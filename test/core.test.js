@@ -53,3 +53,56 @@ test('ToolRuntime register returns a disposer and renders results as text', asyn
   dispose()
   assert.equal(tools.schemas().length, 0)
 })
+
+test('SystemPrompt assembles by order and disposer unregisters fragments', async () => {
+  const prompt = new SystemPromptRuntime()
+  prompt.section({ name: 'b', order: 20, text: 'B' })
+  const dispose = prompt.context({ name: 'a', order: 10, text: () => 'A' })
+
+  assert.equal(await prompt.assemble(), 'A\n\nB')
+  dispose()
+  assert.equal(await prompt.assemble(), 'B')
+})
+
+test('LlmRuntime routes chat to the selected provider and disposer unregisters it', async () => {
+  const llm = new LlmRuntime()
+  const calls = []
+  const dispose = llm.register('mock', {
+    models: ['fast'],
+    chat: async request => {
+      calls.push(request)
+      return { content: 'ok' }
+    },
+  })
+
+  assert.equal(llm.defaultSelection(), 'mock/fast')
+  assert.deepEqual(llm.models(), ['mock/fast'])
+  assert.equal(llm.has('mock/fast'), true)
+
+  const reply = await llm.chat({ messages: [] })
+  assert.equal(reply.content, 'ok')
+  assert.equal(calls[0].model, 'fast')
+
+  dispose()
+  assert.deepEqual(llm.models(), [])
+})
+
+test('LlmRuntime selects an upstream model with provider/model', async () => {
+  const llm = new LlmRuntime()
+  let receivedModel = null
+
+  llm.register('mock', {
+    models: ['a', 'b'],
+    async chat({ model }) {
+      receivedModel = model
+      return { content: model, toolCalls: [] }
+    },
+  }, { defaultModel: 'a' })
+
+  assert.deepEqual(llm.models(), ['mock/a', 'mock/b'])
+  assert.equal(llm.has('mock/b'), true)
+
+  const result = await llm.chat({}, 'mock/b')
+  assert.equal(result.content, 'b')
+  assert.equal(receivedModel, 'b')
+})
