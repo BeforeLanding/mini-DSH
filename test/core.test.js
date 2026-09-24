@@ -1,0 +1,38 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { SessionRuntime } from '../src/core/session-runtime.js'
+
+test('Session derives tool-call history from the event log and keeps reasoning_content', () => {
+  const sessions = new SessionRuntime()
+  const s = sessions.create()
+
+  sessions.append(s.id, 'user/message', { content: 'what time is it' })
+  sessions.append(s.id, 'assistant/tool_calls', {
+    reasoningContent: 'I need to call bash date',
+    toolCalls: [{ id: 'c1', name: 'bash', arguments: { command: 'date' } }],
+  })
+  sessions.append(s.id, 'tool/result', {
+    toolCallId: 'c1',
+    content: '12:00',
+  })
+
+  const messages = sessions.deriveMessages(s.id)
+  assert.equal(messages[1].reasoning_content, 'I need to call bash date')
+  assert.equal(messages[1].tool_calls[0].function.name, 'bash')
+  assert.equal(messages[2].role, 'tool')
+})
+
+test('Session clear keeps the same id and drops derived chat history', () => {
+  const sessions = new SessionRuntime()
+  const s = sessions.create()
+  const id = s.id
+
+  sessions.append(id, 'user/message', { content: 'hello' })
+  sessions.append(id, 'assistant/message', { content: 'hi' })
+  sessions.clear(id)
+
+  assert.equal(sessions.get(id).id, id)
+  assert.equal(sessions.get(id).events[0].type, 'session/start')
+  assert.equal(sessions.get(id).events[0].data.reset, true)
+  assert.deepEqual(sessions.deriveMessages(id), [])
+})
