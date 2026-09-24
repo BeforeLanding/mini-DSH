@@ -36,3 +36,20 @@ test('Session clear keeps the same id and drops derived chat history', () => {
   assert.equal(sessions.get(id).events[0].data.reset, true)
   assert.deepEqual(sessions.deriveMessages(id), [])
 })
+
+test('ToolRuntime register returns a disposer and renders results as text', async () => {
+  const tools = new ToolRuntime()
+  const dispose = tools.register({
+    name: 'echo',
+    description: 'echo',
+    parameters: { type: 'object' },
+    execute: async args => args,
+  })
+
+  assert.equal(tools.schemas().length, 1)
+  const result = await tools.execute('echo', { a: 1 })
+  assert.match(tools.renderResult(result), /"a": 1/)
+
+  dispose()
+  assert.equal(tools.schemas().length, 0)
+})
