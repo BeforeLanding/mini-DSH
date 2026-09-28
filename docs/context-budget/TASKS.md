@@ -11,9 +11,17 @@
 - 状态：done（2026-09-28）。
 - 证据：本目录需求/计划/任务文档、根目录 AGENTS.md / PROGRESS.md、README 开发入口；[E-01 基线验证](../../PROGRESS.md)。
 
+## CB-17 恢复开发基线
+- 关联：M0.5 前置环境、CB-15。
+- 依赖：CB-00。
+- 行为：核验固定 pnpm、按锁文件安装依赖，区分沙箱访问限制与真实缺包；恢复完整核心/Cordis 测试基线，不调整版本或绕过签名。
+- 验证：pnpm --version 为 11.22.0；pnpm install --frozen-lockfile、pnpm check、pnpm test；package.json/锁文件无非必要变更。
+- 状态：done（2026-09-28）。
+- 证据：正常用户权限下 pnpm --version 为 11.22.0；pnpm install --frozen-lockfile 退出码 0（Already up to date）；pnpm check 26 文件通过；pnpm test 22/22 通过，无跳过。package.json/锁文件无变更；详见 PROGRESS 的 E-02。
+
 ## CB-15 TypeScript 工具链与迁移
 - 关联：R-13；M0.5；D-10。
-- 依赖：CB-00；完整验证需先恢复依赖环境。
+- 依赖：CB-00、CB-17。
 - 行为：核验并锁定 TypeScript/@types/node；建立 NodeNext / ES2022 / strict / noEmitOnError / sourceMap；分批迁移 src/test，编译产物运行；更新 CI、配置路径和命令说明。
 - 验证：typecheck/build、编译后的 22 条原测试、无预算长循环、插件释放、动态 plugins.config 导入、cwd/.env 语义；Node 22/24 × Windows/Ubuntu；旧产物不能掩盖错误。
 - 状态：todo；本轮仅选型与调研，未安装依赖或迁移源码。

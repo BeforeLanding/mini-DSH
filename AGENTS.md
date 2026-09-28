@@ -19,6 +19,7 @@
 - CI 覆盖 Ubuntu / Windows、Node.js 22 / 24。
 - `pnpm lint` 当前不是 CI 门槛；不要用 `lint:fix` 或 `format` 顺带重排无关代码。
 - 若 pnpm 引导受限，可用 `node scripts/check-syntax.js` 和 `node --test test/*.test.js` 执行同一检查，并注明替代命令及环境限制。
+- 沙箱内 pnpm 引导或依赖导入失败时，先在正常用户权限下核验版本/导入，再判断是否缺包；必要时请求该命令的沙箱提权。保持固定版本及校验，不以降级、跳过签名或修改锁文件绕过环境限制。
 
 ## 关键约束
 - 核心依赖服务契约，不直接绑定 CLI、DeepSeek 或具体工具；插件注册必须保留可释放的生命周期。
