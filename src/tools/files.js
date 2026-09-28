@@ -1,0 +1,102 @@
+import fs from 'node:fs/promises'
+import path from 'node:path'
+
+export const name = 'mini-tools-files'
+export const inject = ['tools', 'sandbox']
+
+export function matchFilePattern(filename, pattern = '') {
+  const normalized = filename.replace(/\\/g, '/')
+  if (!pattern.includes('*')) return normalized.includes(pattern)
+  let expression = ''
+  for (let index = 0; index < pattern.length; index++) {
+    const char = pattern[index]
+    if (char === '*') {
+      if (pattern[index + 1] === '*') {
+        index++
+        if (pattern[index + 1] === '/') { expression += '(?:.*/)?'; index++ }
+        else expression += '.*'
+      } else expression += '[^/]*'
+    } else expression += char.replace(/[\^$+?.()|{}\[\]\\]/g, '\\$&')
+  }
+  return new RegExp(`^(?:${pattern.includes('/') ? '' : '(?:.*/)?'}${expression})$`).test(normalized)
+}
+
+export function apply(ctx) {
+  const resolve = requested => ctx.sandbox.resolvePath(requested)
+  const parameters = (properties, required = []) => ({ type: 'object', properties, required })
+  const string = { type: 'string' }
+  async function* walk(directory = '.', signal) {
+    signal?.throwIfAborted()
+    for (const entry of await fs.readdir(resolve(directory), { withFileTypes: true })) {
+      signal?.throwIfAborted()
+      const relative = path.join(directory, entry.name)
+      // Do not traverse symlink directories; direct reads still pass the realpath gate.
+      if (entry.isDirectory()) yield* walk(relative, signal)
+      else if (entry.isFile()) yield relative.replace(/\\/g, '/')
+    }
+  }
+  const definitions = [
+    {
+      name: 'read_file', description: 'Read a UTF-8 file inside the workspace.',
+      parameters: parameters({ path: string }, ['path']),
+      async execute(args, exec) { return fs.readFile(resolve(args.path), { encoding: 'utf8', signal: exec.signal }) },
+    },
+    {
+      name: 'write_file', description: 'Write a UTF-8 file after approval.',
+      parameters: parameters({ path: string, content: string }, ['path', 'content']),
+      async execute(args, exec) {
+        resolve(args.path)
+        if (typeof args.content !== 'string') throw new Error('content must be a string')
+        await ctx.sandbox.approve({ tool: 'write_file', summary: `write ${args.path}`, signal: exec.signal })
+        const target = resolve(args.path)
+        await fs.mkdir(path.dirname(target), { recursive: true })
+        await fs.writeFile(resolve(args.path), args.content, { encoding: 'utf8', signal: exec.signal })
+        return `wrote ${args.path}`
+      },
+    },
+    {
+      name: 'edit_file', description: 'Replace one unique occurrence of oldText after approval.',
+      parameters: parameters({ path: string, oldText: string, newText: string }, ['path', 'oldText', 'newText']),
+      async execute(args, exec) {
+        if (typeof args.oldText !== 'string' || !args.oldText) throw new Error('oldText is required')
+        if (typeof args.newText !== 'string') throw new Error('newText must be a string')
+        const original = await fs.readFile(resolve(args.path), { encoding: 'utf8', signal: exec.signal })
+        const index = original.indexOf(args.oldText)
+        if (index < 0) throw new Error('oldText not found')
+        if (original.indexOf(args.oldText, index + 1) >= 0) throw new Error('oldText is not unique; refusing an ambiguous edit')
+        await ctx.sandbox.approve({ tool: 'edit_file', summary: `edit ${args.path}`, signal: exec.signal })
+        const target = resolve(args.path)
+        if (await fs.readFile(target, 'utf8') !== original) throw new Error('file changed during approval; retry the edit')
+        await fs.writeFile(resolve(args.path), original.slice(0, index) + args.newText + original.slice(index + args.oldText.length), { encoding: 'utf8', signal: exec.signal })
+        return `edited ${args.path}`
+      },
+    },
+    {
+      name: 'glob', description: 'List workspace files matching a substring or wildcard.',
+      parameters: parameters({ pattern: string }),
+      async execute(args, exec) {
+        const matches = []
+        for await (const file of walk('.', exec.signal)) if (matchFilePattern(file, args.pattern ?? '')) matches.push(file)
+        return matches
+      },
+    },
+    {
+      name: 'grep', description: 'Find literal text in workspace files with line numbers.',
+      parameters: parameters({ query: string, pattern: string }, ['query']),
+      async execute(args, exec) {
+        if (typeof args.query !== 'string') throw new Error('query must be a string')
+        const matches = []
+        for await (const file of walk('.', exec.signal)) {
+          if (!matchFilePattern(file, args.pattern ?? '')) continue
+          const content = await fs.readFile(resolve(file), { encoding: 'utf8', signal: exec.signal })
+          if (content.includes('\0')) continue
+          content.split(/\r?\n/).forEach((line, index) => {
+            if (line.includes(args.query)) matches.push(`${file}:${index + 1}:${line}`)
+          })
+        }
+        return matches.join('\n')
+      },
+    },
+  ]
+  for (const definition of definitions) ctx.effect(() => ctx.tools.register(definition), `register ${definition.name}`)
+}

@@ -1,7 +1,7 @@
 import readline from 'node:readline'
 
 export const name = 'mini-cli'
-export const inject = ['sessions', 'agents', 'agentLoop', 'tools', 'systemPrompt', 'llm']
+export const inject = ['sessions', 'agents', 'agentLoop', 'tools', 'systemPrompt', 'llm', 'sandbox']
 export function apply(ctx, config = {}) {
   const session = ctx.sessions.create({ source: 'cli' })
   const agent = ctx.agents.create({ name: 'cli-agent', sessionId: session.id,
@@ -16,6 +16,7 @@ export function apply(ctx, config = {}) {
     let running = false
     let closed = false
     let exiting = false
+    let approval
     let queue = Promise.resolve()
     const prompt = () => { if (!closed) { rl.setPrompt('User > '); rl.prompt() } }
     const escape = chunk => {
@@ -25,8 +26,23 @@ export function apply(ctx, config = {}) {
     input.on('data', escape)
     print('mini-dsh — a local agent Harness')
     print('Commands: /tools /models /model /history /prompt /reset /exit')
-    print('Press Esc to cancel a run.')
+    print(`Sandbox workspace: ${ctx.sandbox.workspace}`)
+    print('Writes and bash execution ask [Y/n] first. Press Esc to cancel a run.')
     print(`Model: ${agent.model}`)
+    const disposeApprover = ctx.sandbox.setApprover(request => new Promise(resolve => {
+      if (closed) { resolve(false); return }
+      running = false
+      print(request.summary)
+      approval = answer => {
+        approval = undefined
+        running = true
+        const allowed = /^(?:y|yes)?$/i.test(answer.trim())
+        if (!allowed) print('rejected.')
+        resolve(allowed)
+      }
+      rl.setPrompt('Allow this? [Y/n] ')
+      rl.prompt()
+    }))
     async function handle(line) {
       const text = line.trim()
       if (!text || exiting) return
@@ -78,13 +94,24 @@ export function apply(ctx, config = {}) {
       } finally { controller = undefined; running = false }
     }
     rl.on('line', line => {
+      // Piped input can retain key bytes that a terminal normally consumes.
+      line = line.replace(/\x1b(?:\[[0-9;]*[A-Za-z])?/g, '')
+      if (approval) { approval(line); return }
       queue = queue.then(() => handle(line)).catch(error => print(`[CLIError] ${error.message}`)).finally(prompt)
     })
     rl.on('close', () => {
       closed = true
+      approval?.('n')
       void queue.finally(() => ctx.root.fiber.dispose())
     })
     prompt()
-    return () => { closed = true; controller?.abort(); input.off('data', escape); rl.close() }
+    return () => {
+      closed = true
+      disposeApprover()
+      approval?.('n')
+      controller?.abort()
+      input.off('data', escape)
+      rl.close()
+    }
   }, 'run cli')
 }
