@@ -9,14 +9,17 @@ import * as agentLoop from './plugins/agent-loop.js'
 import * as runtimeContext from './plugins/runtime-context.js'
 import * as deepseek from './models/deepseek.js'
 import * as cli from './plugins/cli.js'
+import * as externalPlugins from './plugins/external-plugins.js'
 
 dotenv.config({ quiet: true })
+const { default: externalConfig } = await import('../plugins.config.js')
 const root = new Context()
 const workspace = process.env.MINI_DSH_WORKSPACE ?? process.cwd()
 try {
   for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
   await root.plugin(runtimeContext, { workspace })
   await root.plugin(deepseek)
+  await root.plugin(externalPlugins, { entries: externalConfig })
   await root.plugin(cli, { model: process.env.MINI_DSH_MODEL ?? 'deepseek/deepseek-v4-pro' })
 } catch (error) {
   console.error(`[startup] ${error.message}`)

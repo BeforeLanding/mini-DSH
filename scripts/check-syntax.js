@@ -4,6 +4,7 @@ import path from 'node:path'
 
 const roots = ['src', 'test', 'scripts']
 const files = []
+if (fs.existsSync('plugins.config.js')) files.push(path.resolve('plugins.config.js'))
 for (const root of roots) walk(path.resolve(root))
 
 for (const file of files) {
