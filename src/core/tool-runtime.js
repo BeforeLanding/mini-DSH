@@ -17,6 +17,7 @@ function blocksToText(blocks) {
 export class ToolRuntime {
     #tools = new Map()
 
+    // Register a new tool definition, ensuring it has a unique name and an execute function
     register(definition) {
         if (!definition?.name) throw new Error('tool.name is required')
         if (typeof definition.execute !== 'function')
@@ -42,6 +43,7 @@ export class ToolRuntime {
         return [...this.#tools.values()]
     }
 
+    // Generate JSON schema representations of all registered tools for integration with external systems
     schemas() {
         return this.list().map((tool) => ({
             type: 'function',
@@ -53,6 +55,7 @@ export class ToolRuntime {
         }))
     }
 
+    // Execute a registered tool by name with the provided arguments and execution context, handling errors gracefully
     async execute(name, args, exec = {}) {
         const tool = this.get(name)
         if (!tool) {

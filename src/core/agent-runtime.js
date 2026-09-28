@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 export class AgentRuntime {
     #agents = new Map()
 
+    // Register a new agent with a unique ID and associated properties. Ensures that each agent is unique and provides a disposal function to remove the agent when no longer needed.
     register(agent) {
         if (this.#agents.has(agent.id)) {
             throw new Error(`duplicate agent: ${agent.id}`)
@@ -20,6 +21,7 @@ export class AgentRuntime {
         }
     }
 
+    // Create a new agent instance with a unique ID, session ID, model selection, and an optional name. The agent is registered in the runtime and can send messages through the provided loop.
     create({ sessionId, model, loop, name = 'default' }) {
         const agent = {
             id: randomUUID(),
@@ -36,6 +38,7 @@ export class AgentRuntime {
         return agent
     }
 
+    // Retrieve an agent by its unique ID. Throws an error if the agent is not found in the runtime.
     list() {
         return [...this.#agents.values()]
     }

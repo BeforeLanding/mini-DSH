@@ -1,6 +1,9 @@
+// DeepSeek LLM provider for mini-DSH, which handles streaming responses and tool calls.
+
 export const name = 'mini-model-deepseek'
 export const inject = ['llm']
 
+// The apply function registers the DeepSeek LLM provider with the mini-DSH context, allowing it to be used for chat operations. It requires an API key and optionally accepts a base URL, a list of models, and a default model selection.
 export async function* parseSSE(response) {
   if (!response.body) throw new Error('DeepSeek API returned no response body')
   const reader = response.body.getReader()
@@ -30,6 +33,7 @@ export async function* parseSSE(response) {
   } finally { reader.releaseLock() }
 }
 
+// Accumulate tool call deltas from the streaming response, allowing for the reconstruction of complete tool calls from partial updates.
 export function accumulateToolCallDelta(map, delta) {
   const index = delta.index ?? 0
   const call = map.get(index) ?? { id: '', name: '', arguments: '' }
@@ -39,6 +43,7 @@ export function accumulateToolCallDelta(map, delta) {
   map.set(index, call)
 }
 
+// Parse tool arguments from a JSON string, throwing an error if the JSON is incomplete or invalid.
 export function parseToolArguments(text) {
   if (!text?.trim()) return {}
   try { return JSON.parse(text) } catch (error) {
@@ -46,6 +51,7 @@ export function parseToolArguments(text) {
   }
 }
 
+// Finalize tool calls by sorting them and ensuring they have valid names and parsed arguments, preparing them for execution.
 export function finalizeToolCalls(map) {
   return [...map.entries()].sort(([a], [b]) => a - b)
     .filter(([, call]) => call.name)

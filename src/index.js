@@ -14,6 +14,8 @@ import * as sandbox from './plugins/sandbox.js'
 import * as bash from './tools/bash.js'
 import * as files from './tools/files.js'
 
+// The main entry point for the application. It sets up the context and loads all the plugins.
+
 dotenv.config({ quiet: true })
 const { default: externalConfig } = await import('../plugins.config.js')
 const root = new Context()

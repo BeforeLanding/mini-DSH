@@ -3,17 +3,19 @@ import { randomUUID } from 'node:crypto'
 export class SessionRuntime {
     #sessions = new Map()
 
+    //six public methods: create, get, append, clear, list, deriveMessages
+
     create(meta = {}) {
-        const id = randomUUID()
+        const id = randomUUID()// Generate a unique session ID
 
         const session = {
             id,
-            meta: { ...meta },
+            meta: { ...meta },//shallow copy of meta
             events: [],
             createdAt: new Date().toISOString(),
         }
 
-        this.#sessions.set(id, session)
+        this.#sessions.set(id, session)// Store the session in the private map
         this.append(id, 'session/start', { meta })
         return session
     }
@@ -40,16 +42,19 @@ export class SessionRuntime {
         return event
     }
 
+    // Clear the session events but keep the meta data
     clear(id) {
         const old = this.get(id)
         old.events = []
         this.append(id, 'session/start', { meta: old.meta, reset: true })
     }
 
+    // List all sessions with their metadata and creation time
     list() {
         return [...this.#sessions.values()]
     }
 
+    // Derive messages from the session events for a given session ID
     deriveMessages(id) {
         const events = this.get(id).events
         const messages = []
@@ -81,7 +86,7 @@ export class SessionRuntime {
                         type: 'function',
                         function: {
                             name: call.name,
-                            arguments: JSON.stringify(call.arguments ?? {}),
+                            arguments: JSON.stringify(call.arguments ?? {}),// Convert arguments to a JSON string
                         },
                     })),
                 })

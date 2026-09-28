@@ -1,9 +1,10 @@
 import { Service } from '@deepseek-ai/cordis'
 import { SessionRuntime } from '../core/session-runtime.js'
 
+//connect SessionRuntime to the Cordis service framework, allowing session management through the SessionsService class.
 class SessionsService extends Service {
     constructor(ctx) {
-        super(ctx, 'sessions')
+        super(ctx, 'sessions')// Initialize the service with the context and name 'sessions'
         this.runtime = new SessionRuntime()
     }
 
@@ -28,6 +29,8 @@ class SessionsService extends Service {
 }
 
 export const name = 'mini-sessions'
+// Export the name of the plugin as 'mini-sessions'
 export function apply(ctx) {
     ctx.plugin(SessionsService)
 }
+// Apply the SessionsService plugin to the provided context, enabling session management capabilities

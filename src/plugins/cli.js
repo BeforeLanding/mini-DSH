@@ -2,10 +2,13 @@ import readline from 'node:readline'
 
 export const name = 'mini-cli'
 export const inject = ['sessions', 'agents', 'agentLoop', 'tools', 'systemPrompt', 'llm', 'sandbox']
+
+// The apply function registers the CLI plugin with the mini-DSH context, setting up the necessary interfaces and event handlers for command-line interaction.
 export function apply(ctx, config = {}) {
   const session = ctx.sessions.create({ source: 'cli' })
   const agent = ctx.agents.create({ name: 'cli-agent', sessionId: session.id,
     model: config.model ?? ctx.llm.defaultSelection(), loop: ctx.agentLoop })
+    
   ctx.effect(() => {
     const input = config.input ?? process.stdin
     const output = config.output ?? process.stdout
