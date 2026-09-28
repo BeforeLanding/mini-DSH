@@ -15,6 +15,7 @@ export function apply(ctx, config = {}) {
     let controller
     let running = false
     let closed = false
+    let exiting = false
     let queue = Promise.resolve()
     const prompt = () => { if (!closed) { rl.setPrompt('User > '); rl.prompt() } }
     const escape = chunk => {
@@ -28,7 +29,7 @@ export function apply(ctx, config = {}) {
     print(`Model: ${agent.model}`)
     async function handle(line) {
       const text = line.trim()
-      if (!text || closed) return
+      if (!text || exiting) return
       if (text.startsWith('/')) {
         const [command, ...parts] = text.split(/\s+/)
         switch (command) {
@@ -44,7 +45,7 @@ export function apply(ctx, config = {}) {
           case '/history': print(JSON.stringify(ctx.sessions.get(session.id).events, null, 2)); break
           case '/prompt': print(await ctx.systemPrompt.assemble({ agent, sessionId: session.id })); break
           case '/reset': ctx.sessions.clear(session.id); print(`Session reset: ${session.id}`); break
-          case '/exit': rl.close(); return
+          case '/exit': exiting = true; rl.close(); return
           default: print(`Unknown command: ${command}`)
         }
         return
@@ -81,7 +82,6 @@ export function apply(ctx, config = {}) {
     })
     rl.on('close', () => {
       closed = true
-      controller?.abort()
       void queue.finally(() => ctx.root.fiber.dispose())
     })
     prompt()

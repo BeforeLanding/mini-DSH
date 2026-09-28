@@ -142,6 +142,7 @@ test('Agent loop completes a model -> tool -> model turn', async () => {
 
         const toolMessage = messages.at(-1)
         assert.equal(toolMessage.role, 'tool')
+        assert.equal(messages[1].reasoning_content, 'look up the time first')
         return { content: `it is ${toolMessage.content}`, toolCalls: [] }
       },
     },
@@ -300,11 +301,13 @@ test('Cancelling a multi-tool turn still records a result for every tool_call', 
     },
   })
 
+  let cancelledTurn = true
   llm.register(
     'mock',
     {
       models: ['demo'],
       async chat() {
+        if (!cancelledTurn) return { content: 'recovered', toolCalls: [] }
         return {
           toolCalls: [
             { id: 't1', name: 'slow', arguments: {} },
@@ -332,6 +335,8 @@ test('Cancelling a multi-tool turn still records a result for every tool_call', 
 
   assert.deepEqual(requested, ['t1', 't2'])
   assert.deepEqual(answered, ['t1', 't2'])
+  cancelledTurn = false
+  assert.equal(await agent.send('continue with a fresh signal'), 'recovered')
 })
 test('streamed tool_calls concatenate name once, not read_fileread_file', async () => {
   const { accumulateToolCallDelta } = await import('../src/models/deepseek.js')
@@ -384,6 +389,10 @@ test('parseSSE flushes a last line without a trailing newline and recognizes dat
   assert.equal(events.length, 2)
   assert.equal(events[0].choices[0].delta.content, 'Hel')
   assert.equal(events[1].choices[0].delta.content, 'lo')
+  const doneResponse = new Response(': heartbeat\n\ndata: {"ok":true}\ndata:[DONE]\ndata: invalid')
+  const beforeDone = []
+  for await (const event of parseSSE(doneResponse)) beforeDone.push(event)
+  assert.deepEqual(beforeDone, [{ ok: true }])
 })
 
 test('finalizeToolCalls sorts by index, drops empty names, and throws on invalid JSON', async () => {
