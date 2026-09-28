@@ -1,0 +1,111 @@
+# 上下文与执行预算管理：计划与设计
+
+更新：2026-09-28。技术路线与参数基线已确定，功能尚未实施。需求见 [REQUIREMENTS](REQUIREMENTS.md)，执行状态见 [TASKS](TASKS.md) 和 [PROGRESS](../../PROGRESS.md)。本文件是技术决策和默认参数的唯一维护位置；初值可配置，未经真实任务质量/性能实验。
+
+## 当前源码基线
+本地 main / c5fc9c4，未核验远程最新提交。Session 在内存中保存事件并派生全部消息；Loop 无固定步数上限；DeepSeek 适配器未归一化 usage 或限制输出。取消会补齐未执行工具结果。Bash 已有 30 秒超时和 32 KiB 输出截断，Context7 已配置 60 秒超时。CLI 尚无预算、持久化恢复和继续命令。
+
+## 实施顺序与里程碑
+1. M0 文档基线：已完成；规则、需求、计划、任务和进度可追溯。
+2. M0.5 TypeScript 迁移（CB-15）：先恢复依赖，建立类型/构建链，分批迁移源码和测试，不改变既有行为。出口：原 22 条测试、构建、配置路径和 CI 矩阵通过。
+3. M1 契约、存储与观测（CB-01、02、03、11、12）：定义事件和预算状态，实现 JSONL、重建及 usage。出口：重启能恢复，重放不执行工具，记录可信用量与唯一终态。
+4. M2 请求投影（CB-04、05）：估算完整请求，按目标移除旧历史，跨 run 保留当前 task。出口：原文不变、工具配对完整、无法容纳明确停止。
+5. M3 预算与继续（CB-06、07、08、13）：调度前检查额度、取消在途工作、补齐工具结果、接续任务。出口：耗尽后无新调度，继续不自动重放旧工具。
+6. M4 CLI 与验收（CB-09、10）：预算状态、帮助、真实 Cordis 集成和全量回归。出口：R-01 至 R-13 有实际证据，Node 22/24 × Windows/Ubuntu CI 通过。
+
+按出口推进，迁移与功能开发分开提交；不预先承诺工期。
+
+## 模块边界
+- 事件存储：经存储接口串行追加/读取，关键事件等待可靠写入；第一版仅 JSONL。
+- Session：重建消息、任务、用量和状态；重放没有外部副作用。
+- ContextBudgetRuntime：估算、历史分组和请求投影；不修改原始事件。
+- RunBudgetRuntime：次数、主动时间、token 预留/结算、停止状态。
+- AgentLoopRuntime：协调请求投影、调度检查、响应结算、工具结果和资源清理。
+- LlmRuntime / 适配器：传递输出上限，返回 usage/finishReason，保存 provider 所需 reasoning。
+- Cordis 插件：服务装配、配置注入、注册释放；CLI 消费状态，不承担预算算法。
+- 成功 agent.send() 仍返回字符串；停止拟采用带原因与状态的类型化错误，具体类型在 CB-01 实现时定稿。
+
+## 设计决策及取舍
+
+### D-01 范围
+第一版包含 TypeScript、上下文投影、四类执行预算、JSONL、session 恢复和 /continue。摘要、长期记忆、费用预算和任意程序位置精确恢复不纳入；见需求文档。
+
+### D-02 原始事件与请求投影
+原始历史完整保存；请求只选择可容纳的完整旧任务/轮次，完整保留 system、安全规则和当前 task 的所有 run。过长停止，不自动摘要或截短当前过程。
+替代：全量发送无法控制规模；最近 N 条可能切断工具协议；摘要/检索增加生成误差与新依赖。当前选择确定且可测，代价是旧信息可能不可见、长任务可能停止。
+
+### D-03 计数与兼容
+请求计实际进入模型适配器的调度（含失败和最终回答）；工具计进入执行入口的调度（含拒批和失败）；skipped 不计。底层未注入预算策略的旧调用兼容无上限；CLI 注入有限默认策略。
+替代：只计成功会纵容无限失败循环；只限制 loop 无法约束单批工具数量。次数和实际用量分别记录，不自动重试。
+
+### D-04 Token 与模型协议
+以实际 usage 结算，估算及输出预留用于请求前判断；缓存输入仍计 token，reasoning 是输出细分，不重复加算。缺少 usage 时估算已知输入/接收输出并标记不确定，不记零。适配器必须处理无新文本的流末包。
+供应商能力按 endpoint/model/核验日期记录，不凭模型名猜窗口；不承诺严格计费上限。保留模型协议字段，包括无工具最终回答的 reasoning。
+
+### D-05 时间与终态
+用单调主动时间和组合 AbortSignal，审批暂停主动计时且单独超时；结束清理 timer/监听器。Promise.race 只停止等待，不替代取消。
+同一 run 仅一个终态；已封存状态不被迟到回调覆盖。检查顺序：用户取消 → 主动 deadline → 对应调度次数 → token → 上下文容量。最后允许的完整回答可完成；超出 token 额度则停止后续调度。
+非协作工具可能继续运行，不能保证物理终止；结果不确定标 unknown。
+
+### D-06 工具结果与停止报告
+已记录调用均有匹配结果：真实完成、明确未执行的 skipped、开始但无法确定结果的 unknown。补齐后直接报告状态，不再请求模型收尾。已完成写入不回滚；恢复不自动重试 unknown。
+终态原因包括 completed、max_steps、max_tool_calls、timeout、token_budget、context_overflow、cancelled、error，以及 approval_timeout、request_timeout、output_limit 细分原因。
+
+### D-07 默认额度
+按下文参数执行，用户可配置覆盖；这些是工程初值，不是官方推荐或经过质量实验的最优值。完整输入与重复请求累计消耗分别受控。
+
+### D-08 JSONL 与 /continue
+采用事件日志作为事实来源，恢复只重建状态；区分 session（会话）、task（目标及所有续跑）和 run（一个执行段）。
+替代：只存消息无法判断执行状态；只存快照缺少过程；SQLite 提供事务/索引但当前单写入者场景无需先引入数据库。多进程写入、复杂检索或重放瓶颈出现时重新评估 SQLite，保留存储替换接口。
+/continue 同 task 新 run，模型根据已有结果重新规划。替代的精确程序位置恢复需要更多执行/审批快照；自动重放缺失结果可能重复副作用。代价是继续需新模型请求，也不恢复旧文件系统。
+
+### D-09 Cordis 与测试框架
+保留 Cordis 的依赖注入/释放和 node:test，核心保持可独立测试。替代 LangGraph/工作流系统可提供检查点，但需迁移执行模型，仍不能自动保证任意副作用只执行一次；出现复杂分支、多 Agent 和大量人工暂停时再评估。无需为预算测试迁移 Jest/Vitest。
+离线模拟优先，真实模型实验另行记录；模拟可稳定验证边界，但不能证明真实协议和任务质量。
+
+### D-10 TypeScript
+采用 tsc strict 检查/编译，Node 执行 ESM。替代 JS + JSDoc 类型约束较弱；tsx 需另设类型检查；Node 类型剥离不检查类型且忽略 tsconfig。代价是新增构建链，收益是事件/状态/服务契约的错误更早暴露。
+基线：NodeNext / ES2022，strict、noEmitOnError、verbatimModuleSyntax、sourceMap；输出 dist。import type 和 .js 相对导入；过渡 allowJs，最终收紧。TS/@types/node 版本在 CB-15 核验锁定，不用 any/关闭 strict 掩盖核心错误。
+计划 typecheck / build / 编译产物 start、test；当前 package.json 仍是 JS 命令。保留入口/配置相对目录、cwd/.env 语义；校验后清理旧 dist，防止旧产物掩盖失败。tsc 不打包依赖。TS 不验证 JSONL/网络数据，仍需运行时校验。
+建议使用 Node 24，保留 Node 22/24 CI；最低版本修改单独处理。
+
+### D-11 验证与默认值调整
+保留原 22 条行为测试和无预算长循环。使用模拟模型/SSE、可注入时钟、临时目录及真实 Cordis；测试调用次数、原事件不变、协议配对、单次终态、重启和副作用不重放。
+后续实验比较输入 32K/64K/128K、输出 8K/16K/32K；覆盖短编辑、多文件修复、长日志及续跑。记录完成率、停止原因分布、实际 token、估算误差、延迟和重复副作用，再调整初值。
+
+## 默认参数与行为
+
+### 请求规模与估算
+- 输入目标 65,536 token；输出上限 16,384（reasoning + 正文）；输出预留最低 4,096。
+- 容量余量 max(2,048, ceil(estimatedInputTokens × 10%))。输入估算不含此余量；input <= 输入目标，且 input + 输出预留 + 余量 <= 模型窗口。
+- DeepSeek 官方 1M 窗口先保守配置为 1,000,000；自定义端点必须明确能力。显式 max_tokens，不沿用供应商默认大额度。
+- 可替换估算器初值：Unicode ASCII/非 ASCII 字符分别按 0.3/1.0 token，加上角色、调用 ID、参数 JSON、reasoning、schema 等实际序列化内容；每消息 32、每请求 256 token 封装开销。这不是真实 tokenizer，代码/特殊符号可能有误差，来源标 estimated。
+- 先移除最旧已结束完整任务/轮次；不截短当前 task 过程。当前集合无法容纳时 context_overflow；/continue 不自动扩大输入目标。
+- 输出触及 length 时标 output_limit，不执行残缺调用；usage 结算后记录估算偏差。
+
+### 每段执行与续跑
+- 模型请求 64 次，工具调用 128 次，主动时间 600,000ms，累计输入加输出 2,000,000 token。
+- 主动时间包括组装、模型、工具和持久化；人工审批等待暂停，单次审批限 300,000ms。模型请求限 180,000ms，Bash 保留 30,000ms、Context7 保留 60,000ms，均受剩余主动时间约束。
+- 最后一次模型请求若给出完整答案可完成；若继续要求工具，全部标 skipped 后停止，避免产生无法继续判断的副作用。其他批次按顺序执行至预算耗尽。
+- 请求前预留输入、容量余量和输出；余额不足先降低输出上限，连最低预留也不足则 token_budget。最低预留不要求实际生成至少 4K。
+- /continue 显式开启同 task 的新 run，默认追加相同额度；run 显示本段，task 持续累计次数/token/主动时间/续跑数。用户停留及审批等待另计，无隐藏任务总上限。
+- completed 不继续；上下文配置未调整的 context_overflow 仍拒绝；取消后显式继续仍检查 unknown。unknown 副作用先核验，不自动重试。
+- 64K/16K 控制工作集及单次生成；2M 限制重复发送的累计消耗。满 64 次请求不保证可用满，其他额度可能先触顶；不承诺严格费用上限。
+
+### 持久化与 reset
+- 默认 ~/.mini-dsh/sessions/<sessionId>/events.jsonl，可配置覆盖；记录规范化 workspace，恢复到其他目录不得直接执行。
+- session 单写入者持锁，第二写入者失败；失效锁显式核验，不仅凭 PID 自动移除。
+- 非流片段语义事件（请求/工具开始、结果、用量、终态、reset）串行追加并等待 sync，再调度后续操作；写入失败停止。新文件目录耐久性按平台核验，不承诺任意设备掉电保证。
+- 流片段按 250ms 或 4KiB 合并追加，不逐 token sync；完成/中断追加状态并 sync。投影只用完整响应，不重复派生片段；崩溃可能丢失未写入尾部，明确标不完整。
+- 尾部半条记录保护原文件并隔离后才能继续；中间损坏、缺序号、未知版本停止恢复，不静默跳过。
+- reset 追加 session/reset，保留 sessionId、全局递增 seq 及文件；投影切换 epoch，旧任务不可继续；不物理删除日志。
+- 保存 Harness 实际捕获内容；不自动解除 Bash 的 32 KiB 截断。日志不提交仓库，凭证不写事件；崩溃恢复不是文件系统快照。
+
+## 官方依据
+核验日期：2026-09-28；仅代表文档核验，协议实现待测试。开发时模型版本变化需复核。
+- [DeepSeek 模型说明](https://api-docs.deepseek.com/quick_start/pricing/)：当前窗口 1M、最大输出 384K，旧 deepseek-v4-flash 名称已映射新版 Flash。
+- [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)：max_tokens、usage、reasoning 细分及流末包；[Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/)：工具模式的 reasoning 回传。
+- [Token 说明](https://api-docs.deepseek.com/quick_start/token_usage/)：字符比例只是近似；官方离线 tokenizer 与当前聊天模板的一致性尚未验证。
+- [Node TypeScript](https://nodejs.org/api/typescript.html)、[TS 模块](https://www.typescriptlang.org/docs/handbook/modules/reference.html)：类型剥离与 NodeNext；[文件 API](https://nodejs.org/api/fs.html)：写入协调和 sync；[测试 API](https://nodejs.org/api/test.html)：mock/计时器。
+- [SQLite 原子提交](https://www.sqlite.org/atomiccommit.html)、[Node SQLite](https://nodejs.org/api/sqlite.html)：事务能力与 Node 22.5 起的内置接口；外部工具副作用不属于数据库事务。
+- [LangGraph 持久化](https://docs.langchain.com/oss/javascript/langgraph/persistence)、[中断副作用](https://github.com/langchain-ai/docs/blob/main/src/oss/langgraph/interrupts.mdx)：检查点不免除副作用恢复责任。

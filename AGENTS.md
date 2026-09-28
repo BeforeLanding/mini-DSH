@@ -1,0 +1,39 @@
+# 项目协作规则
+
+适用范围：本仓库全部文件。面向人工开发者及编码 Agent。
+
+## 项目与文档入口
+- mini-DSH 是 JavaScript ESM / Cordis 插件化本地 Agent Harness。
+- `src/index.js` 负责装配；`src/core/` 实现运行逻辑；`src/plugins/` 暴露服务；`src/models/` 适配模型协议；`src/tools/` 注册工具。
+- [README](README.md)：启动、CLI 和现有架构。
+- [需求](docs/context-budget/REQUIREMENTS.md)：目标、范围和验收。
+- [计划](docs/context-budget/PLAN.md)：当前源码基线、里程碑、技术取舍、默认参数和官方依据。
+- [任务清单](docs/context-budget/TASKS.md)：行为、验证、状态和证据。
+- [进度](PROGRESS.md)：已完成、验证、阻塞和下一步。
+
+## 运行与检查
+- 以 `package.json` 为版本和命令依据：Node.js >= 20.18.1，pnpm 11.22.0。
+- 安装：`pnpm install --frozen-lockfile`。
+- 启动：复制 `.env.example` 为 `.env`，填写 `DEEPSEEK_API_KEY`，运行 `pnpm start`；不得覆盖已有 `.env`。
+- 必需检查：`pnpm check`（语法）和 `pnpm test`（核心及 Cordis 集成）。测试不需要模型 API Key；集成测试实际执行 Bash。
+- CI 覆盖 Ubuntu / Windows、Node.js 22 / 24。
+- `pnpm lint` 当前不是 CI 门槛；不要用 `lint:fix` 或 `format` 顺带重排无关代码。
+- 若 pnpm 引导受限，可用 `node scripts/check-syntax.js` 和 `node --test test/*.test.js` 执行同一检查，并注明替代命令及环境限制。
+
+## 关键约束
+- 核心依赖服务契约，不直接绑定 CLI、DeepSeek 或具体工具；插件注册必须保留可释放的生命周期。
+- 后续使用 TypeScript / tsc / Node ESM；先独立迁移并验证原行为，再做预算功能。JSONL/网络数据仍需运行时校验；当前 package.json 尚未迁移，运行命令以实际实现为准。
+- 保留事件历史的可追溯性；上下文裁剪作用于请求投影，不删除原始事件。持久化 reset 通过追加事件改变可见历史。
+- JSONL 是第一版事实来源，关键写入须等待落盘确认；重放只重建状态，unknown 工具不自动重试；续跑跨 run 保留当前 task 全部过程。
+- 保留 system、安全规则、当前用户请求及工具协议完整性：每个已记录 tool_call 都有对应结果，包括取消或预算停止时未执行的调用。
+- 保留路径闸门、真实路径/软链检查、写入及 Bash 审批；应用层策略不得描述成操作系统隔离。
+- 新预算必须可配置；不得悄悄加入固定轮数限制或把估算 token 当作供应商真实用量。
+- 不提交密钥、`.env`、真实用户提示词或敏感工具输出；测试证据使用模拟数据。
+- 修改功能时增加针对边界和失败行为的测试；使用模拟模型验证预算，不依赖付费请求。
+
+## 协作与交接
+- 开始前阅读专题需求、计划、任务和进度；区分“现有行为”“计划行为”和“待确认决策”。
+- 当前只有文档基线完成；开发时以任务真实状态为准，不得把设计完成标为功能完成。
+- 开始功能开发时更新任务状态；完成须填写实际命令、结果和代码/测试证据，并同步 `PROGRESS.md`。
+- 范围或契约改变时先同步需求与决策记录；未完成检查写明原因，不宣称通过。
+- 保留用户已有改动；不顺带提交、推送或发布。文档用中文，代码命名沿用现有英文风格。
