@@ -8,11 +8,15 @@ import path from 'node:path'
 import fs from 'node:fs/promises'
 import { BudgetStop, CLI_BUDGET, resolveBudget } from '../core/budget.js'
 import { JsonlStore, isRecord } from '../core/event-store.js'
+import { positiveLimit } from '../core/bounded-text.js'
+import { utf8Prefix } from '../core/tool-result-store.js'
+import type { taskChanges } from '../core/task-changes.js'
 export const name = 'mini-cli'
 export const inject = ['sessions', 'agents', 'agentLoop', 'tools', 'systemPrompt', 'llm', 'sandbox']
 export interface CliConfig {
   model?: string; input?: Readable & { isTTY?: boolean }; output?: Writable & { isTTY?: boolean }
   budget?: BudgetPolicy; sessionDirectory?: string | false; resumeSessionId?: string
+  maxChangeOutputBytes?: number
 }
 function parsePolicy(text: string): BudgetPolicy {
   const value: unknown = JSON.parse(text)
@@ -20,6 +24,8 @@ function parsePolicy(text: string): BudgetPolicy {
   return value as BudgetPolicy
 }
 export async function apply(ctx: Context, config: CliConfig = {}) {
+  const maxChangeOutputBytes = positiveLimit(config.maxChangeOutputBytes, 32 * 1024, 'maxChangeOutputBytes')
+  if (maxChangeOutputBytes < 4) throw new Error('maxChangeOutputBytes must be at least 4 for UTF-8 pagination')
   const workspace = await fs.realpath(ctx.sandbox.workspace)
   const directory = config.sessionDirectory ?? process.env.MINI_DSH_SESSION_DIR ?? path.join(os.homedir(), '.mini-dsh', 'sessions')
   const resumeId = config.resumeSessionId ?? process.env.MINI_DSH_SESSION_ID
@@ -55,7 +61,7 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
     const escape = (chunk: Buffer | string) => { const bytes = Buffer.from(chunk); if (bytes.length === 1 && bytes[0] === 0x1b) controller?.abort() }
     input.on('data', escape)
     print('mini-dsh — a local agent Harness')
-    print('Commands: /tools /models /model /history /prompt /reset /continue /budget [JSON] /exit')
+    print('Commands: /tools /models /model /history /prompt /reset /continue /budget [JSON] /changes [fileOffset] /diff [fileOffset] [byteOffset] /exit')
     print(`Sandbox workspace: ${workspace}`)
     print(`Session: ${session.id}${store ? ` (${store.directory})` : ' (memory)'}`)
     print('Writes and bash execution ask [Y/n] first. Press Esc to cancel, including during approval.')
@@ -74,6 +80,38 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
       approval = answer; request.signal?.addEventListener('abort', cancel, { once: true })
       rl.setPrompt('Allow this? [Y/n] '); rl.prompt()
     }))
+    function offset(text: string | undefined) {
+      if (text === undefined) return 0
+      if (!/^\d+$/.test(text) || !Number.isSafeInteger(Number(text))) throw new Error('offset must be a nonnegative safe integer')
+      return Number(text)
+    }
+    async function showChanges(includeDiff = false, fileOffset = 0, byteOffset = 0) {
+      const tool = ctx.tools.get('task_changes')
+      if (!tool) { if (includeDiff) print('[Changes unavailable] task_changes is not installed'); return }
+      const properties = tool.parameters?.properties
+      const filesParameter = isRecord(properties) ? properties.maxFiles : undefined
+      const ceiling = isRecord(filesParameter) && typeof filesParameter.maximum === 'number' ? filesParameter.maximum : 20
+      // CLI inspection is read-only; use the tool's configured limits without result projection.
+      const report = await tool.execute({ includeDiff, offset: fileOffset, maxFiles: includeDiff ? 1 : Math.min(20, ceiling) }, { sessionId: session.id, signal: new AbortController().signal }) as Awaited<ReturnType<typeof taskChanges>>
+      if (!report.taskId || !report.files.length) { print('[Changes] no tracked edits in this task'); return }
+      if (!includeDiff) {
+        const text = [`[Changes] task=${report.taskId} (file tools only)`, ...report.files.map(file => {
+          const failed = file.attempts.filter(attempt => attempt.status === 'failed').length
+          return `${file.status} ${file.path}${failed ? ` failedAttempts=${failed}` : ''}${file.externalChange ? ' [external change after editing]' : ''}${file.externalChangesBetweenEdits ? ' [external changes between edits; individual diffs]' : ''}${file.currentError ? ` [current file unavailable: ${file.currentError}]` : ''}`
+        }), ...(!report.eof ? [`[more files: /changes ${report.nextOffset}]`] : [])].join('\n')
+        const preview = utf8Prefix(Buffer.from(text), maxChangeOutputBytes).toString('utf8')
+        print(preview + (preview.length < text.length ? '\n[change list truncated]' : ''))
+        return
+      }
+      const file = report.files[0]
+      print(`[Diff] ${file.path} status=${file.status} basis=${file.diffBasis}; confirmed edits only${file.externalChange ? '; current file has external changes' : ''}`)
+      const bytes = Buffer.from(file.diff ?? '')
+      if (byteOffset > bytes.length || (byteOffset < bytes.length && (bytes[byteOffset] & 0xc0) === 0x80)) throw new Error('byteOffset must be within the diff at a UTF-8 boundary')
+      const preview = utf8Prefix(bytes.subarray(byteOffset), maxChangeOutputBytes)
+      print(preview.toString('utf8') || '(no confirmed diff)')
+      if (byteOffset + preview.length < bytes.length) print(`[diff truncated; continue: /diff ${fileOffset} ${byteOffset + preview.length}]`)
+      else if (!report.eof) print(`[next file: /diff ${report.nextOffset}]`)
+    }
     async function runInput(text?: string) {
       controller = new AbortController()
       let segment = '', streamed = false
@@ -100,6 +138,7 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
           print(`[Run ${state.status}] model=${c.modelRequests}, tools=${c.toolCalls}, tokens=${c.totalTokens} (${[...new Set(state.usage.map(u => u.source))].join('+') || 'none'}), active=${Math.round(c.activeDurationMs)}ms, removedTasks=${state.removedTaskIds.length}`)
           if (state.terminalCommit?.status === 'uncertain') print('[Persistence uncertain] Close and restore this session to verify its terminal record before continuing.')
           print(`[Task] runs=${task.runIds.length}, tokens=${task.counters.totalTokens}, model=${task.counters.modelRequests}, tools=${task.counters.toolCalls}`)
+          try { await showChanges() } catch (error) { print(`[Changes unavailable] ${error instanceof Error ? error.message : String(error)}`) }
         }
       }
     }
@@ -125,6 +164,8 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
           break
         }
         case '/continue': await runInput(); break
+        case '/changes': if (parts.length > 1) throw new Error('usage: /changes [fileOffset]'); await showChanges(false, offset(parts[0])); break
+        case '/diff': if (parts.length > 2) throw new Error('usage: /diff [fileOffset] [byteOffset]'); await showChanges(true, offset(parts[0]), offset(parts[1])); break
         case '/history': print(JSON.stringify(ctx.sessions.get(session.id).events, null, 2)); break
         case '/prompt': print(await ctx.systemPrompt.assemble({ agent, sessionId: session.id })); break
         case '/reset': ctx.sessions.clear(session.id); await persistConfig(); print(`Session reset: ${session.id}`); break

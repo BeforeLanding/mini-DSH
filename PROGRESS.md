@@ -1,5 +1,9 @@
 # 开发进度
 
+### NX-13e（2026-09-29）
+CLI 运行结束展示当前 task 变更清单；/changes 按文件分页，/diff 按文件和 UTF-8 字节分页，显示 confirmed diff、失败次数和外部变更标记。coding 身份提示使用 expectedHash、冲突后重新读取以及交付前检查 task_changes；README 同步参数、覆盖范围和已知限制。
+新增真实 Cordis CLI/模拟模型闭环：读取指纹、编辑、失败尝试、新建文件、模型读取任务 diff、终态清单、中文/emoji 大 diff 续读、unknown 和 reset；核对原用户行保持。pnpm check（65 文件）、pnpm test（107/107）、pnpm fixtures:check（初始 0/3、参考 3/3）和 git diff --check 通过；全部使用模拟提示和模型，无付费 API。软链/权限修复 d802adc 已推送，本步提交后核验最终 CI。
+
 ### NX-13d2（2026-09-29）
 独立复核修复：快照保存真实 location，提交检查内部目录/文件软链指向稳定，向真实文件替换以保留软链；显式恢复原权限，避免 umask 降低权限；rename 后临时清理错误不倒置成功结果。新增同内容目录软链重新指向冲突与权限保持测试，POSIX 另验文件软链保持。
 pnpm check（65 文件）、pnpm test（106/106）和 git diff --check 通过。任务记录提交 97b7653 的 CI 36544870349 已 success；本步独立提交后推进 CLI。

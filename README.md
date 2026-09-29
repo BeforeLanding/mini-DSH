@@ -4,7 +4,7 @@
 
 仿 DeepSeek Harness 的 **mini coding agent harness**，使用 TypeScript / Cordis 构建本地编程 Agent 运行环境。按照 [从零手写 mini-dsh 学习指南](https://github.com/huangjunsen0406/mini-dsh/blob/main/LEARNING.zh-CN.md) 完成第 0～7 天主线及补充篇，每个阶段分别提交，随后扩展上下文、预算与持久化恢复。
 
-开发主线是让模型在代码仓库中完成“理解项目规则 → 定位代码 → 修改文件 → 运行检查 → 根据失败修复 → 交付 diff 与验证证据”。当前已具备有界文件/Bash 工具、大结果回读、运行时底座和仓库规则/检查入口上下文；任务变更清单、结构化验证记录等仍是后续规划。首版聚焦单 Agent、单本地工作区与 CLI。
+开发主线是让模型在代码仓库中完成“理解项目规则 → 定位代码 → 修改文件 → 运行检查 → 根据失败修复 → 交付 diff 与验证证据”。当前已具备有界文件/Bash 工具、大结果回读、运行时底座、仓库规则/检查入口上下文、可靠编辑和可恢复的任务变更清单/diff；结构化验证记录仍是后续规划。首版聚焦单 Agent、单本地工作区与 CLI。
 
 ## 运行
 
@@ -18,7 +18,7 @@ pnpm start
 
 启动前在 `.env` 中填写 `DEEPSEEK_API_KEY`。`.env.example` 默认选择 `deepseek/deepseek-v4-flash`；未设置 `MINI_DSH_MODEL` 时选择 `deepseek/deepseek-v4-pro`。`MINI_DSH_WORKSPACE` 指定工作目录，默认是启动目录。Context7 为可选 MCP 服务，连接失败仍可进入 CLI。
 
-CLI 支持 `/tools`、`/models`、`/model provider/model`、`/history`、`/prompt`、`/reset`、`/continue`、`/budget` 和 `/exit`。`/reset` 追加事件、清理可见历史并保留 session id 与原始 JSONL。运行或审批时按 Esc 取消，方向键不会触发取消。
+CLI 支持 `/tools`、`/models`、`/model provider/model`、`/history`、`/prompt`、`/reset`、`/continue`、`/budget`、`/changes [fileOffset]`、`/diff [fileOffset] [byteOffset]` 和 `/exit`。`/reset` 追加事件、清理可见历史并保留 session id 与原始 JSONL。运行或审批时按 Esc 取消，方向键不会触发取消。
 
 写文件、编辑文件和执行 Bash 前会询问 `Allow this? [Y/n]`，空回车或 `y` / `yes` 同意。审批等待暂停主动时间，并有独立超时。`MINI_DSH_AUTO_APPROVE=1` 可用于受信任的测试环境。
 
@@ -32,7 +32,7 @@ project-context 插件可通过 `limits` 配置 `maxFileBytes`（默认 16 KiB�
 
 ## 结构
 
-入口负责装配插件；`core/` 实现事件日志、工具注册表、提示词、模型路由和 Agent Loop；`plugins/` 将 runtime 暴露为 Cordis 服务；`models/` 实现 DeepSeek 流式协议；`tools/` 注册 Bash 和五个文件工具。
+入口负责装配插件；`core/` 实现事件日志、工具注册表、提示词、模型路由和 Agent Loop；`plugins/` 将 runtime 暴露为 Cordis 服务；`models/` 实现 DeepSeek 流式协议；`tools/` 注册 Bash、五个文件工具和 task_changes。
 
 请求经过 CLI → agent.send → Agent Loop → Session Event Log → LLM；模型请求工具时经过 ToolRuntime，记录结果后继续下一轮。Loop 通过服务契约工作，不依赖具体模型或工具，底层未注入预算时没有固定次数上限；CLI 默认使用有限预算。
 
@@ -45,7 +45,7 @@ pnpm check
 pnpm test
 ```
 
-当前 96 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文和有界工具/结果回读测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
+当前 107 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读和可靠编辑/任务变更测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
 
 NX-05a 提供三个可重复的 [编程任务 fixture](test/fixtures/coding/README.md)：边界修复、功能扩展和跨文件接口修改。运行 `pnpm fixtures:check` 核验初始失败/参考通过基线；`pnpm test` 还覆盖模拟模型经真实文件/Bash 工具完成失败→修改→重跑的流程。每次使用新临时工作区，独立验收器保留在工作区外；模拟结果不代表真实模型编程成功率。
 
@@ -57,7 +57,17 @@ GitHub Actions 在推送到 `main`、提交 Pull Request 或手动触发时运�
 
 ## 开发协作
 
-围绕 mini coding agent harness 的 [完成度评估与开发路线](docs/INTERNSHIP_ROADMAP.md) 包含三个已复现边界、仓库上下文、可靠编辑、执行验证、编程评测和求职展示；规划项尚未实现。
+围绕 mini coding agent harness 的 [完成度评估与开发路线](docs/INTERNSHIP_ROADMAP.md) 包含三个已复现边界、仓库上下文、可靠编辑、执行验证、编程评测和求职展示；具体完成状态以 TASKS/PROGRESS 为准。
+
+## 可靠编辑与任务 diff
+
+read_file 在编辑限额内返回完整字节 SHA-256；edit_file/write_file 可传 expectedHash，新建用 missing。编辑保持 Unicode/BOM/CRLF，拒绝重复 oldText、二进制、非法编码和超限；审批展示范围、指纹和有界 diff。审批期间变更或软链重新指向会拒绝，文件通过同目录临时写入、sync 和 rename 替换并保留原权限。最终核验至 rename 仍存在外部进程竞态，这是乐观冲突检测，逐文件提交，不承诺跨文件事务。
+
+有 session 时，首次读取/编辑前的现场内容作为 task 基线，保留用户原有 staged/dirty 修改；未传 expectedHash 时也检查最近观察/成功编辑版本。冲突后重新读取再编辑。基线、观察指纹、意图和逐次结果保存到原 JSONL；重启和 /continue 不重放编辑，结果未确认显示 unknown，须人工核验后开始新任务。无 session 直接调用仍可用指纹保护，但不产生任务清单。
+
+运行结束自动展示清单；/changes 查看逐文件状态、失败次数和外部变化，/diff 查看已确认编辑，截断时给出文件/UTF-8 字节续读命令。task_changes 给模型同样的清单及 diff，大结果继续使用结果引用回读。两次编辑间的用户修改只标记来源断层并改为逐次编辑 diff，不将它们归到 Agent；Bash 和外部工具修改不在此清单覆盖范围。
+
+files 插件 maxEditBytes 默认 1 MiB、maxTrackedFiles 默认每 task 100，均可配置。超限文件仍可有界读取但无编辑指纹；不可直接编辑。CLI maxChangeOutputBytes 默认 32 KiB（至少 4 字节），/diff 每次展示一个文件并可分页，/changes 默认每页最多 20 个文件。快照包含相关文件内容，作为本地 session 数据保存，勿提交真实用户日志。
 
 本轮 TypeScript、持久化、上下文、预算及续跑功能的完整梳理见 [改动与实现功能](docs/context-budget/CHANGES.md)。
 

@@ -14,7 +14,9 @@ import * as agentLoop from '../src/plugins/agent-loop.js'
 import * as sandbox from '../src/plugins/sandbox.js'
 import * as cli from '../src/plugins/cli.js'
 import { JsonlStore } from '../src/core/event-store.js'
-async function boot(workspace: string, directory: string, resumeSessionId?: string, autoApprove = true) {
+import * as files from '../src/tools/files.js'
+import { fingerprint } from '../src/core/file-edit.js'
+async function boot(workspace: string, directory: string, resumeSessionId?: string, autoApprove = true, maxChangeOutputBytes?: number) {
   const root = new Context(), input = new PassThrough(), output = new PassThrough()
   let text = '', models = 0, executions = 0
   output.on('data', chunk => { text += String(chunk) })
@@ -23,7 +25,7 @@ async function boot(workspace: string, directory: string, resumeSessionId?: stri
   root.llm.register('mock', { models: ['test', 'alternate'], capabilities: { test: { contextWindowTokens: 1_000_000 }, alternate: { contextWindowTokens: 1_000_000 } },
     chat: async () => ++models === 1 ? { toolCalls: [{ id: 'a', name: 'tick', arguments: {} }] } : { content: 'done' } })
   root.tools.register({ name: 'tick', execute: () => { executions++; return 'ok' } })
-  await root.plugin(cli, { input, output, sessionDirectory: directory, resumeSessionId, ...(resumeSessionId ? {} : { budget: { maxModelRequests: 1 } }) })
+  await root.plugin(cli, { input, output, sessionDirectory: directory, resumeSessionId, maxChangeOutputBytes, ...(resumeSessionId ? {} : { budget: { maxModelRequests: 1 } }) })
   async function waitFor(pattern: string) {
     if (text.includes(pattern)) return
     await new Promise<void>((resolve, reject) => {
@@ -83,6 +85,53 @@ test('CLI rejects invalid overrides without changing the effective policy', { ti
   } finally {
     await app.root.fiber.dispose(); assert.equal(path.dirname(temp), path.resolve(os.tmpdir())); await fs.rm(temp, { recursive: true, force: true })
   }
+})
+
+test('CLI and scripted model deliver confirmed task changes, failed attempts and UTF-8 diff pagination', { timeout: 15000 }, async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-cli-changes-')), workspace = path.join(temp, 'work')
+  await fs.mkdir(workspace)
+  const original = '用户已有\r\nvalue=1\r\n'
+  await fs.writeFile(path.join(workspace, 'a'), original)
+  const app = await boot(workspace, path.join(temp, 'logs'), undefined, true, 256)
+  try {
+    await app.root.plugin(files, { maxTrackedFiles: 2 })
+    const commands = [
+      { id: 'read', name: 'read_file', arguments: { path: 'a' } },
+      { id: 'edit', name: 'edit_file', arguments: { path: 'a', oldText: 'value=1', newText: 'value=2', expectedHash: fingerprint(original) } },
+      { id: 'failure', name: 'edit_file', arguments: { path: 'a', oldText: 'absent', newText: 'x' } },
+      { id: 'create', name: 'write_file', arguments: { path: 'b', content: '中文😀'.repeat(100), expectedHash: 'missing' } },
+      { id: 'changes', name: 'task_changes', arguments: { includeDiff: true } },
+    ]
+    let step = 0
+    app.root.llm.register('changes', { models: ['test'], capabilities: { test: { contextWindowTokens: 1_000_000 } }, chat: async ({ messages = [] }) => {
+      if (step === commands.length) {
+        const report = JSON.parse(messages.at(-1)!.content!)
+        assert.equal(report.files[0].status, 'applied')
+        assert.deepEqual(report.files[0].attempts.map((attempt: { status: string }) => attempt.status), ['applied', 'failed'])
+        assert.doesNotMatch(report.files[0].diff, /用户已有/)
+        return { content: 'changes delivered' }
+      }
+      return { toolCalls: [commands[step++]] }
+    } })
+    app.input.write('/model changes/test\n/budget {"maxModelRequests":12}\nmock edit task\n/changes\n/diff 0\n/diff 1\n')
+    await app.waitFor('[diff truncated; continue: /diff 1 ')
+    assert.match(app.text(), /applied a failedAttempts=1/)
+    assert.match(app.text(), /-value=1\r\n\+value=2/)
+    assert.equal(await fs.readFile(path.join(workspace, 'a'), 'utf8'), original.replace('value=1', 'value=2'))
+    const match = app.text().match(/continue: \/diff 1 (\d+)/)!
+    app.input.write(`/diff 1 ${match[1]}\n/diff -1\n`)
+    await app.waitFor('offset must be a nonnegative safe integer')
+    assert.doesNotMatch(app.text(), /�/)
+    const state = app.root.sessions.latestRun(app.root.sessions.list()[0].id)!
+    assert.equal(state.status, 'completed')
+    assert.equal(state.counters.toolCalls, commands.length)
+    // Unknown intent is visible without inferring success from current bytes.
+    const unknownRun = app.root.sessions.beginRun(state.sessionId, {}, 'mock')
+    app.root.sessions.append(state.sessionId, 'file/change', { changeId: 'unknown', path: 'a', tool: 'write_file', before: { text: null, hash: 'missing' }, after: { text: 'maybe', hash: fingerprint('maybe') } }, unknownRun)
+    app.root.sessions.finishRun(unknownRun, 'error'); await app.root.sessions.flush(state.sessionId)
+    app.input.write('/changes\n/diff\n/reset\n/changes\n')
+    await app.waitFor('unknown a'); await app.waitFor('(no confirmed diff)'); await app.waitFor('[Changes] no tracked edits in this task')
+  } finally { await app.root.fiber.dispose(); await fs.rm(temp, { recursive: true, force: true }) }
 })
 test('Esc cancels a CLI approval and releases its input handler', { timeout: 10000 }, async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-cli-approval-'))
