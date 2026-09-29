@@ -1,5 +1,11 @@
 # 开发进度
 
+### NX-12 Windows CI 短路径修复（2026-09-29）
+
+失败运行 36536233812：Ubuntu Node 22/24 通过，Windows 两组均在内部 junction 规则读取时误报越界。本地用真实 8.3 路径复现：fs.realpathSync 保留 junction 目标的短路径，而 fs.promises.realpath 返回长路径；原本相同目录因此比较失败。路径闸门统一使用 fs.realpathSync.native，与异步加载器一致，不放宽工作区边界。
+
+新增跨平台目录别名回归，Windows 通过系统 ShortPath 构造 junction，验证规则加载、规范化来源和未创建文件的内部路径；外部 junction 及其未创建子路径继续拒绝。pnpm check（54 文件）、pnpm test（87/87，无跳过）与 git diff --check 通过。本步独立提交并推送后再核验四组 CI；提交时尚无远端修复成功结论。
+
 ### NX-12e 项目上下文集成与 NX-12 完成（2026-09-29）
 
 新增依赖实际 sandbox 工作区的 project-context 插件，动态 system 提示词及只读 project_context 工具共用有界加载器，标注权限、作用域、脚本未验证及查询不改变工具 cwd。CLI 默认 coding，可用 MINI_DSH_PROFILE=general 保留通用身份；MINI_DSH_PROJECT_DIRECTORY 只控制初始上下文目录。注册前校验，释放时移除上下文和工具；README 与示例环境同步使用方式。

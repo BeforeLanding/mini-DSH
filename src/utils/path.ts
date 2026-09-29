@@ -10,7 +10,8 @@ function realpathWithMissing(target: string): string {
   const missing: string[] = []
   let current = target
   while (true) {
-    try { return path.join(fs.realpathSync(current), ...missing) } catch (error) {
+    // Match fs.promises.realpath: native resolution also expands Windows 8.3 aliases.
+    try { return path.join(fs.realpathSync.native(current), ...missing) } catch (error) {
       if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error
       try { if (fs.lstatSync(current).isSymbolicLink()) throw new Error('path escapes the workspace through a symlink') }
       catch (statError) { if (!(statError instanceof Error && 'code' in statError && statError.code === 'ENOENT')) throw statError }

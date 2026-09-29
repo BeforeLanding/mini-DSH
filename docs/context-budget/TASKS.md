@@ -1,5 +1,10 @@
 # 任务清单
 
+## NX-12 CI 修复：Windows 短路径 junction
+- 状态：本地修复完成，提交后核验远端 CI（2026-09-29）。
+- CI-12a / 统一真实路径解析，内部短路径 junction 不误报越界 / 本地复现、短路径及既有越界回归、pnpm check（54 文件）与 pnpm test（87/87，无跳过）、git diff --check 通过 / done / 本步独立提交后报告编号。
+- 本步完成并提交后推送，核验 Ubuntu/Windows × Node 22/24 四组 CI；远端未通过前不报告修复已验收。
+
 ## NX-12 coding profile 与仓库上下文
 - 关联：M6、R-14；依赖 NX-05a。
 - 状态：done（2026-09-29）。

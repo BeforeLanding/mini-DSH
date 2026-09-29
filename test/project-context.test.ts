@@ -3,7 +3,9 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { execFileSync } from 'node:child_process'
 import { ProjectContextRuntime } from '../src/core/project-context-runtime.js'
+import { resolveInside } from '../src/utils/path.js'
 
 async function fixture() {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-context-'))
@@ -94,6 +96,35 @@ test('rule loading rejects escaped directories and outward file/directory symlin
       assert.equal((await loader.load()).rules[0].source, 'shared.md')
       assert.equal((await loader.load()).rules[0].scope, '.')
     }
+  } finally { await f.close() }
+})
+
+test('native path checks accept internal directory aliases including Windows short names without allowing escape', async () => {
+  const f = await fixture()
+  try {
+    const canonical = await fs.realpath(f.workspace)
+    const aliasRoot = process.platform === 'win32'
+      ? execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '(New-Object -ComObject Scripting.FileSystemObject).GetFolder($env:MINI_DSH_TEST_PATH).ShortPath'], {
+        encoding: 'utf8', env: { ...process.env, MINI_DSH_TEST_PATH: f.workspace },
+      }).trim()
+      : f.workspace
+    assert.ok(aliasRoot)
+    await fs.mkdir(path.join(canonical, 'shared'))
+    await fs.writeFile(path.join(canonical, 'shared', 'AGENTS.md'), 'internal-rule')
+    const linkType = process.platform === 'win32' ? 'junction' : 'dir'
+    await fs.symlink(path.join(aliasRoot, 'shared'), path.join(canonical, 'alias'), linkType)
+    const loader = new ProjectContextRuntime(aliasRoot)
+    const result = await loader.load('alias')
+    assert.equal(result.workspace, canonical)
+    assert.equal(result.directory, 'shared')
+    assert.equal(result.rules[0].source, 'shared/AGENTS.md')
+    assert.equal(result.rules[0].content, 'internal-rule')
+    assert.equal(resolveInside(canonical, 'alias/new/file.txt'), path.join(canonical, 'alias/new/file.txt'))
+    const outside = path.join(f.directory, 'outside')
+    await fs.mkdir(outside)
+    await fs.symlink(outside, path.join(canonical, 'escape'), linkType)
+    await assert.rejects(loader.load('escape'), /path escapes/)
+    assert.throws(() => resolveInside(canonical, 'escape/new/file.txt'), /path escapes/)
   } finally { await f.close() }
 })
 
