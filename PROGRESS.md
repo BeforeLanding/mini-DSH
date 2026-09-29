@@ -1,5 +1,11 @@
 # 开发进度
 
+### F2 最终持久化 deadline 修复（2026-09-29）
+
+答案与用量先在主动预算内确认；唯一终态提交等待也受主动 deadline 及 finalizationTimeoutMs（默认 5000ms）限制，返回前复查。错误收尾独立有界并保留原停止原因。终态写入已开始后的超时/取消/失败暴露 terminalCommit=uncertain，包含提交等待的实际观测时间；阻止继续、新任务及 reset，迟到确认不覆盖当前状态。重新读取日志按完整持久化事实恢复，不追加冲突终态；提交前计时快照和重启后无法重建的 sync 时间已在 R-05/D-05/README 明确。
+
+pnpm check（46 文件）、pnpm test（62/62，无跳过）、node --check docs/context-budget/review-probes.mjs 与 git diff --check 通过。四条新增回归覆盖跨 deadline、挂起、取消/完成竞态、失败、迟到完成、有界错误收尾以及终态已/未落盘两种恢复；真实 Cordis/JSONL 集成继续通过。诊断 F2 返回 timeout、主动时间 20ms、提交 uncertain；F1 保留全部历史，F3 待修复。尚未核验本轮跨平台 CI。
+
 ### F1 输出额度与历史裁剪联动修复（2026-09-29）
 
 每个候选历史集合依据当前 run 已消耗 token、输入估算和最低输出计算实际额度，再检查输入目标与窗口；不足时才移除最旧完整任务并重新计算。完整历史输入 754、余额 854、窗口 2902 的样例保留全部历史并发送 100 输出额度。原始事件保持不变，当前 task、system/schema 仍不可裁剪。

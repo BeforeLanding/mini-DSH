@@ -129,11 +129,14 @@ test('Cordis persists a stopped file task then resumes without repeating the com
     const agent = first.agents.create({ sessionId: session.id, model: 'mock/test', loop: first.agentLoop, budget: { maxModelRequests: 2 } })
     await assert.rejects(agent.send('mock file task', { onToolResult: () => { writes++ } }), /max_steps/)
     const before = first.sessions.latestRun(session.id)!, stat = await fs.stat(path.join(workspace, 'once.txt'))
+    const terminal = first.sessions.get(session.id).events.filter(e => e.type === 'run/finish').at(-1)!
     assert.equal(writes, 1)
     await first.sessions.close(); await first.fiber.dispose()
     const second = await boot(), reopened = await JsonlStore.open(directory, session.id); stores.push(reopened)
     await second.sessions.restore(reopened, await fs.realpath(workspace))
-    assert.deepEqual(second.sessions.latestRun(session.id), before)
+    assert.equal(before.terminalCommit?.status, 'confirmed')
+    assert.ok(before.counters.activeDurationMs >= terminal.data.state.counters.activeDurationMs)
+    assert.deepEqual(second.sessions.latestRun(session.id), terminal.data.state)
     let resumedRequests = 0
     second.llm.register('mock', { models: ['test'], chat: async ({ messages = [] }) => {
       resumedRequests++

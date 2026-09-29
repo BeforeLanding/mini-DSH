@@ -98,6 +98,7 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
         if (state) {
           const c = state.counters, task = ctx.sessions.taskState(session.id, state.taskId)
           print(`[Run ${state.status}] model=${c.modelRequests}, tools=${c.toolCalls}, tokens=${c.totalTokens} (${[...new Set(state.usage.map(u => u.source))].join('+') || 'none'}), active=${Math.round(c.activeDurationMs)}ms, removedTasks=${state.removedTaskIds.length}`)
+          if (state.terminalCommit?.status === 'uncertain') print('[Persistence uncertain] Close and restore this session to verify its terminal record before continuing.')
           print(`[Task] runs=${task.runIds.length}, tokens=${task.counters.totalTokens}, model=${task.counters.modelRequests}, tools=${task.counters.toolCalls}`)
         }
       }

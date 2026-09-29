@@ -50,7 +50,7 @@ export class RunBudgetRuntime {
     if (remaining <= 0) this.stop('timeout')
     else this.#timer = this.clock.setTimeout(() => this.#schedule(), Math.min(remaining, 2_147_483_647))
   }
-  async wait<T>(work: () => Promise<T>, timeoutMs?: number, timeoutReason: 'request_timeout' | 'approval_timeout' = 'request_timeout'): Promise<T> {
+  async wait<T>(work: () => Promise<T>, timeoutMs?: number, timeoutReason: 'request_timeout' | 'approval_timeout' | 'timeout' = 'request_timeout'): Promise<T> {
     this.check()
     let timer: unknown
     let abort: () => void = () => {}
@@ -70,8 +70,14 @@ export class RunBudgetRuntime {
     try {
       if (this.signal.aborted) abort()
       const value = await Promise.race([work(), interrupted])
+      this.check()
       return value
     } finally { this.clock.clearTimeout(timer); this.signal.removeEventListener('abort', abort) }
+  }
+  async finalize<T>(work: () => Promise<T>): Promise<T> {
+    const cleanup = new RunBudgetRuntime({ maxActiveDurationMs: this.policy.finalizationTimeoutMs ?? 5_000 }, this.state, undefined, this.clock)
+    try { return await cleanup.wait(work) }
+    finally { cleanup.dispose() }
   }
   async approve<T>(work: () => Promise<T>): Promise<T> {
     this.check()

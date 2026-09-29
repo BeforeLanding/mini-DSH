@@ -68,6 +68,9 @@
 供应商能力按 endpoint/model/核验日期记录，不凭模型名猜窗口；不承诺严格计费上限。保留模型协议字段，包括无工具最终回答的 reasoning。
 
 ### D-05 时间与终态
+回答、用量等执行事件先在主动预算内完成 flush 并复查，再生成唯一 run/finish。终态提交确认同样受剩余主动时间约束，且另受 finalizationTimeoutMs（默认 5000ms、可配置）限制。停止后的错误收尾仅使用该独立上界，保留原停止原因；成功确认后再次复查取消/deadline 才返回答案。
+
+终态写入开始后不能安全撤销，也不能追加相冲突的第二个终态。确认超时、取消或失败时，调用失败；当前进程暴露 terminalCommit.status=uncertain、终态快照及实际观测主动时间，禁止新 run，迟到写入不会改回 completed。须关闭并重新读取日志判定持久化事实：若唯一 completed 记录确已完整落盘，恢复按 completed；若未落盘，恢复按 running 崩溃窗口处理。run/finish 的计时为提交前快照，terminalCommit.activeDurationMs 为当前进程包含提交等待的观测值；重启无法精确重建最后 sync 时间。收尾上界不保证物理取消文件 IO。
 用单调主动时间和组合 AbortSignal，审批暂停主动计时且单独超时；结束清理 timer/监听器。Promise.race 只停止等待，不替代取消。
 同一 run 仅一个终态；已封存状态不被迟到回调覆盖。检查顺序：用户取消 → 主动 deadline → 对应调度次数 → token → 上下文容量。最后允许的完整回答可完成；超出 token 额度则停止后续调度。
 非协作工具可能继续运行，不能保证物理终止；结果不确定标 unknown。

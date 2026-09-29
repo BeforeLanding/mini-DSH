@@ -1,5 +1,12 @@
 # 任务清单
 
+## F2 最终持久化 deadline 与提交不确定性
+- 关联：R-05、R-08、R-10；NX-02、D-05。
+- 状态：done（2026-09-29）。
+- 行为：回答及用量先在主动预算内确认，再提交唯一终态；终态确认受主动 deadline 和可配置收尾上界限制。超时或取消后不返回成功，提交不确定时阻止新 run；恢复以日志事实为准。
+- 验证：最终 sync 跨 deadline、挂起、取消/完成竞态、失败和迟到完成；错误路径收尾有界。
+- 证据：test/deadline.test.ts 四条新增回归及 test/integration.test.ts 的真实 Cordis/JSONL 恢复；pnpm check（46 文件）、pnpm test（62/62，无跳过）、诊断脚本与 git diff --check 通过。
+
 ## F1 输出额度与历史裁剪联动
 - 关联：R-02、R-03、R-06、R-07；NX-01。
 - 状态：done（2026-09-29）。

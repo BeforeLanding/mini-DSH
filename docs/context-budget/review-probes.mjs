@@ -60,11 +60,14 @@ terminal.sessions.attachStore(terminal.session.id, {
   append: async event => { if (event.type === 'run/finish') clock.advance(20) },
   read: async () => [], close: async () => {},
 })
-const returned = await terminal.agent.send('current', { budget: { maxActiveDurationMs: 10 } })
+let returned, stopReason
+try { returned = await terminal.agent.send('current', { budget: { maxActiveDurationMs: 10 } }) }
+catch (error) { stopReason = error.reason ?? error.message }
 const terminalState = terminal.sessions.latestRun(terminal.session.id)
 console.log(JSON.stringify({
-  probe: 'F2-terminal-persistence', returned, elapsedMs: clock.time, limitMs: 10,
+  probe: 'F2-terminal-persistence', returned: returned ?? null, stopReason, elapsedMs: clock.time, limitMs: 10,
   status: terminalState.status, recordedActiveMs: terminalState.counters.activeDurationMs,
+  terminalCommit: terminalState.terminalCommit,
 }))
 await terminal.sessions.close()
 

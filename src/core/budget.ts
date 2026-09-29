@@ -10,14 +10,16 @@ export interface BudgetPolicy {
   safetyMarginTokens?: number
   requestTimeoutMs?: number
   approvalTimeoutMs?: number
+  finalizationTimeoutMs?: number
 }
 export const CLI_BUDGET: Readonly<BudgetPolicy> = Object.freeze({
   maxModelRequests: 64, maxToolCalls: 128, maxActiveDurationMs: 600_000,
   maxTotalTokens: 2_000_000, maxOutputTokens: 16_384, minimumOutputTokens: 4_096,
   inputTargetTokens: 65_536, safetyMarginTokens: 2_048,
   requestTimeoutMs: 180_000, approvalTimeoutMs: 300_000,
+  finalizationTimeoutMs: 5_000,
 })
-const positive = new Set(['maxOutputTokens', 'minimumOutputTokens', 'contextWindowTokens', 'inputTargetTokens', 'requestTimeoutMs', 'approvalTimeoutMs'])
+const positive = new Set(['maxOutputTokens', 'minimumOutputTokens', 'contextWindowTokens', 'inputTargetTokens', 'requestTimeoutMs', 'approvalTimeoutMs', 'finalizationTimeoutMs'])
 const keys = new Set(Object.keys(CLI_BUDGET).concat('contextWindowTokens'))
 export function resolveBudget(...layers: (BudgetPolicy | undefined)[]): Readonly<BudgetPolicy> {
   const result: BudgetPolicy = {}
@@ -45,6 +47,7 @@ export interface RunState {
   sessionId: string; taskId: string; runId: string; previousRunId?: string; model: string
   policy: Readonly<BudgetPolicy>; counters: Counters; status: 'running' | StopReason
   usage: Usage[]; removedTaskIds: string[]; estimatedInputTokens?: number
+  terminalCommit?: { status: 'confirmed' | 'uncertain'; terminalStatus: StopReason; activeDurationMs: number }
 }
 export class BudgetStop extends Error {
   constructor(public reason: Exclude<StopReason, 'completed'>, public state?: RunState) {

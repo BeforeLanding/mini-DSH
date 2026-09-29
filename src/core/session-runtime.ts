@@ -15,6 +15,13 @@ export class SessionRuntime {
     #confirmed = new Map<string, number>()
     #storeErrors = new Map<string, unknown>()
     #pending = new Map<string, Promise<void>>()
+    #terminalCommits = new Map<string, RunState>()
+
+    observeTerminalCommit(state: RunState, terminalStatus: StopReason, confirmed: boolean, status: StopReason = terminalStatus) {
+        state.status = status
+        state.terminalCommit = { status: confirmed ? 'confirmed' : 'uncertain', terminalStatus, activeDurationMs: state.counters.activeDurationMs }
+        this.#terminalCommits.set(state.runId, structuredClone(state))
+    }
     
     attachStore(id: string, store: EventStore, existing = false) {
         if (this.#stores.has(id)) throw new Error('session already has a store')
@@ -81,6 +88,8 @@ export class SessionRuntime {
         if (!begin || begin.type !== 'run/start') return undefined
         const end = [...events].reverse().find(e => e.type === 'run/finish' && e.data.state.runId === begin.data.state.runId)
         if (end?.type === 'run/finish') {
+            const observed = this.#terminalCommits.get(begin.data.state.runId)
+            if (observed) return structuredClone(observed)
             const state = structuredClone(end.data.state)
             if (this.#stores.has(id) && end.seq > (this.#confirmed.get(id) ?? 0)) state.status = this.#storeErrors.has(id) ? 'error' : 'running'
             return state
@@ -102,6 +111,7 @@ export class SessionRuntime {
     }
     beginRun(id: string, policy: Readonly<BudgetPolicy>, model: string, continuing = false): RunState {
         if (this.#storeErrors.has(id)) throw new Error('session storage failed; close and verify the log before resuming', { cause: this.#storeErrors.get(id) })
+        if (this.latestRun(id)?.terminalCommit?.status === 'uncertain') throw new Error('terminal commit uncertain; close and restore the session log before resuming')
         if (this.latestRun(id)?.status === 'running') throw new Error('session is already running')
         const previous = this.latestRun(id)
         if (continuing) {
@@ -136,7 +146,8 @@ export class SessionRuntime {
         const result = emptyCounters()
         for (const event of this.visibleEvents(id)) {
             if (event.type !== 'run/finish' || event.data.state.taskId !== taskId) continue
-            for (const key of Object.keys(result) as (keyof Counters)[]) result[key] += (event.data.state.counters[key] ?? 0)
+            const counters = this.#terminalCommits.get(event.data.state.runId)?.counters ?? event.data.state.counters
+            for (const key of Object.keys(result) as (keyof Counters)[]) result[key] += (counters[key] ?? 0)
         }
         return result
     }
@@ -191,6 +202,7 @@ export class SessionRuntime {
     clear(id: string) {
         const old = this.get(id)
         if (this.latestRun(id)?.status === 'running') throw new Error('session is running')
+        if (this.latestRun(id)?.terminalCommit?.status === 'uncertain') throw new Error('terminal commit uncertain; close and restore the session log before reset')
         this.append(id, 'session/reset', { epoch: old.events.filter(e => e.type === 'session/reset').length + 1 })
     }
 

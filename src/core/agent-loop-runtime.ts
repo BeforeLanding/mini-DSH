@@ -5,7 +5,7 @@ import { ContextBudgetRuntime } from './context-runtime.js'
 import { estimateInput, estimateUsage } from './token-estimator.js'
 import { StreamJournal } from './stream-journal.js'
 import { ModelStreamError } from './model-error.js'
-import type { Usage } from './budget.js'
+import type { Usage, StopReason } from './budget.js'
 import { randomUUID } from 'node:crypto'
 import { BudgetStop } from './budget.js'
 import { resolveBudget } from './budget.js'
@@ -39,6 +39,12 @@ export class AgentLoopRuntime {
         const state = this.sessions.beginRun(sessionId, policy, typeof agent.model === 'string' ? agent.model : JSON.stringify(agent.model), input === undefined)
         const control = new RunBudgetRuntime(policy, state, signal, this.clock)
         const enteredTools = new Set<string>()
+        let terminalStatus: StopReason | undefined
+        const observeCommit = (confirmed: boolean, status: StopReason = terminalStatus!) => {
+            state.counters.approvalDurationMs = control.approvalDurationMs
+            state.counters.activeDurationMs = control.activeDurationMs
+            this.sessions.observeTerminalCommit(state, terminalStatus!, confirmed, status)
+        }
         const append: SessionRuntime['append'] = (id, type, data) => this.sessions.append(id, type, data, state)
         try {
         if (input !== undefined) append(sessionId, 'user/message', { content: input })
@@ -113,10 +119,15 @@ export class AgentLoopRuntime {
                 const content = response.content ?? ''
                 append(sessionId, 'assistant/message', { content, reasoningContent: response.reasoningContent })
                 if (policy.maxTotalTokens !== undefined && state.counters.totalTokens > policy.maxTotalTokens) throw new BudgetStop('token_budget', state)
+                await control.wait(() => this.sessions.flush(sessionId))
+                control.check()
                 state.counters.approvalDurationMs = control.approvalDurationMs
                 state.counters.activeDurationMs = control.activeDurationMs
-                this.sessions.finishRun(state, 'completed')
-                await this.sessions.flush(sessionId)
+                terminalStatus = 'completed'
+                this.sessions.finishRun(state, terminalStatus)
+                await control.wait(() => this.sessions.flush(sessionId), policy.finalizationTimeoutMs ?? 5_000, 'timeout')
+                control.check()
+                observeCommit(true)
                 return content
             }
 
@@ -184,6 +195,10 @@ export class AgentLoopRuntime {
 
         }
         } catch (error) {
+            if (terminalStatus !== undefined) {
+                observeCommit(false, control.stopReason ?? (error instanceof BudgetStop ? error.reason : 'error'))
+                throw error
+            }
             const events = this.sessions.visibleEvents(sessionId)
             for (const { call, scope } of pendingTools(events)) {
                 if (scope.runId !== state.runId) continue
@@ -193,8 +208,15 @@ export class AgentLoopRuntime {
             }
             state.counters.approvalDurationMs = control.approvalDurationMs
                 state.counters.activeDurationMs = control.activeDurationMs
-            this.sessions.finishRun(state, control.stopReason ?? (error instanceof BudgetStop ? error.reason : 'error'))
-            await this.sessions.flush(sessionId)
+            terminalStatus = control.stopReason ?? (error instanceof BudgetStop ? error.reason : 'error')
+            this.sessions.finishRun(state, terminalStatus)
+            try {
+                await control.finalize(() => this.sessions.flush(sessionId))
+                observeCommit(true)
+            } catch (commitError) {
+                observeCommit(false, terminalStatus)
+                if (!(commitError instanceof BudgetStop)) throw commitError
+            }
             throw error
         } finally { control.dispose() }
     }
