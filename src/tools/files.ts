@@ -66,7 +66,7 @@ export function apply(ctx: Context, config: FilesConfig = {}) {
       }
       validateText(text, maxEditBytes)
       const diff = unifiedDiff(relative(target), before.text, text)
-      changeId = await journal?.start({ path: file, tool, toolCallId: exec.toolCallId, before, after: { text, hash: fingerprint(text), mode: before.mode } })
+      changeId = await journal?.start({ path: file, tool, toolCallId: exec.toolCallId, before, after: { text, hash: fingerprint(text), mode: before.mode, location: before.location } })
       if (before.text === text) {
         if (changeId) await journal!.finish(changeId, 'unchanged')
         return { path: file, status: 'unchanged', beforeHash: before.hash, afterHash: before.hash, diff: '' }

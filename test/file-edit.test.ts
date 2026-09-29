@@ -56,3 +56,32 @@ test('unified diff handles inserted/deleted lines, empty files, CRLF and missing
   assert.match(unifiedDiff('a', 'a\n', 'a\nb\n'), /@@ -1,0 \+2,1 @@/)
   assert.match(unifiedDiff('a', '', 'x'), /@@ -0,0 \+1,1 @@/)
 })
+
+test('atomic edits preserve permissions and internal symlinks, refusing approval-time retargeting', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'file-alias-')), a = path.join(directory, 'a'), b = path.join(directory, 'b'), alias = path.join(directory, 'alias')
+  const signal = new AbortController().signal
+  try {
+    await fs.mkdir(a); await fs.mkdir(b)
+    const original = path.join(a, 'file'), other = path.join(b, 'file')
+    await fs.writeFile(original, 'same'); await fs.writeFile(other, 'same')
+    await fs.symlink(a, alias, process.platform === 'win32' ? 'junction' : 'dir')
+    const before = await snapshot(path.join(alias, 'file'), 100, signal)
+    await fs.unlink(alias); await fs.symlink(b, alias, process.platform === 'win32' ? 'junction' : 'dir')
+    await assert.rejects(commitFile(() => path.join(alias, 'file'), before, 'changed', 100, signal), /path changed/)
+    assert.equal(await fs.readFile(original, 'utf8'), 'same'); assert.equal(await fs.readFile(other, 'utf8'), 'same')
+    await fs.chmod(other, 0o751)
+    const mode = (await fs.stat(other)).mode & 0o777
+    const current = await snapshot(path.join(alias, 'file'), 100, signal)
+    await commitFile(() => path.join(alias, 'file'), current, 'updated', 100, signal)
+    assert.equal(await fs.readFile(other, 'utf8'), 'updated')
+    assert.equal((await fs.stat(other)).mode & 0o777, mode)
+    assert.equal((await fs.lstat(alias)).isSymbolicLink(), true)
+    if (process.platform !== 'win32') {
+      const link = path.join(directory, 'link')
+      await fs.symlink(other, link)
+      await commitFile(() => link, await snapshot(link, 100, signal), 'linked', 100, signal)
+      assert.equal((await fs.lstat(link)).isSymbolicLink(), true)
+      assert.equal(await fs.readFile(other, 'utf8'), 'linked')
+    }
+  } finally { await fs.rm(directory, { recursive: true, force: true }) }
+})

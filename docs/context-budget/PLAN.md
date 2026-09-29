@@ -51,6 +51,7 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 
 - 文件快照默认限额 1 MiB，可配置；完整字节指纹区分 missing 和空文件。读取大文件保留分段行为但说明无编辑指纹，编辑禁止超限。
 - 唯一字面替换，统一 unified diff（共同前后缀裁剪，单 hunk，避免二次复杂度）。同目录临时文件 sync 后重新解析路径、核验目标，再 rename；取消在 rename 前不写目标，rename 后按实际成功记录。最终检查与 rename 仍有外部进程竞态，属于应用层乐观检测。
+- 快照保存真实 location；提交使用真实目标路径，内部文件软链保持为软链，审批中目录/文件软链改指向也拒绝。显式 chmod 恢复原权限，避免 umask 改变权限；rename 已成功后临时清理错误不能倒置提交结果。
 - 无 session 直接调用兼容；有 session 用首次观察与最近确认版本检测陈旧读取。显式 expectedHash 可在重新核验后指定当前版本。首次观察前用户改动作为基线保留。
 - 新增 file/baseline、file/observed、file/change、file/change-result 事件；工具结果和 completed 语义保持。首次基线固定，重新读取更新观察指纹；成功编辑更新预期版本。意图含 before/after 快照并先 flush；结果落盘失败或崩溃留下 unknown，只投影已确认事件，不根据文件匹配推断成功。取消后的协作工具可以在 run 终态后追加同 run 的失败结果；恢复校验已知 run、唯一意图及结果配对。
 - 用户在两次编辑间修改文件时，标记 externalChangesBetweenEdits 并输出逐次编辑 diff，避免首次基线至最新版本的差异夹带用户改动；最后一次成功编辑后的外部变化另标 externalChange。unknown 仅展示当前指纹，不断言外部归因。

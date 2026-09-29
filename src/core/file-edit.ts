@@ -2,15 +2,28 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 
-export interface FileSnapshot { text: string | null; hash: string; mode?: number }
+export interface FileSnapshot { text: string | null; hash: string; mode?: number; location?: string }
 export const fingerprint = (text: string | null) => text === null ? 'missing' : createHash('sha256').update(text, 'utf8').digest('hex')
 export class FileSizeLimit extends Error {}
 
+async function canonicalLocation(target: string): Promise<string> {
+  const missing: string[] = []
+  let current = target
+  while (true) {
+    try { return path.join(await fs.realpath(current), ...missing) }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
+    const parent = path.dirname(current)
+    if (parent === current) throw new Error('cannot resolve file location')
+    missing.unshift(path.basename(current)); current = parent
+  }
+}
+
 export async function snapshot(target: string, maxBytes: number, signal: AbortSignal): Promise<FileSnapshot> {
   signal.throwIfAborted()
+  const location = await canonicalLocation(target)
   let handle
   try { handle = await fs.open(target, 'r') }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { text: null, hash: 'missing' }; throw error }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { text: null, hash: 'missing', location }; throw error }
   try {
     const stat = await handle.stat()
     if (!stat.isFile()) throw new Error('expected a regular file')
@@ -27,7 +40,8 @@ export async function snapshot(target: string, maxBytes: number, signal: AbortSi
     const data = bytes.subarray(0, count)
     if (data.includes(0)) throw new Error('binary file is not supported')
     const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(data)
-    return { text, hash: fingerprint(text), mode: stat.mode }
+    if (await canonicalLocation(target) !== location) throw new Error('file path changed while reading')
+    return { text, hash: fingerprint(text), mode: stat.mode, location }
   } finally { await handle.close() }
 }
 
@@ -69,23 +83,29 @@ export function validateText(text: unknown, maxBytes: number): asserts text is s
 export async function commitFile(resolve: () => string, before: FileSnapshot, text: string, maxBytes: number, signal: AbortSignal) {
   validateText(text, maxBytes)
   signal.throwIfAborted()
-  const target = resolve()
+  const requested = resolve()
+  const target = before.location ?? await canonicalLocation(requested)
+  if (await canonicalLocation(resolve()) !== target) throw new Error('file path changed before write')
   await fs.mkdir(path.dirname(target), { recursive: true })
-  if (resolve() !== target) throw new Error('file path changed before write')
+  if (await canonicalLocation(resolve()) !== target) throw new Error('file path changed before write')
   const temporary = path.join(path.dirname(target), `.mini-dsh-edit-${randomUUID()}.tmp`)
   let handle
+  let committed = false
   try {
     handle = await fs.open(temporary, 'wx', before.mode === undefined ? 0o666 : before.mode & 0o777)
     await handle.writeFile(text, { encoding: 'utf8', signal })
+    if (before.mode !== undefined) await handle.chmod(before.mode & 0o777)
     await handle.sync()
     await handle.close(); handle = undefined
     signal.throwIfAborted()
-    if (resolve() !== target) throw new Error('file path changed before commit')
+    if (await canonicalLocation(resolve()) !== target) throw new Error('file path changed before commit')
     checkHash((await snapshot(target, maxBytes, signal)).hash, before.hash)
     signal.throwIfAborted()
     await fs.rename(temporary, target)
+    committed = true
   } finally {
     await handle?.close()
-    await fs.rm(temporary, { force: true })
+    // A cleanup failure after rename must not turn a committed edit into a failed edit.
+    try { await fs.rm(temporary, { force: true }) } catch (error) { if (!committed) throw error }
   }
 }

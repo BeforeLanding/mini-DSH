@@ -6,7 +6,7 @@ const integer = (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v)
 const optionalString = (v: unknown) => v === undefined || string(v)
 const stops = new Set(['running', 'completed', 'max_steps', 'max_tool_calls', 'timeout', 'token_budget', 'context_overflow', 'cancelled', 'error', 'approval_timeout', 'request_timeout', 'output_limit'])
 function validSnapshot(value: unknown) {
-  return record(value) && (value.text === null || (typeof value.text === 'string' && !value.text.includes('\0') && Buffer.from(value.text).toString('utf8') === value.text)) && value.hash === fingerprint(value.text as string | null) && (value.mode === undefined || integer(value.mode))
+  return record(value) && (value.text === null || (typeof value.text === 'string' && !value.text.includes('\0') && Buffer.from(value.text).toString('utf8') === value.text)) && value.hash === fingerprint(value.text as string | null) && (value.mode === undefined || integer(value.mode)) && optionalString(value.location)
 }
 const filePath = (value: unknown) => typeof value === 'string' && !!value && !/[\r\n\0]/.test(value) && !value.includes('\\') && !value.startsWith('/') && !/^[A-Za-z]:/.test(value) && !value.split('/').some(part => part === '..' || part === '.' || !part)
 function validState(v: unknown): boolean {

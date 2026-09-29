@@ -7,6 +7,7 @@
 - NX-13c：文件工具冲突保护与具体审批；pnpm check（63 文件）、pnpm test（101/101）、git diff --check 通过；done；本步提交后回填。NX-13b 提交 4b7cfd2。
 - NX-13d：持久基线、逐次结果和任务清单；pnpm check（65 文件）、pnpm test（105/105）、git diff --check 通过；done；本步提交后回填。NX-13c 提交 489bcfa。
 - NX-13e：CLI /changes /diff、结束清单与交付说明；CLI 和模型闭环 + check/test/fixtures；待开始；独立展示提交。
+- NX-13d2：复核原子替换的权限与内部软链目标稳定性；pnpm check（65 文件）、pnpm test（106/106）、git diff --check 通过；done；独立修复提交（先于 e）。NX-13d 提交 97b7653。
 - 每步通过检查、更新证据、提交并推送后才开始下一步；完成后核对实际提交和 CI。
 
 ## NX-12 CI 修复：Windows 短路径 junction
