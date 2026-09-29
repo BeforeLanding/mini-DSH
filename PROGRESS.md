@@ -88,3 +88,6 @@ token-estimator 按 PLAN ASCII0.3/其他Unicode1.0、每消息32/请求256，覆
 
 ### CB-12 流式恢复（2026-09-29）
 严格事件恢复不重放工具；unknown/skipped、workspace校验、reset重启；流片段250ms或4KiB合并，不派生为完成答案；缺失usage恢复估算。pnpm check / test 35/35 通过。
+
+### CB-05 历史分组（2026-09-29）
+groupHistory 按完整 task 聚合，当前 task 与缺失结果组受保护；工具调用/结果完整性检查；原事件不变。pnpm check / test 36/36 通过。请求投影和容量停止待下一步。
