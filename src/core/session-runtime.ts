@@ -97,6 +97,10 @@ export class SessionRuntime {
         const state = structuredClone(begin.data.state)
         for (const event of events) {
             if (event.runId !== state.runId) continue
+            if (event.type === 'context/projection') {
+                state.removedTaskIds = [...new Set([...state.removedTaskIds, ...event.data.removedTaskIds])]
+                state.estimatedInputTokens = event.data.estimatedInputTokens
+            }
             if (event.type === 'model/start') state.counters.modelRequests++
             if (event.type === 'tool/start') state.counters.toolCalls++
             if (event.type === 'model/usage') {

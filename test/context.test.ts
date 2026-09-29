@@ -79,6 +79,7 @@ test('capacity equality dispatches, one token below stops, and model capacity is
   await assert.rejects(h.agent.send('current', { budget: { contextWindowTokens: exact - 1, maxOutputTokens: 10 } }), /context_overflow/)
   assert.equal(calls, 1)
   assert.equal(h.sessions.latestRun(h.session.id)?.status, 'context_overflow')
+  assert.equal(h.sessions.latestRun(h.session.id)?.estimatedInputTokens, input)
   const dispose = h.llm.register('capacity', { models: ['large', 'small'], capabilities: { large: { contextWindowTokens: 10000 }, small: { contextWindowTokens: 100 } }, chat: async () => { calls++; return { content: 'ok' } } })
   h.agent.budget = { inputTargetTokens: 5000, maxOutputTokens: 10 }
   h.agent.model = 'capacity/large'

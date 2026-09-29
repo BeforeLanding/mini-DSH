@@ -72,10 +72,10 @@ export class AgentLoopRuntime {
             control.check()
             const maxOutputTokens = control.outputAllowance(estimatedInputTokens)
             const reservedOutputTokens = maxOutputTokens ?? 0
+            state.estimatedInputTokens = estimatedInputTokens
             append(sessionId, 'context/projection', { estimatedInputTokens, reservedOutputTokens, safetyMarginTokens: projection.safetyMarginTokens, removedTaskIds: projection.removedTaskIds })
             if ((policy.inputTargetTokens !== undefined && estimatedInputTokens > policy.inputTargetTokens) ||
                 (policy.contextWindowTokens !== undefined && estimatedInputTokens + reservedOutputTokens + projection.safetyMarginTokens > policy.contextWindowTokens)) throw new BudgetStop('context_overflow', state)
-            state.estimatedInputTokens = estimatedInputTokens
             const requestId = randomUUID()
             append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId, estimatedInputTokens })
             const settle = (usage?: Usage) => {

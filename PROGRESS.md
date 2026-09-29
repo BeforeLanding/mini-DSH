@@ -1,5 +1,11 @@
 # 开发进度
 
+### F3 崩溃恢复投影信息修复（2026-09-29）
+
+latestRun 在未完成 run 的事件重放中处理 context/projection：按发生顺序去重合并裁剪任务 ID，恢复最近一次输入估算。Loop 在记录候选投影时更新估算，即使 context_overflow 未调度模型也保持观测一致；候选投影不冒充实际请求或 usage。正常终态快照优先，reset 和同 task 的其他 run 不混入。
+
+pnpm check（46 文件）、pnpm test（64/64，无跳过）与 git diff --check 通过；test/store.test.ts 覆盖七个崩溃位置、重复恢复、终态及 reset，test/context.test.ts 验证 overflow 输入观测。诊断脚本三个输出均符合修复结果：F1 保留旧历史、3 条消息和 100 输出额度；F2 报 timeout、20ms、提交 uncertain；F3 恢复 synthetic-old-task 与输入估算 1234。原始事件不改写，没有付费模型调用；本轮尚未核验跨平台 CI。F1～F3 / NX-01～NX-03 已完成，后续路线状态同步。
+
 ### F2 最终持久化 deadline 修复（2026-09-29）
 
 答案与用量先在主动预算内确认；唯一终态提交等待也受主动 deadline 及 finalizationTimeoutMs（默认 5000ms）限制，返回前复查。错误收尾独立有界并保留原停止原因。终态写入已开始后的超时/取消/失败暴露 terminalCommit=uncertain，包含提交等待的实际观测时间；阻止继续、新任务及 reset，迟到确认不覆盖当前状态。重新读取日志按完整持久化事实恢复，不追加冲突终态；提交前计时快照和重启后无法重建的 sync 时间已在 R-05/D-05/README 明确。

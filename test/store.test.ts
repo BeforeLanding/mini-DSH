@@ -114,3 +114,67 @@ test('usage or terminal persistence failure is surfaced as error and forbids new
     assert.equal(models, 1)
   }
 })
+
+test('crash replay unions only this run projections and restores the latest attempted input estimate', async () => {
+  const sessions = new SessionRuntime(), session = sessions.create()
+  const previous = sessions.beginRun(session.id, {}, 'mock/demo')
+  sessions.append(session.id, 'context/projection', { estimatedInputTokens: 9999, reservedOutputTokens: 10, safetyMarginTokens: 2048, removedTaskIds: ['other-run'] }, previous)
+  sessions.finishRun(previous, 'max_steps')
+  const run = sessions.beginRun(session.id, {}, 'mock/demo', true)
+  const snapshots = [structuredClone(session.events)]
+  const project = (estimatedInputTokens: number, removedTaskIds: string[]) => {
+    sessions.append(session.id, 'context/projection', { estimatedInputTokens, reservedOutputTokens: 10, safetyMarginTokens: 2048, removedTaskIds }, run)
+    snapshots.push(structuredClone(session.events))
+  }
+  project(1234, ['old-a'])
+  sessions.append(session.id, 'model/start', { taskId: run.taskId, runId: run.runId, requestId: 'first', estimatedInputTokens: 1234 }, run)
+  snapshots.push(structuredClone(session.events))
+  sessions.append(session.id, 'model/usage', { taskId: run.taskId, runId: run.runId, requestId: 'first', usage: { inputTokens: 1234, outputTokens: 10, totalTokens: 1244, source: 'provider', uncertain: false } }, run)
+  snapshots.push(structuredClone(session.events))
+  project(900, ['old-a', 'old-b'])
+  sessions.append(session.id, 'model/start', { taskId: run.taskId, runId: run.runId, requestId: 'second', estimatedInputTokens: 900 }, run)
+  snapshots.push(structuredClone(session.events))
+  project(800, [])
+  for (const raw of snapshots) {
+    const projections = raw.flatMap(e => e.type === 'context/projection' && e.runId === run.runId ? [e.data] : [])
+    const expectedIds = [...new Set(projections.flatMap(data => data.removedTaskIds))]
+    const estimate = projections.at(-1)?.estimatedInputTokens
+    const restored = new SessionRuntime()
+    await restored.restore({ read: async () => raw, append: async () => {}, close: async () => {} })
+    const state = restored.latestRun(session.id)!
+    assert.equal(state.status, 'error')
+    assert.equal(state.runId, run.runId)
+    assert.equal(state.taskId, previous.taskId)
+    assert.deepEqual(state.removedTaskIds, expectedIds)
+    assert.equal(state.estimatedInputTokens, estimate)
+    assert.equal(state.counters.modelRequests, raw.filter(e => e.type === 'model/start' && e.runId === run.runId).length)
+    if (raw.some(e => e.type === 'model/start' && e.data.requestId === 'second')) assert.equal(state.usage.at(-1)?.inputTokens, 900)
+    assert.deepEqual(restored.get(session.id).events.slice(0, raw.length), raw)
+    assert.equal(restored.get(session.id).events.filter(e => e.type === 'run/finish' && e.runId === run.runId).length, 1)
+    const sealed = structuredClone(restored.get(session.id).events)
+    const reopened = new SessionRuntime()
+    await reopened.restore({ read: async () => sealed, append: async () => {}, close: async () => {} })
+    assert.deepEqual(reopened.latestRun(session.id), state)
+    assert.deepEqual(reopened.get(session.id).events, sealed)
+  }
+})
+
+test('projection replay respects reset and preserves a completed terminal snapshot', async () => {
+  const sessions = new SessionRuntime(), session = sessions.create()
+  const old = sessions.beginRun(session.id, {}, 'mock/demo')
+  sessions.append(session.id, 'context/projection', { estimatedInputTokens: 1234, reservedOutputTokens: 10, safetyMarginTokens: 2048, removedTaskIds: ['old-task'] }, old)
+  old.estimatedInputTokens = 1234; old.removedTaskIds = ['old-task']
+  sessions.finishRun(old, 'completed')
+  const completed = new SessionRuntime()
+  await completed.restore({ read: async () => structuredClone(session.events), append: async () => {}, close: async () => {} })
+  assert.deepEqual(completed.latestRun(session.id), old)
+  sessions.clear(session.id)
+  const run = sessions.beginRun(session.id, {}, 'mock/demo')
+  sessions.append(session.id, 'context/projection', { estimatedInputTokens: 300, reservedOutputTokens: 10, safetyMarginTokens: 2048, removedTaskIds: [] }, run)
+  const restored = new SessionRuntime()
+  await restored.restore({ read: async () => structuredClone(session.events), append: async () => {}, close: async () => {} })
+  assert.equal(restored.latestRun(session.id)?.estimatedInputTokens, 300)
+  assert.deepEqual(restored.latestRun(session.id)?.removedTaskIds, [])
+  assert.equal(restored.latestRun(session.id)?.runId, run.runId)
+  assert.equal(restored.get(session.id).events.filter(e => e.type === 'context/projection').length, 2)
+})

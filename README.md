@@ -37,7 +37,7 @@ pnpm check
 pnpm test
 ```
 
-当前 62 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑和 CLI 测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
+当前 64 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑和 CLI 测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
 
 GitHub Actions 在推送到 `main`、提交 Pull Request 或手动触发时运行 CI，覆盖 Ubuntu / Windows 和 Node.js 22 / 24。工作流按 `package.json` 固定的 pnpm 版本安装依赖，使用 `--frozen-lockfile`，然后运行 `pnpm check` 和 `pnpm test`，无需 DeepSeek 或 Context7 密钥。
 

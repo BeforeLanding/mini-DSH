@@ -1,5 +1,12 @@
 # 任务清单
 
+## F3 崩溃恢复的投影观测一致性
+- 关联：R-08、R-11；NX-03、D-08。
+- 状态：done（2026-09-29）。
+- 行为：只重放当前 run 的 context/projection，去重归并 removedTaskIds，并保留最近一次候选投影的输入估算；不修改原事件，不执行模型或工具。
+- 验证：多次投影后、model/start/usage 后及最终投影未发送时崩溃；正常终态恢复、reset 与同 task 新 run 隔离。
+- 证据：test/store.test.ts 两条新增回归覆盖七个崩溃窗口、重复恢复、同 task 不同 run 和 reset；test/context.test.ts 核对 overflow 的投影估算；pnpm check（46 文件）、pnpm test（64/64，无跳过）、三个诊断及 git diff --check 通过。
+
 ## F2 最终持久化 deadline 与提交不确定性
 - 关联：R-05、R-08、R-10；NX-02、D-05。
 - 状态：done（2026-09-29）。
