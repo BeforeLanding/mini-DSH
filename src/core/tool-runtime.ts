@@ -17,6 +17,13 @@ function blocksToText(blocks: ContentBlock[]) {
 
 export class ToolRuntime {
     #tools = new Map<string, ToolDefinition>()
+    #projection?: (name: string, result: ToolResult, execution: Execution) => Promise<ToolResult>
+
+    setResultProjection(projection: (name: string, result: ToolResult, execution: Execution) => Promise<ToolResult>) {
+        if (this.#projection) throw new Error('tool result projection already configured')
+        this.#projection = projection
+        return () => { if (this.#projection === projection) this.#projection = undefined }
+    }
 
     register(definition: ToolDefinition) {
         if (!definition?.name) throw new Error('tool.name is required')
@@ -72,25 +79,30 @@ export class ToolRuntime {
             agent: exec.agent,
         }
 
+        let result: ToolResult
         try {
             const value = await tool.execute(args, execution)
             const content = tool.output?.render
                 ? tool.output.render(args, value)
                 : [{ type: 'text', text: toText(value) }]
 
-            let result = { value, content, isError: false }
+            result = { value, content, isError: false }
             if (typeof tool.finalizeContent === 'function') {
                 const finalized = await tool.finalizeContent(execution, result)
                 if (finalized !== undefined) result = { ...result, content: finalized }
             }
-            return result
         } catch (error: unknown) {
-            return {
+            result = {
                 value: null,
                 content: [{ type: 'text', text: `ToolError: ${error instanceof Error ? error.message : String(error)}` }],
                 isError: true,
             }
         }
+        if (this.#projection) {
+            try { return await this.#projection(name, result, execution) }
+            catch (error) { return { value: null, isError: true, content: [{ type: 'text', text: `ToolError: result projection failed: ${error instanceof Error ? error.message : String(error)}` }] } }
+        }
+        return result
     }
 
     renderResult(result: ToolResult) {

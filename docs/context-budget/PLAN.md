@@ -163,3 +163,5 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 - 工具预览默认 16 KiB、结果采集最多 8 MiB、磁盘总额 64 MiB，均可配置。结果存储默认位于工作区 .mini-dsh/tool-results，随机 UUID 引用绑定 session，SHA-256 校验内容；无 session 时不创建引用而保留原运行时兼容。磁盘失败返回 ToolError，不静默丢失。容量耗尽明确失败，不自动删除历史。
 - read_tool_result 以 UTF-8 字节偏移有界读取，返回 nextOffset/eof；偏移须落在字符边界。引用是数据，不是文件路径；没有同 session 或文件丢失/损坏时报错。回读工具本身不再次存储，释放插件移除其注册。
 - Bash 保持审批、超时、退出码语义，改为采集最多 8 MiB（可配置），保留超限标记；失败日志也可引用。模型/JSONL 保存预览和引用，完整内容放在结果文件中，不修改历史事件或预算逻辑。
+
+NX-07 集成补充：搜索也默认忽略 .mini-dsh；read/search 的 maxOutputBytes 限制正文/匹配载荷，不包含有界元数据与 JSON 格式包装。存储另设 maxFiles=1000，额度检查在单 ToolResultStore 实例内串行；多进程共享目录没有全局配额锁。CLI 默认注入结果投影，无 session 的底层调用保持兼容；回读上限默认 16 KiB。文件/Bash 采集有限与完整请求预算分别生效。

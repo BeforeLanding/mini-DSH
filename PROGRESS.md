@@ -251,3 +251,8 @@ read_file 增加 startLine/maxLines、行号、nextLine/eof 和截断原因，�
 
 ### NX-07d（2026-09-29）
 持久结果存储完成，UUID 引用只按同 session 读取，验证版本/哈希/文件大小，按 UTF-8 字节边界返回 nextOffset/eof/captureTruncated。保存限制采集大小、磁盘总额及 1000 文件（可配置），容量耗尽或写入失败明确报错。pnpm check（59 文件）及结果存储 2/2 边界测试通过，diff 核对通过；尚未集成工具预览。搜索提交 04f5c4b 已推送。
+
+### NX-07e（2026-09-29）
+工具结果投影与 CLI 集成完成：大输出保存后只记录预览/引用，read_tool_result 同 session 有界回读；Bash 成功/非零退出日志均可回读，采集超限明确标注。真实 Cordis 模拟模型读取超过旧 32 KiB 限额的日志尾部，重建服务继续回读；错误状态、存储失败、无 session 兼容和释放已验证。README/忽略规则同步。
+
+首次验证因测试误用 RunState.stopReason 字段未编译；已改为实际 status 后重新通过 pnpm check（60 文件）、pnpm test（96/96）、pnpm fixtures:check（初始全部失败、参考全部通过）。diff 核对及 git diff --check 通过，未调用付费 API。结果存储提交 dd45f75 已推送；本步提交后核验远端 CI 并回填实际提交清单。

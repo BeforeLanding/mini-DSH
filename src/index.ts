@@ -14,6 +14,7 @@ import * as externalPlugins from './plugins/external-plugins.js'
 import * as sandbox from './plugins/sandbox.js'
 import * as bash from './tools/bash.js'
 import * as files from './tools/files.js'
+import * as toolResults from './plugins/tool-results.js'
 
 dotenv.config({ quiet: true })
 const { default: externalConfig } = await import('../plugins.config.js')
@@ -27,6 +28,7 @@ try {
   for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
   await root.plugin(runtimeContext, { workspace, profile })
   await root.plugin(sandbox, { workspace })
+  await root.plugin(toolResults)
   if (profile === 'coding') await root.plugin(projectContext, { directory: process.env.MINI_DSH_PROJECT_DIRECTORY })
   await root.plugin(deepseek)
   await root.plugin(bash, { workspace })

@@ -3,16 +3,18 @@ import type { ToolDefinition, Arguments } from '../core/contracts.js'
 import { spawn, execFile } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { positiveLimit } from '../core/bounded-text.js'
 
 export const name = 'mini-tool-bash'
 export const inject = ['tools', 'sandbox']
 
-export function apply(ctx: Context, config: { executable?: string; workspace?: string } = {}) {
+export function apply(ctx: Context, config: { executable?: string; workspace?: string; maxCaptureBytes?: number } = {}) {
   const workspace = ctx.sandbox.workspace
+  const maxCaptureBytes = positiveLimit(config.maxCaptureBytes, 8 * 1024 * 1024, 'maxCaptureBytes')
   const gitBash = path.join(process.env.ProgramFiles ?? 'C:/Program Files', 'Git', 'bin', 'bash.exe')
   const executable = config.executable ?? (process.platform === 'win32' && fs.existsSync(gitBash) ? gitBash : 'bash')
   ctx.effect(() => ctx.tools.register({
-    name: 'bash', description: 'Run a bash command in the workspace after approval.',
+    name: 'bash', description: 'Run a bash command in the workspace after approval. Large logs have bounded collection; stored previews include a ref for read_tool_result when available.',
     parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] },
     async execute({ command }, exec) {
       if (typeof command !== 'string' || !command.trim()) throw new Error('command is required')
@@ -28,7 +30,7 @@ export function apply(ctx: Context, config: { executable?: string; workspace?: s
         let truncated = false
         let failure: Error | undefined
         const collect = (chunk: Buffer) => {
-          const remaining = 32 * 1024 - bytes
+          const remaining = maxCaptureBytes - bytes
           if (chunk.length > remaining) truncated = true
           if (remaining > 0) { const kept = chunk.subarray(0, remaining); chunks.push(kept); bytes += kept.length }
         }
@@ -48,7 +50,7 @@ export function apply(ctx: Context, config: { executable?: string; workspace?: s
         child.on('error', error => { cleanup(); reject(error) })
         child.on('close', code => {
           cleanup()
-          const output = Buffer.concat(chunks).toString('utf8') + (truncated ? '\n[output truncated at 32KB]' : '')
+          const output = Buffer.concat(chunks).toString('utf8') + (truncated ? `\n[output collection truncated at ${maxCaptureBytes} bytes]` : '')
           if (failure) reject(failure)
           else if (code !== 0) reject(new Error(`bash exited with code ${code}\n${output}`))
           else resolve(output)

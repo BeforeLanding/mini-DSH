@@ -53,3 +53,103 @@ test('result storage bounds capture/quota, rejects corruption and recovers after
     assert.throws(() => new ToolResultStore({ directory, maxCaptureBytes: 0 }), /positive/)
   } finally { await fs.rm(directory, { recursive: true, force: true }) }
 })
+
+import { Context } from '@deepseek-ai/cordis'
+import * as tools from '../src/plugins/tools.js'
+import * as sandbox from '../src/plugins/sandbox.js'
+import * as systemPrompt from '../src/plugins/system-prompt.js'
+import * as sessions from '../src/plugins/session.js'
+import * as agents from '../src/plugins/agent.js'
+import * as agentLoop from '../src/plugins/agent-loop.js'
+import * as llm from '../src/plugins/llm.js'
+import * as toolResults from '../src/plugins/tool-results.js'
+import * as bash from '../src/tools/bash.js'
+
+async function bootResults(workspace: string) {
+  const root = new Context()
+  for (const plugin of [tools, systemPrompt, sessions, agents, agentLoop, llm]) await root.plugin(plugin)
+  await root.plugin(sandbox, { workspace, autoApprove: true })
+  return root
+}
+
+test('Cordis model reads a large Bash log via its persistent ref while events retain only previews', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'result-integration-'))
+  const root = await bootResults(workspace)
+  let restarted: Context | undefined
+  try {
+    await root.plugin(toolResults, { maxPreviewBytes: 256, maxReadBytes: 4096 })
+    await root.plugin(bash)
+    let request = 0, reference = ''
+    root.llm.register('mock', { models: ['test'], async chat({ messages = [], tools: schemas = [] }) {
+      request++
+      assert.ok(schemas.some(schema => schema.function.name === 'read_tool_result'))
+      if (request === 1) return { toolCalls: [{ id: 'log', name: 'bash', arguments: { command: `node -e 'process.stdout.write("x".repeat(40000)+"TAIL")'` } }] }
+      if (request === 2) {
+        const text = messages.at(-1)!.content!
+        assert.ok(Buffer.byteLength(text) < 1024)
+        reference = JSON.parse(text.match(/\[tool_result (\{.*\});/)![1]).ref
+        return { toolCalls: [{ id: 'page', name: 'read_tool_result', arguments: { ref: reference, offset: 39000, maxBytes: 4096 } }] }
+      }
+      assert.ok(messages.at(-1)!.content!.includes('TAIL'))
+      assert.ok(messages.at(-1)!.content!.includes('"eof": true'))
+      assert.ok(!messages.at(-1)!.content!.includes('[tool_result'))
+      return { content: 'log inspected' }
+    } })
+    const session = root.sessions.create({ workspace })
+    const agent = root.agents.create({ sessionId: session.id, model: 'mock/test', loop: root.agentLoop })
+    assert.equal(await agent.send('inspect synthetic log'), 'log inspected')
+    const results = session.events.filter(event => event.type === 'tool/result')
+    assert.equal(results.length, 2)
+    assert.ok(results.every(event => event.data.content.length < 2000))
+    assert.equal(root.sessions.latestRun(session.id)?.status, 'completed')
+    restarted = await bootResults(workspace)
+    await restarted.plugin(toolResults)
+    const page = await restarted.tools.execute('read_tool_result', { ref: reference, offset: 40000 }, { sessionId: session.id })
+    assert.equal(page.isError, false); assert.equal((page.value as { content: string }).content, 'TAIL')
+    const denied = await restarted.tools.execute('read_tool_result', { ref: reference }, { sessionId: 'other' })
+    assert.equal(denied.isError, true)
+  } finally { await root.fiber.dispose(); await restarted?.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
+})
+
+test('result projection preserves errors, reports storage failure and disposes without changing old runtime calls', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'result-integration-'))
+  const root = await bootResults(workspace)
+  try {
+    const plugin = await root.plugin(toolResults, { maxPreviewBytes: 32, maxCaptureBytes: 256 })
+    root.tools.register({ name: 'large-error', execute() { throw new Error('synthetic failure '.repeat(100)) } })
+    const result = await root.tools.execute('large-error', {}, { sessionId: 's' })
+    assert.equal(result.isError, true)
+    const ref = (result.value as { ref: string }).ref
+    const page = await root.tools.execute('read_tool_result', { ref }, { sessionId: 's' })
+    assert.equal(page.isError, false); assert.equal((page.value as { captureTruncated: boolean }).captureTruncated, true)
+    assert.match(root.tools.renderResult(page), /synthetic failure/)
+    const compatible = await root.tools.execute('large-error')
+    assert.equal(compatible.value, null); assert.ok(root.tools.renderResult(compatible).length > 1000)
+    await plugin.dispose()
+    assert.equal(root.tools.get('read_tool_result'), undefined)
+    assert.equal((await root.tools.execute('large-error', {}, { sessionId: 's' })).value, null)
+    const blocked = path.join(workspace, 'blocked'); await fs.writeFile(blocked, 'file')
+    await root.plugin(toolResults, { directory: 'blocked', maxPreviewBytes: 32 })
+    const failed = await root.tools.execute('large-error', {}, { sessionId: 's' })
+    assert.equal(failed.isError, true); assert.match(root.tools.renderResult(failed), /projection failed/)
+  } finally { await root.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
+})
+
+test('Bash collection flags its cap and nonzero exit logs retain retrievable error refs', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'result-bash-'))
+  const root = await bootResults(workspace)
+  try {
+    await root.plugin(toolResults, { maxPreviewBytes: 32 })
+    await root.plugin(bash, { maxCaptureBytes: 128 })
+    const success = await root.tools.execute('bash', { command: `node -e 'process.stdout.write("x".repeat(1000))'` }, { sessionId: 's' })
+    assert.equal(success.isError, false)
+    const ref = (success.value as { ref: string }).ref
+    const page = await root.tools.execute('read_tool_result', { ref }, { sessionId: 's' })
+    assert.match(root.tools.renderResult(page), /collection truncated at 128 bytes/)
+    const failure = await root.tools.execute('bash', { command: `node -e 'process.stderr.write("failure ".repeat(10));process.exit(7)'` }, { sessionId: 's' })
+    assert.equal(failure.isError, true)
+    const errorPage = await root.tools.execute('read_tool_result', { ref: (failure.value as { ref: string }).ref }, { sessionId: 's' })
+    assert.match(root.tools.renderResult(errorPage), /bash exited with code 7/)
+    assert.match(root.tools.renderResult(errorPage), /failure/)
+  } finally { await root.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
+})
