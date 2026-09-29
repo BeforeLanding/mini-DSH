@@ -1,9 +1,10 @@
-function toText(value) {
+import type { Arguments, Execution, ContentBlock, ToolDefinition, ToolResult } from './contracts.js'
+function toText(value: unknown): string {
     if (typeof value === 'string') return value
-    return JSON.stringify(value, null, 2)
+    return JSON.stringify(value, null, 2) ?? String(value)
 }
 
-function blocksToText(blocks) {
+function blocksToText(blocks: ContentBlock[]) {
     if (!Array.isArray(blocks)) return toText(blocks)
     return blocks
         .map((block) => {
@@ -15,10 +16,10 @@ function blocksToText(blocks) {
 }
 
 export class ToolRuntime {
-    #tools = new Map()
+    #tools = new Map<string, ToolDefinition>()
 
     // Register a new tool definition, ensuring it has a unique name and an execute function
-    register(definition) {
+    register(definition: ToolDefinition) {
         if (!definition?.name) throw new Error('tool.name is required')
         if (typeof definition.execute !== 'function')
             throw new Error(`tool is missing execute(): ${definition.name}`)
@@ -35,7 +36,7 @@ export class ToolRuntime {
         }
     }
 
-    get(name) {
+    get(name: string) {
         return this.#tools.get(name)
     }
 
@@ -46,7 +47,7 @@ export class ToolRuntime {
     // Generate JSON schema representations of all registered tools for integration with external systems
     schemas() {
         return this.list().map((tool) => ({
-            type: 'function',
+            type: 'function' as const,
             function: {
                 name: tool.name,
                 description: tool.description ?? '',
@@ -56,7 +57,7 @@ export class ToolRuntime {
     }
 
     // Execute a registered tool by name with the provided arguments and execution context, handling errors gracefully
-    async execute(name, args, exec = {}) {
+    async execute(name: string, args: Arguments = {}, exec: Partial<Execution> = {}): Promise<ToolResult> {
         const tool = this.get(name)
         if (!tool) {
             return {
@@ -85,16 +86,16 @@ export class ToolRuntime {
                 if (finalized !== undefined) result = { ...result, content: finalized }
             }
             return result
-        } catch (error) {
+        } catch (error: unknown) {
             return {
                 value: null,
-                content: [{ type: 'text', text: `ToolError: ${error?.message ?? String(error)}` }],
+                content: [{ type: 'text', text: `ToolError: ${error instanceof Error ? error.message : String(error)}` }],
                 isError: true,
             }
         }
     }
 
-    renderResult(result) {
+    renderResult(result: ToolResult) {
         return blocksToText(result.content)
     }
 }

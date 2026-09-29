@@ -1,10 +1,11 @@
+import type { Agent, Loop, ModelSelection } from './contracts.js'
 import { randomUUID } from 'node:crypto'
 
 export class AgentRuntime {
-    #agents = new Map()
+    #agents = new Map<string, Agent>()
 
     // Register a new agent with a unique ID and associated properties. Ensures that each agent is unique and provides a disposal function to remove the agent when no longer needed.
-    register(agent) {
+    register(agent: Agent) {
         if (this.#agents.has(agent.id)) {
             throw new Error(`duplicate agent: ${agent.id}`)
         }
@@ -22,8 +23,8 @@ export class AgentRuntime {
     }
 
     // Create a new agent instance with a unique ID, session ID, model selection, and an optional name. The agent is registered in the runtime and can send messages through the provided loop.
-    create({ sessionId, model, loop, name = 'default' }) {
-        const agent = {
+    create({ sessionId, model, loop, name = 'default' }: { sessionId: string; model: ModelSelection; loop: Loop; name?: string }) {
+        const agent: Agent = {
             id: randomUUID(),
             name,
             sessionId,

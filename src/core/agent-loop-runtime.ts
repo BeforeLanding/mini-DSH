@@ -1,14 +1,23 @@
+import type { Agent, RunOptions } from './contracts.js'
+import type { SessionRuntime } from './session-runtime.js'
+import type { SystemPromptRuntime } from './system-prompt-runtime.js'
+import type { ToolRuntime } from './tool-runtime.js'
+import type { LlmRuntime } from './llm-runtime.js'
 const CANCELLED_RESULT = 'ToolError: the run was cancelled before this tool ran'
 
 export class AgentLoopRuntime {
-    constructor({ sessions, systemPrompt, tools, llm }) {
+    sessions: Pick<SessionRuntime, "append" | "deriveMessages">
+    systemPrompt: Pick<SystemPromptRuntime, "assemble">
+    tools: Pick<ToolRuntime, "schemas" | "execute" | "renderResult">
+    llm: Pick<LlmRuntime, "chat">
+    constructor({ sessions, systemPrompt, tools, llm }: { sessions: Pick<SessionRuntime, "append" | "deriveMessages">; systemPrompt: Pick<SystemPromptRuntime, "assemble">; tools: Pick<ToolRuntime, "schemas" | "execute" | "renderResult">; llm: Pick<LlmRuntime, "chat"> }) {
         this.sessions = sessions
         this.systemPrompt = systemPrompt
         this.tools = tools
         this.llm = llm
     }
 
-    async run(agent, input, { signal, onReasoning, onContent, onToolCall, onToolResult } = {}) {
+    async run(agent: Agent, input: string, { signal, onReasoning, onContent, onToolCall, onToolResult }: RunOptions = {}) {
         const sessionId = agent.sessionId
 
         this.sessions.append(sessionId, 'user/message', { content: input })

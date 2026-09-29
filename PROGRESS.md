@@ -49,3 +49,6 @@
 
 ### CB-15a（2026-09-29）
 已建立 TypeScript 7.0.2、Node 24 类型、strict NodeNext 编译链；过渡阶段 allowJs。start/test 使用 dist 产物，构建先类型检查再清理固定 dist，plugins.config 路径保持。pnpm check / test 通过，原 22/22 回归通过。下一步迁移核心。推送被自动审批要求确认具体 origin 目的地，等待确认。
+
+### CB-15b（2026-09-29）
+核心和路径闸门迁移 TypeScript，增加消息/工具/服务契约，strict 无隐式 any。pnpm check / test 成功，原 22/22 通过。CB-15a 已推送 origin，用户已确认 BeforeLanding/mini-DSH 为具体目的地。下一步插件、模型、工具。

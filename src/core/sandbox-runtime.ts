@@ -1,19 +1,23 @@
+import type { ApprovalRequest, SandboxConfig } from './contracts.js'
 import path from 'node:path'
 import { resolveInside } from '../utils/path.js'
 
 export class SandboxRuntime {
-  #approver
-  constructor({ workspace = process.cwd(), autoApprove = false, allowHosts = ['localhost', '127.0.0.1', '[::1]'] } = {}) {
+  workspace: string
+  autoApprove: boolean
+  allowHosts: string[]
+  #approver?: (request: ApprovalRequest) => Promise<boolean>
+  constructor({ workspace = process.cwd(), autoApprove = false, allowHosts = ['localhost', '127.0.0.1', '[::1]'] }: SandboxConfig = {}) {
     this.workspace = path.resolve(workspace)
     this.autoApprove = autoApprove
     this.allowHosts = allowHosts
   }
-  resolvePath(requested) { return resolveInside(this.workspace, requested) }
-  setApprover(fn) {
+  resolvePath(requested: unknown) { return resolveInside(this.workspace, requested) }
+  setApprover(fn: (request: ApprovalRequest) => Promise<boolean>) {
     this.#approver = fn
     return () => { if (this.#approver === fn) this.#approver = undefined }
   }
-  async approve(request) {
+  async approve(request: ApprovalRequest) {
     request.signal?.throwIfAborted()
     if (this.autoApprove) return { approved: true, source: 'auto' }
     if (!this.#approver) throw new Error('write requires user approval, but no approval channel is set')
@@ -22,8 +26,8 @@ export class SandboxRuntime {
     if (!approved) throw new Error('user rejected this operation')
     return { approved: true, source: 'user' }
   }
-  inspectCommand(command) {
-    const deny = reason => ({ action: 'deny', reason })
+  inspectCommand(command: unknown) {
+    const deny = (reason: string) => ({ action: 'deny', reason })
     if (typeof command !== 'string' || !command.trim()) return deny('command is required')
     // This policy catches accidental dangerous commands. Approval is the execution boundary.
     let expanded
@@ -38,7 +42,7 @@ export class SandboxRuntime {
         if (!home) throw new Error('unset home path')
         return prefix + home
       })
-    } catch (error) { return deny(error.message) }
+    } catch (error) { return deny(error instanceof Error ? error.message : String(error)) }
     if (/\b(?:sudo|su)\b/.test(expanded)) return deny('sudo/su is blocked')
     if (/\brm\s+(?:(?:-[A-Za-z]*r[A-Za-z]*|--recursive)\b|[^;&|\n]*\s(?:-[A-Za-z]*r[A-Za-z]*|--recursive)\b)/i.test(expanded)) return deny('recursive delete is blocked')
     if (/\b(?:curl|wget)\b[^\n]*\|\s*(?:\S*\/)?(?:sh|bash|zsh)\b/.test(expanded)) return deny('piping curl/wget into a shell is blocked')
@@ -48,7 +52,7 @@ export class SandboxRuntime {
     let networkTool = false
     for (let index = 0; index < tokens.length; index++) {
       const token = tokens[index][0].replace(/^["']|["']$/g, '')
-      let executable = index === 0 || /[|;&\n]\s*$/.test(expanded.slice(0, tokens[index].index))
+      let executable = index === 0 || /[|;&\n]\s*$/.test(expanded.slice(0, (tokens[index].index ?? 0)))
       if (executable) networkTool = false
       const basename = path.posix.basename(token)
       if (executable && ['curl', 'wget'].includes(basename)) networkTool = true
@@ -65,13 +69,13 @@ export class SandboxRuntime {
         // Standard executable locations are allowed only at a command position.
         if (executable && /^\/(?:bin|usr\/bin)\/[^/]+$/.test(token)) { executable = false; continue }
         if (/^\/(?:etc|dev|proc|sys|root|boot)(?:\/|$)/.test(normalized)) return deny('system path is blocked')
-        try { this.resolvePath(token) } catch (error) { return deny(error.message) }
+        try { this.resolvePath(token) } catch (error) { return deny(error instanceof Error ? error.message : String(error)) }
       }
       executable = false
     }
-    return { action: 'allow' }
+    return { action: 'allow', reason: undefined }
   }
-  assertCommand(command) {
+  assertCommand(command: unknown) {
     const result = this.inspectCommand(command)
     if (result.action === 'deny') throw new Error(result.reason)
     return result

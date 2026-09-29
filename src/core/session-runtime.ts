@@ -1,14 +1,15 @@
+import type { Arguments, EventData, Session, SessionEvent, Message } from './contracts.js'
 import { randomUUID } from 'node:crypto'
 
 export class SessionRuntime {
-    #sessions = new Map()
+    #sessions = new Map<string, Session>()
 
     //six public methods: create, get, append, clear, list, deriveMessages
 
-    create(meta = {}) {
+    create(meta: Arguments = {}) {
         const id = randomUUID()// Generate a unique session ID
 
-        const session = {
+        const session: Session = {
             id,
             meta: { ...meta },//shallow copy of meta
             events: [],
@@ -20,7 +21,7 @@ export class SessionRuntime {
         return session
     }
 
-    get(id) {
+    get(id: string) {
         const session = this.#sessions.get(id)
         if (!session) {
             throw new Error(`Session ${id} not found`)
@@ -28,7 +29,7 @@ export class SessionRuntime {
         return session
     }
 
-    append(id, type, data) {
+    append<K extends keyof EventData>(id: string, type: K, data: EventData[K]) {
         const session = this.get(id)
 
         const event = {
@@ -37,13 +38,13 @@ export class SessionRuntime {
             data,
             at: new Date().toISOString(),
         }
-        session.events.push(event)
+        session.events.push(event as SessionEvent)
 
         return event
     }
 
     // Clear the session events but keep the meta data
-    clear(id) {
+    clear(id: string) {
         const old = this.get(id)
         old.events = []
         this.append(id, 'session/start', { meta: old.meta, reset: true })
@@ -55,9 +56,9 @@ export class SessionRuntime {
     }
 
     // Derive messages from the session events for a given session ID
-    deriveMessages(id) {
+    deriveMessages(id: string) {
         const events = this.get(id).events
-        const messages = []
+        const messages: Message[] = []
 
         for (const event of events) {
             const { type, data } = event

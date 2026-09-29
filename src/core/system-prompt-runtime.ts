@@ -1,16 +1,17 @@
+import type { PromptEntry, PromptContext } from './contracts.js'
 export class SystemPromptRuntime {
-    #sections = new Map()
-    #contexts = new Map()
+    #sections = new Map<string, PromptEntry>()
+    #contexts = new Map<string, PromptEntry>()
 
-    section(section) {
+    section(section: PromptEntry) {
         return this.#register(this.#sections, section, 'section')
     }
 
-    context(context) {
+    context(context: PromptEntry) {
         return this.#register(this.#contexts, context, 'context')
     }
 
-    #register(store, item, kind) {
+    #register(store: Map<string, PromptEntry>, item: PromptEntry, kind: string) {
         if (!item?.name) throw new Error(`${kind}.name is required`)
         if (store.has(item.name)) throw new Error(`duplicate ${kind}: ${item.name}`)
         //no duplicate names allowed, but section and context names can overlap since they are in different namespaces
@@ -31,7 +32,7 @@ export class SystemPromptRuntime {
     }
 
     // Assemble the system prompt by combining sections and contexts in order, allowing for dynamic text generation based on the provided context
-    async assemble(assembleContext = {}) {
+    async assemble(assembleContext: PromptContext = {}) {
         const entries = [...this.#sections.values(), ...this.#contexts.values()].sort(
             (a, b) => (a.order ?? 0) - (b.order ?? 0),
         )
