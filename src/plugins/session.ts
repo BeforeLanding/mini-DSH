@@ -10,14 +10,19 @@ class SessionsService extends Service {
         this.runtime = new SessionRuntime()
     }
 
+    visibleEvents(...args: Parameters<SessionRuntime['visibleEvents']>) { return this.runtime.visibleEvents(...args) }
+    latestRun(...args: Parameters<SessionRuntime['latestRun']>) { return this.runtime.latestRun(...args) }
+    beginRun(...args: Parameters<SessionRuntime['beginRun']>) { return this.runtime.beginRun(...args) }
+    finishRun(...args: Parameters<SessionRuntime['finishRun']>) { return this.runtime.finishRun(...args) }
+    taskCounters(...args: Parameters<SessionRuntime['taskCounters']>) { return this.runtime.taskCounters(...args) }
     create(...args: Parameters<SessionRuntime['create']>) {
         return this.runtime.create(...args)
     }
     get(...args: Parameters<SessionRuntime['get']>) {
         return this.runtime.get(...args)
     }
-    append<K extends keyof import('../core/contracts.js').EventData>(id: string, type: K, data: import('../core/contracts.js').EventData[K]) {
-        return this.runtime.append(id, type, data)
+    append<K extends keyof import('../core/contracts.js').EventData>(id: string, type: K, data: import('../core/contracts.js').EventData[K], scope?: { taskId?: string; runId?: string }) {
+        return this.runtime.append(id, type, data, scope)
     }
     clear(...args: Parameters<SessionRuntime['clear']>) {
         return this.runtime.clear(...args)

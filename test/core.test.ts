@@ -39,7 +39,8 @@ test('Session clear keeps the same id and drops derived chat history', () => {
 
   assert.equal(sessions.get(id).id, id)
   assert.equal(sessions.get(id).events[0].type, 'session/start')
-  assert.equal((sessions.get(id).events[0].data as { reset?: boolean }).reset, true)
+  assert.equal(sessions.get(id).events.at(-1)?.type, 'session/reset')
+  assert.equal(sessions.get(id).events.length, 4)
   assert.deepEqual(sessions.deriveMessages(id), [])
 })
 

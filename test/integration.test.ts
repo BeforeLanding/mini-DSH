@@ -56,7 +56,7 @@ test('the whole plugin stack boots on Cordis and runs a full model -> tool -> mo
     const agent = root.agents.create({ sessionId: session.id, model: 'mock/smoke', loop: root.agentLoop })
     assert.equal(await agent.send('print the working directory'), 'done')
     assert.equal(calls, 2)
-    assert.deepEqual(session.events.map(event => event.type), ['session/start', 'user/message', 'assistant/tool_calls', 'tool/result', 'assistant/message'])
+    assert.deepEqual(session.events.filter(event => ['session/start', 'user/message', 'assistant/tool_calls', 'tool/result', 'assistant/message'].includes(event.type)).map(event => event.type), ['session/start', 'user/message', 'assistant/tool_calls', 'tool/result', 'assistant/message'])
 
     const execute = async (name: string, args: Arguments) => {
       const result = await root.tools.execute(name, args)

@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+import { BudgetStop } from './budget.js'
 import { resolveBudget } from './budget.js'
 import type { Agent, RunOptions } from './contracts.js'
 import type { SessionRuntime } from './session-runtime.js'
@@ -7,11 +9,11 @@ import type { LlmRuntime } from './llm-runtime.js'
 const CANCELLED_RESULT = 'ToolError: the run was cancelled before this tool ran'
 
 export class AgentLoopRuntime {
-    sessions: Pick<SessionRuntime, "append" | "deriveMessages">
+    sessions: Pick<SessionRuntime, keyof SessionRuntime>
     systemPrompt: Pick<SystemPromptRuntime, "assemble">
     tools: Pick<ToolRuntime, "schemas" | "execute" | "renderResult">
     llm: Pick<LlmRuntime, "chat">
-    constructor({ sessions, systemPrompt, tools, llm }: { sessions: Pick<SessionRuntime, "append" | "deriveMessages">; systemPrompt: Pick<SystemPromptRuntime, "assemble">; tools: Pick<ToolRuntime, "schemas" | "execute" | "renderResult">; llm: Pick<LlmRuntime, "chat"> }) {
+    constructor({ sessions, systemPrompt, tools, llm }: { sessions: Pick<SessionRuntime, keyof SessionRuntime>; systemPrompt: Pick<SystemPromptRuntime, "assemble">; tools: Pick<ToolRuntime, "schemas" | "execute" | "renderResult">; llm: Pick<LlmRuntime, "chat"> }) {
         this.sessions = sessions
         this.systemPrompt = systemPrompt
         this.tools = tools
@@ -19,10 +21,14 @@ export class AgentLoopRuntime {
     }
 
     async run(agent: Agent, input: string, { signal, onReasoning, onContent, onToolCall, onToolResult, budget }: RunOptions = {}) {
-        resolveBudget(agent.budget, budget)
+        const policy = resolveBudget(agent.budget, budget)
         const sessionId = agent.sessionId
 
-        this.sessions.append(sessionId, 'user/message', { content: input })
+        const state = this.sessions.beginRun(sessionId, policy, typeof agent.model === 'string' ? agent.model : JSON.stringify(agent.model))
+        const started = performance.now()
+        const append: SessionRuntime['append'] = (id, type, data) => this.sessions.append(id, type, data, state)
+        try {
+        append(sessionId, 'user/message', { content: input })
         //step1: Append the user's input message to the session's event log, marking the start of the agent's reasoning process
 
         let step = 0
@@ -43,6 +49,8 @@ export class AgentLoopRuntime {
 
             const messages = this.sessions.deriveMessages(sessionId)
 
+            state.counters.modelRequests++
+            append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId: randomUUID() })
             const response = await this.llm.chat(
                 {
                     system,
@@ -60,11 +68,13 @@ export class AgentLoopRuntime {
 
             if (toolCalls.length === 0) {
                 const content = response.content ?? ''
-                this.sessions.append(sessionId, 'assistant/message', { content })
+                append(sessionId, 'assistant/message', { content, reasoningContent: response.reasoningContent })
+                state.counters.activeDurationMs = performance.now() - started
+                this.sessions.finishRun(state, 'completed')
                 return content
             }//step4: If the LLM's response does not include any tool calls, append the assistant's message to the session and return the content. This indicates that the agent has completed its reasoning without needing to invoke any tools.
 
-            this.sessions.append(sessionId, 'assistant/tool_calls', {
+            append(sessionId, 'assistant/tool_calls', {
                 content: response.content ?? null,
                 reasoningContent: response.reasoningContent,
                 toolCalls,
@@ -76,15 +86,18 @@ export class AgentLoopRuntime {
                 cancelled ||= Boolean(signal?.aborted)
 
                 if (cancelled) {
-                    this.sessions.append(sessionId, 'tool/result', {
+                    append(sessionId, 'tool/result', {
                         toolCallId: call.id,
                         name: call.name,
                         isError: true,
                         content: CANCELLED_RESULT,
+                        status: 'skipped',
                     })
                     continue
                 }
 
+                state.counters.toolCalls++
+                append(sessionId, 'tool/start', { taskId: state.taskId, runId: state.runId, toolCallId: call.id, name: call.name })
                 onToolCall?.(call)
 
                 const result = await this.tools.execute(call.name, call.arguments, {
@@ -97,11 +110,12 @@ export class AgentLoopRuntime {
                 const renderedContent = this.tools.renderResult(result)
                 onToolResult?.({ ...result, renderedContent, name: call.name, toolCallId: call.id })
 
-                this.sessions.append(sessionId, 'tool/result', {
+                append(sessionId, 'tool/result', {
                     toolCallId: call.id,
                     name: call.name,
                     isError: result.isError,
                     content: renderedContent,
+                    status: 'completed',
                 })
             }
             //step6: After executing each tool, render the result for display, invoke any provided callbacks for tool results, and append the tool's result to the session's event log. This allows the agent to continue its reasoning based on the outcomes of the tool executions.
@@ -110,6 +124,11 @@ export class AgentLoopRuntime {
                 throw new Error('Agent run cancelled')
             }
 
+        }
+        } catch (error) {
+            state.counters.activeDurationMs = performance.now() - started
+            this.sessions.finishRun(state, error instanceof BudgetStop ? error.reason : signal?.aborted ? 'cancelled' : 'error')
+            throw error
         }
     }
 }

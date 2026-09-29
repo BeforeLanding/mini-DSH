@@ -1,8 +1,57 @@
+import { emptyCounters } from './budget.js'
+import type { BudgetPolicy, RunState, StopReason, Counters } from './budget.js'
 import type { Arguments, EventData, Session, SessionEvent, Message } from './contracts.js'
 import { randomUUID } from 'node:crypto'
 
 export class SessionRuntime {
     #sessions = new Map<string, Session>()
+
+
+    visibleEvents(id: string) {
+        const events = this.get(id).events
+        const reset = events.map(e => e.type).lastIndexOf('session/reset')
+        return events.slice(reset + 1)
+    }
+    latestRun(id: string): RunState | undefined {
+        const events = this.visibleEvents(id)
+        const begin = [...events].reverse().find(e => e.type === 'run/start')
+        if (!begin || begin.type !== 'run/start') return undefined
+        const end = [...events].reverse().find(e => e.type === 'run/finish' && e.data.state.runId === begin.data.state.runId)
+        if (end?.type === 'run/finish') return structuredClone(end.data.state)
+        const state = structuredClone(begin.data.state)
+        for (const event of events) {
+            if (event.runId !== state.runId) continue
+            if (event.type === 'model/start') state.counters.modelRequests++
+            if (event.type === 'tool/start') state.counters.toolCalls++
+            if (event.type === 'model/usage') {
+                state.usage.push(event.data.usage)
+                state.counters.inputTokens += event.data.usage.inputTokens
+                state.counters.outputTokens += event.data.usage.outputTokens
+                state.counters.totalTokens += event.data.usage.totalTokens
+            }
+        }
+        return state
+    }
+    beginRun(id: string, policy: Readonly<BudgetPolicy>, model: string): RunState {
+        if (this.latestRun(id)?.status === 'running') throw new Error('session is already running')
+        const state: RunState = { sessionId: id, taskId: randomUUID(), runId: randomUUID(), model,
+            policy, counters: emptyCounters(), status: 'running', usage: [], removedTaskIds: [] }
+        this.append(id, 'run/start', { state }, state)
+        return state
+    }
+    finishRun(state: RunState, status: StopReason) {
+        if (this.visibleEvents(state.sessionId).some(e => e.type === 'run/finish' && e.data.state.runId === state.runId)) return
+        state.status = status
+        this.append(state.sessionId, 'run/finish', { state }, state)
+    }
+    taskCounters(id: string, taskId: string): Counters {
+        const result = emptyCounters()
+        for (const event of this.visibleEvents(id)) {
+            if (event.type !== 'run/finish' || event.data.state.taskId !== taskId) continue
+            for (const key of Object.keys(result) as (keyof Counters)[]) result[key] += event.data.state.counters[key]
+        }
+        return result
+    }
 
     //six public methods: create, get, append, clear, list, deriveMessages
 
@@ -29,13 +78,14 @@ export class SessionRuntime {
         return session
     }
 
-    append<K extends keyof EventData>(id: string, type: K, data: EventData[K]) {
+    append<K extends keyof EventData>(id: string, type: K, data: EventData[K], scope: { taskId?: string; runId?: string } = {}) {
         const session = this.get(id)
 
         const event = {
+            version: 1 as const, sessionId: id, id: randomUUID(), ...scope,
             seq: session.events.length + 1,
             type,
-            data,
+            data: structuredClone(data),
             at: new Date().toISOString(),
         }
         session.events.push(event as SessionEvent)
@@ -46,8 +96,8 @@ export class SessionRuntime {
     // Clear the session events but keep the meta data
     clear(id: string) {
         const old = this.get(id)
-        old.events = []
-        this.append(id, 'session/start', { meta: old.meta, reset: true })
+        if (this.latestRun(id)?.status === 'running') throw new Error('session is running')
+        this.append(id, 'session/reset', { epoch: old.events.filter(e => e.type === 'session/reset').length + 1 })
     }
 
     // List all sessions with their metadata and creation time
@@ -57,7 +107,7 @@ export class SessionRuntime {
 
     // Derive messages from the session events for a given session ID
     deriveMessages(id: string) {
-        const events = this.get(id).events
+        const events = this.visibleEvents(id)
         const messages: Message[] = []
 
         for (const event of events) {
@@ -73,6 +123,7 @@ export class SessionRuntime {
             if (type === 'assistant/message') {
                 messages.push({
                     role: 'assistant',
+                    ...(data.reasoningContent ? { reasoning_content: data.reasoningContent } : {}),
                     content: data.content,
                 })
             }

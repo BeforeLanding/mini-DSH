@@ -1,4 +1,4 @@
-import type { BudgetPolicy } from './budget.js'
+import type { BudgetPolicy, RunState, Usage } from './budget.js'
 export type Arguments = Record<string, unknown>
 export type ModelSelection = string | { provider: string; model: string } | null
 export interface ToolCall { id: string; name: string; arguments?: Arguments }
@@ -42,10 +42,16 @@ export interface ApprovalRequest { tool: string; summary: string; signal?: Abort
 export interface SandboxConfig { workspace?: string; autoApprove?: boolean; allowHosts?: string[] }
 export interface EventData {
   'session/start': { meta: Arguments; reset?: boolean }
+  'session/reset': { epoch: number }
+  'run/start': { state: RunState }
+  'run/finish': { state: RunState }
+  'model/start': { taskId: string; runId: string; requestId: string }
+  'model/usage': { taskId: string; runId: string; requestId: string; usage: Usage }
+  'tool/start': { taskId: string; runId: string; toolCallId: string; name: string }
   'user/message': { content: string }
   'assistant/message': { content: string; reasoningContent?: string }
   'assistant/tool_calls': { content?: string | null; reasoningContent?: string; toolCalls: ToolCall[] }
-  'tool/result': { toolCallId: string; name?: string; isError?: boolean; content: string }
+  'tool/result': { toolCallId: string; name?: string; isError?: boolean; status?: 'completed' | 'skipped' | 'unknown'; content: string }
 }
-export type SessionEvent = { [K in keyof EventData]: { seq: number; type: K; data: EventData[K]; at: string } }[keyof EventData]
+export type SessionEvent = { [K in keyof EventData]: { version: 1; sessionId: string; id: string; taskId?: string; runId?: string; seq: number; type: K; data: EventData[K]; at: string } }[keyof EventData]
 export interface Session { id: string; meta: Arguments; events: SessionEvent[]; createdAt: string }
