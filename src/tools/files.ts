@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ToolDefinition, Arguments } from '../core/contracts.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { positiveLimit, readTextRange } from '../core/bounded-text.js'
 
 export const name = 'mini-tools-files'
 export const inject = ['tools', 'sandbox']
@@ -23,7 +24,14 @@ export function matchFilePattern(filename: string, pattern = '') {
   return new RegExp(`^(?:${pattern.includes('/') ? '' : '(?:.*/)?'}${expression})$`).test(normalized)
 }
 
-export function apply(ctx: Context, _config: { workspace?: string } = {}) {
+export interface FilesConfig { workspace?: string; maxLines?: number; maxOutputBytes?: number; maxScanBytes?: number }
+
+export function apply(ctx: Context, config: FilesConfig = {}) {
+  const limits = {
+    maxLines: positiveLimit(config.maxLines, 200, 'maxLines'),
+    maxOutputBytes: positiveLimit(config.maxOutputBytes, 32 * 1024, 'maxOutputBytes'),
+    maxScanBytes: positiveLimit(config.maxScanBytes, 8 * 1024 * 1024, 'maxScanBytes'),
+  }
   const resolve = (requested: unknown) => ctx.sandbox.resolvePath(requested)
   const parameters = (properties: Arguments, required: string[] = []) => ({ type: 'object', properties, required })
   const string = { type: 'string' }
@@ -38,9 +46,11 @@ export function apply(ctx: Context, _config: { workspace?: string } = {}) {
   }
   const definitions: ToolDefinition[] = [
     {
-      name: 'read_file', description: 'Read a UTF-8 file inside the workspace.',
-      parameters: parameters({ path: string }, ['path']),
-      async execute(args, exec) { return fs.readFile(resolve(args.path), { encoding: 'utf8', signal: exec.signal }) },
+      name: 'read_file', description: 'Read a bounded UTF-8 line range with line numbers and nextLine/eof. Use startLine to continue. Binary, invalid UTF-8 and oversized lines fail explicitly.',
+      parameters: parameters({ path: string, startLine: { type: 'integer', minimum: 1 }, maxLines: { type: 'integer', minimum: 1, maximum: limits.maxLines } }, ['path']),
+      async execute(args, exec) {
+        return readTextRange(resolve(args.path), positiveLimit(args.startLine, 1, 'startLine'), positiveLimit(args.maxLines, limits.maxLines, 'maxLines', limits.maxLines), limits, exec.signal)
+      },
     },
     {
       name: 'write_file', description: 'Write a UTF-8 file after approval.',

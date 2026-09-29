@@ -221,3 +221,5 @@
 - NX-07c / 有界搜索和分页 / 遍历/扫描/输出/取消/路径测试与回归 / todo / 独立提交搜索及测试。
 - NX-07d / 持久结果存储与有界回读 / 隔离、完整性、容量、重启测试 / todo / 独立提交公共结果存储。
 - NX-07e / 工具预览、Bash 采集及回读集成 / Cordis 模拟模型、pnpm check/test/fixtures:check / todo / 独立提交工具集成及使用文档。
+
+NX-07b：done；src/core/bounded-text.ts 流式扫描和 src/tools/files.ts 分段读取；pnpm check（56 文件）、pnpm test（89/89，无跳过）通过。覆盖中文/CRLF、空文件、末行、输出/扫描上限、长行、非法编码、二进制、取消及非文件；NX-07a 提交 5ef5b2e。下一步搜索。

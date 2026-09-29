@@ -242,3 +242,6 @@ R-01至R-13逐项证据见PROGRESS E-03；本地pnpm check/test 57/57；功能�
 
 ### NX-07a（2026-09-29）
 已补 R-15 和有界工具决策，拆为契约、读取、搜索、持久结果存储、工具/Bash 集成五个独立提交边界。当前仅文档，git diff --check 通过；功能尚未实现。
+
+### NX-07b（2026-09-29）
+read_file 增加 startLine/maxLines、行号、nextLine/eof 和截断原因，固定块读取并限制扫描/行长/输出；非法 UTF-8、二进制、非文件和取消明确失败。pnpm check（56 文件）、pnpm test（89/89）通过；diff 核对及 git diff --check 通过。契约提交 5ef5b2e 已推送，读取独立提交后推进搜索。
