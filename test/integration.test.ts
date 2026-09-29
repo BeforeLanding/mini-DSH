@@ -21,7 +21,8 @@ test('the whole plugin stack boots on Cordis and runs a full model -> tool -> mo
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-smoke-'))
   const root = new Context()
   try {
-    for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
+    for (const plugin of [sessions, systemPrompt, tools, llm, agents]) await root.plugin(plugin)
+    await root.plugin(agentLoop, { budget: { maxModelRequests: 4 } })
     await root.plugin(runtimeContext, { workspace })
     await root.plugin(sandbox, { workspace, autoApprove: true })
     await root.plugin(bash, { workspace })
@@ -56,6 +57,7 @@ test('the whole plugin stack boots on Cordis and runs a full model -> tool -> mo
     const agent = root.agents.create({ sessionId: session.id, model: 'mock/smoke', loop: root.agentLoop })
     assert.equal(await agent.send('print the working directory'), 'done')
     assert.equal(calls, 2)
+    assert.equal(root.sessions.latestRun(session.id)?.policy.maxModelRequests, 4)
     assert.deepEqual(session.events.filter(event => ['session/start', 'user/message', 'assistant/tool_calls', 'tool/result', 'assistant/message'].includes(event.type)).map(event => event.type), ['session/start', 'user/message', 'assistant/tool_calls', 'tool/result', 'assistant/message'])
 
     const execute = async (name: string, args: Arguments) => {

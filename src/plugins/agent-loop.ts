@@ -6,7 +6,7 @@ class AgentLoopService extends Service {
     runtime: AgentLoopRuntime
     static inject = ['sessions', 'systemPrompt', 'tools', 'llm']
 
-    constructor(ctx: Context) {
+    constructor(ctx: Context, config: { budget?: import('../core/budget.js').BudgetPolicy } = {}) {
         super(ctx, 'agentLoop')
         this.runtime = new AgentLoopRuntime({
             sessions: ctx.sessions,
@@ -14,6 +14,7 @@ class AgentLoopService extends Service {
             tools: ctx.tools,
             llm: ctx.llm,
         })
+        this.runtime.budget = config.budget
     }
 
     run(...args: Parameters<AgentLoopRuntime['run']>) {
@@ -24,6 +25,6 @@ class AgentLoopService extends Service {
 export const name = 'mini-agent-loop'
 export const inject = ['sessions', 'systemPrompt', 'tools', 'llm']
 
-export function apply(ctx: Context) {
-    ctx.plugin(AgentLoopService)
+export function apply(ctx: Context, config: { budget?: import('../core/budget.js').BudgetPolicy } = {}) {
+    ctx.plugin(AgentLoopService, config)
 }
