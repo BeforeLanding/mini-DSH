@@ -14,12 +14,12 @@ import * as agentLoop from '../src/plugins/agent-loop.js'
 import * as sandbox from '../src/plugins/sandbox.js'
 import * as cli from '../src/plugins/cli.js'
 import { JsonlStore } from '../src/core/event-store.js'
-async function boot(workspace: string, directory: string, resumeSessionId?: string) {
+async function boot(workspace: string, directory: string, resumeSessionId?: string, autoApprove = true) {
   const root = new Context(), input = new PassThrough(), output = new PassThrough()
   let text = '', models = 0, executions = 0
   output.on('data', chunk => { text += String(chunk) })
   for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
-  await root.plugin(sandbox, { workspace, autoApprove: true })
+  await root.plugin(sandbox, { workspace, autoApprove })
   root.llm.register('mock', { models: ['test', 'alternate'], capabilities: { test: { contextWindowTokens: 1_000_000 }, alternate: { contextWindowTokens: 1_000_000 } },
     chat: async () => ++models === 1 ? { toolCalls: [{ id: 'a', name: 'tick', arguments: {} }] } : { content: 'done' } })
   root.tools.register({ name: 'tick', execute: () => { executions++; return 'ok' } })
@@ -82,5 +82,23 @@ test('CLI rejects invalid overrides without changing the effective policy', { ti
     assert.equal(app.models(), 0)
   } finally {
     await app.root.fiber.dispose(); assert.equal(path.dirname(temp), path.resolve(os.tmpdir())); await fs.rm(temp, { recursive: true, force: true })
+  }
+})
+test('Esc cancels a CLI approval and releases its input handler', { timeout: 10000 }, async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-cli-approval-'))
+  const app = await boot(temp, path.join(temp, 'sessions'), undefined, false)
+  try {
+    app.root.llm.register('approval', { models: ['test'], capabilities: { test: { contextWindowTokens: 1_000_000 } },
+      chat: async () => ({ toolCalls: [{ id: 'ask', name: 'ask', arguments: {} }] }) })
+    app.root.tools.register({ name: 'ask', execute: async (_args, exec) => app.root.sandbox.approve({ tool: 'ask', summary: 'synthetic approval', signal: exec.signal, approval: exec.approval }) })
+    app.input.write('/model approval/test\n/budget {"maxModelRequests":2}\nmock approval task\n')
+    await app.waitFor('Allow this?')
+    app.input.write(Buffer.from([27]))
+    await app.waitFor('[Run cancelled]')
+    assert.equal(app.root.sessions.latestRun(app.root.sessions.list()[0].id)?.status, 'cancelled')
+    app.input.write('\n/exit\n')
+  } finally {
+    await app.root.fiber.dispose(); assert.equal(app.input.listenerCount('data'), 0)
+    assert.equal(path.dirname(temp), path.resolve(os.tmpdir())); await fs.rm(temp, { recursive: true, force: true })
   }
 })

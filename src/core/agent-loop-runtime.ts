@@ -38,6 +38,7 @@ export class AgentLoopRuntime {
 
         const state = this.sessions.beginRun(sessionId, policy, typeof agent.model === 'string' ? agent.model : JSON.stringify(agent.model), input === undefined)
         const control = new RunBudgetRuntime(policy, state, signal, this.clock)
+        const enteredTools = new Set<string>()
         const append: SessionRuntime['append'] = (id, type, data) => this.sessions.append(id, type, data, state)
         try {
         if (input !== undefined) append(sessionId, 'user/message', { content: input })
@@ -122,7 +123,7 @@ export class AgentLoopRuntime {
                 return content
             }//step4: If the LLM's response does not include any tool calls, append the assistant's message to the session and return the content. This indicates that the agent has completed its reasoning without needing to invoke any tools.
 
-            append(sessionId, 'assistant/tool_calls', {
+            const batch = append(sessionId, 'assistant/tool_calls', {
                 content: response.content ?? null,
                 reasoningContent: response.reasoningContent,
                 toolCalls,
@@ -159,8 +160,9 @@ export class AgentLoopRuntime {
                 await control.wait(() => this.sessions.flush(sessionId))
                 control.check()
                 state.counters.toolCalls++
+                enteredTools.add(`${batch.seq}/${call.id}`)
                 const result = await control.wait(() => this.tools.execute(call.name, call.arguments, {
-                    signal,
+                    signal: control.signal,
                     sessionId,
                     toolCallId: call.id,
                     agent,
@@ -187,8 +189,9 @@ export class AgentLoopRuntime {
         }
         } catch (error) {
             const events = this.sessions.visibleEvents(sessionId)
-            for (const { call, scope, started } of pendingTools(events)) {
+            for (const { call, scope } of pendingTools(events)) {
                 if (scope.runId !== state.runId) continue
+                const started = enteredTools.has(`${scope.seq}/${call.id}`)
                 append(sessionId, 'tool/result', { toolCallId: call.id, name: call.name, isError: true, status: started ? 'unknown' : 'skipped',
                     content: 'ToolError: ' + (started ? 'unknown outcome' : 'skipped') + ' after ' + (error instanceof BudgetStop ? error.reason : 'error') })
             }

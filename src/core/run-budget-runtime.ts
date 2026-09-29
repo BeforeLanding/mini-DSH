@@ -57,7 +57,15 @@ export class RunBudgetRuntime {
     const interrupted = new Promise<never>((_, reject) => {
       abort = () => reject(new BudgetStop(this.stopReason ?? 'cancelled', this.state))
       this.signal.addEventListener('abort', abort, { once: true })
-      if (timeoutMs !== undefined) timer = this.clock.setTimeout(() => this.stop(timeoutReason), Math.min(timeoutMs, 2_147_483_647))
+      if (timeoutMs !== undefined) {
+        const deadline = this.clock.now() + timeoutMs
+        const schedule = () => {
+          const remaining = deadline - this.clock.now()
+          if (remaining <= 0) this.stop(timeoutReason)
+          else timer = this.clock.setTimeout(schedule, Math.min(remaining, 2_147_483_647))
+        }
+        schedule()
+      }
     })
     try {
       if (this.signal.aborted) abort()

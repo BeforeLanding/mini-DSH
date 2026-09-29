@@ -25,6 +25,19 @@ export async function* parseSSE(response: { body: { getReader(): { read(): Promi
     if (!data) return undefined
     const event: unknown = JSON.parse(data)
     if (!isRecord(event) || (event.choices !== undefined && !Array.isArray(event.choices))) throw new Error('invalid SSE event')
+    for (const choice of event.choices ?? []) {
+      if (!isRecord(choice)) throw new Error('invalid SSE choice')
+      if (choice.finish_reason != null && typeof choice.finish_reason !== 'string') throw new Error('invalid SSE finish reason')
+      const delta = choice.delta
+      if (delta == null) continue
+      if (!isRecord(delta) || ['content', 'reasoning_content'].some(k => delta[k] != null && typeof delta[k] !== 'string')) throw new Error('invalid SSE delta')
+      if (delta.tool_calls == null) continue
+      if (!Array.isArray(delta.tool_calls)) throw new Error('invalid SSE tool calls')
+      for (const call of delta.tool_calls) {
+        if (!isRecord(call) || (call.index !== undefined && (typeof call.index !== 'number' || !Number.isSafeInteger(call.index) || call.index < 0)) ||
+          (call.id != null && typeof call.id !== 'string') || (call.function != null && (!isRecord(call.function) || ['name', 'arguments'].some(k => call.function && isRecord(call.function) && call.function[k] != null && typeof call.function[k] !== 'string')))) throw new Error('invalid SSE tool delta')
+      }
+    }
     return event as StreamEvent
   }
   try {

@@ -30,7 +30,7 @@ export function validatePayload(type: string, data: Record<string, unknown>) {
     case 'tool/result': valid = string(data.toolCallId) && string(data.content) && optionalString(data.name) && (data.isError === undefined || typeof data.isError === 'boolean') && (data.status === undefined || ['completed', 'skipped', 'unknown'].includes(String(data.status))); break
     case 'run/start': valid = validState(data.state) && record(data.state) && data.state.status === 'running'; break
     case 'run/finish': valid = validState(data.state) && record(data.state) && data.state.status !== 'running'; break
-    case 'model/start': valid = string(data.taskId) && string(data.runId) && string(data.requestId); break
+    case 'model/start': valid = string(data.taskId) && string(data.runId) && string(data.requestId) && (data.estimatedInputTokens === undefined || integer(data.estimatedInputTokens)); break
     case 'context/projection': valid = integer(data.estimatedInputTokens) && integer(data.reservedOutputTokens) && integer(data.safetyMarginTokens) && Array.isArray(data.removedTaskIds) && data.removedTaskIds.every(string); break
     case 'model/fragment': valid = string(data.requestId) && string(data.content) && string(data.reasoningContent); break
     case 'model/end': valid = string(data.requestId) && typeof data.complete === 'boolean' && optionalString(data.finishReason); break

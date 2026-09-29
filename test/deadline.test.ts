@@ -77,3 +77,16 @@ test('cancel/timeout race seals one state and uncertain running tools are not ma
   assert.equal(h.session.events.filter(e => e.type === 'run/finish').length, 1)
   assert.equal(clock.timers.size, 0)
 })
+test('large timeouts are rescheduled across the Node timer range without stopping early', async () => {
+  const clock = new FakeClock(), entered = deferred<void>()
+  let signal: AbortSignal | undefined
+  const h = harness(async request => { signal = request.signal; entered.resolve(); return new Promise(() => {}) })
+  h.loop.clock = clock
+  const run = h.agent.send('mock', { budget: { requestTimeoutMs: 2_147_484_647 } })
+  const result = assert.rejects(run, /request_timeout/)
+  await entered.promise
+  clock.advance(2_147_483_647)
+  assert.equal(signal?.aborted, false)
+  clock.advance(1000); await result
+  assert.equal(clock.timers.size, 0)
+})

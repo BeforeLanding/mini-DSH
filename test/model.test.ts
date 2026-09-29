@@ -39,3 +39,14 @@ test('usage validation excludes cache/reasoning double counting and rejects inva
   assert.throws(() => normalizeUsage({ ...usage, total_tokens: 99 }), /usage/)
   assert.throws(() => normalizeUsage({ ...usage, completion_tokens: -1 }), /usage/)
 })
+test('malformed provider results and duplicate tool IDs fail with a single terminal state', async () => {
+  const h = harness(async () => ({ toolCalls: [{ id: 'same', name: 'write', arguments: {} }, { id: 'same', name: 'write', arguments: {} }] }))
+  let effects = 0
+  h.tools.register({ name: 'write', execute: () => { effects++; return 'ok' } })
+  await assert.rejects(h.agent.send('mock'), /invalid model response/)
+  assert.equal(effects, 0)
+  assert.equal(h.sessions.latestRun(h.session.id)?.status, 'error')
+  assert.equal(h.session.events.filter(e => e.type === 'run/finish').length, 1)
+  const adapter = createDeepSeekAdapter({ apiKey: 'mock', fetch: async () => new Response(event({ choices: [{ delta: { content: 123 } }] }) + 'data: [DONE]\n') })
+  await assert.rejects(adapter.chat({}), /invalid SSE delta/)
+})

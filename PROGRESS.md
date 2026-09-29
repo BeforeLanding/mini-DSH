@@ -124,3 +124,6 @@ agent.continue 同task新run关联previousRunId，每段独立计数，task累�
 
 ### CB-11 CLI持久化验收（2026-09-29）
 JSONL串行sync、单写入者锁、写入故障停止、尾部隔离和严格恢复；CLI默认持久化并在退出释放锁。pnpm check / test 52/52 通过，日志全为模拟内容。性能样本在最终回归记录。
+
+### CB-10 持久化与取消边界加固（2026-09-29）
+写盘失败禁止后续调度，未确认终态不报告completed；损坏UTF-8原字节隔离；模型载荷/重复调用校验；工具组合signal与Esc审批取消、超长timer回归通过。pnpm check / test 57/57通过，含待单独提交的持久化集成样本；最终CI待核验。

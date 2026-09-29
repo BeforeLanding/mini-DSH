@@ -1,4 +1,7 @@
-import type { Adapter, ChatRequest, ModelSelection } from './contracts.js'
+import { isRecord } from './event-store.js'
+import { validUsage } from './event-validation.js'
+import { ModelStreamError } from './model-error.js'
+import type { Adapter, ChatRequest, ChatResponse, ModelSelection } from './contracts.js'
 export class LlmRuntime {
     #providers = new Map<string, Adapter>()
     #defaultSelection: string | null = null
@@ -54,7 +57,7 @@ export class LlmRuntime {
     }
 
     // Perform a chat operation using the specified model selection. It normalizes the selection, retrieves the appropriate adapter, and invokes the chat method on the adapter with the provided request and model.
-    async chat(request: ChatRequest, selection: ModelSelection = this.#defaultSelection) {
+    async chat(request: ChatRequest, selection: ModelSelection = this.#defaultSelection): Promise<ChatResponse> {
         const { provider, model } = normalizeSelection(selection)
         const adapter = this.#providers.get(provider)
 
@@ -62,7 +65,17 @@ export class LlmRuntime {
             throw new Error(`no LLM provider: ${provider}`)
         }
 
-        return adapter.chat({ ...request, model })
+        const response = await adapter.chat({ ...request, model })
+        const calls = response?.toolCalls ?? []
+        if (!isRecord(response) || (response.content !== undefined && typeof response.content !== 'string') ||
+            (response.reasoningContent !== undefined && typeof response.reasoningContent !== 'string') ||
+            (response.complete !== undefined && typeof response.complete !== 'boolean') || (response.finishReason !== undefined && typeof response.finishReason !== 'string') ||
+            (response.usage !== undefined && !validUsage(response.usage)) || !Array.isArray(calls) ||
+            calls.some(call => !isRecord(call) || typeof call.id !== 'string' || !call.id || typeof call.name !== 'string' || !call.name || (call.arguments !== undefined && !isRecord(call.arguments))) ||
+            new Set(calls.map(call => call.id)).size !== calls.length) {
+            throw new ModelStreamError('invalid model response/tool calls/usage', { content: typeof response?.content === 'string' ? response.content : '', complete: false })
+        }
+        return response
     }
 }
 

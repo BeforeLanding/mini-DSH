@@ -82,11 +82,11 @@ test('tail quarantine preserves original bytes and rejects middle damage or unkn
   try {
     await store.append(session.events[0]); await store.close()
     const target = path.join(store.directory, 'events.jsonl')
-    await fs.appendFile(target, '{"partial":')
-    const original = await fs.readFile(target, 'utf8')
+    await fs.appendFile(target, Buffer.from([0xe4, 0xb8])) // Torn UTF-8 character must survive byte-for-byte.
+    const original = await fs.readFile(target)
     await assert.rejects(JsonlStore.open(root, session.id), /incomplete JSONL tail/)
     const backup = await JsonlStore.quarantineTail(root, session.id)
-    assert.equal(await fs.readFile(backup, 'utf8'), original)
+    assert.deepEqual(await fs.readFile(backup), original)
     const next = await JsonlStore.open(root, session.id)
     assert.equal((await next.read()).length, 1); await next.close()
     const malformed = structuredClone(session.events[0]) as unknown as Record<string, unknown>
@@ -97,4 +97,20 @@ test('tail quarantine preserves original bytes and rejects middle damage or unkn
     malformed.version = 99
     assert.throws(() => parseLog(JSON.stringify(malformed) + '\n', session.id), /envelope\/version/)
   } finally { await store.close(); assert.equal(path.dirname(root), path.resolve(os.tmpdir())); await fs.rm(root, { recursive: true, force: true }) }
+})
+test('usage or terminal persistence failure is surfaced as error and forbids new dispatch', async () => {
+  for (const failType of ['model/usage', 'run/finish']) {
+    let models = 0, tools = 0
+    const h = harness(async () => { models++; return failType === 'model/usage' ? { toolCalls: [{ id: 'a', name: 'tick', arguments: {} }] } : { content: 'answer' } })
+    h.tools.register({ name: 'tick', execute: () => { tools++; return 'ok' } })
+    h.sessions.attachStore(h.session.id, { append: async event => { if (event.type === failType) throw new Error('sync failed') }, read: async () => [], close: async () => {} })
+    await assert.rejects(h.agent.send('mock'), /sync failed/)
+    assert.equal(models, 1)
+    assert.equal(tools, 0)
+    assert.equal(h.sessions.latestRun(h.session.id)?.status, 'error')
+    assert.equal(h.sessions.latestRun(h.session.id)?.counters.toolCalls, 0)
+    assert.ok(h.session.events.filter(e => e.type === 'tool/result').every(e => e.data.status === 'skipped'))
+    await assert.rejects(h.agent.send('next'), /storage failed/)
+    assert.equal(models, 1)
+  }
 })
