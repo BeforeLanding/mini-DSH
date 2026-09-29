@@ -1,3 +1,4 @@
+import { estimateUsage } from './token-estimator.js'
 import path from 'node:path'
 import { parseLog } from './event-store.js'
 import type { EventStore } from './event-store.js'
@@ -39,6 +40,15 @@ export class SessionRuntime {
                 this.append(id, 'tool/result', { toolCallId: call.id, name: call.name, isError: true,
                     status: started ? 'unknown' : 'skipped', content: started ? 'ToolError: unknown outcome after recovery; verify side effects before continuing' : 'ToolError: skipped before execution after recovery' }, event)
             }
+        }
+        for (const event of visible) {
+            if (event.type !== 'model/start' || visible.some(e => e.type === 'model/usage' && e.data.requestId === event.data.requestId)) continue
+            const chunks = visible.filter(e => e.type === 'model/fragment' && e.data.requestId === event.data.requestId)
+            const content = chunks.map(e => e.type === 'model/fragment' ? e.data.content : '').join('')
+            const reasoningContent = chunks.map(e => e.type === 'model/fragment' ? e.data.reasoningContent : '').join('')
+            this.append(id, 'model/usage', { taskId: event.data.taskId, runId: event.data.runId, requestId: event.data.requestId,
+                usage: estimateUsage(event.data.estimatedInputTokens ?? 256, { content, reasoningContent }) }, event)
+            this.append(id, 'model/end', { requestId: event.data.requestId, complete: false }, event)
         }
         const state = this.latestRun(id)
         if (state?.status === 'running') this.finishRun(state, 'error')

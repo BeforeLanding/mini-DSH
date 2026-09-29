@@ -1,3 +1,5 @@
+import { estimateInput, estimateUsage } from './token-estimator.js'
+import { StreamJournal } from './stream-journal.js'
 import { ModelStreamError } from './model-error.js'
 import type { Usage } from './budget.js'
 import { randomUUID } from 'node:crypto'
@@ -51,9 +53,12 @@ export class AgentLoopRuntime {
 
             const messages = this.sessions.deriveMessages(sessionId)
 
+            const schemas = this.tools.schemas()
+            const estimatedInputTokens = estimateInput({ system, messages, tools: schemas })
+            state.estimatedInputTokens = estimatedInputTokens
             state.counters.modelRequests++
             const requestId = randomUUID()
-            append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId })
+            append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId, estimatedInputTokens })
             const settle = (usage?: Usage) => {
                 if (!usage) return
                 state.usage.push(usage)
@@ -63,19 +68,27 @@ export class AgentLoopRuntime {
                 append(sessionId, 'model/usage', { taskId: state.taskId, runId: state.runId, requestId, usage })
             }
             await this.sessions.flush(sessionId)
+            const journal = new StreamJournal(requestId, data => append(sessionId, 'model/fragment', data))
             const response = await this.llm.chat(
                 {
                     maxOutputTokens: policy.maxOutputTokens,
                     system,
                     messages,
-                    tools: this.tools.schemas(),
+                    tools: schemas,
                     signal,
-                    onReasoning,
-                    onContent,
+                    onReasoning: chunk => { journal.add('reasoning', chunk); onReasoning?.(chunk) },
+                    onContent: chunk => { journal.add('content', chunk); onContent?.(chunk) },
                 },
                 agent.model,
-            ).catch(error => { if (error instanceof ModelStreamError) settle(error.partial.usage); throw error })
-            settle(response.usage)
+            ).catch(error => {
+                journal.close()
+                const partial = error instanceof ModelStreamError ? error.partial : { content: journal.content, reasoningContent: journal.reasoningContent, usage: undefined }
+                settle(partial.usage ?? estimateUsage(estimatedInputTokens, partial))
+                append(sessionId, 'model/end', { requestId, complete: false })
+                throw error
+            }).finally(() => journal.close())
+            settle(response.usage ?? estimateUsage(estimatedInputTokens, response))
+            append(sessionId, 'model/end', { requestId, complete: response.complete !== false, finishReason: response.finishReason })
             if (response.complete === false) throw new BudgetStop(response.finishReason === 'length' ? 'output_limit' : 'error', state)
             //step3: Use the LLM to generate a response based on the system prompt, the derived messages, available tools, and any provided callbacks for reasoning and content. The model used is specified by the agent's model selection.
 

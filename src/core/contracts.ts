@@ -46,7 +46,9 @@ export interface EventData {
   'session/reset': { epoch: number }
   'run/start': { state: RunState }
   'run/finish': { state: RunState }
-  'model/start': { taskId: string; runId: string; requestId: string }
+  'model/start': { taskId: string; runId: string; requestId: string; estimatedInputTokens?: number }
+  'model/fragment': { requestId: string; content: string; reasoningContent: string }
+  'model/end': { requestId: string; complete: boolean; finishReason?: string }
   'model/usage': { taskId: string; runId: string; requestId: string; usage: Usage }
   'tool/start': { taskId: string; runId: string; toolCallId: string; name: string }
   'user/message': { content: string }

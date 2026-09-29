@@ -26,6 +26,8 @@ export function validatePayload(type: string, data: Record<string, unknown>) {
     case 'run/start': valid = validState(data.state) && record(data.state) && data.state.status === 'running'; break
     case 'run/finish': valid = validState(data.state) && record(data.state) && data.state.status !== 'running'; break
     case 'model/start': valid = string(data.taskId) && string(data.runId) && string(data.requestId); break
+    case 'model/fragment': valid = string(data.requestId) && string(data.content) && string(data.reasoningContent); break
+    case 'model/end': valid = string(data.requestId) && typeof data.complete === 'boolean' && optionalString(data.finishReason); break
     case 'model/usage': valid = string(data.taskId) && string(data.runId) && string(data.requestId) && validUsage(data.usage); break
     case 'tool/start': valid = string(data.taskId) && string(data.runId) && string(data.toolCallId) && string(data.name); break
   }

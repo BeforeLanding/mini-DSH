@@ -79,3 +79,12 @@ JSONL 串行 sync、单写入者锁与写入故障屏障；严格载荷/序号/�
 
 ### CB-03 usage与输出协议（2026-09-29）
 2026-09-29 核验 https://api-docs.deepseek.com/api/create-chat-completion/；max_tokens、include_usage、usage-only/重复末包归一化，reasoning 为输出子集；截断/残缺调用不执行。pnpm check / test 33/33 通过；缺失 usage 的统一估算在 CB-04 接入。
+
+### CB-04 完整请求估算（2026-09-29）
+token-estimator 按 PLAN ASCII0.3/其他Unicode1.0、每消息32/请求256，覆盖 system/reasoning/工具schema及协议；缺失/失败/中断 usage 标 estimated+uncertain；pnpm check / test 35/35 通过。容量判断在下一步。
+
+### CB-03 usage结算（2026-09-29）
+官方 DeepSeek 协议（2026-09-29）+模型SSE模拟：usage-only/重复末包、max_tokens、reasoning不重复计，length/残缺JSON不执行；缺失及中断用统一估算。pnpm check / test 35/35 通过。
+
+### CB-12 流式恢复（2026-09-29）
+严格事件恢复不重放工具；unknown/skipped、workspace校验、reset重启；流片段250ms或4KiB合并，不派生为完成答案；缺失usage恢复估算。pnpm check / test 35/35 通过。

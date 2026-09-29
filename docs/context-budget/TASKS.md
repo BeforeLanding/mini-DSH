@@ -56,24 +56,24 @@
 - 依赖：CB-01、CB-02。
 - 行为：核验官方协议，归一化 usage/finishReason，支持可选输出 token 上限；无 usage 返回可解释估算。
 - 验证：模拟 fetch/SSE 的完整、usage-only、缺失、重复、流中断；核对输出限制字段；残缺 tool JSON 不执行。
-- 状态：in_progress（2026-09-29）。
-- 证据：2026-09-29 核验 https://api-docs.deepseek.com/api/create-chat-completion/；max_tokens、include_usage、usage-only/重复末包归一化，reasoning 为输出子集；截断/残缺调用不执行。pnpm check / test 33/33 通过；缺失 usage 的统一估算在 CB-04 接入。
+- 状态：done（2026-09-29）。
+- 证据：官方 DeepSeek 协议（2026-09-29）+模型SSE模拟：usage-only/重复末包、max_tokens、reasoning不重复计，length/残缺JSON不执行；缺失及中断用统一估算。pnpm check / test 35/35 通过。
 
 ## CB-12 Session 重建与未知执行识别
 - 关联：R-11；M1；D-08。
 - 依赖：CB-02、CB-03、CB-11。
 - 行为：从事件重建消息、任务、用量、模型和终态；重放不执行外部工作；识别 started 无结果的 unknown；保留 reasoning，区分不完整流。
 - 验证：恢复前后状态比较；工具副作用完成但结果尚未落盘的崩溃样本不自动重试；reset 重启保持；版本不支持报错。
-- 状态：in_progress（2026-09-29）。
-- 证据：恢复仅派生状态/消息并补齐 unknown/skipped；工作区不匹配拒绝执行，reset 重启生效；严格版本/载荷/序号校验和尾部原文隔离。pnpm check / test 30/30 通过。usage/流式恢复待适配器小步。
+- 状态：done（2026-09-29）。
+- 证据：严格事件恢复不重放工具；unknown/skipped、workspace校验、reset重启；流片段250ms或4KiB合并，不派生为完成答案；缺失usage恢复估算。pnpm check / test 35/35 通过。
 
 ## CB-04 请求 token 估算
 - 关联：R-02、R-06；M2；D-04。
 - 依赖：CB-01、CB-03。
 - 行为：估算 system、messages、reasoning、schema 和开销；明确输出预留、安全余量和模型容量来源。
 - 验证：中文/英文/代码/大 schema 固定样本；容量等号及超一边界；未知容量报配置问题；模型切换重新计算。
-- 状态：todo。
-- 证据：尚无；完成时附算法说明及样本评估，不能将估算标为精确值。
+- 状态：in_progress（2026-09-29）。
+- 证据：token-estimator 按 PLAN ASCII0.3/其他Unicode1.0、每消息32/请求256，覆盖 system/reasoning/工具schema及协议；缺失/失败/中断 usage 标 estimated+uncertain；pnpm check / test 35/35 通过。容量判断在下一步。
 
 ## CB-05 上下文裁剪与输出投影
 - 关联：R-02、R-03；M2；D-02。
