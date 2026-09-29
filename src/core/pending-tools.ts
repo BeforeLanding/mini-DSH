@@ -1,5 +1,4 @@
 import type { SessionEvent, ToolCall } from './contracts.js'
-/** Pair by occurrence and run, allowing a provider to reuse an ID after a result. */
 export function pendingTools(events: SessionEvent[]) {
   const pending = new Map<string, { call: ToolCall; scope: SessionEvent; started: boolean }>()
   for (const event of events) {

@@ -51,7 +51,6 @@ export class JsonlStore implements EventStore {
   }
   append(event: SessionEvent): Promise<void> {
     if (this.#closed) return Promise.reject(new Error('event store is closed'))
-    // Serialize at enqueue time, so later caller mutations cannot affect disk.
     const line = JSON.stringify(event) + '\n'
     const seq = event.seq
     const next = this.#queue.then(async () => {
@@ -61,7 +60,6 @@ export class JsonlStore implements EventStore {
       this.#seq = seq
     })
     this.#queue = next
-    // Keep rejection observable through append/read/close without an unhandled rejection.
     void next.catch(() => {})
     return next
   }
@@ -86,7 +84,6 @@ export function decodeLog(bytes: Uint8Array, sessionId: string) {
   try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes) } catch (error) { throw new Error('corrupt UTF-8 in JSONL', { cause: error }) }
   return parseLog(text, sessionId)
 }
-// Unknown payloads and broken envelopes are never skipped.
 export function parseLog(text: string, sessionId: string): SessionEvent[] {
   if (text && !text.endsWith('\n')) throw new Error('incomplete JSONL tail; preserve and quarantine before recovery')
   const events: SessionEvent[] = []

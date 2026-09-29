@@ -32,7 +32,6 @@ export function apply(ctx: Context, _config: { workspace?: string } = {}) {
     for (const entry of await fs.readdir(resolve(directory), { withFileTypes: true })) {
       signal?.throwIfAborted()
       const relative = path.join(directory, entry.name)
-      // Do not traverse symlink directories; direct reads still pass the realpath gate.
       if (entry.isDirectory()) yield* walk(relative, signal)
       else if (entry.isFile()) yield relative.replace(/\\/g, '/')
     }

@@ -448,13 +448,11 @@ test('resolveInside blocks a symlink inside the workspace that points out of it'
 
   try {
     await fs.writeFile(path.join(root, 'inside.txt'), 'ok')
-    // The link itself is inside the workspace; what it points at is not.
     await fs.symlink(os.tmpdir(), path.join(root, 'escape'), process.platform === 'win32' ? 'junction' : 'dir')
 
     assert.equal(resolveInside(root, 'inside.txt'), path.join(root, 'inside.txt'))
 
     assert.throws(() => resolveInside(root, 'escape/passwd'), /through a symlink/)
-    // A file that does not exist yet is the write path — it must be gated too.
     assert.throws(() => resolveInside(root, 'escape/not-created-yet'), /through a symlink/)
   } finally {
     await fs.rm(root, { recursive: true, force: true })

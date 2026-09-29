@@ -82,7 +82,7 @@ test('tail quarantine preserves original bytes and rejects middle damage or unkn
   try {
     await store.append(session.events[0]); await store.close()
     const target = path.join(store.directory, 'events.jsonl')
-    await fs.appendFile(target, Buffer.from([0xe4, 0xb8])) // Torn UTF-8 character must survive byte-for-byte.
+    await fs.appendFile(target, Buffer.from([0xe4, 0xb8]))
     const original = await fs.readFile(target)
     await assert.rejects(JsonlStore.open(root, session.id), /incomplete JSONL tail/)
     const backup = await JsonlStore.quarantineTail(root, session.id)

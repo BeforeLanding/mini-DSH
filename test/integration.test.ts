@@ -85,7 +85,6 @@ test('the whole plugin stack boots on Cordis and runs a full model -> tool -> mo
     assert.deepEqual(root.tools.list().map(tool => tool.name), ['bash'])
   } finally {
     await root.fiber.dispose()
-    // Only remove the exact directory created by this test under os.tmpdir().
     assert.ok(path.dirname(workspace) === path.resolve(os.tmpdir()))
     await fs.rm(workspace, { recursive: true, force: true })
   }

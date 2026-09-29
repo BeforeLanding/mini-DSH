@@ -17,7 +17,7 @@ export interface CliConfig {
 function parsePolicy(text: string): BudgetPolicy {
   const value: unknown = JSON.parse(text)
   if (!isRecord(value)) throw new Error('budget must be a JSON object')
-  return value as BudgetPolicy // resolveBudget checks every key and value before use.
+  return value as BudgetPolicy
 }
 export async function apply(ctx: Context, config: CliConfig = {}) {
   const workspace = await fs.realpath(ctx.sandbox.workspace)

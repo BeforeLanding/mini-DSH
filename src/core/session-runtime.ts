@@ -140,19 +140,18 @@ export class SessionRuntime {
         return result
     }
 
-    //six public methods: create, get, append, clear, list, deriveMessages
 
     create(meta: Arguments = {}) {
-        const id = randomUUID()// Generate a unique session ID
+        const id = randomUUID()
 
         const session: Session = {
             id,
-            meta: { ...meta },//shallow copy of meta
+            meta: { ...meta },
             events: [],
             createdAt: new Date().toISOString(),
         }
 
-        this.#sessions.set(id, session)// Store the session in the private map
+        this.#sessions.set(id, session)
         this.append(id, 'session/start', { meta })
         return session
     }
@@ -188,19 +187,16 @@ export class SessionRuntime {
         return event
     }
 
-    // Clear the session events but keep the meta data
     clear(id: string) {
         const old = this.get(id)
         if (this.latestRun(id)?.status === 'running') throw new Error('session is running')
         this.append(id, 'session/reset', { epoch: old.events.filter(e => e.type === 'session/reset').length + 1 })
     }
 
-    // List all sessions with their metadata and creation time
     list() {
         return [...this.#sessions.values()]
     }
 
-    // Derive messages from the session events for a given session ID
     deriveMessages(id: string, events = this.visibleEvents(id)) {
         const messages: Message[] = []
 
@@ -232,7 +228,7 @@ export class SessionRuntime {
                         type: 'function',
                         function: {
                             name: call.name,
-                            arguments: JSON.stringify(call.arguments ?? {}),// Convert arguments to a JSON string
+                            arguments: JSON.stringify(call.arguments ?? {}),
                         },
                     })),
                 })

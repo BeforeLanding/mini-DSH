@@ -12,7 +12,6 @@ function realpathWithMissing(target: string): string {
   while (true) {
     try { return path.join(fs.realpathSync(current), ...missing) } catch (error) {
       if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error
-      // A dangling symlink is an existing prefix with an unsafe destination.
       try { if (fs.lstatSync(current).isSymbolicLink()) throw new Error('path escapes the workspace through a symlink') }
       catch (statError) { if (!(statError instanceof Error && 'code' in statError && statError.code === 'ENOENT')) throw statError }
       const parent = path.dirname(current)

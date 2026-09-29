@@ -6,12 +6,10 @@ import type { Adapter, Arguments, ChatRequest } from '../core/contracts.js'
 interface WireCall { id: string; name: string; arguments: string }
 interface Delta { index?: number; id?: string; function?: { name?: string; arguments?: string } }
 interface StreamEvent { usage?: unknown; error?: { message?: string }; choices?: { finish_reason?: string; delta?: { content?: string; reasoning_content?: string; tool_calls?: Delta[] } }[] }
-// DeepSeek LLM provider for mini-DSH, which handles streaming responses and tool calls.
 
 export const name = 'mini-model-deepseek'
 export const inject = ['llm']
 
-// The apply function registers the DeepSeek LLM provider with the mini-DSH context, allowing it to be used for chat operations. It requires an API key and optionally accepts a base URL, a list of models, and a default model selection.
 export async function* parseSSE(response: { body: { getReader(): { read(): Promise<{ done: boolean; value?: Uint8Array }>; releaseLock(): void } } | null }): AsyncGenerator<StreamEvent> {
   if (!response.body) throw new Error('DeepSeek API returned no response body')
   const reader = response.body.getReader()
@@ -57,7 +55,6 @@ export async function* parseSSE(response: { body: { getReader(): { read(): Promi
   } finally { reader.releaseLock() }
 }
 
-// Accumulate tool call deltas from the streaming response, allowing for the reconstruction of complete tool calls from partial updates.
 export function accumulateToolCallDelta(map: Map<number, WireCall>, delta: Delta) {
   const index = delta.index ?? 0
   const call = map.get(index) ?? { id: '', name: '', arguments: '' }
@@ -67,7 +64,6 @@ export function accumulateToolCallDelta(map: Map<number, WireCall>, delta: Delta
   map.set(index, call)
 }
 
-// Parse tool arguments from a JSON string, throwing an error if the JSON is incomplete or invalid.
 export function parseToolArguments(text: string): Arguments {
   if (!text?.trim()) return {}
   try {
@@ -79,7 +75,6 @@ export function parseToolArguments(text: string): Arguments {
   }
 }
 
-// Finalize tool calls by sorting them and ensuring they have valid names and parsed arguments, preparing them for execution.
 export function finalizeToolCalls(map: Map<number, WireCall>) {
   return [...map.entries()].sort(([a], [b]) => a - b)
     .filter(([, call]) => call.name)
