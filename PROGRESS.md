@@ -1,5 +1,9 @@
 # 开发进度
 
+### CD-02a 离线传包发布脚本（2026-09-29）
+19f4ec9 的部署 36551890832 在服务器 git clone 时连接 github.com:443 超时，current 未切换。新增 scripts/deploy-ecs-bundle.sh：prepare 校验本地完整 bundle 与精确 SHA、构建/测试后写 receipt，activate 校验 receipt/HEAD/REVISION/共享 .env/产物，持锁保存上一版本并原子切换。服务器侧没有 GitHub 下载操作。MINI_DSH_DEPLOY_BASE 用于临时 fixture，默认沿用已有服务器布局。
+新增 scripts/test-ecs-bundle.sh，本地真实 Git bundle 导入与错误 SHA/路径/REVISION 拒绝通过；Git Bash 缺少 flock 时仅 fixture 使用替身，Linux 原子激活场景留待下一步在 Actions 执行，不报告本地已覆盖。两个脚本 bash -n、pnpm check（65 文件）、pnpm test（107/107、无跳过）、git diff --check 通过。当前脚本尚未接入 CD，远端修复待 b。
+
 ### CD-01d 用户启动核验收尾（2026-09-29）
 用户通过服务器 ~/bin/mini-dsh 成功进入交互 CLI，输出确认固定工作区 /home/deploy/workspaces/default、持久会话目录 ~/.mini-dsh/sessions 与所选模型配置正常。启动证据来自用户，本地代理未执行新模型请求；先前 bootstrap 的模型请求验证独立保留。CD-01 部署与 CD 设置完成；c 操作交付提交为 f02f567，已推送。本步仅同步摘要与任务状态，不保存真实会话 ID 或日志；git diff --check 通过，不重复运行应用测试。
 

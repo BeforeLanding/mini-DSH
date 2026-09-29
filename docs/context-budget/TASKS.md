@@ -1,5 +1,12 @@
 # 任务清单
 
+## CD-02 修复服务器 GitHub 下载失败
+- 状态：进行中；最新 19f4ec9 的 CI success，但部署 36551890832 在 git clone 连接 github.com:443 超时，未切换版本。
+- CD-02a：离线 Git bundle 发布脚本，分 prepare/activate，构建失败或 SHA 不符不得切换；实现与本地验证完成，两个 Bash 脚本语法、真实 bundle 导入、错误 SHA/路径/REVISION 拒绝、pnpm check（65 文件）/test（107/107）和 git diff --check 通过。Windows 无 flock/原生 Linux 软链，本地锁用 fixture 替身，原子激活验收待 b 的 Linux runner 与服务器实际运行；独立提交。
+- CD-02b：Actions 下载 CI SHA，传 bundle/脚本，服务器构建后由 runner 查 main 再激活；工作流门槛/语法、实际 CI/CD、版本与持久目录核验；独立提交。
+- CD-02c：记录真实部署结果；独立验收文档提交，不提前宣称远端成功。
+- 保留 production Secrets、严格主机校验、服务器发布锁和旧版本；不读取模型密钥或会话内容。
+
 ## CD-01 阿里云 CLI 发布
 - 状态：done；自动发布链路已实测通过，用户已确认发布后的启动入口正常进入 CLI，工作区与持久会话目录正确；模型请求先前已在 bootstrap 验证。
 - CD-01a：仅手动触发的公网 SSH 连接/运行环境检查；YAML 解析、main/production/手动触发门槛核验、runner/remote 两段 Bash 语法和 git diff --check 均通过；done；73988b5；[公网预检 36550421451](https://github.com/BeforeLanding/mini-DSH/actions/runs/36550421451) success。
