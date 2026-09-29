@@ -225,3 +225,5 @@
 NX-07b：done；src/core/bounded-text.ts 流式扫描和 src/tools/files.ts 分段读取；pnpm check（56 文件）、pnpm test（89/89，无跳过）通过。覆盖中文/CRLF、空文件、末行、输出/扫描上限、长行、非法编码、二进制、取消及非文件；NX-07a 提交 5ef5b2e。下一步搜索。
 
 NX-07c：done；有界 glob/grep 返回 matches、nextOffset、eof、reason、扫描与跳过统计，支持 path/pattern/includeIgnored。目录流式遍历，条目/深度/单文件/累计扫描/输出有限额。pnpm check（57 文件）、pnpm test（91/91）及 git diff --check 通过。NX-07b 提交 21ee528；本步独立提交后推进结果存储。
+
+NX-07d：done；ToolResultStore 使用 UUID、session 哈希、SHA-256、sync 和串行写入，保存有界采集并按字符边界分页回读；磁盘文件数/总字节有限额。pnpm check（59 文件）、node --test dist/test/tool-results.test.js（2/2）与 git diff --check 通过。覆盖重启、session 隔离、缺失/损坏、UTF-8 偏移、采集/磁盘额度、取消和失败后恢复；NX-07c 提交 04f5c4b。

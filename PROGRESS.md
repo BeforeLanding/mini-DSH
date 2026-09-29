@@ -248,3 +248,6 @@ read_file 增加 startLine/maxLines、行号、nextLine/eof 和截断原因，�
 
 ### NX-07c（2026-09-29）
 搜索改为有界、可分页的结构化结果，默认忽略生成目录和 .mini-dsh，跳过软链/二进制/非法编码/过大文件并记录原因。新增分页、缩小范围、扫描/遍历/深度/输出额度与取消测试。pnpm check（57 文件）、pnpm test（91/91）通过；更新原 Cordis glob 契约断言，diff 核对通过。读取提交 21ee528 已推送。
+
+### NX-07d（2026-09-29）
+持久结果存储完成，UUID 引用只按同 session 读取，验证版本/哈希/文件大小，按 UTF-8 字节边界返回 nextOffset/eof/captureTruncated。保存限制采集大小、磁盘总额及 1000 文件（可配置），容量耗尽或写入失败明确报错。pnpm check（59 文件）及结果存储 2/2 边界测试通过，diff 核对通过；尚未集成工具预览。搜索提交 04f5c4b 已推送。
