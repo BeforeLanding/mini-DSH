@@ -2,8 +2,8 @@
 
 ## NX-13 可靠编辑、冲突与变更交付
 - 关联 R-16 / M6；状态：进行中（2026-09-29），patch 按需延后。
-- NX-13a：需求、设计与分步边界；git diff --check；done；独立文档提交。
-- NX-13b：有界快照、指纹、唯一替换、原子替换和 diff 核心；核心边界测试 + check；待开始；独立核心提交。
+- NX-13a：需求、设计与分步边界；git diff --check；done；6081892。
+- NX-13b：有界快照、指纹、唯一替换、原子替换和 diff 核心；pnpm check（62 文件）、node --test dist/test/file-edit.test.js（3/3）、git diff --check 通过；done；本步独立提交后回填。
 - NX-13c：文件工具冲突保护与具体审批；Cordis 工具测试 + 全量回归；待开始；独立工具提交。
 - NX-13d：持久基线、逐次结果和任务清单；JSONL 恢复/续跑/失败测试 + 全量回归；待开始；独立记录提交。
 - NX-13e：CLI /changes /diff、结束清单与交付说明；CLI 和模型闭环 + check/test/fixtures；待开始；独立展示提交。
