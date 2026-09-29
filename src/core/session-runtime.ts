@@ -1,3 +1,5 @@
+import path from 'node:path'
+import { parseLog } from './event-store.js'
 import type { EventStore } from './event-store.js'
 import { emptyCounters } from './budget.js'
 import type { BudgetPolicy, RunState, StopReason, Counters } from './budget.js'
@@ -15,6 +17,33 @@ export class SessionRuntime {
         if (!existing) for (const event of session.events) pending = pending.then(() => store.append(event))
         this.#pending.set(id, pending)
         void pending.catch(() => {})
+    }
+    async restore(store: EventStore, workspace?: string) {
+        const raw = await store.read()
+        if (!raw.length || raw[0].type !== 'session/start') throw new Error('missing session start')
+        const id = raw[0].sessionId
+        const events = parseLog(raw.map(e => JSON.stringify(e) + '\n').join(''), id)
+        if (this.#sessions.has(id)) throw new Error('session already loaded')
+        const meta = raw[0].data.meta
+        if (workspace !== undefined && (typeof meta.workspace !== 'string' || path.resolve(meta.workspace) !== path.resolve(workspace))) throw new Error('session workspace mismatch; restore cannot execute in another workspace')
+        const session: Session = { id, meta, events, createdAt: events[0].at }
+        this.#sessions.set(id, session)
+        this.attachStore(id, store, true)
+        const visible = this.visibleEvents(id)
+        for (const event of visible) {
+            if (event.type !== 'assistant/tool_calls') continue
+            for (const call of event.data.toolCalls) {
+                const hasResult = visible.some(e => e.type === 'tool/result' && e.runId === event.runId && e.data.toolCallId === call.id)
+                if (hasResult) continue
+                const started = visible.some(e => e.type === 'tool/start' && e.runId === event.runId && e.data.toolCallId === call.id)
+                this.append(id, 'tool/result', { toolCallId: call.id, name: call.name, isError: true,
+                    status: started ? 'unknown' : 'skipped', content: started ? 'ToolError: unknown outcome after recovery; verify side effects before continuing' : 'ToolError: skipped before execution after recovery' }, event)
+            }
+        }
+        const state = this.latestRun(id)
+        if (state?.status === 'running') this.finishRun(state, 'error')
+        await this.flush(id)
+        return session
     }
     async flush(id: string) { await this.#pending.get(id) }
     async close() {
@@ -101,7 +130,7 @@ export class SessionRuntime {
         const session = this.get(id)
 
         const event = {
-            version: 1 as const, sessionId: id, id: randomUUID(), ...scope,
+            version: 1 as const, sessionId: id, id: randomUUID(), ...(scope.taskId ? { taskId: scope.taskId } : {}), ...(scope.runId ? { runId: scope.runId } : {}),
             seq: session.events.length + 1,
             type,
             data: structuredClone(data),

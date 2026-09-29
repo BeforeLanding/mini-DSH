@@ -10,6 +10,7 @@ class SessionsService extends Service {
         this.runtime = new SessionRuntime()
     }
 
+    restore(...args: Parameters<SessionRuntime['restore']>) { return this.runtime.restore(...args) }
     attachStore(...args: Parameters<SessionRuntime['attachStore']>) { return this.runtime.attachStore(...args) }
     flush(...args: Parameters<SessionRuntime['flush']>) { return this.runtime.flush(...args) }
     close() { return this.runtime.close() }

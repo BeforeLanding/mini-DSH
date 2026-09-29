@@ -1,3 +1,4 @@
+import { validatePayload } from './event-validation.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -13,6 +14,24 @@ export class JsonlStore implements EventStore {
   #closed = false
   #seq: number
   private constructor(public directory: string, public sessionId: string, private file: FileHandle, private lock: FileHandle, private token: string, events: SessionEvent[]) { this.#seq = events.length }
+  static async quarantineTail(directory: string, sessionId: string) {
+    if (!/^[a-f0-9-]{36}$/.test(sessionId)) throw new Error('invalid session id')
+    const dir = path.resolve(directory, sessionId), lockPath = path.join(dir, 'writer.lock')
+    const lock = await fs.open(lockPath, 'wx', 0o600)
+    try {
+      const target = path.join(dir, 'events.jsonl')
+      const text = await fs.readFile(target, 'utf8')
+      if (!text || text.endsWith('\n')) throw new Error('no incomplete tail to quarantine')
+      const prefix = text.slice(0, text.lastIndexOf('\n') + 1)
+      parseLog(prefix, sessionId)
+      const backup = path.join(dir, `events.quarantine-${randomUUID()}.jsonl`)
+      const copy = await fs.open(backup, 'wx', 0o600)
+      try { await copy.writeFile(text); await copy.sync() } finally { await copy.close() }
+      const file = await fs.open(target, 'r+')
+      try { await file.truncate(Buffer.byteLength(prefix)); await file.sync() } finally { await file.close() }
+      return backup
+    } finally { await lock.close(); await fs.unlink(lockPath) }
+  }
   static async open(directory: string, sessionId: string) {
     if (!/^[a-f0-9-]{36}$/.test(sessionId)) throw new Error('invalid session id')
     const dir = path.resolve(directory, sessionId)
@@ -70,6 +89,8 @@ export function parseLog(text: string, sessionId: string): SessionEvent[] {
     let event: unknown
     try { event = JSON.parse(line) } catch (error) { throw new Error(`corrupt JSONL record ${events.length + 1}`, { cause: error }) }
     if (!isRecord(event) || event.version !== 1 || event.sessionId !== sessionId || event.seq !== events.length + 1 || typeof event.id !== 'string' || ids.has(event.id) || typeof event.at !== 'string' || typeof event.type !== 'string' || !isRecord(event.data)) throw new Error(`invalid event envelope/version/sequence at ${events.length + 1}`)
+    if ((event.taskId !== undefined && typeof event.taskId !== 'string') || (event.runId !== undefined && typeof event.runId !== 'string')) throw new Error('invalid event scope')
+    validatePayload(event.type, event.data)
     ids.add(event.id)
     events.push(event as unknown as SessionEvent)
   }
