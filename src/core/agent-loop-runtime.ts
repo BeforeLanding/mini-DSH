@@ -63,9 +63,12 @@ export class AgentLoopRuntime {
                 { system, tools: schemas, maxOutputTokens: policy.maxOutputTokens }, policy, events => this.sessions.deriveMessages(sessionId, events))
             const { messages, estimatedInputTokens } = projection
             state.removedTaskIds = [...new Set([...state.removedTaskIds, ...projection.removedTaskIds])]
-            append(sessionId, 'context/projection', { estimatedInputTokens, reservedOutputTokens: projection.reservedOutputTokens, safetyMarginTokens: projection.safetyMarginTokens, removedTaskIds: projection.removedTaskIds })
             control.check()
-            if (!projection.fits) throw new BudgetStop('context_overflow', state)
+            const maxOutputTokens = control.outputAllowance(estimatedInputTokens)
+            const reservedOutputTokens = maxOutputTokens ?? 0
+            append(sessionId, 'context/projection', { estimatedInputTokens, reservedOutputTokens, safetyMarginTokens: projection.safetyMarginTokens, removedTaskIds: projection.removedTaskIds })
+            if ((policy.inputTargetTokens !== undefined && estimatedInputTokens > policy.inputTargetTokens) ||
+                (policy.contextWindowTokens !== undefined && estimatedInputTokens + reservedOutputTokens + projection.safetyMarginTokens > policy.contextWindowTokens)) throw new BudgetStop('context_overflow', state)
             state.estimatedInputTokens = estimatedInputTokens
             const requestId = randomUUID()
             append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId, estimatedInputTokens })
@@ -83,7 +86,7 @@ export class AgentLoopRuntime {
             const journal = new StreamJournal(requestId, data => append(sessionId, 'model/fragment', data))
             const response = await control.wait(() => this.llm.chat(
                 {
-                    maxOutputTokens: policy.maxOutputTokens,
+                    maxOutputTokens,
                     system,
                     messages,
                     tools: schemas,
@@ -110,6 +113,7 @@ export class AgentLoopRuntime {
             if (toolCalls.length === 0) {
                 const content = response.content ?? ''
                 append(sessionId, 'assistant/message', { content, reasoningContent: response.reasoningContent })
+                if (policy.maxTotalTokens !== undefined && state.counters.totalTokens > policy.maxTotalTokens) throw new BudgetStop('token_budget', state)
                 state.counters.approvalDurationMs = control.approvalDurationMs
                 state.counters.activeDurationMs = control.activeDurationMs
                 this.sessions.finishRun(state, 'completed')
@@ -123,7 +127,12 @@ export class AgentLoopRuntime {
                 toolCalls,
             })
 
+            control.check()
             if (policy.maxModelRequests !== undefined && state.counters.modelRequests >= policy.maxModelRequests) throw new BudgetStop('max_steps', state)
+            if (policy.maxTotalTokens !== undefined && state.counters.totalTokens >= policy.maxTotalTokens) {
+                const reason = policy.maxToolCalls !== undefined && state.counters.toolCalls >= policy.maxToolCalls ? 'max_tool_calls' : 'token_budget'
+                throw new BudgetStop(reason, state)
+            }
             let cancelled = false
             let toolsExhausted = false
 
@@ -171,7 +180,7 @@ export class AgentLoopRuntime {
             }
             //step6: After executing each tool, render the result for display, invoke any provided callbacks for tool results, and append the tool's result to the session's event log. This allows the agent to continue its reasoning based on the outcomes of the tool executions.
 
-            if (cancelled) throw new BudgetStop('cancelled', state)
+            if (cancelled) control.check()
             if (toolsExhausted) throw new BudgetStop('max_tool_calls', state)
 
         }

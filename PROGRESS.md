@@ -109,3 +109,6 @@ groupHistory 按完整 task 聚合，当前 task 与缺失结果组受保护；�
 
 ### CB-07 主动时间与取消（2026-09-29）
 RunBudgetRuntime 可注入单调时钟、组合signal、主动deadline、模型独立超时、审批暂停与独立超时；阶段复查、资源清理、迟到流忽略，未知在途工具配对。pnpm check / test 45/45 通过；非协作工具仅停止等待，不能保证物理终止。
+
+### CB-08 累计token（2026-09-29）
+请求前预留完整输入与最低输出、余额降低max_tokens；actual/estimated均累计重复输入，真实超估算停止后续调度并补齐结果；取消/失败保留不确定消耗。pnpm check / test 48/48 通过，验证次数/token/context停止优先级。

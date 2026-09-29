@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { resolveBudget } from '../src/core/budget.js'
 import { harness } from './harness.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
+import { estimateInput } from '../src/core/token-estimator.js'
 test('budget snapshots preserve zero, apply precedence and reject invalid values', () => {
   const input = { maxModelRequests: 3 }
   const policy = resolveBudget(input, { maxModelRequests: 0 })
@@ -84,4 +85,43 @@ test('runtime defaults, agent limits and call overrides obey precedence per run'
   await assert.rejects(h.agent.send('override', { budget: { maxModelRequests: 0 } }), /max_steps/)
   assert.equal(await h.agent.send('independent'), 'ok')
   assert.equal(h.sessions.latestRun(h.session.id)?.counters.modelRequests, 1)
+})
+test('cumulative tokens reserve input/output, lower output allowance and stop further dispatch', async () => {
+  let calls = 0, executions = 0, output: number | undefined
+  const h = harness(async request => {
+    calls++; output = request.maxOutputTokens
+    return { toolCalls: [{ id: 'a', name: 'tick', arguments: {} }], usage: { inputTokens: 500, outputTokens: 100, totalTokens: 600, source: 'provider', uncertain: false } }
+  })
+  h.tools.register({ name: 'tick', execute: () => { executions++; return 'ok' } })
+  await assert.rejects(h.agent.send('zero', { budget: { maxTotalTokens: 0 } }), /token_budget/)
+  assert.equal(calls, 0)
+  const input = estimateInput({ system: '', messages: [{ role: 'user', content: 'current' }], tools: h.tools.schemas() })
+  h.sessions.clear(h.session.id)
+  await assert.rejects(h.agent.send('current', { budget: { maxTotalTokens: input + 10, maxOutputTokens: 100, minimumOutputTokens: 1 } }), /token_budget/)
+  assert.equal(output, 10)
+  assert.equal(calls, 1)
+  assert.equal(executions, 0)
+  assert.equal(h.sessions.latestRun(h.session.id)?.counters.totalTokens, 600)
+  assertToolProtocol(h.sessions.deriveMessages(h.session.id))
+})
+test('repeated input is billed on each request and estimated usage participates in the limit', async () => {
+  let calls = 0
+  const h = harness(async () => { calls++; return { toolCalls: [{ id: `c${calls}`, name: 'tick', arguments: {} }] } })
+  h.tools.register({ name: 'tick', execute: () => 'ok' })
+  await assert.rejects(h.agent.send('current', { budget: { maxTotalTokens: 1800, maxOutputTokens: 20, minimumOutputTokens: 1 } }), /token_budget/)
+  const state = h.sessions.latestRun(h.session.id)!
+  assert.ok(calls >= 2)
+  assert.equal(state.usage.length, calls)
+  assert.ok(state.usage.every(u => u.source === 'estimated' && u.uncertain))
+  assert.equal(state.counters.totalTokens, state.usage.reduce((sum, u) => sum + u.totalTokens, 0))
+  assertToolProtocol(h.sessions.deriveMessages(h.session.id))
+})
+test('stop precedence is cancellation, active time, corresponding count, token then context', async () => {
+  const h = harness(async () => ({ content: 'never' }))
+  const budget = { maxModelRequests: 0, maxTotalTokens: 0, contextWindowTokens: 1, maxOutputTokens: 1 }
+  const abort = new AbortController(); abort.abort()
+  await assert.rejects(h.agent.send('mock', { budget, signal: abort.signal }), /cancelled/)
+  await assert.rejects(h.agent.send('mock', { budget: { ...budget, maxActiveDurationMs: 0 } }), /timeout/)
+  await assert.rejects(h.agent.send('mock', { budget }), /max_steps/)
+  await assert.rejects(h.agent.send('mock', { budget: { ...budget, maxModelRequests: 1 } }), /token_budget/)
 })

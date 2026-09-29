@@ -35,6 +35,14 @@ export class RunBudgetRuntime {
   }
   stop(reason: Exclude<StopReason, 'completed'>) { if (!this.signal.aborted && !this.#closed) this.#controller.abort(new BudgetStop(reason, this.state)) }
   check() { const reason = this.stopReason; if (reason) { this.stop(reason); throw new BudgetStop(reason, this.state) } }
+  outputAllowance(inputTokens: number): number | undefined {
+    if (this.policy.maxTotalTokens === undefined) return this.policy.maxOutputTokens
+    const maximum = this.policy.maxOutputTokens ?? 16_384
+    const minimum = this.policy.minimumOutputTokens ?? Math.min(4096, maximum)
+    const remaining = this.policy.maxTotalTokens - this.state.counters.totalTokens - inputTokens
+    if (remaining < minimum) throw new BudgetStop('token_budget', this.state)
+    return Math.min(maximum, remaining)
+  }
   #schedule() {
     this.clock.clearTimeout(this.#timer)
     if (this.#closed || this.#pausedAt !== undefined || this.signal.aborted || this.policy.maxActiveDurationMs === undefined) return
@@ -54,7 +62,6 @@ export class RunBudgetRuntime {
     try {
       if (this.signal.aborted) abort()
       const value = await Promise.race([work(), interrupted])
-      this.check()
       return value
     } finally { this.clock.clearTimeout(timer); this.signal.removeEventListener('abort', abort) }
   }
