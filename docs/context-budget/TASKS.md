@@ -128,8 +128,8 @@
 - 依赖：CB-01 至 CB-09、CB-11 至 CB-13、CB-15。
 - 行为：通过真实 Cordis 装配走通有预算 run、停止和恢复；审查配置入口、dispose 和旧契约；同步进度与风险。
 - 验证：pnpm check/test；Windows/Ubuntu × Node 22/24 CI；需求逐项有证据；无需 API Key；保留 22 条原测试并增加有意义边界测试。
-- 状态：in_progress（2026-09-29）。
-- 证据：写盘失败禁止后续调度，未确认终态不报告completed；损坏UTF-8原字节隔离；模型载荷/重复调用校验；工具组合signal与Esc审批取消、超长timer回归通过。pnpm check / test 57/57通过，含待单独提交的持久化集成样本；最终CI待核验。
+- 状态：done（2026-09-29）。
+- 证据：R-01至R-13逐项证据见PROGRESS E-03；本地pnpm check/test 57/57；功能提交4600379的GitHub CI 36508829785四组合Windows/Ubuntu × Node22/24全部success。模拟模型、真实Cordis/Bash/文件及JSONL恢复；无付费API调用。
 
 ## 新任务模板
 - ID / 标题、关联需求 / 决策 / 里程碑、依赖。
@@ -141,4 +141,4 @@
 ### CB-15 分步证据
 - CB-15b：src/core/*.ts 与 utils/path.ts，pnpm check / test 成功；22/22 原回归通过，取消工具配对与软链检查保持。
 - CB-15c：插件/模型/工具及入口迁移，Cordis Context 增强；pnpm check / test，22/22 原回归通过。
-- CB-15d：allowJs=false；原测试及配置迁移，pnpm check / test 22/22 通过；CI 四组合保留，远程结果待核验。
+- CB-15d：allowJs=false；原测试及配置迁移，pnpm check / test 22/22 通过；CI 四组合保留，远程四组合已通过，最终功能验收 CI 36508829785。

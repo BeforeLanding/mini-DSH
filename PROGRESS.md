@@ -1,6 +1,6 @@
 # 开发进度
 
-更新：2026-09-29。五阶段功能已实现并逐步提交推送；本地 57/57 回归通过。最终提交的跨平台 CI 正在核验。
+更新：2026-09-29。五阶段功能已实现并逐步提交推送；本地 57/57 回归通过。功能提交 4600379 的跨平台 CI 四组合全部通过。
 
 当前状态：严格 TS 迁移、契约/持久化、上下文管理、执行预算、续跑/CLI 已完成；原 22 条测试保留。历史基线及失败记录保留在下文，当前验收以末尾 E-03 为准。
 
@@ -39,7 +39,7 @@
 - 本步 18 个本地文档链接、文档空白和 git diff --check 通过；CB-17 标记 done，CB-15 保持 todo。
 
 ## 下一步
-核验最终 GitHub Windows/Ubuntu × Node22/24 四组合 CI，并回填 CB-10。后续真实模型质量与 tokenizer 校准属于额外实验，不影响本次模拟边界验收。
+本次开发及验收完成，无待完成的功能项。后续真实模型质量与 tokenizer 校准属于额外实验。
 
 ## 更新规则
 本文件只保存当前状态、重要验证/失败、阻塞和下一步；任务级行为/证据维护在 [TASKS](docs/context-budget/TASKS.md)。参数和设计维护在 PLAN，验收维护在 REQUIREMENTS。done 必须有真实验收证据，设计完成不等于功能完成。
@@ -141,3 +141,9 @@ JSONL串行sync、单写入者锁、写入故障停止、尾部隔离和严格�
 
 ### CB-11 JSONL性能验收（2026-09-29）
 纯模拟1000次sync追加样本，约466KB；Windows Node24样本645.25ms，平均0.645ms/次，读取校验3.86ms。可复现脚本scripts/benchmark-store.ts；严格损坏/故障/恢复测试通过，单机样本不保证掉电耐久性。
+
+### E-03 跨平台验收结论
+功能提交 4600379：GitHub CI [36508829785](https://github.com/BeforeLanding/mini-DSH/actions/runs/36508829785) 完成且 success；Windows/Ubuntu × Node22/24 四 job 均 success，编译检查和 57 条回归通过。最终加固提交 6b9d858 的 CI 36508694746 亦 success。本次所有功能步骤按用户顺序独立提交并逐次推送到确认的 origin。
+
+### CB-10 集成验收完成（2026-09-29）
+R-01至R-13逐项证据见PROGRESS E-03；本地pnpm check/test 57/57；功能提交4600379的GitHub CI 36508829785四组合Windows/Ubuntu × Node22/24全部success。模拟模型、真实Cordis/Bash/文件及JSONL恢复；无付费API调用。
