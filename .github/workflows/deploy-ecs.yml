@@ -1,0 +1,94 @@
+name: Deploy ECS
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ecs-deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - name: Publish tested main commit
+        shell: bash
+        env:
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+          ECS_HOST: ${{ secrets.ECS_HOST }}
+          ECS_PORT: ${{ secrets.ECS_PORT }}
+          ECS_USER: ${{ secrets.ECS_USER }}
+          SSH_KEY: ${{ secrets.ECS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.ECS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid deployment SHA'; exit 1; }
+          [[ "$ECS_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]] || { echo 'Invalid or missing ECS_HOST'; exit 1; }
+          [[ "$ECS_PORT" =~ ^[0-9]{1,5}$ ]] || { echo 'Invalid or missing ECS_PORT'; exit 1; }
+          (( 10#$ECS_PORT >= 1 && 10#$ECS_PORT <= 65535 )) || { echo 'Invalid ECS_PORT'; exit 1; }
+          [[ "$ECS_USER" == 'deploy' ]] || { echo 'ECS_USER must be deploy'; exit 1; }
+          [[ -n "$SSH_KEY" && -n "$KNOWN_HOSTS" ]] || { echo 'SSH secrets are missing'; exit 1; }
+
+          umask 077
+          credentials="$(mktemp -d "$RUNNER_TEMP/mini-dsh-ssh.XXXXXX")"
+          trap 'rm -f -- "$credentials/key" "$credentials/known_hosts"; rmdir -- "$credentials"' EXIT
+          printf '%s\n' "$SSH_KEY" > "$credentials/key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$credentials/known_hosts"
+          unset SSH_KEY KNOWN_HOSTS
+
+          ssh -T \
+            -i "$credentials/key" \
+            -p "$ECS_PORT" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o HostKeyAlgorithms=ssh-ed25519 \
+            -o "UserKnownHostsFile=$credentials/known_hosts" \
+            -o ConnectTimeout=15 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=3 \
+            "$ECS_USER@$ECS_HOST" "bash -se -- $DEPLOY_SHA" <<'REMOTE'
+          sha="$1"
+          test "$(id -un)" = deploy
+          base="$HOME/apps/mini-DSH"
+          workspace="$HOME/workspaces/default"
+          sessions="$HOME/.mini-dsh/sessions"
+          test -d "$workspace"
+          test -d "$sessions"
+          workspace_identity="$(stat -c '%d:%i' "$workspace")"
+          sessions_identity="$(stat -c '%d:%i' "$sessions")"
+          env_identity="$(stat -c '%d:%i' "$base/shared/.env")"
+          bash "$HOME/bin/deploy-mini-dsh" "$sha"
+          test "$(stat -c '%d:%i' "$workspace")" = "$workspace_identity"
+          test "$(stat -c '%d:%i' "$sessions")" = "$sessions_identity"
+          test "$(stat -c '%d:%i' "$base/shared/.env")" = "$env_identity"
+          current="$(readlink -f "$base/current")"
+          if [[ "$(cat "$current/REVISION" 2>/dev/null || true)" != "$sha" ]]; then
+            latest="$(git ls-remote --exit-code https://github.com/BeforeLanding/mini-DSH.git refs/heads/main | cut -f1)"
+            if [[ "$latest" != "$sha" ]]; then
+              echo 'Superseded main commit; no version switch required.'
+              exit 0
+            fi
+            echo 'Current release does not match the tested commit.'
+            exit 1
+          fi
+          test "$(git -C "$current" rev-parse HEAD)" = "$sha"
+          test "$(readlink -f "$current/.env")" = "$base/shared/.env"
+          test -f "$current/dist/src/index.js"
+          printf 'Published commit: %s\n' "$sha"
+          printf 'Current release: %s\n' "$current"
+          echo 'Deployment verified; shared configuration, workspace and sessions retained.'
+          REMOTE

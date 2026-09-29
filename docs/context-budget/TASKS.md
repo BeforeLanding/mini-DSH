@@ -2,8 +2,8 @@
 
 ## CD-01 阿里云 CLI 发布
 - 状态：进行中；服务器手动安装、模型请求、固定工作区/启动入口、部署密钥、production Secrets 和服务器发布脚本语法已由用户逐步确认。
-- CD-01a：仅手动触发的公网 SSH 连接/运行环境检查；YAML 解析、main/production/手动触发门槛核验、runner/remote 两段 Bash 语法和 git diff --check 均通过；工作流实现完成，公网验收待真实 Actions 运行；独立工作流提交。
-- CD-01b：CI 成功后部署对应 main SHA、串行发布和版本切换；待 a 的公网连接检查通过后开始；独立自动部署提交。
+- CD-01a：仅手动触发的公网 SSH 连接/运行环境检查；YAML 解析、main/production/手动触发门槛核验、runner/remote 两段 Bash 语法和 git diff --check 均通过；done；73988b5；[公网预检 36550421451](https://github.com/BeforeLanding/mini-DSH/actions/runs/36550421451) success。
+- CD-01b：CI 成功后部署对应 main SHA、串行发布和版本切换；工作流实现完成，首次发布待实际 Actions 运行；YAML、成功/push/同仓库/main 门槛、精确 SHA、并发设置、runner/remote Bash 语法、pnpm check（65 文件）、pnpm test（107/107）和 git diff --check 通过；独立自动部署提交。
 - CD-01c：首次 CD 实际发布、版本/数据保持核验及回滚说明；待 b；独立验收记录提交。
 - 不将真实服务器地址、公钥、私钥、模型密钥或实际会话日志写入仓库。运行时功能和事件契约保持；当前步骤不自动发布、不重启 CLI。
 

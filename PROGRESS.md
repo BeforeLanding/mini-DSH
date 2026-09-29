@@ -1,5 +1,10 @@
 # 开发进度
 
+### CD-01b 自动发布工作流（2026-09-29）
+CD-01a 已提交并推送 73988b5；[公网 SSH 预检 36550421451](https://github.com/BeforeLanding/mini-DSH/actions/runs/36550421451) 实际 success，确认 GitHub 托管 runner 的连接与部署前置环境。
+新增 Deploy ECS，通过 workflow_run 仅接受同仓库 main push 的 CI 全部成功结果，以 head_sha 调用用户已安装的发布脚本；production Secrets、严格主机密钥校验、无交互 SSH、串行发布且不中途取消。发布后核验实际 Git HEAD/REVISION、共享 .env 链接、构建入口和配置/工作区/会话目录身份；过期 main 提交跳过，应用版本与 CI SHA 必须一致。未读取任何密钥或会话内容。
+本地 YAML/门槛/SHA/并发核验、runner/remote Bash 语法、pnpm check（65 文件）、pnpm test（107/107，无跳过）及 git diff --check 通过。首次自动发布仍待本步推送后的 CI/CD 真实运行，未提前标记发布成功。
+
 ### CD-01a 公网连接预检（2026-09-29）
 用户已确认云服务器手动 check、107/107 测试、真实模型请求、固定工作区与启动入口、部署密钥本机 SSH、公钥身份核验、production 五项 Secrets 以及服务器发布脚本 bash -n。这些是用户提供的远端证据，未由本地代理重复执行或读取密钥。
 仓库增加手动触发 ECS SSH Check，限定 main/production；通过严格主机密钥校验与无交互 SSH 检查用户、Node24/pnpm11.22.0、目录和发布脚本语法，不执行发布、不读取 .env 内容、不修改应用数据。公网连接尚待真实 Actions 运行确认；a 提交后再推进 b 自动部署。
