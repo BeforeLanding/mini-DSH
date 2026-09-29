@@ -39,6 +39,8 @@ class SessionsService extends Service {
         return this.runtime.deriveMessages(...args)
     }
 }
+//integrate the session core with cordis.
+//The service layer forwards calls, while event and state logic is handled by the runtime layer. This separation allows for better modularity and maintainability of the codebase.
 
 export const name = 'mini-sessions'
 export function apply(ctx: Context) {

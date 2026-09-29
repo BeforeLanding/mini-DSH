@@ -15,6 +15,7 @@ export class SessionRuntime {
     #confirmed = new Map<string, number>()
     #storeErrors = new Map<string, unknown>()
     #pending = new Map<string, Promise<void>>()
+    
     attachStore(id: string, store: EventStore, existing = false) {
         if (this.#stores.has(id)) throw new Error('session already has a store')
         const session = this.get(id)

@@ -14,11 +14,12 @@ import * as sandbox from './plugins/sandbox.js'
 import * as bash from './tools/bash.js'
 import * as files from './tools/files.js'
 
-
 dotenv.config({ quiet: true })
 const { default: externalConfig } = await import('../plugins.config.js')
+
 const root = new Context()
 const workspace = process.env.MINI_DSH_WORKSPACE ?? process.cwd()
+
 try {
   for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
   await root.plugin(runtimeContext, { workspace })
