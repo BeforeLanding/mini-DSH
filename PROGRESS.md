@@ -239,3 +239,6 @@ JSONL串行sync、单写入者锁、写入故障停止、尾部隔离和严格�
 
 ### CB-10 集成验收完成（2026-09-29）
 R-01至R-13逐项证据见PROGRESS E-03；本地pnpm check/test 57/57；功能提交4600379的GitHub CI 36508829785四组合Windows/Ubuntu × Node22/24全部success。模拟模型、真实Cordis/Bash/文件及JSONL恢复；无付费API调用。
+
+### NX-07a（2026-09-29）
+已补 R-15 和有界工具决策，拆为契约、读取、搜索、持久结果存储、工具/Bash 集成五个独立提交边界。当前仅文档，git diff --check 通过；功能尚未实现。

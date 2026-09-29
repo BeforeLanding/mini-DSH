@@ -155,3 +155,11 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 - [Node TypeScript](https://nodejs.org/api/typescript.html)、[TS 模块](https://www.typescriptlang.org/docs/handbook/modules/reference.html)：类型剥离与 NodeNext；[文件 API](https://nodejs.org/api/fs.html)：写入协调和 sync；[测试 API](https://nodejs.org/api/test.html)：mock/计时器。
 - [SQLite 原子提交](https://www.sqlite.org/atomiccommit.html)、[Node SQLite](https://nodejs.org/api/sqlite.html)：事务能力与 Node 22.5 起的内置接口；外部工具副作用不属于数据库事务。
 - [LangGraph 持久化](https://docs.langchain.com/oss/javascript/langgraph/persistence)、[中断副作用](https://github.com/langchain-ai/docs/blob/main/src/oss/langgraph/interrupts.mdx)：检查点不免除副作用恢复责任。
+
+## NX-07 有界工具决策
+- read_file 默认 startLine=1、maxLines=200，输出最大 32 KiB；扫描最大 8 MiB，每次只读 8 KiB，单行超过输出上限明确失败，支持继续读取后续行。文件必须普通 UTF-8 文本；NUL/非法编码拒绝。
+- glob/grep 默认 path='.'、offset=0、maxResults=200，最大输出 32 KiB；遍历最多 10000 条目，深度 64，单文件扫描 1 MiB、累计 8 MiB。流式目录遍历不跟随软链，默认忽略 .git/node_modules/dist，可 includeIgnored=true。分页 offset 为重新扫描后的匹配偏移，不承诺文件变化时稳定快照；超限返回原因和 nextOffset，无法越过扫描限额时提示缩小目录。
+- 所有限额为正安全整数并可通过 files 配置调整；调用参数只可降低 maxLines/maxResults，不可扩大配置上限。
+- 工具预览默认 16 KiB、结果采集最多 8 MiB、磁盘总额 64 MiB，均可配置。结果存储默认位于工作区 .mini-dsh/tool-results，随机 UUID 引用绑定 session，SHA-256 校验内容；无 session 时不创建引用而保留原运行时兼容。磁盘失败返回 ToolError，不静默丢失。容量耗尽明确失败，不自动删除历史。
+- read_tool_result 以 UTF-8 字节偏移有界读取，返回 nextOffset/eof；偏移须落在字符边界。引用是数据，不是文件路径；没有同 session 或文件丢失/损坏时报错。回读工具本身不再次存储，释放插件移除其注册。
+- Bash 保持审批、超时、退出码语义，改为采集最多 8 MiB（可配置），保留超限标记；失败日志也可引用。模型/JSONL 保存预览和引用，完整内容放在结果文件中，不修改历史事件或预算逻辑。

@@ -213,3 +213,11 @@
 - CB-15b：src/core/*.ts 与 utils/path.ts，pnpm check / test 成功；22/22 原回归通过，取消工具配对与软链检查保持。
 - CB-15c：插件/模型/工具及入口迁移，Cordis Context 增强；pnpm check / test，22/22 原回归通过。
 - CB-15d：allowJs=false；原测试及配置迁移，pnpm check / test 22/22 通过；CI 四组合保留，远程四组合已通过，最终功能验收 CI 36508829785。
+
+## NX-07 有界代码读取、搜索与大结果回读
+- 关联：M6、R-15；状态：进行中。
+- NX-07a / 需求、参数与契约 / git diff --check / done（仅文档）/ 本步提交后报告。
+- NX-07b / 分段文件读取 / 类型构建、读取边界测试 / todo / 独立提交读取及测试。
+- NX-07c / 有界搜索和分页 / 遍历/扫描/输出/取消/路径测试与回归 / todo / 独立提交搜索及测试。
+- NX-07d / 持久结果存储与有界回读 / 隔离、完整性、容量、重启测试 / todo / 独立提交公共结果存储。
+- NX-07e / 工具预览、Bash 采集及回读集成 / Cordis 模拟模型、pnpm check/test/fixtures:check / todo / 独立提交工具集成及使用文档。
