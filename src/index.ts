@@ -30,7 +30,7 @@ try {
   await root.plugin(externalPlugins, { entries: externalConfig })
   await root.plugin(cli, { model: process.env.MINI_DSH_MODEL ?? 'deepseek/deepseek-v4-pro' })
 } catch (error) {
-  console.error(`[startup] ${error.message}`)
+  console.error(`[startup] ${error instanceof Error ? error.message : String(error)}`)
   await root.fiber.dispose()
   process.exitCode = 1
 }

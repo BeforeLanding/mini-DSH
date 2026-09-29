@@ -1,10 +1,12 @@
+import type { Context } from '@deepseek-ai/cordis'
+import type { ToolDefinition, Arguments } from '../core/contracts.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
 export const name = 'mini-tools-files'
 export const inject = ['tools', 'sandbox']
 
-export function matchFilePattern(filename, pattern = '') {
+export function matchFilePattern(filename: string, pattern = '') {
   const normalized = filename.replace(/\\/g, '/')
   if (!pattern.includes('*')) return normalized.includes(pattern)
   let expression = ''
@@ -21,11 +23,11 @@ export function matchFilePattern(filename, pattern = '') {
   return new RegExp(`^(?:${pattern.includes('/') ? '' : '(?:.*/)?'}${expression})$`).test(normalized)
 }
 
-export function apply(ctx) {
-  const resolve = requested => ctx.sandbox.resolvePath(requested)
-  const parameters = (properties, required = []) => ({ type: 'object', properties, required })
+export function apply(ctx: Context, _config: { workspace?: string } = {}) {
+  const resolve = (requested: unknown) => ctx.sandbox.resolvePath(requested)
+  const parameters = (properties: Arguments, required: string[] = []) => ({ type: 'object', properties, required })
   const string = { type: 'string' }
-  async function* walk(directory = '.', signal) {
+  async function* walk(directory = '.', signal?: AbortSignal): AsyncGenerator<string> {
     signal?.throwIfAborted()
     for (const entry of await fs.readdir(resolve(directory), { withFileTypes: true })) {
       signal?.throwIfAborted()
@@ -35,7 +37,7 @@ export function apply(ctx) {
       else if (entry.isFile()) yield relative.replace(/\\/g, '/')
     }
   }
-  const definitions = [
+  const definitions: ToolDefinition[] = [
     {
       name: 'read_file', description: 'Read a UTF-8 file inside the workspace.',
       parameters: parameters({ path: string }, ['path']),
@@ -75,8 +77,8 @@ export function apply(ctx) {
       name: 'glob', description: 'List workspace files matching a substring or wildcard.',
       parameters: parameters({ pattern: string }),
       async execute(args, exec) {
-        const matches = []
-        for await (const file of walk('.', exec.signal)) if (matchFilePattern(file, args.pattern ?? '')) matches.push(file)
+        const matches: string[] = []
+        for await (const file of walk('.', exec.signal)) if (matchFilePattern(file, typeof args.pattern === 'string' ? args.pattern : '')) matches.push(file)
         return matches
       },
     },
@@ -85,13 +87,14 @@ export function apply(ctx) {
       parameters: parameters({ query: string, pattern: string }, ['query']),
       async execute(args, exec) {
         if (typeof args.query !== 'string') throw new Error('query must be a string')
-        const matches = []
+        const query = args.query
+        const matches: string[] = []
         for await (const file of walk('.', exec.signal)) {
-          if (!matchFilePattern(file, args.pattern ?? '')) continue
+          if (!matchFilePattern(file, typeof args.pattern === 'string' ? args.pattern : '')) continue
           const content = await fs.readFile(resolve(file), { encoding: 'utf8', signal: exec.signal })
           if (content.includes('\0')) continue
           content.split(/\r?\n/).forEach((line, index) => {
-            if (line.includes(args.query)) matches.push(`${file}:${index + 1}:${line}`)
+            if (line.includes(query)) matches.push(`${file}:${index + 1}:${line}`)
           })
         }
         return matches.join('\n')

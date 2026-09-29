@@ -52,3 +52,6 @@
 
 ### CB-15b（2026-09-29）
 核心和路径闸门迁移 TypeScript，增加消息/工具/服务契约，strict 无隐式 any。pnpm check / test 成功，原 22/22 通过。CB-15a 已推送 origin，用户已确认 BeforeLanding/mini-DSH 为具体目的地。下一步插件、模型、工具。
+
+### CB-15c（2026-09-29）
+入口、Cordis 服务、DeepSeek、文件/Bash 工具迁移 TS；使用 Cordis Context 类型增强，保留注册释放。pnpm check / test 成功，原 22/22 通过；配置动态导入路径保持。修正 dist 忽略规则换行。下一步测试和 CI。

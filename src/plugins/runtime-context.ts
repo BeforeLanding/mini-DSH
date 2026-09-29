@@ -1,3 +1,4 @@
+import type { Context } from '@deepseek-ai/cordis'
 import path from 'node:path'
 import os from 'node:os'
 
@@ -5,7 +6,7 @@ export const name = 'mini-runtime-context'
 export const inject = ['systemPrompt']
 
 // The apply function registers the runtime context plugin with the mini-DSH context, providing system prompt sections that describe the agent's identity and the runtime environment. It allows for customization of the workspace path through configuration or environment variables.
-export function apply(ctx, config = {}) {
+export function apply(ctx: Context, config: { workspace?: string } = {}) {
   const workspace = path.resolve(config.workspace ?? process.env.MINI_DSH_WORKSPACE ?? process.cwd())
   
   ctx.effect(() => ctx.systemPrompt.section({

@@ -1,36 +1,38 @@
+import type { Context } from '@deepseek-ai/cordis'
 import { Service } from '@deepseek-ai/cordis'
 import { SessionRuntime } from '../core/session-runtime.js'
 
 //connect SessionRuntime to the Cordis service framework, allowing session management through the SessionsService class.
 class SessionsService extends Service {
-    constructor(ctx) {
+    runtime: SessionRuntime
+    constructor(ctx: Context) {
         super(ctx, 'sessions')// Initialize the service with the context and name 'sessions'
         this.runtime = new SessionRuntime()
     }
 
-    create(meta) {
-        return this.runtime.create(meta)
+    create(...args: Parameters<SessionRuntime['create']>) {
+        return this.runtime.create(...args)
     }
-    get(id) {
-        return this.runtime.get(id)
+    get(...args: Parameters<SessionRuntime['get']>) {
+        return this.runtime.get(...args)
     }
-    append(id, type, data) {
+    append<K extends keyof import('../core/contracts.js').EventData>(id: string, type: K, data: import('../core/contracts.js').EventData[K]) {
         return this.runtime.append(id, type, data)
     }
-    clear(id) {
-        return this.runtime.clear(id)
+    clear(...args: Parameters<SessionRuntime['clear']>) {
+        return this.runtime.clear(...args)
     }
     list() {
         return this.runtime.list()
     }
-    deriveMessages(id) {
-        return this.runtime.deriveMessages(id)
+    deriveMessages(...args: Parameters<SessionRuntime['deriveMessages']>) {
+        return this.runtime.deriveMessages(...args)
     }
 }
 
 export const name = 'mini-sessions'
 // Export the name of the plugin as 'mini-sessions'
-export function apply(ctx) {
+export function apply(ctx: Context) {
     ctx.plugin(SessionsService)
 }
 // Apply the SessionsService plugin to the provided context, enabling session management capabilities

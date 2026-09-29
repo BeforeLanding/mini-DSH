@@ -1,10 +1,12 @@
+import type { ReadStream, WriteStream } from 'node:tty'
+import type { Context } from '@deepseek-ai/cordis'
 import readline from 'node:readline'
 
 export const name = 'mini-cli'
 export const inject = ['sessions', 'agents', 'agentLoop', 'tools', 'systemPrompt', 'llm', 'sandbox']
 
 // The apply function registers the CLI plugin with the mini-DSH context, setting up the necessary interfaces and event handlers for command-line interaction.
-export function apply(ctx, config = {}) {
+export function apply(ctx: Context, config: { model?: string; input?: ReadStream; output?: WriteStream } = {}) {
   const session = ctx.sessions.create({ source: 'cli' })
   const agent = ctx.agents.create({ name: 'cli-agent', sessionId: session.id,
     model: config.model ?? ctx.llm.defaultSelection(), loop: ctx.agentLoop })
@@ -13,16 +15,16 @@ export function apply(ctx, config = {}) {
     const input = config.input ?? process.stdin
     const output = config.output ?? process.stdout
     const rl = readline.createInterface({ input, output, terminal: Boolean(input.isTTY && output.isTTY) })
-    const color = (code, text) => output.isTTY ? `\x1b[${code}m${text}\x1b[0m` : text
-    const print = text => output.write(`${text}\n`)
-    let controller
+    const color = (code: number, text: string) => output.isTTY ? `\x1b[${code}m${text}\x1b[0m` : text
+    const print = (text: unknown) => { output.write(`${text}\n`) }
+    let controller: AbortController | undefined
     let running = false
     let closed = false
     let exiting = false
-    let approval
+    let approval: ((answer: string) => void) | undefined
     let queue = Promise.resolve()
     const prompt = () => { if (!closed) { rl.setPrompt('User > '); rl.prompt() } }
-    const escape = chunk => {
+    const escape = (chunk: Buffer | string) => {
       const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
       if (running && bytes.length === 1 && bytes[0] === 0x1b) controller?.abort()
     }
@@ -46,7 +48,7 @@ export function apply(ctx, config = {}) {
       rl.setPrompt('Allow this? [Y/n] ')
       rl.prompt()
     }))
-    async function handle(line) {
+    async function handle(line: string) {
       const text = line.trim()
       if (!text || exiting) return
       if (text.startsWith('/')) {
@@ -56,7 +58,7 @@ export function apply(ctx, config = {}) {
           case '/models': print(ctx.llm.models().join('\n')); break
           case '/model': {
             const selection = parts.join(' ')
-            if (!selection) print(agent.model)
+            if (!selection) print(String(agent.model))
             else if (!ctx.llm.has(selection)) print(`Unknown model: ${selection}`)
             else { agent.model = selection; print(`Model: ${selection}`) }
             break
@@ -93,14 +95,14 @@ export function apply(ctx, config = {}) {
         if (!streamed) print(`Agent > ${answer}`)
       } catch (error) {
         endSegment()
-        print(controller.signal.aborted ? '[cancelled]' : `[AgentError] ${error.message}`)
+        print(controller.signal.aborted ? '[cancelled]' : `[AgentError] ${error instanceof Error ? error.message : String(error)}`)
       } finally { controller = undefined; running = false }
     }
     rl.on('line', line => {
       // Piped input can retain key bytes that a terminal normally consumes.
       line = line.replace(/\x1b(?:\[[0-9;]*[A-Za-z])?/g, '')
       if (approval) { approval(line); return }
-      queue = queue.then(() => handle(line)).catch(error => print(`[CLIError] ${error.message}`)).finally(prompt)
+      queue = queue.then(() => handle(line)).catch(error => print(`[CLIError] ${error instanceof Error ? error.message : String(error)}`)).finally(prompt)
     })
     rl.on('close', () => {
       closed = true
