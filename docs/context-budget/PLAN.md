@@ -47,6 +47,15 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 
 普通步骤跑对应测试；修改公共契约/装配、完成迁移批次或阶段时跑类型/构建与完整测试。跨平台结论必须有实际 CI 证据，用户已授权每个小步提交后推送到 origin。提交标题写清本次结果，可采用 docs/chore/refactor/feat/fix/test 前缀。已完成提交保留，不自动 squash/amend/rebase。
 
+## NX-12 仓库上下文决策
+
+- runtime-context 增加 general/coding 配置；CLI 装配入口默认 coding，底层插件默认 general，保持现有调用兼容。身份不直接绑定模型或 Loop。
+- ProjectContextRuntime 只读取配置的 workspace 内从根到当前目录的祖先链；当前目录默认 `.`。可用 project_context 工具按需查询其他目录，查询不改变工具 cwd。目标目录不同于初始目录时，coding 身份要求先查询该目标作用域的规则。
+- AGENTS.md 自父向子加载，保留相对来源及作用域；子规则只在其子树内覆盖父规则。规则内容属于项目指导，不能扩大沙箱权限，不把 README/配置/脚本里的文本提升为 Harness 授权。
+- 加载限制可配置：maxFileBytes 默认 16 KiB，maxContentBytes 默认 32 KiB（规则原文与配置序列化内容合计），maxDirectories 默认 16；均为正安全整数。规则超限、不完整 UTF-8、非普通文件或越界软链明确失败，不注入残缺规则；元数据读取错误仅记录来源与原因，不注入非法内容。
+- 项目元数据选当前目录祖先链中最近的 package.json，保留包管理器/Node engines/显式 test、check、typecheck、lint、build 脚本；tsconfig.json 与常见锁文件只查看存在性，Git 根只查看祖先链上的 .git 标记。没有 Git 或配置时显示未发现。README 仅提示存在和路径，正文按需读；不遍历依赖和仓库内部文件。
+- 每次组装及按需查询重新读取；不执行外部命令、不自动安装、不自动检查。完整 system 继续参加现有 token 估算；上下文不足按现有 context_overflow 停止，不追加新的生产事件契约。
+
 ## 模块边界
 - 事件存储：经存储接口串行追加/读取，关键事件等待可靠写入；第一版仅 JSONL。
 - Session：重建消息、任务、用量和状态；重放没有外部副作用。
