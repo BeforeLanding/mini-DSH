@@ -1,5 +1,13 @@
 # 开发进度
 
+### NX-12e 项目上下文集成与 NX-12 完成（2026-09-29）
+
+新增依赖实际 sandbox 工作区的 project-context 插件，动态 system 提示词及只读 project_context 工具共用有界加载器，标注权限、作用域、脚本未验证及查询不改变工具 cwd。CLI 默认 coding，可用 MINI_DSH_PROFILE=general 保留通用身份；MINI_DSH_PROJECT_DIRECTORY 只控制初始上下文目录。注册前校验，释放时移除上下文和工具；README 与示例环境同步使用方式。
+
+四条真实 Cordis/模拟模型集成覆盖模型收到来源/目录规则、其他目录查询、规则动态刷新、真实文件读 cwd、脚本不执行、审批/越界不放宽、释放与初始失败；容量和动态规则超限均在模型调用前停止。pnpm check（54 文件）、pnpm test（86/86，无跳过）通过，提交前核对 diff。未调用付费 API，未核验本轮跨平台 CI。
+
+NX-12 按五步完成：a c5dd04b、b 94ad6e0、c 3a18c8b、d 20e8e3b；e 本步独立提交后报告编号。每步测试通过并提交后才进入下一步；下一开发主线可推进 NX-07 有界读取/搜索。
+
 ### NX-12d 显式项目元数据（2026-09-29）
 
 只查看目标祖先链，选择最近 package.json 的包管理器、Node 要求和 test/check/typecheck/lint/build 字符串入口，标注来源；Git、TS、锁文件和 README 只发现标记，不读取 README 正文。脚本仅作为数据，不执行。缺失、非法或过大配置给出明确退化信息；最近配置无效时不冒用父配置。元数据使用剩余总字节预算，规则保持完整。

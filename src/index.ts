@@ -7,6 +7,7 @@ import * as llm from './plugins/llm.js'
 import * as agents from './plugins/agent.js'
 import * as agentLoop from './plugins/agent-loop.js'
 import * as runtimeContext from './plugins/runtime-context.js'
+import * as projectContext from './plugins/project-context.js'
 import * as deepseek from './models/deepseek.js'
 import * as cli from './plugins/cli.js'
 import * as externalPlugins from './plugins/external-plugins.js'
@@ -21,9 +22,12 @@ const root = new Context()
 const workspace = process.env.MINI_DSH_WORKSPACE ?? process.cwd()
 
 try {
+  const profile = process.env.MINI_DSH_PROFILE ?? 'coding'
+  if (profile !== 'general' && profile !== 'coding') throw new Error('MINI_DSH_PROFILE must be general or coding')
   for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
-  await root.plugin(runtimeContext, { workspace })
+  await root.plugin(runtimeContext, { workspace, profile })
   await root.plugin(sandbox, { workspace })
+  if (profile === 'coding') await root.plugin(projectContext, { directory: process.env.MINI_DSH_PROJECT_DIRECTORY })
   await root.plugin(deepseek)
   await root.plugin(bash, { workspace })
   await root.plugin(files, { workspace })

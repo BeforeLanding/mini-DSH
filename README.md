@@ -4,7 +4,7 @@
 
 仿 DeepSeek Harness 的 **mini coding agent harness**，使用 TypeScript / Cordis 构建本地编程 Agent 运行环境。按照 [从零手写 mini-dsh 学习指南](https://github.com/huangjunsen0406/mini-dsh/blob/main/LEARNING.zh-CN.md) 完成第 0～7 天主线及补充篇，每个阶段分别提交，随后扩展上下文、预算与持久化恢复。
 
-开发主线是让模型在代码仓库中完成“理解项目规则 → 定位代码 → 修改文件 → 运行检查 → 根据失败修复 → 交付 diff 与验证证据”。当前已具备文件/Bash 工具及运行时底座；仓库规则加载、任务变更清单、结构化验证记录等仍是后续规划。首版聚焦单 Agent、单本地工作区与 CLI。
+开发主线是让模型在代码仓库中完成“理解项目规则 → 定位代码 → 修改文件 → 运行检查 → 根据失败修复 → 交付 diff 与验证证据”。当前已具备文件/Bash 工具、运行时底座和仓库规则/检查入口上下文；任务变更清单、结构化验证记录等仍是后续规划。首版聚焦单 Agent、单本地工作区与 CLI。
 
 ## 运行
 
@@ -22,6 +22,14 @@ CLI 支持 `/tools`、`/models`、`/model provider/model`、`/history`、`/promp
 
 写文件、编辑文件和执行 Bash 前会询问 `Allow this? [Y/n]`，空回车或 `y` / `yes` 同意。审批等待暂停主动时间，并有独立超时。`MINI_DSH_AUTO_APPROVE=1` 可用于受信任的测试环境。
 
+CLI 默认 `MINI_DSH_PROFILE=coding`，要求检查相关代码与已有改动、保留用户变更、按目录规则工作并报告真实检查证据。设为 `general` 可使用原通用身份并关闭项目上下文插件；底层 runtime-context 插件仍默认 general。无效 profile 在启动时拒绝。
+
+coding 模式从 `MINI_DSH_WORKSPACE` 至初始项目目录加载祖先链上的 `AGENTS.md`，父规则在前，返回路径、真实来源和目录作用域。初始目录由 `MINI_DSH_PROJECT_DIRECTORY` 指定，默认 `.`，必须在工作区内；这只是上下文目录，文件/Bash 的工作目录仍为工作区。模型修改其他目录前可用只读 `project_context({directory:"src"})` 查询该目录规则。每次组装和查询重新读取，不递归扫描仓库，缺失规则返回空列表。
+
+项目配置选择最近的 package.json，展示包管理器、Node 要求及显式 test/check/typecheck/lint/build 入口；Git、TS、锁文件和 README 只发现路径标记。发现命令不会执行或安装，运行仍需 Bash 策略和审批；项目内容不能扩大 Harness 权限，run completed 也不代表检查通过。非 Git/缺失配置可继续，错误配置有来源和退化说明，不冒用父配置。
+
+project-context 插件可通过 `limits` 配置 `maxFileBytes`（默认 16 KiB）、`maxContentBytes`（32 KiB）和 `maxDirectories`（16，包含工作区和目标）；均须为正安全整数。规则原文与元数据 JSON 共用内容字节预算，超预算元数据仅返回退化诊断；路径/诊断/提示词包装还会进入完整请求的 token 估算。规则超限、无效 UTF-8、非文件或越界明确失败，不注入残缺规则；完整 system 装不下时沿用 context_overflow 停止。
+
 ## 结构
 
 入口负责装配插件；`core/` 实现事件日志、工具注册表、提示词、模型路由和 Agent Loop；`plugins/` 将 runtime 暴露为 Cordis 服务；`models/` 实现 DeepSeek 流式协议；`tools/` 注册 Bash 和五个文件工具。
@@ -37,7 +45,7 @@ pnpm check
 pnpm test
 ```
 
-当前 72 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑和 CLI 测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
+当前 86 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI 和项目上下文测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
 
 NX-05a 提供三个可重复的 [编程任务 fixture](test/fixtures/coding/README.md)：边界修复、功能扩展和跨文件接口修改。运行 `pnpm fixtures:check` 核验初始失败/参考通过基线；`pnpm test` 还覆盖模拟模型经真实文件/Bash 工具完成失败→修改→重跑的流程。每次使用新临时工作区，独立验收器保留在工作区外；模拟结果不代表真实模型编程成功率。
 
