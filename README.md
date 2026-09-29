@@ -2,7 +2,9 @@
 
 [![CI](https://github.com/BeforeLanding/mini-DSH/actions/workflows/ci.yml/badge.svg)](https://github.com/BeforeLanding/mini-DSH/actions/workflows/ci.yml)
 
-按照 [从零手写 mini-dsh 学习指南](https://github.com/huangjunsen0406/mini-dsh/blob/main/LEARNING.zh-CN.md) 实现的 Agent Harness。第 0～7 天主线及补充篇已完成，每个阶段分别提交。
+仿 DeepSeek Harness 的 **mini coding agent harness**，使用 TypeScript / Cordis 构建本地编程 Agent 运行环境。按照 [从零手写 mini-dsh 学习指南](https://github.com/huangjunsen0406/mini-dsh/blob/main/LEARNING.zh-CN.md) 完成第 0～7 天主线及补充篇，每个阶段分别提交，随后扩展上下文、预算与持久化恢复。
+
+开发主线是让模型在代码仓库中完成“理解项目规则 → 定位代码 → 修改文件 → 运行检查 → 根据失败修复 → 交付 diff 与验证证据”。当前已具备文件/Bash 工具及运行时底座；仓库规则加载、任务变更清单、结构化验证记录等仍是后续规划。首版聚焦单 Agent、单本地工作区与 CLI。
 
 ## 运行
 
@@ -45,7 +47,7 @@ GitHub Actions 在推送到 `main`、提交 Pull Request 或手动触发时运�
 
 ## 开发协作
 
-面向 Agent 应用/平台实习的 [完成度评估与后续路线](docs/INTERNSHIP_ROADMAP.md) 包含基线验证、三个已复现边界、优化优先级和分阶段验收；规划项尚未实现。
+围绕 mini coding agent harness 的 [完成度评估与开发路线](docs/INTERNSHIP_ROADMAP.md) 包含三个已复现边界、仓库上下文、可靠编辑、执行验证、编程评测和求职展示；规划项尚未实现。
 
 本轮 TypeScript、持久化、上下文、预算及续跑功能的完整梳理见 [改动与实现功能](docs/context-budget/CHANGES.md)。
 

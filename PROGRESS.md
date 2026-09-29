@@ -1,5 +1,13 @@
 # 开发进度
 
+### mini coding agent harness 定位修订（2026-09-29）
+
+按用户明确的“仿 DeepSeek Harness 的 mini coding agent harness”定位更新 [开发路线](docs/INTERNSHIP_ROADMAP.md) 及 README、需求/计划入口。保留 F1～F3 及原预算评估；新主线为 M5 边界收尾 → M6 仓库上下文/代码定位/可靠编辑/执行验证 → M7 编程评测，M8 长任务增强按证据选择，M9 求职展示随开发积累。
+
+保留 NX-01～NX-11，新增 NX-12～NX-16；全部功能项仍为 todo。特别区分 run completed 与代码验证通过，现有通用身份、prompt、事件 schema 和工具行为没有修改。本轮仅文档，未重跑功能测试；57/57 与四组合 CI 是此前评估基线，不能作为新规划的验收证据。
+
+本轮验证：32 个本地 Markdown 链接存在性检查、16 个父任务编号（NX-05 拆为 a/b 两步）及 M5～M9 阶段检查通过；`git diff --check` 通过。
+
 ### 实习导向评估与路线（2026-09-29）
 
 基于与 origin HEAD 一致的 ca1e2c4 完成 [完成度评估与后续路线](docs/INTERNSHIP_ROADMAP.md)。正常用户权限下重新运行 pnpm check（46 文件）和 pnpm test（57/57，无跳过）；只读核验基线 CI [36514313704](https://github.com/BeforeLanding/mini-DSH/actions/runs/36514313704)，Windows/Ubuntu × Node22/24 四组合 success。
@@ -53,7 +61,7 @@
 - 本步 18 个本地文档链接、文档空白和 git diff --check 通过；CB-17 标记 done，CB-15 保持 todo。
 
 ## 下一步
-原首阶段开发及验收已完成；本次评估发现的三个边界缺口作为新加固项跟踪。下一步优先按 [实习开发路线](docs/INTERNSHIP_ROADMAP.md) 的 M5 修复和验证，再建设任务评测与有界工具输出；尚未开始功能开发。
+原首阶段开发及验收已完成；优先修复 F1～F3（M5），随后按 [编程 Harness 开发路线](docs/INTERNSHIP_ROADMAP.md) 的 M6 建立最小代码修改与验证闭环，以 3 个编程 fixture 贯穿开发，再扩展 M7 真实模型评测。NX-01～NX-16 均未开始功能开发。
 
 ## 更新规则
 本文件只保存当前状态、重要验证/失败、阻塞和下一步；任务级行为/证据维护在 [TASKS](docs/context-budget/TASKS.md)。参数和设计维护在 PLAN，验收维护在 REQUIREMENTS。done 必须有真实验收证据，设计完成不等于功能完成。

@@ -5,6 +5,12 @@
 ## 当前实现
 严格 TypeScript / NodeNext 编译产物运行；Session 使用版本化 JSONL 事件恢复；Loop 实现上下文投影、执行预算与同 task 续跑；DeepSeek 归一化 usage 并限制输出；CLI 提供 /budget、/continue 和 session 恢复。原始基线及逐步变更保留在 PROGRESS。
 
+## 首阶段之后的方向
+
+项目定位为仿 DeepSeek Harness 的 mini coding agent harness。M5 起按 [编程 Harness 开发路线](../INTERNSHIP_ROADMAP.md) 推进：收尾已复现预算边界 → 仓库上下文/代码定位/可靠编辑/执行验证闭环 → 编程任务评测 → 按失败证据增强长任务能力。求职演示随开发积累。保持现有 Cordis 服务与模型适配器边界；运行终态和代码验证结果分别建模。
+
+上述为后续规划，未更改 D-02 当前 task 完整保护、D-05 终态或现有事件 schema。实现 NX-02、NX-07、NX-15、NX-16 等涉及契约的任务前，须先在本专题补充对应需求与设计决策；不把未来压缩或验证行为混入现有完成记录。
+
 ## 实施顺序与里程碑
 1. M0 文档基线：已完成；规则、需求、计划、任务和进度可追溯。
 2. M0.5 TypeScript 迁移（CB-15）：先恢复依赖，建立类型/构建链，分批迁移源码和测试，不改变既有行为。出口：原 22 条测试、构建、配置路径和 CI 矩阵通过。
