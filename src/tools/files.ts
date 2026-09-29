@@ -49,7 +49,7 @@ export function apply(ctx: Context, _config: { workspace?: string } = {}) {
       async execute(args, exec) {
         resolve(args.path)
         if (typeof args.content !== 'string') throw new Error('content must be a string')
-        await ctx.sandbox.approve({ tool: 'write_file', summary: `write ${args.path}`, signal: exec.signal })
+        await ctx.sandbox.approve({ tool: 'write_file', summary: `write ${args.path}`, signal: exec.signal, approval: exec.approval })
         const target = resolve(args.path)
         await fs.mkdir(path.dirname(target), { recursive: true })
         await fs.writeFile(resolve(args.path), args.content, { encoding: 'utf8', signal: exec.signal })
@@ -66,7 +66,7 @@ export function apply(ctx: Context, _config: { workspace?: string } = {}) {
         const index = original.indexOf(args.oldText)
         if (index < 0) throw new Error('oldText not found')
         if (original.indexOf(args.oldText, index + 1) >= 0) throw new Error('oldText is not unique; refusing an ambiguous edit')
-        await ctx.sandbox.approve({ tool: 'edit_file', summary: `edit ${args.path}`, signal: exec.signal })
+        await ctx.sandbox.approve({ tool: 'edit_file', summary: `edit ${args.path}`, signal: exec.signal, approval: exec.approval })
         const target = resolve(args.path)
         if (await fs.readFile(target, 'utf8') !== original) throw new Error('file changed during approval; retry the edit')
         await fs.writeFile(resolve(args.path), original.slice(0, index) + args.newText + original.slice(index + args.oldText.length), { encoding: 'utf8', signal: exec.signal })

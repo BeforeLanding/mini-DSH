@@ -1,3 +1,5 @@
+import { RunBudgetRuntime } from './run-budget-runtime.js'
+import type { Clock } from './run-budget-runtime.js'
 import { ContextBudgetRuntime } from './context-runtime.js'
 import { estimateInput, estimateUsage } from './token-estimator.js'
 import { StreamJournal } from './stream-journal.js'
@@ -25,6 +27,7 @@ export class AgentLoopRuntime {
         this.llm = llm
     }
 
+    clock?: Clock
     budget?: import('./budget.js').BudgetPolicy
     async run(agent: Agent, input: string, { signal, onReasoning, onContent, onToolCall, onToolResult, budget }: RunOptions = {}) {
         const configured = { ...this.budget, ...agent.budget, ...budget }
@@ -33,7 +36,7 @@ export class AgentLoopRuntime {
         const sessionId = agent.sessionId
 
         const state = this.sessions.beginRun(sessionId, policy, typeof agent.model === 'string' ? agent.model : JSON.stringify(agent.model))
-        const started = performance.now()
+        const control = new RunBudgetRuntime(policy, state, signal, this.clock)
         const append: SessionRuntime['append'] = (id, type, data) => this.sessions.append(id, type, data, state)
         try {
         append(sessionId, 'user/message', { content: input })
@@ -44,25 +47,26 @@ export class AgentLoopRuntime {
         while (true) {
             step += 1
 
-            if (signal?.aborted) throw new BudgetStop('cancelled', state)
+            control.check()
             if (policy.maxModelRequests !== undefined && state.counters.modelRequests >= policy.maxModelRequests) throw new BudgetStop('max_steps', state)
 
-            const system = await this.systemPrompt.assemble({
+            const system = await control.wait(() => this.systemPrompt.assemble({
                 agent,
                 sessionId,
                 step,
-            })
+            }))
             //step2: Assemble the system prompt based on the current agent, session ID, and step number. This prompt will guide the agent's reasoning and decision-making process.
 
+            control.check()
             const schemas = this.tools.schemas()
             const projection = new ContextBudgetRuntime().project(this.sessions.visibleEvents(sessionId), state.taskId,
                 { system, tools: schemas, maxOutputTokens: policy.maxOutputTokens }, policy, events => this.sessions.deriveMessages(sessionId, events))
             const { messages, estimatedInputTokens } = projection
             state.removedTaskIds = [...new Set([...state.removedTaskIds, ...projection.removedTaskIds])]
             append(sessionId, 'context/projection', { estimatedInputTokens, reservedOutputTokens: projection.reservedOutputTokens, safetyMarginTokens: projection.safetyMarginTokens, removedTaskIds: projection.removedTaskIds })
+            control.check()
             if (!projection.fits) throw new BudgetStop('context_overflow', state)
             state.estimatedInputTokens = estimatedInputTokens
-            state.counters.modelRequests++
             const requestId = randomUUID()
             append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId, estimatedInputTokens })
             const settle = (usage?: Usage) => {
@@ -73,20 +77,22 @@ export class AgentLoopRuntime {
                 state.counters.totalTokens += usage.totalTokens
                 append(sessionId, 'model/usage', { taskId: state.taskId, runId: state.runId, requestId, usage })
             }
-            await this.sessions.flush(sessionId)
+            await control.wait(() => this.sessions.flush(sessionId))
+            control.check()
+            state.counters.modelRequests++
             const journal = new StreamJournal(requestId, data => append(sessionId, 'model/fragment', data))
-            const response = await this.llm.chat(
+            const response = await control.wait(() => this.llm.chat(
                 {
                     maxOutputTokens: policy.maxOutputTokens,
                     system,
                     messages,
                     tools: schemas,
-                    signal,
-                    onReasoning: chunk => { journal.add('reasoning', chunk); onReasoning?.(chunk) },
-                    onContent: chunk => { journal.add('content', chunk); onContent?.(chunk) },
+                    signal: control.signal,
+                    onReasoning: chunk => { if (control.signal.aborted || journal.closed) return; journal.add('reasoning', chunk); onReasoning?.(chunk) },
+                    onContent: chunk => { if (control.signal.aborted || journal.closed) return; journal.add('content', chunk); onContent?.(chunk) },
                 },
                 agent.model,
-            ).catch(error => {
+            ), policy.requestTimeoutMs ?? 180_000).catch(error => {
                 journal.close()
                 const partial = error instanceof ModelStreamError ? error.partial : { content: journal.content, reasoningContent: journal.reasoningContent, usage: undefined }
                 settle(partial.usage ?? estimateUsage(estimatedInputTokens, partial))
@@ -99,11 +105,13 @@ export class AgentLoopRuntime {
             //step3: Use the LLM to generate a response based on the system prompt, the derived messages, available tools, and any provided callbacks for reasoning and content. The model used is specified by the agent's model selection.
 
             const toolCalls = response.toolCalls ?? []
+            if (!toolCalls.length) control.check()
 
             if (toolCalls.length === 0) {
                 const content = response.content ?? ''
                 append(sessionId, 'assistant/message', { content, reasoningContent: response.reasoningContent })
-                state.counters.activeDurationMs = performance.now() - started
+                state.counters.approvalDurationMs = control.approvalDurationMs
+                state.counters.activeDurationMs = control.activeDurationMs
                 this.sessions.finishRun(state, 'completed')
                 await this.sessions.flush(sessionId)
                 return content
@@ -120,7 +128,7 @@ export class AgentLoopRuntime {
             let toolsExhausted = false
 
             for (const call of toolCalls) {
-                cancelled ||= Boolean(signal?.aborted)
+                cancelled ||= Boolean(control.signal.aborted)
 
                 const exhausted = policy.maxToolCalls !== undefined && state.counters.toolCalls >= policy.maxToolCalls
                 toolsExhausted ||= exhausted
@@ -135,17 +143,19 @@ export class AgentLoopRuntime {
                     continue
                 }
 
-                state.counters.toolCalls++
-                append(sessionId, 'tool/start', { taskId: state.taskId, runId: state.runId, toolCallId: call.id, name: call.name })
-                await this.sessions.flush(sessionId)
                 onToolCall?.(call)
-
-                const result = await this.tools.execute(call.name, call.arguments, {
+                control.check()
+                append(sessionId, 'tool/start', { taskId: state.taskId, runId: state.runId, toolCallId: call.id, name: call.name })
+                await control.wait(() => this.sessions.flush(sessionId))
+                control.check()
+                state.counters.toolCalls++
+                const result = await control.wait(() => this.tools.execute(call.name, call.arguments, {
                     signal,
                     sessionId,
                     toolCallId: call.id,
                     agent,
-                })//step5: For each tool call generated by the LLM, check if the run has been cancelled. If not, invoke the corresponding tool with the provided arguments and execution context. Capture the result of the tool execution, which may include success or error information.
+                    approval: work => control.approve(work),
+                }))//step5: For each tool call generated by the LLM, check if the run has been cancelled. If not, invoke the corresponding tool with the provided arguments and execution context. Capture the result of the tool execution, which may include success or error information.
 
                 const renderedContent = this.tools.renderResult(result)
 
@@ -176,10 +186,11 @@ export class AgentLoopRuntime {
                         content: 'ToolError: ' + (started ? 'unknown outcome' : 'skipped') + ' after ' + (error instanceof BudgetStop ? error.reason : 'error') })
                 }
             }
-            state.counters.activeDurationMs = performance.now() - started
-            this.sessions.finishRun(state, error instanceof BudgetStop ? error.reason : signal?.aborted ? 'cancelled' : 'error')
+            state.counters.approvalDurationMs = control.approvalDurationMs
+                state.counters.activeDurationMs = control.activeDurationMs
+            this.sessions.finishRun(state, control.stopReason ?? (error instanceof BudgetStop ? error.reason : 'error'))
             await this.sessions.flush(sessionId)
             throw error
-        }
+        } finally { control.dispose() }
     }
 }

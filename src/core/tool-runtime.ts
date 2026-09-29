@@ -68,6 +68,7 @@ export class ToolRuntime {
         }
 
         const execution = {
+            approval: exec.approval,
             signal: exec.signal ?? new AbortController().signal,
             sessionId: exec.sessionId,
             toolCallId: exec.toolCallId,

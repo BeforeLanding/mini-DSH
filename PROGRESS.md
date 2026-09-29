@@ -106,3 +106,6 @@ groupHistory 按完整 task 聚合，当前 task 与缺失结果组受保护；�
 
 ### CB-01 配置贯通（2026-09-29）
 调用>Agent>runtime默认的校验快照、有限整数/零额度、类型化BudgetStop、成功字符串；Cordis插件配置注入实际验证。pnpm check / test 42/42 通过。
+
+### CB-07 主动时间与取消（2026-09-29）
+RunBudgetRuntime 可注入单调时钟、组合signal、主动deadline、模型独立超时、审批暂停与独立超时；阶段复查、资源清理、迟到流忽略，未知在途工具配对。pnpm check / test 45/45 通过；非协作工具仅停止等待，不能保证物理终止。

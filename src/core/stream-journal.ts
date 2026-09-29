@@ -1,5 +1,6 @@
 import type { EventData } from './contracts.js'
 export class StreamJournal {
+  get closed() { return this.#closed }
   content = ''
   reasoningContent = ''
   #content = ''

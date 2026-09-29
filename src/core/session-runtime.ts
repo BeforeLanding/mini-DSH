@@ -106,7 +106,7 @@ export class SessionRuntime {
         const result = emptyCounters()
         for (const event of this.visibleEvents(id)) {
             if (event.type !== 'run/finish' || event.data.state.taskId !== taskId) continue
-            for (const key of Object.keys(result) as (keyof Counters)[]) result[key] += event.data.state.counters[key]
+            for (const key of Object.keys(result) as (keyof Counters)[]) result[key] += (event.data.state.counters[key] ?? 0)
         }
         return result
     }

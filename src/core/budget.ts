@@ -39,8 +39,8 @@ export function resolveBudget(...layers: (BudgetPolicy | undefined)[]): Readonly
 }
 export type StopReason = 'completed' | 'max_steps' | 'max_tool_calls' | 'timeout' | 'token_budget' | 'context_overflow' | 'cancelled' | 'error' | 'approval_timeout' | 'request_timeout' | 'output_limit'
 export interface Usage { inputTokens: number; outputTokens: number; totalTokens: number; source: 'provider' | 'estimated'; uncertain: boolean; reasoningTokens?: number }
-export interface Counters { modelRequests: number; toolCalls: number; inputTokens: number; outputTokens: number; totalTokens: number; activeDurationMs: number }
-export const emptyCounters = (): Counters => ({ modelRequests: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, activeDurationMs: 0 })
+export interface Counters { modelRequests: number; toolCalls: number; inputTokens: number; outputTokens: number; totalTokens: number; activeDurationMs: number; approvalDurationMs: number }
+export const emptyCounters = (): Counters => ({ modelRequests: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, activeDurationMs: 0, approvalDurationMs: 0 })
 export interface RunState {
   sessionId: string; taskId: string; runId: string; model: string
   policy: Readonly<BudgetPolicy>; counters: Counters; status: 'running' | StopReason

@@ -7,6 +7,7 @@ const stops = new Set(['running', 'completed', 'max_steps', 'max_tool_calls', 't
 function validState(v: unknown): boolean {
   if (!record(v) || !string(v.sessionId) || !string(v.taskId) || !string(v.runId) || !string(v.model) || !record(v.policy) || !record(v.counters) || !stops.has(String(v.status)) || !Array.isArray(v.usage) || !v.usage.every(validUsage) || !Array.isArray(v.removedTaskIds) || !v.removedTaskIds.every(string)) return false
   const counters = v.counters
+  if (counters.approvalDurationMs !== undefined && (typeof counters.approvalDurationMs !== 'number' || !Number.isFinite(counters.approvalDurationMs) || counters.approvalDurationMs < 0)) return false
   if (!['modelRequests', 'toolCalls', 'inputTokens', 'outputTokens', 'totalTokens'].every(k => integer(counters[k])) || typeof counters.activeDurationMs !== 'number' || !Number.isFinite(counters.activeDurationMs) || counters.activeDurationMs < 0) return false
   try { resolveBudget(v.policy) } catch { return false }
   return true

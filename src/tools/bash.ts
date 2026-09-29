@@ -17,7 +17,7 @@ export function apply(ctx: Context, config: { executable?: string; workspace?: s
     async execute({ command }, exec) {
       if (typeof command !== 'string' || !command.trim()) throw new Error('command is required')
       ctx.sandbox.assertCommand(command)
-      await ctx.sandbox.approve({ tool: 'bash', summary: `bash: ${command}`, signal: exec.signal })
+      await ctx.sandbox.approve({ tool: 'bash', summary: `bash: ${command}`, signal: exec.signal, approval: exec.approval })
       ctx.sandbox.assertCommand(command)
       exec.signal.throwIfAborted()
       return new Promise<string>((resolve, reject) => {

@@ -21,7 +21,8 @@ export class SandboxRuntime {
     request.signal?.throwIfAborted()
     if (this.autoApprove) return { approved: true, source: 'auto' }
     if (!this.#approver) throw new Error('write requires user approval, but no approval channel is set')
-    const approved = await this.#approver(request)
+    const approver = this.#approver
+    const approved = await (request.approval ? request.approval(() => approver(request)) : approver(request))
     request.signal?.throwIfAborted()
     if (!approved) throw new Error('user rejected this operation')
     return { approved: true, source: 'user' }

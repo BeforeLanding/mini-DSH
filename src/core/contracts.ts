@@ -28,7 +28,7 @@ export interface Agent {
   send(input: string, options?: RunOptions): Promise<string>
 }
 export interface Loop { run(agent: Agent, input: string, options?: RunOptions): Promise<string> }
-export interface Execution { signal: AbortSignal; sessionId?: string; toolCallId?: string; agent?: Agent }
+export interface Execution { approval?: <T>(work: () => Promise<T>) => Promise<T>; signal: AbortSignal; sessionId?: string; toolCallId?: string; agent?: Agent }
 export interface ContentBlock { type: string; text?: string; [key: string]: unknown }
 export interface ToolResult { value: unknown; content: ContentBlock[]; isError: boolean }
 export interface ToolDefinition {
@@ -39,7 +39,7 @@ export interface ToolDefinition {
 }
 export interface PromptContext { agent?: Agent; sessionId?: string; step?: number }
 export interface PromptEntry { name: string; order?: number; text: string | ((context: PromptContext) => string | Promise<string>) }
-export interface ApprovalRequest { tool: string; summary: string; signal?: AbortSignal }
+export interface ApprovalRequest { tool: string; summary: string; signal?: AbortSignal; approval?: <T>(work: () => Promise<T>) => Promise<T> }
 export interface SandboxConfig { workspace?: string; autoApprove?: boolean; allowHosts?: string[] }
 export interface EventData {
   'session/start': { meta: Arguments; reset?: boolean }
