@@ -131,6 +131,14 @@
 - 状态：done（2026-09-29）。
 - 证据：R-01至R-13逐项证据见PROGRESS E-03；本地pnpm check/test 57/57；功能提交4600379的GitHub CI 36508829785四组合Windows/Ubuntu × Node22/24全部success。模拟模型、真实Cordis/Bash/文件及JSONL恢复；无付费API调用。
 
+## CB-18 实习导向评估与后续规划
+
+- 关联：R-02、R-05、R-09、R-11 的边界复核及后续开发方向。
+- 行为：核对源码、测试、远程基线和 CI；复现交叉边界；产出求职导向的完成度、优先级及验收路线。
+- 状态：done（2026-09-29，仅评估完成）。
+- 证据：基线 ca1e2c4；pnpm check 46 文件、pnpm test 57/57；CI 36514313704 四组合 success；`node docs/context-budget/review-probes.mjs` 输出 F1～F3 诊断值。报告与新任务见 [完成度评估与后续路线](../INTERNSHIP_ROADMAP.md)。
+- 后续：F1～F3 尚未修复，NX-01～NX-11 均为 todo；没有付费模型效果证据，不将规划标记为功能完成。
+
 ## 新任务模板
 - ID / 标题、关联需求 / 决策 / 里程碑、依赖。
 - 行为：输入、输出、边界、失败与副作用。

@@ -1,5 +1,13 @@
 # 开发进度
 
+### 实习导向评估与路线（2026-09-29）
+
+基于与 origin HEAD 一致的 ca1e2c4 完成 [完成度评估与后续路线](docs/INTERNSHIP_ROADMAP.md)。正常用户权限下重新运行 pnpm check（46 文件）和 pnpm test（57/57，无跳过）；只读核验基线 CI [36514313704](https://github.com/BeforeLanding/mini-DSH/actions/runs/36514313704)，Windows/Ubuntu × Node22/24 四组合 success。
+
+新增离线诊断 `node docs/context-budget/review-probes.mjs`，复现 F1 输出额度收缩前提前裁剪、F2 最终提交超 deadline 仍 completed、F3 恢复遗漏投影观测。三个问题尚未修复；未改运行时功能、未调用付费 API。后续 NX-01～NX-11 均为 todo，按边界加固→评测/工具输出治理→求职展示推进。评估完成不代表后续功能完成。
+
+文档与诊断检查：22 个本地 Markdown 链接存在性检查通过，`node --check docs/context-budget/review-probes.mjs` 和 `git diff --check` 通过。功能检查使用上述本次基线结果，文档变更后不重复执行不受影响的全量测试。
+
 ### 功能梳理（2026-09-29）
 新增 [本次改动与实现功能](docs/context-budget/CHANGES.md)，按用户五阶段顺序归纳 21 个开发提交、模块职责、CLI/恢复入口、默认值、回归证据和实际边界；README 增加入口。本步仅文档变更，沿用注释清理后的 pnpm check / test 57/57 结果。
 
@@ -45,7 +53,7 @@
 - 本步 18 个本地文档链接、文档空白和 git diff --check 通过；CB-17 标记 done，CB-15 保持 todo。
 
 ## 下一步
-本次开发及验收完成，无待完成的功能项。后续真实模型质量与 tokenizer 校准属于额外实验。
+原首阶段开发及验收已完成；本次评估发现的三个边界缺口作为新加固项跟踪。下一步优先按 [实习开发路线](docs/INTERNSHIP_ROADMAP.md) 的 M5 修复和验证，再建设任务评测与有界工具输出；尚未开始功能开发。
 
 ## 更新规则
 本文件只保存当前状态、重要验证/失败、阻塞和下一步；任务级行为/证据维护在 [TASKS](docs/context-budget/TASKS.md)。参数和设计维护在 PLAN，验收维护在 REQUIREMENTS。done 必须有真实验收证据，设计完成不等于功能完成。
