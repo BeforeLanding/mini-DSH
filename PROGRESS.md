@@ -1,5 +1,10 @@
 # 开发进度
 
+### CD-01a 公网连接预检（2026-09-29）
+用户已确认云服务器手动 check、107/107 测试、真实模型请求、固定工作区与启动入口、部署密钥本机 SSH、公钥身份核验、production 五项 Secrets 以及服务器发布脚本 bash -n。这些是用户提供的远端证据，未由本地代理重复执行或读取密钥。
+仓库增加手动触发 ECS SSH Check，限定 main/production；通过严格主机密钥校验与无交互 SSH 检查用户、Node24/pnpm11.22.0、目录和发布脚本语法，不执行发布、不读取 .env 内容、不修改应用数据。公网连接尚待真实 Actions 运行确认；a 提交后再推进 b 自动部署。
+本地验证：Python/PyYAML 解析及手动/main/production 门槛核验通过；提取 runner 与 remote 脚本分别使用 Git Bash bash -n 通过；git diff --check 通过。本步仅修改工作流与文档，未重复运行应用测试，公网验收仍待执行。
+
 ### NX-13 完成与跨平台验收（2026-09-29）
 NX-13 已完成可靠编辑、乐观冲突检测、可恢复任务变更清单和 unified diff；模型 task_changes 与 CLI /changes /diff 可查询逐文件成功、失败、unknown 及外部变化，运行结束自动展示清单。用户首次观察前已有修改保留，跨编辑的用户变更不归入 Agent diff；patch 按需延后。
 实际顺序与提交：a 契约 6081892 → b 核心 4b7cfd2 → c 工具 489bcfa → d 持久记录 97b7653 → d2 权限/软链边界 d802adc → e CLI/交付 4c9501c。均独立验收并推送；首次推送自动审查要求具体远端授权，用户明确授权 origin 后正常推送，未绕过审查。

@@ -1,0 +1,73 @@
+name: ECS SSH Check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ecs-ssh-check-production
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production
+    steps:
+      - name: Verify SSH access and deployment prerequisites
+        shell: bash
+        env:
+          ECS_HOST: ${{ secrets.ECS_HOST }}
+          ECS_PORT: ${{ secrets.ECS_PORT }}
+          ECS_USER: ${{ secrets.ECS_USER }}
+          SSH_KEY: ${{ secrets.ECS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.ECS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          [[ "$ECS_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]] || { echo 'Invalid or missing ECS_HOST'; exit 1; }
+          [[ "$ECS_PORT" =~ ^[0-9]{1,5}$ ]] || { echo 'Invalid or missing ECS_PORT'; exit 1; }
+          (( 10#$ECS_PORT >= 1 && 10#$ECS_PORT <= 65535 )) || { echo 'Invalid ECS_PORT'; exit 1; }
+          [[ "$ECS_USER" == 'deploy' ]] || { echo 'ECS_USER must be deploy'; exit 1; }
+          [[ -n "$SSH_KEY" && -n "$KNOWN_HOSTS" ]] || { echo 'SSH secrets are missing'; exit 1; }
+
+          umask 077
+          credentials="$(mktemp -d "$RUNNER_TEMP/mini-dsh-ssh.XXXXXX")"
+          trap 'rm -f -- "$credentials/key" "$credentials/known_hosts"; rmdir -- "$credentials"' EXIT
+          printf '%s\n' "$SSH_KEY" > "$credentials/key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$credentials/known_hosts"
+          unset SSH_KEY KNOWN_HOSTS
+
+          ssh -T \
+            -i "$credentials/key" \
+            -p "$ECS_PORT" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o HostKeyAlgorithms=ssh-ed25519 \
+            -o "UserKnownHostsFile=$credentials/known_hosts" \
+            -o ConnectTimeout=15 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=3 \
+            "$ECS_USER@$ECS_HOST" 'bash -se' <<'REMOTE'
+          test "$(id -un)" = deploy
+          printf 'Remote user: %s\n' "$(id -un)"
+          test -f "$HOME/.nvm/nvm.sh"
+          source "$HOME/.nvm/nvm.sh"
+          nvm use 24 >/dev/null
+          [[ "$(node --version)" == v24.* ]]
+          test "$(pnpm --version)" = 11.22.0
+          printf 'Node: %s\n' "$(node --version)"
+          printf 'pnpm: %s\n' "$(pnpm --version)"
+          test -x "$HOME/bin/deploy-mini-dsh"
+          bash -n "$HOME/bin/deploy-mini-dsh"
+          test -L "$HOME/apps/mini-DSH/current"
+          test -d "$HOME/apps/mini-DSH/current"
+          test -f "$HOME/apps/mini-DSH/shared/.env"
+          test -d "$HOME/workspaces/default"
+          test -d "$HOME/.mini-dsh/sessions"
+          printf 'Current release: %s\n' "$(readlink -f "$HOME/apps/mini-DSH/current")"
+          echo 'SSH connection check passed; no deployment performed.'
+          REMOTE
