@@ -49,7 +49,7 @@
 - 行为：定义存储接口，实现单写入者串行追加、序号/版本、关键事件落盘确认和错误传播；reset 追加事件。
 - 验证：重启读取、尾部半条记录、中部损坏、重复/乱序事件、写盘失败后不再调度；日志只用模拟内容；追加成本使用实际样本测量。
 - 状态：in_progress（2026-09-29）。
-- 证据：JSONL 串行 sync、单写入者锁与写入故障屏障；严格载荷/序号/版本、半条尾部拒绝并提供显式备份隔离；pnpm check / test 30/30 通过。CLI 持久化入口待后续。
+- 证据：JSONL串行sync、单写入者锁、写入故障停止、尾部隔离和严格恢复；CLI默认持久化并在退出释放锁。pnpm check / test 52/52 通过，日志全为模拟内容。性能样本在最终回归记录。
 
 ## CB-03 模型 usage 与输出限制
 - 关联：R-06、R-07；M1；D-04。
@@ -112,16 +112,16 @@
 - 依赖：CB-05、CB-06、CB-07、CB-08、CB-12。
 - 行为：同 task 新 run，每段额度按 PLAN；未执行调用有 skipped 结果，模型重新规划；显示本段和任务累计用量；未知副作用不自动重试。
 - 验证：预算停止→continue→完成；不重复用户输入/原工具；上下文保护跨 run；unknown 副作用不自动重试；context_overflow 不因额度刷新被忽略。
-- 状态：in_progress（2026-09-29）。
-- 证据：agent.continue 同task新run关联previousRunId，每段独立计数，task累计及续跑数；不重复用户输入/旧工具；跨run上下文保护，completed/unchanged context/unknown拒绝。修复复用call ID的按发生顺序配对。pnpm check / test 50/50 通过；CLI入口下一步。
+- 状态：done（2026-09-29）。
+- 证据：续跑核心与CLI /continue实际串联，预算停止→继续→完成；task累计、跨run保护、completed/unknown/unchanged context明确反馈。pnpm check / test 52/52 通过。
 
 ## CB-09 CLI 与用户文档
 - 关联：R-01、R-08、R-09；M4；D-05、D-06。
 - 依赖：CB-05、CB-06、CB-07、CB-08。
 - 行为：提供 `/budget`、用量来源和停止原因显示；更新帮助及环境配置说明；保留 /history、/prompt、/reset 语义。
 - 验证：命令输出有效配置、最近状态和裁剪范围；模型切换、reset、流式部分输出、预算错误与用户取消区分；不泄漏密钥。
-- 状态：todo。
-- 证据：尚无。
+- 状态：done（2026-09-29）。
+- 证据：真实Cordis CLI实现 /budget查看/JSON覆盖、/continue、run/task用量与裁剪范围；默认JSONL、session ID恢复、模型/预算设置持久化、reset追加与锁释放；README/.env.example更新。pnpm check / test 52/52 通过。
 
 ## CB-10 集成验收与交接
 - 关联：R-01 至 R-13；M4。

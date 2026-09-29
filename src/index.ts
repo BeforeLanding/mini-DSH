@@ -28,7 +28,7 @@ try {
   await root.plugin(bash, { workspace })
   await root.plugin(files, { workspace })
   await root.plugin(externalPlugins, { entries: externalConfig })
-  await root.plugin(cli, { model: process.env.MINI_DSH_MODEL ?? 'deepseek/deepseek-v4-pro' })
+  await root.plugin(cli, { model: process.env.MINI_DSH_MODEL })
 } catch (error) {
   console.error(`[startup] ${error instanceof Error ? error.message : String(error)}`)
   await root.fiber.dispose()

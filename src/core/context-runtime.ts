@@ -22,7 +22,7 @@ export function groupHistory(events: SessionEvent[], currentTaskId: string): His
   const groups = new Map<string, HistoryGroup>()
   let legacy = 'legacy-start'
   for (const event of events) {
-    if (event.type === 'session/start' || event.type === 'session/reset') continue
+    if (event.type === 'session/start' || event.type === 'session/reset' || event.type === 'session/config') continue
     if (!event.taskId && event.type === 'user/message') legacy = `legacy-${event.seq}`
     const taskId = event.taskId ?? legacy
     let group = groups.get(taskId)

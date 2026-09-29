@@ -65,6 +65,10 @@ export class SessionRuntime {
         const reset = events.map(e => e.type).lastIndexOf('session/reset')
         return events.slice(reset + 1)
     }
+    configuration(id: string) {
+        const event = [...this.visibleEvents(id)].reverse().find(e => e.type === 'session/config')
+        return event?.type === 'session/config' ? structuredClone(event.data) : undefined
+    }
     latestRun(id: string): RunState | undefined {
         const events = this.visibleEvents(id)
         const begin = [...events].reverse().find(e => e.type === 'run/start')

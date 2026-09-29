@@ -115,3 +115,12 @@ RunBudgetRuntime 可注入单调时钟、组合signal、主动deadline、模型�
 
 ### CB-13 续跑核心（2026-09-29）
 agent.continue 同task新run关联previousRunId，每段独立计数，task累计及续跑数；不重复用户输入/旧工具；跨run上下文保护，completed/unchanged context/unknown拒绝。修复复用call ID的按发生顺序配对。pnpm check / test 50/50 通过；CLI入口下一步。
+
+### CB-09 CLI状态与恢复（2026-09-29）
+真实Cordis CLI实现 /budget查看/JSON覆盖、/continue、run/task用量与裁剪范围；默认JSONL、session ID恢复、模型/预算设置持久化、reset追加与锁释放；README/.env.example更新。pnpm check / test 52/52 通过。
+
+### CB-13 CLI继续（2026-09-29）
+续跑核心与CLI /continue实际串联，预算停止→继续→完成；task累计、跨run保护、completed/unknown/unchanged context明确反馈。pnpm check / test 52/52 通过。
+
+### CB-11 CLI持久化验收（2026-09-29）
+JSONL串行sync、单写入者锁、写入故障停止、尾部隔离和严格恢复；CLI默认持久化并在退出释放锁。pnpm check / test 52/52 通过，日志全为模拟内容。性能样本在最终回归记录。

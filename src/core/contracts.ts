@@ -44,6 +44,7 @@ export interface ApprovalRequest { tool: string; summary: string; signal?: Abort
 export interface SandboxConfig { workspace?: string; autoApprove?: boolean; allowHosts?: string[] }
 export interface EventData {
   'session/start': { meta: Arguments; reset?: boolean }
+  'session/config': { model: string; budget: BudgetPolicy }
   'session/reset': { epoch: number }
   'run/start': { state: RunState }
   'run/finish': { state: RunState }

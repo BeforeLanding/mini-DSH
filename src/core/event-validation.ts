@@ -19,6 +19,10 @@ export function validatePayload(type: string, data: Record<string, unknown>) {
   let valid = false
   switch (type) {
     case 'session/start': valid = record(data.meta) && (data.reset === undefined || typeof data.reset === 'boolean'); break
+    case 'session/config':
+      if (!string(data.model) || !record(data.budget)) break
+      try { resolveBudget({ contextWindowTokens: 1 }, data.budget); valid = true } catch { valid = false }
+      break
     case 'session/reset': valid = integer(data.epoch); break
     case 'user/message': valid = string(data.content); break
     case 'assistant/message': valid = string(data.content) && optionalString(data.reasoningContent); break

@@ -15,6 +15,7 @@ class SessionsService extends Service {
     flush(...args: Parameters<SessionRuntime['flush']>) { return this.runtime.flush(...args) }
     close() { return this.runtime.close() }
     visibleEvents(...args: Parameters<SessionRuntime['visibleEvents']>) { return this.runtime.visibleEvents(...args) }
+    configuration(...args: Parameters<SessionRuntime['configuration']>) { return this.runtime.configuration(...args) }
     latestRun(...args: Parameters<SessionRuntime['latestRun']>) { return this.runtime.latestRun(...args) }
     beginRun(...args: Parameters<SessionRuntime['beginRun']>) { return this.runtime.beginRun(...args) }
     finishRun(...args: Parameters<SessionRuntime['finishRun']>) { return this.runtime.finishRun(...args) }
