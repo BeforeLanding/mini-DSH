@@ -73,7 +73,7 @@ export function finalizeToolCalls(map: Map<number, WireCall>) {
     .map(([index, call]) => ({ id: call.id || `call_${index}`, name: call.name, arguments: parseToolArguments(call.arguments) }))
 }
 
-export interface DeepSeekConfig { apiKey?: string; baseUrl?: string; models?: string[]; defaultModel?: string; thinking?: string; fetch?: typeof fetch }
+export interface DeepSeekConfig { apiKey?: string; baseUrl?: string; models?: string[]; defaultModel?: string; thinking?: string; contextWindowTokens?: number; fetch?: typeof fetch }
 export function normalizeUsage(raw: unknown): Usage | undefined {
   if (raw == null) return undefined
   if (!isRecord(raw)) throw new Error('invalid model usage')
@@ -88,8 +88,10 @@ export function createDeepSeekAdapter(config: DeepSeekConfig = {}): Adapter {
   if (!apiKey) throw new Error('missing DEEPSEEK_API_KEY; copy .env.example to .env and fill it in')
   const baseUrl = (config.baseUrl ?? process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com').replace(/\/+$/, '')
   const models = config.models ?? ['deepseek-v4-pro', 'deepseek-v4-flash']
+  const configuredCapacity = config.contextWindowTokens ?? (baseUrl === 'https://api.deepseek.com' && !config.models ? 1_000_000 : undefined)
   const adapter: Adapter = {
     models,
+    capabilities: configuredCapacity === undefined ? undefined : Object.fromEntries(models.map(model => [model, { contextWindowTokens: configuredCapacity }])),
     async chat({ system, messages = [], tools = [], model, signal, onReasoning, onContent, maxOutputTokens }: ChatRequest) {
       const response = await (config.fetch ?? fetch)(`${baseUrl}/chat/completions`, {
         method: 'POST',

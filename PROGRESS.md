@@ -91,3 +91,6 @@ token-estimator 按 PLAN ASCII0.3/其他Unicode1.0、每消息32/请求256，覆
 
 ### CB-05 历史分组（2026-09-29）
 groupHistory 按完整 task 聚合，当前 task 与缺失结果组受保护；工具调用/结果完整性检查；原事件不变。pnpm check / test 36/36 通过。请求投影和容量停止待下一步。
+
+### CB-05 请求投影（2026-09-29）
+完整历史分组后按目标移除最旧完整任务，当前task/工具协议受保护；投影确定且不改原文，context/projection 记录移除任务。pnpm check / test 37/37 通过。容量停止下一小步接入。

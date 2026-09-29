@@ -14,7 +14,7 @@ export interface BudgetPolicy {
 export const CLI_BUDGET: Readonly<BudgetPolicy> = Object.freeze({
   maxModelRequests: 64, maxToolCalls: 128, maxActiveDurationMs: 600_000,
   maxTotalTokens: 2_000_000, maxOutputTokens: 16_384, minimumOutputTokens: 4_096,
-  inputTargetTokens: 65_536, safetyMarginTokens: 8_192,
+  inputTargetTokens: 65_536, safetyMarginTokens: 2_048,
   requestTimeoutMs: 180_000, approvalTimeoutMs: 300_000,
 })
 const positive = new Set(['maxOutputTokens', 'minimumOutputTokens', 'contextWindowTokens', 'inputTargetTokens', 'requestTimeoutMs', 'approvalTimeoutMs'])
@@ -33,6 +33,7 @@ export function resolveBudget(...layers: (BudgetPolicy | undefined)[]): Readonly
     }
   }
   if (result.minimumOutputTokens !== undefined && result.maxOutputTokens !== undefined && result.minimumOutputTokens > result.maxOutputTokens) throw new Error('minimumOutputTokens exceeds maxOutputTokens')
+  if (result.inputTargetTokens !== undefined && result.contextWindowTokens === undefined) throw new Error('context capacity must be explicitly configured')
   if (result.contextWindowTokens !== undefined && result.maxOutputTokens === undefined) throw new Error('context capacity requires maxOutputTokens')
   return Object.freeze(result)
 }

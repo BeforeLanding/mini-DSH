@@ -26,6 +26,10 @@ export class LlmRuntime {
         }
     }
 
+    capacity(selection: ModelSelection) {
+        const { provider, model } = normalizeSelection(selection)
+        return this.#providers.get(provider)?.capabilities?.[model]?.contextWindowTokens
+    }
     models() {
         const out: string[] = []
         for (const [provider, adapter] of this.#providers) {

@@ -16,7 +16,7 @@ export interface ChatRequest {
   signal?: AbortSignal; onReasoning?: (chunk: string) => void; onContent?: (chunk: string) => void
 }
 export interface ChatResponse { usage?: Usage; finishReason?: string; complete?: boolean; content?: string; reasoningContent?: string; toolCalls?: ToolCall[] }
-export interface Adapter { models?: string[]; chat(request: ChatRequest): Promise<ChatResponse> }
+export interface Adapter { capabilities?: Record<string, { contextWindowTokens: number }>; models?: string[]; chat(request: ChatRequest): Promise<ChatResponse> }
 export interface RunOptions {
   budget?: BudgetPolicy
   signal?: AbortSignal; onReasoning?: (chunk: string) => void; onContent?: (chunk: string) => void
@@ -47,6 +47,7 @@ export interface EventData {
   'run/start': { state: RunState }
   'run/finish': { state: RunState }
   'model/start': { taskId: string; runId: string; requestId: string; estimatedInputTokens?: number }
+  'context/projection': { estimatedInputTokens: number; reservedOutputTokens: number; safetyMarginTokens: number; removedTaskIds: string[] }
   'model/fragment': { requestId: string; content: string; reasoningContent: string }
   'model/end': { requestId: string; complete: boolean; finishReason?: string }
   'model/usage': { taskId: string; runId: string; requestId: string; usage: Usage }

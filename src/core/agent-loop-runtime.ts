@@ -1,3 +1,4 @@
+import { ContextBudgetRuntime } from './context-runtime.js'
 import { estimateInput, estimateUsage } from './token-estimator.js'
 import { StreamJournal } from './stream-journal.js'
 import { ModelStreamError } from './model-error.js'
@@ -16,8 +17,8 @@ export class AgentLoopRuntime {
     sessions: Pick<SessionRuntime, keyof SessionRuntime>
     systemPrompt: Pick<SystemPromptRuntime, "assemble">
     tools: Pick<ToolRuntime, "schemas" | "execute" | "renderResult">
-    llm: Pick<LlmRuntime, "chat">
-    constructor({ sessions, systemPrompt, tools, llm }: { sessions: Pick<SessionRuntime, keyof SessionRuntime>; systemPrompt: Pick<SystemPromptRuntime, "assemble">; tools: Pick<ToolRuntime, "schemas" | "execute" | "renderResult">; llm: Pick<LlmRuntime, "chat"> }) {
+    llm: Pick<LlmRuntime, "chat" | "capacity">
+    constructor({ sessions, systemPrompt, tools, llm }: { sessions: Pick<SessionRuntime, keyof SessionRuntime>; systemPrompt: Pick<SystemPromptRuntime, "assemble">; tools: Pick<ToolRuntime, "schemas" | "execute" | "renderResult">; llm: Pick<LlmRuntime, "chat" | "capacity"> }) {
         this.sessions = sessions
         this.systemPrompt = systemPrompt
         this.tools = tools
@@ -25,7 +26,9 @@ export class AgentLoopRuntime {
     }
 
     async run(agent: Agent, input: string, { signal, onReasoning, onContent, onToolCall, onToolResult, budget }: RunOptions = {}) {
-        const policy = resolveBudget(agent.budget, budget)
+        const configured = { ...agent.budget, ...budget }
+        const capacity = configured.contextWindowTokens ?? (configured.inputTargetTokens !== undefined ? this.llm.capacity(agent.model) : undefined)
+        const policy = resolveBudget(capacity === undefined ? undefined : { contextWindowTokens: capacity }, agent.budget, budget)
         const sessionId = agent.sessionId
 
         const state = this.sessions.beginRun(sessionId, policy, typeof agent.model === 'string' ? agent.model : JSON.stringify(agent.model))
@@ -51,10 +54,12 @@ export class AgentLoopRuntime {
             })
             //step2: Assemble the system prompt based on the current agent, session ID, and step number. This prompt will guide the agent's reasoning and decision-making process.
 
-            const messages = this.sessions.deriveMessages(sessionId)
-
             const schemas = this.tools.schemas()
-            const estimatedInputTokens = estimateInput({ system, messages, tools: schemas })
+            const projection = new ContextBudgetRuntime().project(this.sessions.visibleEvents(sessionId), state.taskId,
+                { system, tools: schemas, maxOutputTokens: policy.maxOutputTokens }, policy, events => this.sessions.deriveMessages(sessionId, events))
+            const { messages, estimatedInputTokens } = projection
+            state.removedTaskIds = [...new Set([...state.removedTaskIds, ...projection.removedTaskIds])]
+            append(sessionId, 'context/projection', { estimatedInputTokens, reservedOutputTokens: projection.reservedOutputTokens, safetyMarginTokens: projection.safetyMarginTokens, removedTaskIds: projection.removedTaskIds })
             state.estimatedInputTokens = estimatedInputTokens
             state.counters.modelRequests++
             const requestId = randomUUID()

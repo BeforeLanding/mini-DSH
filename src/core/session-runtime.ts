@@ -170,8 +170,7 @@ export class SessionRuntime {
     }
 
     // Derive messages from the session events for a given session ID
-    deriveMessages(id: string) {
-        const events = this.visibleEvents(id)
+    deriveMessages(id: string, events = this.visibleEvents(id)) {
         const messages: Message[] = []
 
         for (const event of events) {

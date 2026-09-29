@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { estimateInput, estimateText } from '../src/core/token-estimator.js'
 import { harness } from './harness.js'
-import { assertToolProtocol, groupHistory } from '../src/core/context-runtime.js'
+import { assertToolProtocol, groupHistory, ContextBudgetRuntime } from '../src/core/context-runtime.js'
 test('token estimator covers Unicode, schemas, reasoning and protocol envelope', () => {
   assert.equal(estimateText('abc'), 1)
   assert.equal(estimateText('中文🙂'), 3)
@@ -49,4 +49,22 @@ test('missing usage and interrupted streams record estimated nonzero consumption
   await h.agent.send('next')
   assert.equal(h.sessions.latestRun(h.session.id)?.usage[0].source, 'estimated')
   done()
+})
+test('request projection drops oldest complete tasks, preserves raw events and current task', async () => {
+  const h = harness(async () => ({ content: 'answer' }))
+  await h.agent.send('oldest '.repeat(200))
+  const oldest = h.sessions.latestRun(h.session.id)!.taskId
+  await h.agent.send('middle '.repeat(200))
+  const middle = h.sessions.latestRun(h.session.id)!.taskId
+  await h.agent.send('current')
+  const current = h.sessions.latestRun(h.session.id)!.taskId
+  const before = structuredClone(h.session.events)
+  const project = () => new ContextBudgetRuntime().project(h.sessions.visibleEvents(h.session.id), current, { system: 'mandatory policy', maxOutputTokens: 10 },
+    { contextWindowTokens: 4000, inputTargetTokens: 500 }, events => h.sessions.deriveMessages(h.session.id, events))
+  const result = project()
+  assert.deepEqual(result.removedTaskIds, [oldest, middle])
+  assert.equal(result.messages[0].content, 'current')
+  assert.ok(result.fits)
+  assert.deepEqual(project(), result)
+  assert.deepEqual(h.session.events, before)
 })

@@ -13,6 +13,7 @@ class LlmService extends Service {
         return this.runtime.register(...args)
     }
 
+    capacity(...args: Parameters<LlmRuntime['capacity']>) { return this.runtime.capacity(...args) }
     models() {
         return this.runtime.models()
     }

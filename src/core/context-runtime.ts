@@ -1,4 +1,7 @@
-import type { Message, SessionEvent } from './contracts.js'
+import type { ChatRequest, Message, SessionEvent } from './contracts.js'
+import type { BudgetPolicy } from './budget.js'
+import { BudgetStop } from './budget.js'
+import { estimateInput } from './token-estimator.js'
 export interface HistoryGroup { taskId: string; events: SessionEvent[]; complete: boolean; protected: boolean }
 export function assertToolProtocol(messages: Message[]) {
   const pending = new Set<string>()
@@ -37,4 +40,30 @@ export function groupHistory(events: SessionEvent[], currentTaskId: string): His
     if (calls.size || !group.complete) group.protected = true
   }
   return [...groups.values()]
+}
+export class ContextBudgetRuntime {
+  project(events: SessionEvent[], taskId: string, request: ChatRequest, policy: Readonly<BudgetPolicy>, derive: (events: SessionEvent[]) => Message[]) {
+    const groups = groupHistory(events, taskId)
+    const removedTaskIds: string[] = []
+    let selected = [...groups]
+    const reservedOutputTokens = request.maxOutputTokens ?? 0
+    const measure = () => {
+      const messages = derive(selected.flatMap(g => g.events))
+      const estimatedInputTokens = estimateInput({ ...request, messages })
+      const safetyMarginTokens = Math.max(policy.safetyMarginTokens ?? 2048, Math.ceil(estimatedInputTokens * 0.1))
+      const fits = (policy.inputTargetTokens === undefined || estimatedInputTokens <= policy.inputTargetTokens) &&
+        (policy.contextWindowTokens === undefined || estimatedInputTokens + reservedOutputTokens + safetyMarginTokens <= policy.contextWindowTokens)
+      return { messages, estimatedInputTokens, safetyMarginTokens, fits }
+    }
+    let projection = measure()
+    for (const group of groups) {
+      if (projection.fits) break
+      if (group.protected || !group.complete) continue
+      selected = selected.filter(g => g !== group)
+      removedTaskIds.push(group.taskId)
+      projection = measure()
+    }
+    assertToolProtocol(projection.messages)
+    return { ...projection, removedTaskIds, reservedOutputTokens }
+  }
 }
