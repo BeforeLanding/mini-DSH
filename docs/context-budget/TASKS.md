@@ -112,8 +112,8 @@
 - 依赖：CB-05、CB-06、CB-07、CB-08、CB-12。
 - 行为：同 task 新 run，每段额度按 PLAN；未执行调用有 skipped 结果，模型重新规划；显示本段和任务累计用量；未知副作用不自动重试。
 - 验证：预算停止→continue→完成；不重复用户输入/原工具；上下文保护跨 run；unknown 副作用不自动重试；context_overflow 不因额度刷新被忽略。
-- 状态：todo。
-- 证据：尚无。
+- 状态：in_progress（2026-09-29）。
+- 证据：agent.continue 同task新run关联previousRunId，每段独立计数，task累计及续跑数；不重复用户输入/旧工具；跨run上下文保护，completed/unchanged context/unknown拒绝。修复复用call ID的按发生顺序配对。pnpm check / test 50/50 通过；CLI入口下一步。
 
 ## CB-09 CLI 与用户文档
 - 关联：R-01、R-08、R-09；M4；D-05、D-06。

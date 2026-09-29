@@ -112,3 +112,6 @@ RunBudgetRuntime 可注入单调时钟、组合signal、主动deadline、模型�
 
 ### CB-08 累计token（2026-09-29）
 请求前预留完整输入与最低输出、余额降低max_tokens；actual/estimated均累计重复输入，真实超估算停止后续调度并补齐结果；取消/失败保留不确定消耗。pnpm check / test 48/48 通过，验证次数/token/context停止优先级。
+
+### CB-13 续跑核心（2026-09-29）
+agent.continue 同task新run关联previousRunId，每段独立计数，task累计及续跑数；不重复用户输入/旧工具；跨run上下文保护，completed/unchanged context/unknown拒绝。修复复用call ID的按发生顺序配对。pnpm check / test 50/50 通过；CLI入口下一步。

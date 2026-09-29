@@ -1,3 +1,4 @@
+import { pendingTools } from './pending-tools.js'
 import { estimateUsage } from './token-estimator.js'
 import path from 'node:path'
 import { parseLog } from './event-store.js'
@@ -31,15 +32,9 @@ export class SessionRuntime {
         this.#sessions.set(id, session)
         this.attachStore(id, store, true)
         const visible = this.visibleEvents(id)
-        for (const event of visible) {
-            if (event.type !== 'assistant/tool_calls') continue
-            for (const call of event.data.toolCalls) {
-                const hasResult = visible.some(e => e.type === 'tool/result' && e.runId === event.runId && e.data.toolCallId === call.id)
-                if (hasResult) continue
-                const started = visible.some(e => e.type === 'tool/start' && e.runId === event.runId && e.data.toolCallId === call.id)
-                this.append(id, 'tool/result', { toolCallId: call.id, name: call.name, isError: true,
-                    status: started ? 'unknown' : 'skipped', content: started ? 'ToolError: unknown outcome after recovery; verify side effects before continuing' : 'ToolError: skipped before execution after recovery' }, event)
-            }
+        for (const { call, scope, started } of pendingTools(visible)) {
+            this.append(id, 'tool/result', { toolCallId: call.id, name: call.name, isError: true,
+                status: started ? 'unknown' : 'skipped', content: started ? 'ToolError: unknown outcome after recovery; verify side effects before continuing' : 'ToolError: skipped before execution after recovery' }, scope)
         }
         for (const event of visible) {
             if (event.type !== 'model/start' || visible.some(e => e.type === 'model/usage' && e.data.requestId === event.data.requestId)) continue
@@ -90,9 +85,19 @@ export class SessionRuntime {
         }
         return state
     }
-    beginRun(id: string, policy: Readonly<BudgetPolicy>, model: string): RunState {
+    beginRun(id: string, policy: Readonly<BudgetPolicy>, model: string, continuing = false): RunState {
         if (this.latestRun(id)?.status === 'running') throw new Error('session is already running')
-        const state: RunState = { sessionId: id, taskId: randomUUID(), runId: randomUUID(), model,
+        const previous = this.latestRun(id)
+        if (continuing) {
+            if (!previous) throw new Error('no task to continue')
+            if (previous.status === 'completed') throw new Error('task already completed')
+            const unknown = this.visibleEvents(id).some(e => e.taskId === previous.taskId && e.type === 'tool/result' && e.data.status === 'unknown')
+            if (unknown) throw new Error('unknown tool outcome; verify side effects before starting a new task; automatic continuation is blocked')
+            const contextKeys = ['contextWindowTokens', 'inputTargetTokens', 'maxOutputTokens', 'safetyMarginTokens'] as const
+            if (previous.status === 'context_overflow' && contextKeys.every(key => policy[key] === previous.policy[key]) && model === previous.model) throw new Error('context_overflow cannot continue with unchanged context configuration')
+        }
+        const state: RunState = { sessionId: id, taskId: continuing ? previous!.taskId : randomUUID(), runId: randomUUID(), model,
+            ...(continuing ? { previousRunId: previous!.runId } : {}),
             policy, counters: emptyCounters(), status: 'running', usage: [], removedTaskIds: [] }
         this.append(id, 'run/start', { state }, state)
         return state
@@ -101,6 +106,13 @@ export class SessionRuntime {
         if (this.visibleEvents(state.sessionId).some(e => e.type === 'run/finish' && e.data.state.runId === state.runId)) return
         state.status = status
         this.append(state.sessionId, 'run/finish', { state }, state)
+    }
+    taskState(id: string, taskId: string) {
+        const events = this.visibleEvents(id)
+        const runs = events.filter(e => e.type === 'run/start' && e.data.state.taskId === taskId)
+        const latest = [...events].reverse().find(e => e.type === 'run/finish' && e.data.state.taskId === taskId)
+        return { taskId, runIds: runs.map(e => e.type === 'run/start' ? e.data.state.runId : ''), continuations: Math.max(0, runs.length - 1),
+            status: latest?.type === 'run/finish' ? latest.data.state.status : 'running', counters: this.taskCounters(id, taskId) }
     }
     taskCounters(id: string, taskId: string): Counters {
         const result = emptyCounters()

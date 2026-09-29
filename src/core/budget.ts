@@ -42,7 +42,7 @@ export interface Usage { inputTokens: number; outputTokens: number; totalTokens:
 export interface Counters { modelRequests: number; toolCalls: number; inputTokens: number; outputTokens: number; totalTokens: number; activeDurationMs: number; approvalDurationMs: number }
 export const emptyCounters = (): Counters => ({ modelRequests: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, activeDurationMs: 0, approvalDurationMs: 0 })
 export interface RunState {
-  sessionId: string; taskId: string; runId: string; model: string
+  sessionId: string; taskId: string; runId: string; previousRunId?: string; model: string
   policy: Readonly<BudgetPolicy>; counters: Counters; status: 'running' | StopReason
   usage: Usage[]; removedTaskIds: string[]; estimatedInputTokens?: number
 }

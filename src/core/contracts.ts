@@ -26,8 +26,9 @@ export interface RunOptions {
 export interface Agent {
   id: string; name: string; sessionId: string; model: ModelSelection; budget?: BudgetPolicy
   send(input: string, options?: RunOptions): Promise<string>
+  continue(options?: RunOptions): Promise<string>
 }
-export interface Loop { run(agent: Agent, input: string, options?: RunOptions): Promise<string> }
+export interface Loop { run(agent: Agent, input: string | undefined, options?: RunOptions): Promise<string> }
 export interface Execution { approval?: <T>(work: () => Promise<T>) => Promise<T>; signal: AbortSignal; sessionId?: string; toolCallId?: string; agent?: Agent }
 export interface ContentBlock { type: string; text?: string; [key: string]: unknown }
 export interface ToolResult { value: unknown; content: ContentBlock[]; isError: boolean }

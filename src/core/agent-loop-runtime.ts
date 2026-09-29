@@ -1,3 +1,4 @@
+import { pendingTools } from './pending-tools.js'
 import { RunBudgetRuntime } from './run-budget-runtime.js'
 import type { Clock } from './run-budget-runtime.js'
 import { ContextBudgetRuntime } from './context-runtime.js'
@@ -29,17 +30,17 @@ export class AgentLoopRuntime {
 
     clock?: Clock
     budget?: import('./budget.js').BudgetPolicy
-    async run(agent: Agent, input: string, { signal, onReasoning, onContent, onToolCall, onToolResult, budget }: RunOptions = {}) {
+    async run(agent: Agent, input: string | undefined, { signal, onReasoning, onContent, onToolCall, onToolResult, budget }: RunOptions = {}) {
         const configured = { ...this.budget, ...agent.budget, ...budget }
         const capacity = configured.contextWindowTokens ?? (configured.inputTargetTokens !== undefined ? this.llm.capacity(agent.model) : undefined)
         const policy = resolveBudget(capacity === undefined ? undefined : { contextWindowTokens: capacity }, this.budget, agent.budget, budget)
         const sessionId = agent.sessionId
 
-        const state = this.sessions.beginRun(sessionId, policy, typeof agent.model === 'string' ? agent.model : JSON.stringify(agent.model))
+        const state = this.sessions.beginRun(sessionId, policy, typeof agent.model === 'string' ? agent.model : JSON.stringify(agent.model), input === undefined)
         const control = new RunBudgetRuntime(policy, state, signal, this.clock)
         const append: SessionRuntime['append'] = (id, type, data) => this.sessions.append(id, type, data, state)
         try {
-        append(sessionId, 'user/message', { content: input })
+        if (input !== undefined) append(sessionId, 'user/message', { content: input })
         //step1: Append the user's input message to the session's event log, marking the start of the agent's reasoning process
 
         let step = 0
@@ -186,14 +187,10 @@ export class AgentLoopRuntime {
         }
         } catch (error) {
             const events = this.sessions.visibleEvents(sessionId)
-            for (const event of events) {
-                if (event.runId !== state.runId || event.type !== 'assistant/tool_calls') continue
-                for (const call of event.data.toolCalls) {
-                    if (events.some(e => e.runId === state.runId && e.type === 'tool/result' && e.data.toolCallId === call.id)) continue
-                    const started = events.some(e => e.runId === state.runId && e.type === 'tool/start' && e.data.toolCallId === call.id)
-                    append(sessionId, 'tool/result', { toolCallId: call.id, name: call.name, isError: true, status: started ? 'unknown' : 'skipped',
-                        content: 'ToolError: ' + (started ? 'unknown outcome' : 'skipped') + ' after ' + (error instanceof BudgetStop ? error.reason : 'error') })
-                }
+            for (const { call, scope, started } of pendingTools(events)) {
+                if (scope.runId !== state.runId) continue
+                append(sessionId, 'tool/result', { toolCallId: call.id, name: call.name, isError: true, status: started ? 'unknown' : 'skipped',
+                    content: 'ToolError: ' + (started ? 'unknown outcome' : 'skipped') + ' after ' + (error instanceof BudgetStop ? error.reason : 'error') })
             }
             state.counters.approvalDurationMs = control.approvalDurationMs
                 state.counters.activeDurationMs = control.activeDurationMs

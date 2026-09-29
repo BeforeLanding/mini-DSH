@@ -31,6 +31,7 @@ export class AgentRuntime {
             model,
             budget,
 
+            async continue(options = {}) { return loop.run(agent, undefined, options) },
             async send(input, options = {}) {
                 return loop.run(agent, input, options)
             },

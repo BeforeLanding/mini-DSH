@@ -18,6 +18,7 @@ class SessionsService extends Service {
     latestRun(...args: Parameters<SessionRuntime['latestRun']>) { return this.runtime.latestRun(...args) }
     beginRun(...args: Parameters<SessionRuntime['beginRun']>) { return this.runtime.beginRun(...args) }
     finishRun(...args: Parameters<SessionRuntime['finishRun']>) { return this.runtime.finishRun(...args) }
+    taskState(...args: Parameters<SessionRuntime['taskState']>) { return this.runtime.taskState(...args) }
     taskCounters(...args: Parameters<SessionRuntime['taskCounters']>) { return this.runtime.taskCounters(...args) }
     create(...args: Parameters<SessionRuntime['create']>) {
         return this.runtime.create(...args)
