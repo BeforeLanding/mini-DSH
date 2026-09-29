@@ -51,6 +51,7 @@ export class AgentLoopRuntime {
 
             state.counters.modelRequests++
             append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId: randomUUID() })
+            await this.sessions.flush(sessionId)
             const response = await this.llm.chat(
                 {
                     system,
@@ -71,6 +72,7 @@ export class AgentLoopRuntime {
                 append(sessionId, 'assistant/message', { content, reasoningContent: response.reasoningContent })
                 state.counters.activeDurationMs = performance.now() - started
                 this.sessions.finishRun(state, 'completed')
+                await this.sessions.flush(sessionId)
                 return content
             }//step4: If the LLM's response does not include any tool calls, append the assistant's message to the session and return the content. This indicates that the agent has completed its reasoning without needing to invoke any tools.
 
@@ -98,6 +100,7 @@ export class AgentLoopRuntime {
 
                 state.counters.toolCalls++
                 append(sessionId, 'tool/start', { taskId: state.taskId, runId: state.runId, toolCallId: call.id, name: call.name })
+                await this.sessions.flush(sessionId)
                 onToolCall?.(call)
 
                 const result = await this.tools.execute(call.name, call.arguments, {
@@ -128,6 +131,7 @@ export class AgentLoopRuntime {
         } catch (error) {
             state.counters.activeDurationMs = performance.now() - started
             this.sessions.finishRun(state, error instanceof BudgetStop ? error.reason : signal?.aborted ? 'cancelled' : 'error')
+            await this.sessions.flush(sessionId)
             throw error
         }
     }

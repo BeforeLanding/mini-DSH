@@ -1,9 +1,28 @@
+import type { EventStore } from './event-store.js'
 import { emptyCounters } from './budget.js'
 import type { BudgetPolicy, RunState, StopReason, Counters } from './budget.js'
 import type { Arguments, EventData, Session, SessionEvent, Message } from './contracts.js'
 import { randomUUID } from 'node:crypto'
 
 export class SessionRuntime {
+    #stores = new Map<string, EventStore>()
+    #pending = new Map<string, Promise<void>>()
+    attachStore(id: string, store: EventStore, existing = false) {
+        if (this.#stores.has(id)) throw new Error('session already has a store')
+        const session = this.get(id)
+        this.#stores.set(id, store)
+        let pending = Promise.resolve()
+        if (!existing) for (const event of session.events) pending = pending.then(() => store.append(event))
+        this.#pending.set(id, pending)
+        void pending.catch(() => {})
+    }
+    async flush(id: string) { await this.#pending.get(id) }
+    async close() {
+        await Promise.allSettled([...this.#pending.values()])
+        const results = await Promise.allSettled([...this.#stores.values()].map(store => store.close()))
+        const failed = results.find(r => r.status === 'rejected')
+        if (failed?.status === 'rejected') throw failed.reason
+    }
     #sessions = new Map<string, Session>()
 
 
@@ -89,6 +108,12 @@ export class SessionRuntime {
             at: new Date().toISOString(),
         }
         session.events.push(event as SessionEvent)
+        const store = this.#stores.get(id)
+        if (store) {
+            const pending = (this.#pending.get(id) ?? Promise.resolve()).then(() => store.append(event as SessionEvent))
+            this.#pending.set(id, pending)
+            void pending.catch(() => {})
+        }
 
         return event
     }
