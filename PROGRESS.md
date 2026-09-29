@@ -1,5 +1,11 @@
 # 开发进度
 
+### F1 输出额度与历史裁剪联动修复（2026-09-29）
+
+每个候选历史集合依据当前 run 已消耗 token、输入估算和最低输出计算实际额度，再检查输入目标与窗口；不足时才移除最旧完整任务并重新计算。完整历史输入 754、余额 854、窗口 2902 的样例保留全部历史并发送 100 输出额度。原始事件保持不变，当前 task、system/schema 仍不可裁剪。
+
+正常用户权限 pnpm check（46 文件）、pnpm test（58/58，无跳过）和 git diff --check 通过。新增交叉边界回归见 test/context.test.ts；F2、F3 待依次修复。
+
 ### mini coding agent harness 定位修订（2026-09-29）
 
 按用户明确的“仿 DeepSeek Harness 的 mini coding agent harness”定位更新 [开发路线](docs/INTERNSHIP_ROADMAP.md) 及 README、需求/计划入口。保留 F1～F3 及原预算评估；新主线为 M5 边界收尾 → M6 仓库上下文/代码定位/可靠编辑/执行验证 → M7 编程评测，M8 长任务增强按证据选择，M9 求职展示随开发积累。

@@ -60,7 +60,7 @@ export class AgentLoopRuntime {
             control.check()
             const schemas = this.tools.schemas()
             const projection = new ContextBudgetRuntime().project(this.sessions.visibleEvents(sessionId), state.taskId,
-                { system, tools: schemas, maxOutputTokens: policy.maxOutputTokens }, policy, events => this.sessions.deriveMessages(sessionId, events))
+                { system, tools: schemas, maxOutputTokens: policy.maxOutputTokens }, policy, events => this.sessions.deriveMessages(sessionId, events), inputTokens => control.outputAllowance(inputTokens))
             const { messages, estimatedInputTokens } = projection
             state.removedTaskIds = [...new Set([...state.removedTaskIds, ...projection.removedTaskIds])]
             control.check()

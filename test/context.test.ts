@@ -103,3 +103,41 @@ test('oversized current input, system or schemas stop without a model request', 
     assert.equal(h.sessions.latestRun(h.session.id)?.counters.modelRequests, 0)
   }
 })
+
+test('projection uses remaining output allowance before trimming and recalculates after removal', async () => {
+  for (const mode of ['exact', 'below', 'minimum', 'exhausted'] as const) {
+    let captured: import('../src/core/contracts.js').ChatRequest | undefined
+    let calls = 0
+    const h = harness(async request => { captured = request; calls++; return { content: 'ok' } })
+    await h.agent.send('old-context '.repeat(100))
+    const oldTask = h.sessions.latestRun(h.session.id)!.taskId
+    const before = structuredClone(h.session.events)
+    const fullInput = estimateInput({ system: '', tools: [], messages: [...h.sessions.deriveMessages(h.session.id), { role: 'user', content: 'current' }] })
+    const budget = {
+      contextWindowTokens: fullInput + 2048 + 100 - (mode === 'below' ? 1 : 0),
+      maxOutputTokens: 1000, minimumOutputTokens: mode === 'minimum' ? 101 : 1,
+      maxTotalTokens: mode === 'exhausted' ? 0 : fullInput + 100,
+    }
+    if (mode === 'exhausted' || mode === 'below') {
+      await assert.rejects(h.agent.send('current', { budget }), mode === 'exhausted' ? /token_budget/ : /context_overflow/)
+      assert.equal(calls, 1)
+      if (mode === 'below') {
+        const projection = h.session.events.filter(e => e.type === 'context/projection').at(-1)!
+        assert.deepEqual(projection.data.removedTaskIds, [oldTask])
+        assert.equal(projection.data.reservedOutputTokens, budget.maxTotalTokens - projection.data.estimatedInputTokens)
+      }
+    } else {
+      await h.agent.send('current', { budget })
+      const projection = h.session.events.filter(e => e.type === 'context/projection').at(-1)!
+      assert.equal(projection.type, 'context/projection')
+      if (projection.type !== 'context/projection') throw new Error('missing projection')
+      assert.deepEqual(projection.data.removedTaskIds, mode === 'exact' ? [] : [oldTask])
+      assert.equal(captured!.messages!.length, mode === 'exact' ? 3 : 1)
+      assert.equal(captured!.maxOutputTokens, budget.maxTotalTokens - projection.data.estimatedInputTokens)
+      assert.equal(projection.data.reservedOutputTokens, captured!.maxOutputTokens)
+      if (mode === 'exact') assert.equal(captured!.maxOutputTokens, 100)
+      assert.ok(projection.data.estimatedInputTokens + projection.data.reservedOutputTokens + projection.data.safetyMarginTokens <= budget.contextWindowTokens)
+    }
+    assert.deepEqual(h.session.events.slice(0, before.length), before)
+  }
+})

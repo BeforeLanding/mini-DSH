@@ -42,18 +42,27 @@ export function groupHistory(events: SessionEvent[], currentTaskId: string): His
   return [...groups.values()]
 }
 export class ContextBudgetRuntime {
-  project(events: SessionEvent[], taskId: string, request: ChatRequest, policy: Readonly<BudgetPolicy>, derive: (events: SessionEvent[]) => Message[]) {
+  project(events: SessionEvent[], taskId: string, request: ChatRequest, policy: Readonly<BudgetPolicy>, derive: (events: SessionEvent[]) => Message[], outputAllowance?: (inputTokens: number) => number | undefined) {
     const groups = groupHistory(events, taskId)
     const removedTaskIds: string[] = []
     let selected = [...groups]
-    const reservedOutputTokens = request.maxOutputTokens ?? 0
     const measure = () => {
       const messages = derive(selected.flatMap(g => g.events))
       const estimatedInputTokens = estimateInput({ ...request, messages })
+      let reservedOutputTokens = request.maxOutputTokens ?? 0
+      let tokenFits = true
+      if (outputAllowance) {
+        try { reservedOutputTokens = outputAllowance(estimatedInputTokens) ?? 0 }
+        catch (error) {
+          if (!(error instanceof BudgetStop) || error.reason !== 'token_budget') throw error
+          tokenFits = false
+          reservedOutputTokens = 0
+        }
+      }
       const safetyMarginTokens = Math.max(policy.safetyMarginTokens ?? 2048, Math.ceil(estimatedInputTokens * 0.1))
-      const fits = (policy.inputTargetTokens === undefined || estimatedInputTokens <= policy.inputTargetTokens) &&
+      const fits = tokenFits && (policy.inputTargetTokens === undefined || estimatedInputTokens <= policy.inputTargetTokens) &&
         (policy.contextWindowTokens === undefined || estimatedInputTokens + reservedOutputTokens + safetyMarginTokens <= policy.contextWindowTokens)
-      return { messages, estimatedInputTokens, safetyMarginTokens, fits }
+      return { messages, estimatedInputTokens, safetyMarginTokens, reservedOutputTokens, fits }
     }
     let projection = measure()
     for (const group of groups) {
@@ -64,6 +73,6 @@ export class ContextBudgetRuntime {
       projection = measure()
     }
     assertToolProtocol(projection.messages)
-    return { ...projection, removedTaskIds, reservedOutputTokens }
+    return { ...projection, removedTaskIds }
   }
 }
