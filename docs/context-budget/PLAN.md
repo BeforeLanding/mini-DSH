@@ -1,9 +1,9 @@
 # 上下文与执行预算管理：计划与设计
 
-更新：2026-09-28。技术路线与参数基线已确定，功能尚未实施。需求见 [REQUIREMENTS](REQUIREMENTS.md)，执行状态见 [TASKS](TASKS.md) 和 [PROGRESS](../../PROGRESS.md)。本文件是技术决策和默认参数的唯一维护位置；初值可配置，未经真实任务质量/性能实验。
+更新：2026-09-29。M0 至 M4 的功能已实现，验收证据见 TASKS/PROGRESS。需求见 [REQUIREMENTS](REQUIREMENTS.md)，执行状态见 [TASKS](TASKS.md) 和 [PROGRESS](../../PROGRESS.md)。本文件是技术决策和默认参数的唯一维护位置；初值可配置，已测量模拟 JSONL 追加成本；未经付费模型的真实任务质量实验。
 
-## 当前源码基线
-本地 main / c5fc9c4，未核验远程最新提交。Session 在内存中保存事件并派生全部消息；Loop 无固定步数上限；DeepSeek 适配器未归一化 usage 或限制输出。取消会补齐未执行工具结果。Bash 已有 30 秒超时和 32 KiB 输出截断，Context7 已配置 60 秒超时。CLI 尚无预算、持久化恢复和继续命令。
+## 当前实现
+严格 TypeScript / NodeNext 编译产物运行；Session 使用版本化 JSONL 事件恢复；Loop 实现上下文投影、执行预算与同 task 续跑；DeepSeek 归一化 usage 并限制输出；CLI 提供 /budget、/continue 和 session 恢复。原始基线及逐步变更保留在 PROGRESS。
 
 ## 实施顺序与里程碑
 1. M0 文档基线：已完成；规则、需求、计划、任务和进度可追溯。
@@ -120,7 +120,7 @@
 - 保存 Harness 实际捕获内容；不自动解除 Bash 的 32 KiB 截断。日志不提交仓库，凭证不写事件；崩溃恢复不是文件系统快照。
 
 ## 官方依据
-核验日期：2026-09-28；仅代表文档核验，协议实现待测试。开发时模型版本变化需复核。
+核验日期：2026-09-28；Chat Completions 于 2026-09-29 复核并通过模拟 SSE 协议测试。开发时模型版本变化需复核。
 - [DeepSeek 模型说明](https://api-docs.deepseek.com/quick_start/pricing/)：当前窗口 1M、最大输出 384K，旧 deepseek-v4-flash 名称已映射新版 Flash。
 - [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)：max_tokens、usage、reasoning 细分及流末包；[Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/)：工具模式的 reasoning 回传。
 - [Token 说明](https://api-docs.deepseek.com/quick_start/token_usage/)：字符比例只是近似；官方离线 tokenizer 与当前聊天模板的一致性尚未验证。

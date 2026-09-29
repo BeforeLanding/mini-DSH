@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
-const roots = ['dist/src', 'dist/test', 'scripts']
+const roots = ['dist/src', 'dist/test', 'dist/scripts', 'scripts']
 const files = []
 if (fs.existsSync('dist/plugins.config.js')) files.push(path.resolve('dist/plugins.config.js'))
 for (const root of roots) walk(path.resolve(root))

@@ -1,8 +1,8 @@
 # 开发进度
 
-更新：2026-09-28。文档基线完成；TypeScript 迁移和预算功能尚未实施。
+更新：2026-09-29。五阶段功能已实现并逐步提交推送；本地 57/57 回归通过。最终提交的跨平台 CI 正在核验。
 
-当前状态：CB-17 恢复开发基线已完成；下一步 CB-15 TypeScript 工具链与迁移。历史 E-01 失败记录保留。
+当前状态：严格 TS 迁移、契约/持久化、上下文管理、执行预算、续跑/CLI 已完成；原 22 条测试保留。历史基线及失败记录保留在下文，当前验收以末尾 E-03 为准。
 
 ## 已完成
 - 仓库规则、需求、计划及任务清单已建立；TypeScript / Node ESM、Cordis、node:test、JSONL、请求投影和同 task 新 run 的 /continue 路线已确定。
@@ -39,10 +39,7 @@
 - 本步 18 个本地文档链接、文档空白和 git diff --check 通过；CB-17 标记 done，CB-15 保持 todo。
 
 ## 下一步
-1. CB-15a：核验并锁定 TypeScript 工具链，建立编译产物执行路径，验证原行为后提交。
-2. CB-15b 至 d：分批迁移核心、插件/模型/工具、测试及 CI，每批验证并提交。
-3. CB-01 开始按计划推进契约、事件存储、请求投影、预算与继续；任务完成回填实际证据。
-4. 后续核验编译器/类型依赖版本、协议兼容、估算误差、存储性能与实际任务质量。
+核验最终 GitHub Windows/Ubuntu × Node22/24 四组合 CI，并回填 CB-10。后续真实模型质量与 tokenizer 校准属于额外实验，不影响本次模拟边界验收。
 
 ## 更新规则
 本文件只保存当前状态、重要验证/失败、阻塞和下一步；任务级行为/证据维护在 [TASKS](docs/context-budget/TASKS.md)。参数和设计维护在 PLAN，验收维护在 REQUIREMENTS。done 必须有真实验收证据，设计完成不等于功能完成。
@@ -127,3 +124,20 @@ JSONL串行sync、单写入者锁、写入故障停止、尾部隔离和严格�
 
 ### CB-10 持久化与取消边界加固（2026-09-29）
 写盘失败禁止后续调度，未确认终态不报告completed；损坏UTF-8原字节隔离；模型载荷/重复调用校验；工具组合signal与Esc审批取消、超长timer回归通过。pnpm check / test 57/57通过，含待单独提交的持久化集成样本；最终CI待核验。
+
+## 最终集成验收 E-03（2026-09-29）
+- Windows / Node v24.16.0：pnpm check 类型/构建/46 文件语法通过；pnpm test 57/57，无跳过；全部模型请求为模拟，无 API Key 或付费请求。
+- 真实 Cordis + JSONL + 文件工具：预算停止后关闭服务、重新读取日志并装配新实例，/continue 同 task 新 run；已写文件的 mtime 不变，任务累计模型 3 次/工具 1 次，内存/磁盘规范化事件一致。
+- R-01/R-04：test/budget.test.ts 覆盖非法/零/N 额度、优先级、快照、最后回答与批量跳过；旧无预算 20 次工具回归保留。
+- R-02/R-03：test/context.test.ts 覆盖完整请求估算、中文/schema/reasoning、容量等号/超界、模型切换、完整任务投影、原始事件不变与当前任务保护。
+- R-05：test/deadline.test.ts 和 test/cli.test.ts 覆盖单调主动时间、审批暂停/超时、请求超时、取消竞态、Esc 取消审批、超长 timer 及监听器释放。
+- R-06/R-07：test/model.test.ts、context/budget 覆盖 usage-only/重复末包、max_tokens、实际/估算结算、重复输入、截断与无效调用不执行。
+- R-08/R-09：budget/cli/core/integration 覆盖唯一终态、run/task 状态、预算/裁剪范围、模型路由、插件释放与原始回归。
+- R-10/R-11：test/store.test.ts 覆盖 sync 屏障、单写入者、写盘错误停止、严格版本/载荷/序号、尾部原字节备份、unknown/skipped、reset/workspace 与恢复无副作用。
+- R-12：test/continue.test.ts、cli/integration 覆盖新 run 额度、已完成调用不重放、跨 run 保护与 unknown/unchanged context 拒绝。
+- R-13：strict NodeNext/noEmitOnError/allowJs=false；源码、插件配置、测试和性能脚本 TS 化，编译产物运行；CI 四组合执行相同 check/test。
+- 性能命令：pnpm build 后 node dist/scripts/benchmark-store.js 1000；每个事件 flush+sync，使用纯模拟 256 字符载荷；结果记录于 CB-11。仅代表单机样本，不承诺设备掉电保证。
+- 已知限制：估算器不等于供应商 tokenizer；非协作第三方工具只能停止等待；unknown 副作用需要外部核验，writer.lock 不自动清除；Biome 尚未作为门槛（README 已说明）。
+
+### CB-11 JSONL性能验收（2026-09-29）
+纯模拟1000次sync追加样本，约466KB；Windows Node24样本645.25ms，平均0.645ms/次，读取校验3.86ms。可复现脚本scripts/benchmark-store.ts；严格损坏/故障/恢复测试通过，单机样本不保证掉电耐久性。

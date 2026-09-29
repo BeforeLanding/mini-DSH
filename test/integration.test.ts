@@ -16,6 +16,8 @@ import * as sandbox from '../src/plugins/sandbox.js'
 import * as bash from '../src/tools/bash.js'
 import * as files from '../src/tools/files.js'
 import * as externalPlugins from '../src/plugins/external-plugins.js'
+import { JsonlStore } from '../src/core/event-store.js'
+import { assertToolProtocol } from '../src/core/context-runtime.js'
 
 test('the whole plugin stack boots on Cordis and runs a full model -> tool -> model turn', async () => {
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-smoke-'))
@@ -105,5 +107,55 @@ test('external plugin loader tolerates an optional failure and enforces a requir
     console.log = originalLog
     console.error = originalError
     await root.fiber.dispose()
+  }
+})
+test('Cordis persists a stopped file task then resumes without repeating the completed write', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-persistent-'))
+  const directory = path.join(temp, 'sessions'), workspace = path.join(temp, 'workspace')
+  await fs.mkdir(workspace)
+  const roots: Context[] = [], stores: JsonlStore[] = []
+  async function boot() {
+    const root = new Context(); roots.push(root)
+    for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
+    await root.plugin(sandbox, { workspace, autoApprove: true }); await root.plugin(files, { workspace })
+    return root
+  }
+  try {
+    const first = await boot(), session = first.sessions.create({ workspace: await fs.realpath(workspace) })
+    const store = await JsonlStore.open(directory, session.id); stores.push(store); first.sessions.attachStore(session.id, store)
+    let modelRequests = 0, writes = 0
+    first.llm.register('mock', { models: ['test'], chat: async () => ++modelRequests === 1
+      ? { toolCalls: [{ id: 'write', name: 'write_file', arguments: { path: 'once.txt', content: 'synthetic side effect' } }] }
+      : { toolCalls: [{ id: 'read', name: 'read_file', arguments: { path: 'once.txt' } }] } })
+    const agent = first.agents.create({ sessionId: session.id, model: 'mock/test', loop: first.agentLoop, budget: { maxModelRequests: 2 } })
+    await assert.rejects(agent.send('mock file task', { onToolResult: () => { writes++ } }), /max_steps/)
+    const before = first.sessions.latestRun(session.id)!, stat = await fs.stat(path.join(workspace, 'once.txt'))
+    assert.equal(writes, 1)
+    await first.sessions.close(); await first.fiber.dispose()
+    const second = await boot(), reopened = await JsonlStore.open(directory, session.id); stores.push(reopened)
+    await second.sessions.restore(reopened, await fs.realpath(workspace))
+    assert.deepEqual(second.sessions.latestRun(session.id), before)
+    let resumedRequests = 0
+    second.llm.register('mock', { models: ['test'], chat: async ({ messages = [] }) => {
+      resumedRequests++
+      assertToolProtocol(messages)
+      assert.equal(messages.filter(m => m.role === 'user').length, 1)
+      assert.match(messages.filter(m => m.role === 'tool')[0].content ?? '', /wrote once/)
+      return { content: 'completed without repeating write' }
+    } })
+    const resumed = second.agents.create({ sessionId: session.id, model: before.model, loop: second.agentLoop, budget: { maxModelRequests: 2 } })
+    assert.equal(await resumed.continue(), 'completed without repeating write')
+    assert.equal(resumedRequests, 1)
+    assert.equal((await fs.stat(path.join(workspace, 'once.txt'))).mtimeMs, stat.mtimeMs)
+    assert.equal(second.sessions.taskCounters(session.id, before.taskId).toolCalls, 1)
+    assert.equal(second.sessions.taskCounters(session.id, before.taskId).modelRequests, 3)
+    assert.equal(second.sessions.taskState(session.id, before.taskId).continuations, 1)
+    await second.sessions.flush(session.id)
+    assert.deepEqual(await reopened.read(), second.sessions.get(session.id).events)
+    await second.sessions.close()
+  } finally {
+    for (const root of roots) await root.fiber.dispose()
+    for (const store of stores) await store.close()
+    assert.equal(path.dirname(temp), path.resolve(os.tmpdir())); await fs.rm(temp, { recursive: true, force: true })
   }
 })

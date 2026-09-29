@@ -17,6 +17,7 @@
   "include": [
     "src/**/*",
     "test/**/*",
-    "plugins.config.ts"
+    "plugins.config.ts",
+    "scripts/**/*.ts"
   ]
 }
