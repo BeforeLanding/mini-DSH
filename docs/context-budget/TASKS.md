@@ -1,5 +1,12 @@
 # 任务清单
 
+## NX-05a 三个编程 fixture 与独立验收
+- 关联：M6；依赖 NX-01～NX-03。
+- 状态：done（2026-09-29）。
+- 行为：提供边界修复、小功能扩展、跨文件接口修改的初始代码、中文任务、参考解；每次复制到独立临时目录，以工作区外的可信验收器核验实际文件行为。记录修改前基线并验证模拟模型经真实 Cordis 文件/Bash 工具执行失败→修改→重跑。
+- 验证：三个初始状态均失败、三个参考解均通过；错误实现及篡改工作区测试不能伪造通过；重复运行、目录清理及完整回归。
+- 证据：test/fixtures/coding 三套任务/初始代码/参考解/verify；scripts/coding-fixtures.ts / check-coding-fixtures.ts；test/coding-fixtures.test.ts 八条回归。正常用户权限 pnpm check（49 文件）、pnpm test（72/72，无跳过）、pnpm fixtures:check 与 git diff --check 通过。初始 0/3、参考 3/3、预设模拟模型工具流程 3/3；完整基线见 test/fixtures/coding/README.md。没有真实模型质量或本轮跨平台 CI 结论。
+
 ## F3 崩溃恢复的投影观测一致性
 - 关联：R-08、R-11；NX-03、D-08。
 - 状态：done（2026-09-29）。

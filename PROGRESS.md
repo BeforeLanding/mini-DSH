@@ -1,5 +1,13 @@
 # 开发进度
 
+### NX-05a 编程 fixture 与独立验收完成（2026-09-29）
+
+新增 boundary、options、interface 三个无依赖编程任务，包含中文任务、完整初始代码、源码参考解和工作区外的行为验收器。每次运行新建临时目录，只复制初始代码；提供受保护文件完整性核验、10 秒/32 KiB 的可配置验收上界和经路径确认的目录清理。runner 使用 TypeScript，fixture 输入使用可直接运行的 Node ESM，避免引入额外安装/编译依赖。
+
+新增 pnpm fixtures:check 命令：三项初始状态均退出 1（0/3），参考解均退出 0（3/3）；基线记录于 [fixture 说明](test/fixtures/coding/README.md)。真实 Cordis + 文件/Bash 的预设模拟模型流程均通过（3/3），其中 options 演示修复不完整→失败检查→再次编辑→通过。run completed 和独立行为验收分别断言，没有修改生产运行状态/验证事件契约。
+
+八条新增回归覆盖基线/参考解、独立临时目录和清理、真实工具闭环、公开测试篡改、跨文件部分修改、导入提前退出、挂起超时及输出超限。正常用户权限 pnpm check（49 文件）、pnpm test（72/72，无失败或跳过）、pnpm fixtures:check（退出 0）与 git diff --check 通过。模拟模型使用已知参考修改，不代表自主编程成功率；未调用付费 API，尚未核验本次跨平台 CI。下一主线为 NX-12 仓库规则/检查入口上下文和 NX-07 有界读取搜索，NX-05b 与 NX-15 仍未实现。
+
 ### F3 崩溃恢复投影信息修复（2026-09-29）
 
 latestRun 在未完成 run 的事件重放中处理 context/projection：按发生顺序去重合并裁剪任务 ID，恢复最近一次输入估算。Loop 在记录候选投影时更新估算，即使 context_overflow 未调度模型也保持观测一致；候选投影不冒充实际请求或 usage。正常终态快照优先，reset 和同 task 的其他 run 不混入。
