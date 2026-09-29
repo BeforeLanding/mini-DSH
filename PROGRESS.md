@@ -1,5 +1,8 @@
 # 开发进度
 
+### 功能梳理（2026-09-29）
+新增 [本次改动与实现功能](docs/context-budget/CHANGES.md)，按用户五阶段顺序归纳 21 个开发提交、模块职责、CLI/恢复入口、默认值、回归证据和实际边界；README 增加入口。本步仅文档变更，沿用注释清理后的 pnpm check / test 57/57 结果。
+
 ### 注释清理（2026-09-29）
 按用户要求删除已跟踪源码、测试、脚本、CI、环境示例及 README 运行代码块中的注释；URL、正则、字符串和 Markdown 说明保留，实际 .env 未改动。pnpm check 类型/构建/46 文件语法通过，pnpm test 57/57，无跳过；git diff --check 通过。构建产物的 sourceMappingURL 属于调试映射指令，保留既有 sourceMap 配置。
 
