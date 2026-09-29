@@ -1,10 +1,10 @@
 # 任务清单
 
 ## CD-02 修复服务器 GitHub 下载失败
-- 状态：进行中；最新 19f4ec9 的 CI success，但部署 36551890832 在 git clone 连接 github.com:443 超时，未切换版本。
+- 状态：传包修复已实测成功；原 19f4ec9 在 git clone 超时，修复提交 c9f452c 已实际发布，最终验收记录提交后核验最新 main。
 - CD-02a：离线 Git bundle 发布脚本，分 prepare/activate，构建失败或 SHA 不符不得切换；实现与本地验证完成，两个 Bash 脚本语法、真实 bundle 导入、错误 SHA/路径/REVISION 拒绝、pnpm check（65 文件）/test（107/107）和 git diff --check 通过。Windows 无 flock/原生 Linux 软链，本地锁用 fixture 替身，原子激活验收待 b 的 Linux runner 与服务器实际运行；独立提交。
-- CD-02b：Actions 下载 CI SHA，传 bundle/脚本，服务器构建后由 runner 查 main 再激活；本地实现完成，a 已提交 8df3beb；YAML、成功/push/main/同仓库门槛、精确 SHA/完整历史 checkout、两次 main 核验、runner/prepare/activate Bash 语法和 git diff --check 通过；实际 CI/CD 待推送运行；独立提交。
-- CD-02c：记录真实部署结果；独立验收文档提交，不提前宣称远端成功。
+- CD-02b：done；c9f452c；YAML、触发门槛、精确 checkout SHA/完整历史、两次 main 核验、三段 Bash 语法及 diff 检查通过。[CI 36573968144](https://github.com/BeforeLanding/mini-DSH/actions/runs/36573968144) 四组 success；[CD 36574173979](https://github.com/BeforeLanding/mini-DSH/actions/runs/36574173979) success，Linux fixture 含真实锁/软链原子激活通过，服务器 check65/test107/107（无跳过）、实际 HEAD/REVISION/共享链接/目录身份核验通过。
+- CD-02c：真实部署结果记录完成，git diff --check 通过；独立验收文档提交后继续核验最新 main，不把本地记录等同最新部署。
 - 保留 production Secrets、严格主机校验、服务器发布锁和旧版本；不读取模型密钥或会话内容。
 
 ## CD-01 阿里云 CLI 发布

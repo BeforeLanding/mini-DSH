@@ -1,5 +1,9 @@
 # 开发进度
 
+### CD-02c 传包 CD 实测验收（2026-09-29）
+修复按 a 8df3beb（离线脚本）→ b c9f452c（工作流接入）独立验证提交并推送。[CI 36573968144](https://github.com/BeforeLanding/mini-DSH/actions/runs/36573968144) 四组全部 success；[Deploy ECS 36574173979](https://github.com/BeforeLanding/mini-DSH/actions/runs/36574173979) 实际 success。Linux runner 的 bundle 导入、错误 SHA/路径/REVISION 拒绝、真实 flock/软链原子激活、PREVIOUS_RELEASE/共享配置 fixture 通过；服务器构建语法 65 文件、测试 107/107（fail0/skipped0），实际发布 c9f452cf47732ffc6be91bfd300b15af4d23d017，HEAD/REVISION、共享 .env 与持久目录身份核验通过。该服务器发布没有请求 GitHub 拉取源码，旧网络阻塞已由 runner 下载与 SSH 传包消除；安装依赖仍访问包注册表。
+本步仅记录必要摘要，不保存敏感日志、私钥或会话内容；git diff --check 通过。最终记录提交后继续检查最新 main 的 CI/CD，最终编号及运行结果在用户回复中报告，避免因追加验收记录无限生成提交。
+
 ### CD-02b Actions 传包接入（2026-09-29）
 CD-02a 8df3beb 已独立提交推送；Deploy ECS checkout CI head_sha（完整历史、禁用保留凭据），在 Linux runner 执行 bundle 发布 fixture，生成完整 Git bundle 并通过 SSH/SCP 传送到随机 incoming 目录，使用该提交的脚本 prepare。构建成功后 runner 再通过 GitHub API 核验 main，仍匹配才 activate；版本切换前后核验持久目录身份、共享配置链接与实际 HEAD/REVISION。运行结束清理明确的传输文件，保留版本目录。不再调用服务器旧的 GitHub clone 脚本。
 本地 YAML、CI 触发门槛、精确 checkout SHA/完整历史、两次 main 核验、runner/prepare/activate Bash 语法与 git diff --check 通过；本步只改工作流与说明，应用回归沿用 a 的 107/107，实际四组 CI、Linux fixture 和服务器发布待推送后验证。
