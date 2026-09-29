@@ -48,6 +48,15 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 普通步骤跑对应测试；修改公共契约/装配、完成迁移批次或阶段时跑类型/构建与完整测试。跨平台结论必须有实际 CI 证据，用户已授权每个小步提交后推送到 origin。提交标题写清本次结果，可采用 docs/chore/refactor/feat/fix/test 前缀。已完成提交保留，不自动 squash/amend/rebase。
 
 ## NX-12 仓库上下文决策
+## NX-13 编辑与交付决策
+
+- 文件快照默认限额 1 MiB，可配置；完整字节指纹区分 missing 和空文件。读取大文件保留分段行为但说明无编辑指纹，编辑禁止超限。
+- 唯一字面替换，统一 unified diff（共同前后缀裁剪，单 hunk，避免二次复杂度）。同目录临时文件 sync 后重新解析路径、核验目标，再 rename；取消在 rename 前不写目标，rename 后按实际成功记录。最终检查与 rename 仍有外部进程竞态，属于应用层乐观检测。
+- 无 session 直接调用兼容；有 session 用首次观察与最近确认版本检测陈旧读取。显式 expectedHash 可在重新核验后指定当前版本。首次观察前用户改动作为基线保留。
+- 新增 file/baseline、file/change、file/change-result 事件；工具结果和 completed 语义保持。意图含 before/after 快照并先 flush；结果落盘失败或崩溃留下 unknown，报告当前指纹但不自动重放，也不根据匹配推断成功。
+- 逐次失败独立记录；清单按 task 重建、跨 run 保存，reset 隔离。CLI 有界展示，模型用 task_changes 查询；大结果继续用 NX-07 引用。文件工具之外的修改不自动归因。
+
+## NX-12 仓库上下文决策
 
 - runtime-context 增加 general/coding 配置；CLI 装配入口默认 coding，底层插件默认 general，保持现有调用兼容。身份不直接绑定模型或 Loop。
 - ProjectContextRuntime 只读取配置的 workspace 内从根到当前目录的祖先链；当前目录默认 `.`。可用 project_context 工具按需查询其他目录，查询不改变工具 cwd。目标目录不同于初始目录时，coding 身份要求先查询该目标作用域的规则。

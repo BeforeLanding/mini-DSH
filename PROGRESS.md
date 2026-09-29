@@ -1,5 +1,8 @@
 # 开发进度
 
+### NX-13a（2026-09-29）
+已定义 R-16 与编辑/任务记录契约，拆成文档、核心、工具、持久记录、CLI 五个提交边界。git diff --check 通过；仅文档，功能未开始。不增加 patch，不承诺跨文件事务或文件系统级比较交换。
+
 ### NX-12 Windows CI 短路径修复（2026-09-29）
 
 失败运行 36536233812：Ubuntu Node 22/24 通过，Windows 两组均在内部 junction 规则读取时误报越界。本地用真实 8.3 路径复现：fs.realpathSync 保留 junction 目标的短路径，而 fs.promises.realpath 返回长路径；原本相同目录因此比较失败。路径闸门统一使用 fs.realpathSync.native，与异步加载器一致，不放宽工作区边界。
