@@ -60,6 +60,7 @@ export class AgentLoopRuntime {
             const { messages, estimatedInputTokens } = projection
             state.removedTaskIds = [...new Set([...state.removedTaskIds, ...projection.removedTaskIds])]
             append(sessionId, 'context/projection', { estimatedInputTokens, reservedOutputTokens: projection.reservedOutputTokens, safetyMarginTokens: projection.safetyMarginTokens, removedTaskIds: projection.removedTaskIds })
+            if (!projection.fits) throw new BudgetStop('context_overflow', state)
             state.estimatedInputTokens = estimatedInputTokens
             state.counters.modelRequests++
             const requestId = randomUUID()

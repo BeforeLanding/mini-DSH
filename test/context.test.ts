@@ -68,3 +68,38 @@ test('request projection drops oldest complete tasks, preserves raw events and c
   assert.deepEqual(project(), result)
   assert.deepEqual(h.session.events, before)
 })
+test('capacity equality dispatches, one token below stops, and model capacity is recomputed', async () => {
+  let calls = 0
+  const h = harness(async () => { calls++; return { content: 'ok' } })
+  const input = estimateInput({ system: '', messages: [{ role: 'user', content: 'current' }], tools: [] })
+  const exact = input + 10 + 2048
+  await h.agent.send('current', { budget: { contextWindowTokens: exact, maxOutputTokens: 10 } })
+  assert.equal(calls, 1)
+  h.sessions.clear(h.session.id)
+  await assert.rejects(h.agent.send('current', { budget: { contextWindowTokens: exact - 1, maxOutputTokens: 10 } }), /context_overflow/)
+  assert.equal(calls, 1)
+  assert.equal(h.sessions.latestRun(h.session.id)?.status, 'context_overflow')
+  const dispose = h.llm.register('capacity', { models: ['large', 'small'], capabilities: { large: { contextWindowTokens: 10000 }, small: { contextWindowTokens: 100 } }, chat: async () => { calls++; return { content: 'ok' } } })
+  h.agent.budget = { inputTargetTokens: 5000, maxOutputTokens: 10 }
+  h.agent.model = 'capacity/large'
+  await h.agent.send('current')
+  h.agent.model = 'capacity/small'
+  await assert.rejects(h.agent.send('current'), /context_overflow/)
+  assert.equal(calls, 2)
+  h.agent.model = 'mock/test'
+  const before = h.session.events.length
+  await assert.rejects(h.agent.send('current'), /explicitly configured/)
+  assert.equal(h.session.events.length, before)
+  dispose()
+})
+test('oversized current input, system or schemas stop without a model request', async () => {
+  for (const kind of ['input', 'system', 'schema']) {
+    let calls = 0
+    const h = harness(async () => { calls++; return { content: 'ok' } })
+    if (kind === 'system') h.loop.systemPrompt = { assemble: async () => '中'.repeat(5000) }
+    if (kind === 'schema') h.tools.register({ name: 'huge', parameters: { description: '中'.repeat(5000) }, execute: () => 'ok' })
+    await assert.rejects(h.agent.send(kind === 'input' ? '中'.repeat(5000) : 'current', { budget: { contextWindowTokens: 4000, maxOutputTokens: 10 } }), /context_overflow/)
+    assert.equal(calls, 0)
+    assert.equal(h.sessions.latestRun(h.session.id)?.counters.modelRequests, 0)
+  }
+})

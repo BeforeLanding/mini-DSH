@@ -72,16 +72,16 @@
 - 依赖：CB-01、CB-03。
 - 行为：估算 system、messages、reasoning、schema 和开销；明确输出预留、安全余量和模型容量来源。
 - 验证：中文/英文/代码/大 schema 固定样本；容量等号及超一边界；未知容量报配置问题；模型切换重新计算。
-- 状态：in_progress（2026-09-29）。
-- 证据：token-estimator 按 PLAN ASCII0.3/其他Unicode1.0、每消息32/请求256，覆盖 system/reasoning/工具schema及协议；缺失/失败/中断 usage 标 estimated+uncertain；pnpm check / test 35/35 通过。容量判断在下一步。
+- 状态：done（2026-09-29）。
+- 证据：完整请求估算+动态余量max(2048,input10%)；显式配置/适配器能力元数据，未知容量拒绝且无历史副作用；模型切换重算。pnpm check / test 39/39 通过。
 
 ## CB-05 上下文裁剪与输出投影
 - 关联：R-02、R-03；M2；D-02。
 - 依赖：CB-02、CB-04。
 - 行为：分组完整旧任务/轮次，按目标移除最旧历史；保留当前 task 的所有 run、system 及调用配对；不截短当前过程；无法容纳则 context_overflow。
 - 验证：多轮/多工具/reasoning/取消历史无孤立消息；事件原文深比较不变；重复投影确定；大 system、当前输入、当前调用组失败路径。
-- 状态：in_progress（2026-09-29）。
-- 证据：完整历史分组后按目标移除最旧完整任务，当前task/工具协议受保护；投影确定且不改原文，context/projection 记录移除任务。pnpm check / test 37/37 通过。容量停止下一小步接入。
+- 状态：done（2026-09-29）。
+- 证据：投影后 input+输出预留+动态余量不超过窗口；必保留集合不容纳时 context_overflow 且零模型调度；原文不变。pnpm check / test 39/39 通过，含等号/超一、模型切换及大输入/system/schema。
 
 ## CB-06 步数与工具调用调度
 - 关联：R-04、R-08；M3；D-03、D-06。
