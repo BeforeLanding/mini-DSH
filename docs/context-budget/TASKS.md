@@ -1,14 +1,16 @@
 # 任务清单
 
 ## NX-13 可靠编辑、冲突与变更交付
-- 关联 R-16 / M6；状态：进行中（2026-09-29），patch 按需延后。
+- 关联 R-16 / M6；状态：done（2026-09-29），patch 按需延后。
 - NX-13a：需求、设计与分步边界；git diff --check；done；6081892。
-- NX-13b：有界快照、指纹、唯一替换、原子替换和 diff 核心；pnpm check（62 文件）、node --test dist/test/file-edit.test.js（3/3）、git diff --check 通过；done；本步独立提交后回填。
-- NX-13c：文件工具冲突保护与具体审批；pnpm check（63 文件）、pnpm test（101/101）、git diff --check 通过；done；本步提交后回填。NX-13b 提交 4b7cfd2。
-- NX-13d：持久基线、逐次结果和任务清单；pnpm check（65 文件）、pnpm test（105/105）、git diff --check 通过；done；本步提交后回填。NX-13c 提交 489bcfa。
-- NX-13e：CLI /changes /diff、结束清单与交付说明；pnpm check（65 文件）、pnpm test（107/107）、pnpm fixtures:check（初始 0/3，参考 3/3）、git diff --check 通过；done；本步提交后回填。NX-13d2 提交 d802adc。
-- NX-13d2：复核原子替换的权限与内部软链目标稳定性；pnpm check（65 文件）、pnpm test（106/106）、git diff --check 通过；done；独立修复提交（先于 e）。NX-13d 提交 97b7653。
-- 每步通过检查、更新证据、提交并推送后才开始下一步；完成后核对实际提交和 CI。
+- NX-13b：有界快照、指纹、唯一替换、原子替换和 diff 核心；pnpm check（62 文件）、node --test dist/test/file-edit.test.js（3/3）、git diff --check 通过；done；4b7cfd2。
+- NX-13c：文件工具冲突保护与具体审批；pnpm check（63 文件）、pnpm test（101/101）、git diff --check 通过；done；489bcfa。
+- NX-13d：持久基线、逐次结果和任务清单；pnpm check（65 文件）、pnpm test（105/105）、git diff --check 通过；done；97b7653。
+- NX-13d2：复核原子替换的权限与内部软链目标稳定性；pnpm check（65 文件）、pnpm test（106/106）、git diff --check 通过；done；d802adc（先于 e）。
+- NX-13e：CLI /changes /diff、结束清单与交付说明；pnpm check（65 文件）、pnpm test（107/107）、pnpm fixtures:check（初始 0/3，参考 3/3）、git diff --check 通过；done；4c9501c。
+- NX-13f：最终实际提交清单、跨平台 CI 与文档收尾；git diff --check 与提交清单核验；done；仅文档，本步提交后报告编号。
+- 每步均先验证、更新证据、独立提交并推送，再推进下一内容；补充的 d2 单独提交，保留全部历史。
+- 最终功能提交 4c9501c 的 [CI 36545691239](https://github.com/BeforeLanding/mini-DSH/actions/runs/36545691239) 四组 Ubuntu/Windows × Node22/24 全部 success；本地 107/107 无跳过。核心 test/file-edit.test.ts、工具 test/file-tools.test.ts、持久记录 test/task-changes.test.ts、CLI/model test/cli.test.ts。无付费模型调用。
 
 ## NX-12 CI 修复：Windows 短路径 junction
 - 状态：本地修复完成，提交后核验远端 CI（2026-09-29）。

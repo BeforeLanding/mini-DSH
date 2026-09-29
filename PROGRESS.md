@@ -1,5 +1,11 @@
 # 开发进度
 
+### NX-13 完成与跨平台验收（2026-09-29）
+NX-13 已完成可靠编辑、乐观冲突检测、可恢复任务变更清单和 unified diff；模型 task_changes 与 CLI /changes /diff 可查询逐文件成功、失败、unknown 及外部变化，运行结束自动展示清单。用户首次观察前已有修改保留，跨编辑的用户变更不归入 Agent diff；patch 按需延后。
+实际顺序与提交：a 契约 6081892 → b 核心 4b7cfd2 → c 工具 489bcfa → d 持久记录 97b7653 → d2 权限/软链边界 d802adc → e CLI/交付 4c9501c。均独立验收并推送；首次推送自动审查要求具体远端授权，用户明确授权 origin 后正常推送，未绕过审查。
+本地 Windows Node24：pnpm check（65 文件）、pnpm test（107/107，无跳过）、pnpm fixtures:check（初始 0/3，参考 3/3）通过。最终功能提交 4c9501c 的 [CI 36545691239](https://github.com/BeforeLanding/mini-DSH/actions/runs/36545691239) 四组 Windows/Ubuntu × Node22/24 全部 success。11 条新增测试覆盖指纹/编码、冲突/取消、权限/软链、dirty Git/非 Git、落盘故障/恢复/续跑及 CLI/模型交付。
+f 收尾仅核对提交清单、同步 TASKS/路线/需求状态并运行 git diff --check；无运行时改动，不重复已有功能检查。未调用付费模型 API；记录只覆盖受控文件工具，最终指纹检查与 rename 之间仍有外部进程竞态，不承诺文件系统级比较交换或跨文件事务。下一主线 NX-14/NX-15。
+
 ### NX-13e（2026-09-29）
 CLI 运行结束展示当前 task 变更清单；/changes 按文件分页，/diff 按文件和 UTF-8 字节分页，显示 confirmed diff、失败次数和外部变更标记。coding 身份提示使用 expectedHash、冲突后重新读取以及交付前检查 task_changes；README 同步参数、覆盖范围和已知限制。
 新增真实 Cordis CLI/模拟模型闭环：读取指纹、编辑、失败尝试、新建文件、模型读取任务 diff、终态清单、中文/emoji 大 diff 续读、unknown 和 reset；核对原用户行保持。pnpm check（65 文件）、pnpm test（107/107）、pnpm fixtures:check（初始 0/3、参考 3/3）和 git diff --check 通过；全部使用模拟提示和模型，无付费 API。软链/权限修复 d802adc 已推送，本步提交后核验最终 CI。
