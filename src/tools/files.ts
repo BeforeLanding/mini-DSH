@@ -3,6 +3,7 @@ import type { ToolDefinition, Arguments } from '../core/contracts.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { positiveLimit, readTextRange } from '../core/bounded-text.js'
+import { searchFiles } from '../core/bounded-search.js'
 
 export const name = 'mini-tools-files'
 export const inject = ['tools', 'sandbox']
@@ -24,7 +25,7 @@ export function matchFilePattern(filename: string, pattern = '') {
   return new RegExp(`^(?:${pattern.includes('/') ? '' : '(?:.*/)?'}${expression})$`).test(normalized)
 }
 
-export interface FilesConfig { workspace?: string; maxLines?: number; maxOutputBytes?: number; maxScanBytes?: number }
+export interface FilesConfig { workspace?: string; maxLines?: number; maxOutputBytes?: number; maxScanBytes?: number; maxResults?: number; maxEntries?: number; maxDepth?: number; maxFileBytes?: number }
 
 export function apply(ctx: Context, config: FilesConfig = {}) {
   const limits = {
@@ -33,17 +34,17 @@ export function apply(ctx: Context, config: FilesConfig = {}) {
     maxScanBytes: positiveLimit(config.maxScanBytes, 8 * 1024 * 1024, 'maxScanBytes'),
   }
   const resolve = (requested: unknown) => ctx.sandbox.resolvePath(requested)
+  const searchLimits = {
+    ...limits,
+    maxResults: positiveLimit(config.maxResults, 200, 'maxResults'),
+    maxEntries: positiveLimit(config.maxEntries, 10000, 'maxEntries'),
+    maxDepth: positiveLimit(config.maxDepth, 64, 'maxDepth'),
+    maxFileBytes: positiveLimit(config.maxFileBytes, 1024 * 1024, 'maxFileBytes'),
+    maxTotalBytes: limits.maxScanBytes,
+  }
   const parameters = (properties: Arguments, required: string[] = []) => ({ type: 'object', properties, required })
   const string = { type: 'string' }
-  async function* walk(directory = '.', signal?: AbortSignal): AsyncGenerator<string> {
-    signal?.throwIfAborted()
-    for (const entry of await fs.readdir(resolve(directory), { withFileTypes: true })) {
-      signal?.throwIfAborted()
-      const relative = path.join(directory, entry.name)
-      if (entry.isDirectory()) yield* walk(relative, signal)
-      else if (entry.isFile()) yield relative.replace(/\\/g, '/')
-    }
-  }
+  const searchParameters = { path: string, pattern: string, includeIgnored: { type: 'boolean' }, offset: { type: 'integer', minimum: 0 }, maxResults: { type: 'integer', minimum: 1, maximum: searchLimits.maxResults } }
   const definitions: ToolDefinition[] = [
     {
       name: 'read_file', description: 'Read a bounded UTF-8 line range with line numbers and nextLine/eof. Use startLine to continue. Binary, invalid UTF-8 and oversized lines fail explicitly.',
@@ -83,31 +84,14 @@ export function apply(ctx: Context, config: FilesConfig = {}) {
       },
     },
     {
-      name: 'glob', description: 'List workspace files matching a substring or wildcard.',
-      parameters: parameters({ pattern: string }),
-      async execute(args, exec) {
-        const matches: string[] = []
-        for await (const file of walk('.', exec.signal)) if (matchFilePattern(file, typeof args.pattern === 'string' ? args.pattern : '')) matches.push(file)
-        return matches
-      },
+      name: 'glob', description: 'List bounded workspace matches. Returns matches, nextOffset, eof, reason and skipped counts. Use path to narrow scans; offset rescans current files. Default ignores .git/node_modules/dist/.mini-dsh and skips symlinks.',
+      parameters: parameters(searchParameters),
+      async execute(args, exec) { return searchFiles(resolve, matchFilePattern, args, searchLimits, exec.signal, false) },
     },
     {
-      name: 'grep', description: 'Find literal text in workspace files with line numbers.',
-      parameters: parameters({ query: string, pattern: string }, ['query']),
-      async execute(args, exec) {
-        if (typeof args.query !== 'string') throw new Error('query must be a string')
-        const query = args.query
-        const matches: string[] = []
-        for await (const file of walk('.', exec.signal)) {
-          if (!matchFilePattern(file, typeof args.pattern === 'string' ? args.pattern : '')) continue
-          const content = await fs.readFile(resolve(file), { encoding: 'utf8', signal: exec.signal })
-          if (content.includes('\0')) continue
-          content.split(/\r?\n/).forEach((line, index) => {
-            if (line.includes(query)) matches.push(`${file}:${index + 1}:${line}`)
-          })
-        }
-        return matches.join('\n')
-      },
+      name: 'grep', description: 'Search nonempty literal text with file/line numbers in bounded UTF-8 scans. Returns matches, nextOffset, eof, reason and skipped counts. Narrow path/pattern when scan limits are reached; includeIgnored opts into ignored directories.',
+      parameters: parameters({ ...searchParameters, query: string }, ['query']),
+      async execute(args, exec) { return searchFiles(resolve, matchFilePattern, args, searchLimits, exec.signal, true) },
     },
   ]
   for (const definition of definitions) ctx.effect(() => ctx.tools.register(definition), `register ${definition.name}`)

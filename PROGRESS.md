@@ -245,3 +245,6 @@ R-01至R-13逐项证据见PROGRESS E-03；本地pnpm check/test 57/57；功能�
 
 ### NX-07b（2026-09-29）
 read_file 增加 startLine/maxLines、行号、nextLine/eof 和截断原因，固定块读取并限制扫描/行长/输出；非法 UTF-8、二进制、非文件和取消明确失败。pnpm check（56 文件）、pnpm test（89/89）通过；diff 核对及 git diff --check 通过。契约提交 5ef5b2e 已推送，读取独立提交后推进搜索。
+
+### NX-07c（2026-09-29）
+搜索改为有界、可分页的结构化结果，默认忽略生成目录和 .mini-dsh，跳过软链/二进制/非法编码/过大文件并记录原因。新增分页、缩小范围、扫描/遍历/深度/输出额度与取消测试。pnpm check（57 文件）、pnpm test（91/91）通过；更新原 Cordis glob 契约断言，diff 核对通过。读取提交 21ee528 已推送。
