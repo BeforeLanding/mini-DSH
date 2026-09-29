@@ -24,8 +24,8 @@
 - 依赖：CB-00、CB-17。
 - 行为：核验并锁定 TypeScript/@types/node；建立 NodeNext / ES2022 / strict / noEmitOnError / sourceMap；分批迁移 src/test，编译产物运行；更新 CI、配置路径和命令说明。
 - 验证：typecheck/build、编译后的 22 条原测试、无预算长循环、插件释放、动态 plugins.config 导入、cwd/.env 语义；Node 22/24 × Windows/Ubuntu；旧产物不能掩盖错误。
-- 状态：todo；本轮仅选型与调研，未安装依赖或迁移源码。
-- 证据：尚无实现/构建证据。
+- 状态：in_progress（2026-09-29）；CB-15a 已完成，核心/插件/测试迁移待完成。
+- 证据：CB-15a 锁定 TypeScript 7.0.2 / @types/node 24.19.0；pnpm check、pnpm test 成功，编译后的原 22/22 测试通过；NodeNext strict，配置文件编译至 dist 根目录。
 
 ## CB-01 配置与预算契约
 - 关联：R-01、R-08、R-09；M1；D-03、D-06。

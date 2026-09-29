@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noEmitOnError": true,
+    "verbatimModuleSyntax": true,
+    "sourceMap": true,
+    "allowJs": true,
+    "checkJs": false,
+    "rootDir": ".",
+    "outDir": "dist",
+    "types": ["node"]
+  },
+  "include": ["src/**/*", "test/**/*", "plugins.config.js"]
+}

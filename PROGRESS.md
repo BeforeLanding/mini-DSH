@@ -46,3 +46,6 @@
 
 ## 更新规则
 本文件只保存当前状态、重要验证/失败、阻塞和下一步；任务级行为/证据维护在 [TASKS](docs/context-budget/TASKS.md)。参数和设计维护在 PLAN，验收维护在 REQUIREMENTS。done 必须有真实验收证据，设计完成不等于功能完成。
+
+### CB-15a（2026-09-29）
+已建立 TypeScript 7.0.2、Node 24 类型、strict NodeNext 编译链；过渡阶段 allowJs。start/test 使用 dist 产物，构建先类型检查再清理固定 dist，plugins.config 路径保持。pnpm check / test 通过，原 22/22 回归通过。下一步迁移核心。推送被自动审批要求确认具体 origin 目的地，等待确认。
