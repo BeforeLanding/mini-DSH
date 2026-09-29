@@ -78,6 +78,10 @@ export class SessionRuntime {
         const reset = events.map(e => e.type).lastIndexOf('session/reset')
         return events.slice(reset + 1)
     }
+    confirmedEvents(id: string) {
+        const events = this.visibleEvents(id)
+        return this.#stores.has(id) ? events.filter(event => event.seq <= (this.#confirmed.get(id) ?? 0)) : events
+    }
     configuration(id: string) {
         const event = [...this.visibleEvents(id)].reverse().find(e => e.type === 'session/config')
         return event?.type === 'session/config' ? structuredClone(event.data) : undefined
@@ -123,6 +127,8 @@ export class SessionRuntime {
             if (previous.status === 'completed') throw new Error('task already completed')
             const unknown = this.visibleEvents(id).some(e => e.taskId === previous.taskId && e.type === 'tool/result' && e.data.status === 'unknown')
             if (unknown) throw new Error('unknown tool outcome; verify side effects before starting a new task; automatic continuation is blocked')
+            const files = this.confirmedEvents(id).filter(e => e.taskId === previous.taskId)
+            if (files.some(e => e.type === 'file/change' && !files.some(result => result.type === 'file/change-result' && result.data.changeId === e.data.changeId))) throw new Error('unknown file edit outcome; verify side effects before starting a new task; automatic continuation is blocked')
             const contextKeys = ['contextWindowTokens', 'inputTargetTokens', 'maxOutputTokens', 'safetyMarginTokens'] as const
             if (previous.status === 'context_overflow' && contextKeys.every(key => policy[key] === previous.policy[key]) && model === previous.model) throw new Error('context_overflow cannot continue with unchanged context configuration')
         }

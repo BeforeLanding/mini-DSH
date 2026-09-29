@@ -1,4 +1,5 @@
 import type { BudgetPolicy, RunState, Usage } from './budget.js'
+import type { FileSnapshot } from './file-edit.js'
 export type Arguments = Record<string, unknown>
 export type ModelSelection = string | { provider: string; model: string } | null
 
@@ -49,6 +50,10 @@ export interface PromptEntry { name: string; order?: number; text: string | ((co
 export interface ApprovalRequest { tool: string; summary: string; signal?: AbortSignal; approval?: <T>(work: () => Promise<T>) => Promise<T> }
 export interface SandboxConfig { workspace?: string; autoApprove?: boolean; allowHosts?: string[] }
 export interface EventData {
+  'file/baseline': { path: string; snapshot: FileSnapshot }
+  'file/observed': { path: string; hash: string }
+  'file/change': { changeId: string; path: string; tool: 'edit_file' | 'write_file'; toolCallId?: string; before?: FileSnapshot; after?: FileSnapshot }
+  'file/change-result': { changeId: string; status: 'applied' | 'unchanged' | 'failed'; error?: string }
   'session/start': { meta: Arguments; reset?: boolean }
   'session/config': { model: string; budget: BudgetPolicy }
   'session/reset': { epoch: number }

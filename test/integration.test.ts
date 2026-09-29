@@ -30,7 +30,7 @@ test('the whole plugin stack boots on Cordis and runs a full model -> tool -> mo
     await root.plugin(bash, { workspace })
     const filePlugin = await root.plugin(files, { workspace })
     for (const service of ['sessions', 'systemPrompt', 'tools', 'llm', 'agents', 'agentLoop', 'sandbox'] as const) assert.ok(root[service])
-    assert.deepEqual(root.tools.list().map(tool => tool.name).sort(), ['bash', 'edit_file', 'glob', 'grep', 'read_file', 'write_file'])
+    assert.deepEqual(root.tools.list().map(tool => tool.name).sort(), ['bash', 'edit_file', 'glob', 'grep', 'read_file', 'task_changes', 'write_file'])
     const prompt = await root.systemPrompt.assemble({ step: 0 })
     assert.match(prompt, /You are a general-purpose agent/)
     assert.match(prompt, /## Runtime Context/)

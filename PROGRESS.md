@@ -1,5 +1,10 @@
 # 开发进度
 
+### NX-13d（2026-09-29）
+新增基线/观察/编辑意图/逐次结果事件与 task_changes。任务首次现场基线固定，重新读取刷新预期指纹；同 task 续跑和 JSONL 重启保留清单，reset 隔离。只用确认落盘事件生成清单；写盘意图失败不修改文件，结果写盘失败/崩溃显示 unknown，继续执行拒绝自动处理未知编辑。
+真实临时 Git 仓库已有 staged/dirty 内容、非 Git、读取后冲突、用户两次编辑间的变化、逐文件成功/失败、分页、事件损坏、取消后的迟到失败记录和文件额度均覆盖。中间用户修改改用逐次编辑 diff，不归到 Agent。首次回归发现 Cordis 禁止未声明服务属性访问，改用官方 ctx.get 可选查询以保留无 session 调用。
+pnpm check（65 文件）、pnpm test（105/105，无跳过）和 git diff --check 通过；工具提交 489bcfa 已推送。下一步 CLI 展示与最终验收。
+
 ### NX-13c（2026-09-29）
 read_file 返回完整文件指纹；edit/write 接入快照、expectedHash、具体范围与有界审批 diff、最终冲突检查及原子替换；成功返回结构化 diff/hash，无变化不请求审批。同一实例拒绝并发编辑同一路径，超限读取注明指纹不可用。
 初次回归暴露新测试缺少 systemPrompt 导致 sandbox 未装配，以及旧测试仍断言 wrote 文本；修正装配和结构化结果断言后 pnpm check（63 文件）、pnpm test（101/101）和 git diff --check 通过。核心提交 4b7cfd2 已推送；下一步任务持久记录。

@@ -90,6 +90,7 @@ export function parseLog(text: string, sessionId: string): SessionEvent[] {
   const ids = new Set<string>()
   const runs = new Map<string, { taskId: string; ended: boolean }>()
   const requests = new Set<string>(), usages = new Set<string>(), ends = new Set<string>()
+  const changes = new Map<string, { taskId: string; runId: string; planned: boolean }>(), results = new Set<string>()
   for (const line of text.split('\n').slice(0, -1)) {
     let event: unknown
     try { event = JSON.parse(line) } catch (error) { throw new Error(`corrupt JSONL record ${events.length + 1}`, { cause: error }) }
@@ -97,6 +98,20 @@ export function parseLog(text: string, sessionId: string): SessionEvent[] {
     if ((event.taskId !== undefined && typeof event.taskId !== 'string') || (event.runId !== undefined && typeof event.runId !== 'string')) throw new Error('invalid event scope')
     validatePayload(event.type, event.data)
     const parsed = event as unknown as SessionEvent
+    if (parsed.type.startsWith('file/')) {
+      const run = parsed.runId ? runs.get(parsed.runId) : undefined
+      // A cooperative tool may finish journaling after cancellation seals the run.
+      if (!run || run.taskId !== parsed.taskId) throw new Error('file event scope mismatch')
+      if (parsed.type === 'file/change') {
+        if (changes.has(parsed.data.changeId)) throw new Error('duplicate file change')
+        changes.set(parsed.data.changeId, { taskId: parsed.taskId!, runId: parsed.runId!, planned: !!parsed.data.before && !!parsed.data.after })
+      }
+      if (parsed.type === 'file/change-result') {
+        const change = changes.get(parsed.data.changeId)
+        if (!change || results.has(parsed.data.changeId) || change.taskId !== parsed.taskId || change.runId !== parsed.runId || (parsed.data.status !== 'failed' && !change.planned)) throw new Error('missing/duplicate or mismatched file change result')
+        results.add(parsed.data.changeId)
+      }
+    }
     if (parsed.type === 'run/start' || parsed.type === 'run/finish') {
       const state = parsed.data.state
       if (state.sessionId !== sessionId || parsed.runId !== state.runId || parsed.taskId !== state.taskId) throw new Error('run scope mismatch')

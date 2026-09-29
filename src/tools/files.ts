@@ -4,6 +4,7 @@ import path from 'node:path'
 import { positiveLimit, readTextRange } from '../core/bounded-text.js'
 import { searchFiles } from '../core/bounded-search.js'
 import { snapshot, checkHash, replaceUnique, unifiedDiff, commitFile, validateText, fingerprint, FileSizeLimit } from '../core/file-edit.js'
+import { TaskChanges, taskChanges } from '../core/task-changes.js'
 
 export const name = 'mini-tools-files'
 export const inject = ['tools', 'sandbox']
@@ -25,7 +26,7 @@ export function matchFilePattern(filename: string, pattern = '') {
   return new RegExp(`^(?:${pattern.includes('/') ? '' : '(?:.*/)?'}${expression})$`).test(normalized)
 }
 
-export interface FilesConfig { workspace?: string; maxLines?: number; maxOutputBytes?: number; maxScanBytes?: number; maxResults?: number; maxEntries?: number; maxDepth?: number; maxFileBytes?: number; maxEditBytes?: number }
+export interface FilesConfig { workspace?: string; maxLines?: number; maxOutputBytes?: number; maxScanBytes?: number; maxResults?: number; maxEntries?: number; maxDepth?: number; maxFileBytes?: number; maxEditBytes?: number; maxTrackedFiles?: number }
 
 export function apply(ctx: Context, config: FilesConfig = {}) {
   const limits = {
@@ -35,15 +36,23 @@ export function apply(ctx: Context, config: FilesConfig = {}) {
   }
   const resolve = (requested: unknown) => ctx.sandbox.resolvePath(requested)
   const maxEditBytes = positiveLimit(config.maxEditBytes, 1024 * 1024, 'maxEditBytes')
+  const maxTrackedFiles = positiveLimit(config.maxTrackedFiles, 100, 'maxTrackedFiles')
   const editing = new Set<string>()
   const relative = (target: string) => path.relative(ctx.sandbox.workspace, target).replace(/\\/g, '/')
+  // Optional service lookup keeps direct, session-less file tools available.
+  const sessions = () => ctx.get('sessions') as Context['sessions'] | undefined
   async function mutate(tool: 'edit_file' | 'write_file', args: Arguments, exec: Execution) {
     const target = resolve(args.path)
+    const file = relative(target)
+    const journal = TaskChanges.forExecution(sessions(), exec, maxTrackedFiles)
     if (editing.has(target)) throw new Error('file is already being edited; retry after the pending edit')
     editing.add(target)
+    let changeId: string | undefined, committed = false
     try {
       const before = await snapshot(target, maxEditBytes, exec.signal)
-      checkHash(before.hash, args.expectedHash)
+      await journal?.observe(file, before)
+      const observedHash = journal?.expected(file)
+      checkHash(before.hash, args.expectedHash === undefined ? observedHash : args.expectedHash)
       let text: string, range: string
       if (tool === 'edit_file') {
         if (before.text === null) throw new Error('file does not exist; use write_file to create it')
@@ -57,11 +66,24 @@ export function apply(ctx: Context, config: FilesConfig = {}) {
       }
       validateText(text, maxEditBytes)
       const diff = unifiedDiff(relative(target), before.text, text)
-      if (before.text === text) return { path: relative(target), status: 'unchanged', beforeHash: before.hash, afterHash: before.hash, diff: '' }
+      changeId = await journal?.start({ path: file, tool, toolCallId: exec.toolCallId, before, after: { text, hash: fingerprint(text), mode: before.mode } })
+      if (before.text === text) {
+        if (changeId) await journal!.finish(changeId, 'unchanged')
+        return { path: file, status: 'unchanged', beforeHash: before.hash, afterHash: before.hash, diff: '' }
+      }
       const preview = Array.from(diff).slice(0, 4000).join('')
       await ctx.sandbox.approve({ tool, summary: `${tool} ${relative(target)}: ${range}\nexpectedHash=${before.hash}\n${preview}${preview.length < diff.length ? '\n[approval diff truncated]' : ''}`, signal: exec.signal, approval: exec.approval })
       await commitFile(() => resolve(args.path), before, text, maxEditBytes, exec.signal)
+      committed = true
+      if (changeId) await journal!.finish(changeId, 'applied')
       return { path: relative(target), status: 'applied', beforeHash: before.hash, afterHash: fingerprint(text), diff }
+    } catch (error) {
+      if (journal && !committed) {
+        changeId ??= await journal.start({ path: file, tool, toolCallId: exec.toolCallId })
+        await journal.finish(changeId, 'failed', error instanceof Error ? error.message : String(error))
+      }
+      if (committed) throw new Error('file was committed but result persistence is uncertain; verify before continuing', { cause: error })
+      throw error
     } finally { editing.delete(target) }
   }
   const searchLimits = {
@@ -87,6 +109,7 @@ export function apply(ctx: Context, config: FilesConfig = {}) {
         if (before?.text === null) throw new Error('file does not exist')
         const result = await readTextRange(target, positiveLimit(args.startLine, 1, 'startLine'), positiveLimit(args.maxLines, limits.maxLines, 'maxLines', limits.maxLines), limits, exec.signal)
         if (before) checkHash((await snapshot(resolve(args.path), maxEditBytes, exec.signal)).hash, before.hash)
+        if (before) await TaskChanges.forExecution(sessions(), exec, maxTrackedFiles)?.read(relative(target), before)
         return result + (before ? `\n[read_file hash=${before.hash}]` : '\n[read_file hash=unavailable reason=edit_byte_limit]')
       },
     },
@@ -99,6 +122,18 @@ export function apply(ctx: Context, config: FilesConfig = {}) {
       name: 'edit_file', description: 'Replace one unique exact oldText, preserving line endings, after approval showing range and diff. Pass expectedHash from read_file to reject stale edits. Returns diff and hashes.',
       parameters: parameters({ path: string, oldText: string, newText: string, expectedHash: string }, ['path', 'oldText', 'newText']),
       async execute(args, exec) { return mutate('edit_file', args, exec) },
+    },
+    {
+      name: 'task_changes', description: 'Inspect confirmed file-tool edits and failed/unknown attempts for the current task, across continuation/restart. Returns baseline diff, hashes and current external-change flags; paginated by files. Bash/external changes are not attributed.',
+      parameters: parameters({ includeDiff: { type: 'boolean' }, offset: { type: 'integer', minimum: 0 }, maxFiles: { type: 'integer', minimum: 1, maximum: maxTrackedFiles } }),
+      async execute(args, exec) {
+        const service = sessions()
+        if (!exec.sessionId || !service) throw new Error('task_changes requires a session')
+        if (args.includeDiff !== undefined && typeof args.includeDiff !== 'boolean') throw new Error('includeDiff must be boolean')
+        const offset = args.offset ?? 0
+        if (typeof offset !== 'number' || !Number.isSafeInteger(offset) || offset < 0) throw new Error('offset must be a nonnegative integer')
+        return taskChanges(service, exec.sessionId, file => resolve(file), maxEditBytes, exec.signal, args.includeDiff !== false, offset, positiveLimit(args.maxFiles, maxTrackedFiles, 'maxFiles', maxTrackedFiles))
+      },
     },
     {
       name: 'glob', description: 'List bounded workspace matches. Returns matches, nextOffset, eof, reason and skipped counts. Use path to narrow scans; offset rescans current files. Default ignores .git/node_modules/dist/.mini-dsh and skips symlinks.',

@@ -5,7 +5,7 @@
 - NX-13a：需求、设计与分步边界；git diff --check；done；6081892。
 - NX-13b：有界快照、指纹、唯一替换、原子替换和 diff 核心；pnpm check（62 文件）、node --test dist/test/file-edit.test.js（3/3）、git diff --check 通过；done；本步独立提交后回填。
 - NX-13c：文件工具冲突保护与具体审批；pnpm check（63 文件）、pnpm test（101/101）、git diff --check 通过；done；本步提交后回填。NX-13b 提交 4b7cfd2。
-- NX-13d：持久基线、逐次结果和任务清单；JSONL 恢复/续跑/失败测试 + 全量回归；待开始；独立记录提交。
+- NX-13d：持久基线、逐次结果和任务清单；pnpm check（65 文件）、pnpm test（105/105）、git diff --check 通过；done；本步提交后回填。NX-13c 提交 489bcfa。
 - NX-13e：CLI /changes /diff、结束清单与交付说明；CLI 和模型闭环 + check/test/fixtures；待开始；独立展示提交。
 - 每步通过检查、更新证据、提交并推送后才开始下一步；完成后核对实际提交和 CI。
 
