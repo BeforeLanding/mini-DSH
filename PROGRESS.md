@@ -1,5 +1,8 @@
 # 开发进度
 
+### CD-01d 用户启动核验收尾（2026-09-29）
+用户通过服务器 ~/bin/mini-dsh 成功进入交互 CLI，输出确认固定工作区 /home/deploy/workspaces/default、持久会话目录 ~/.mini-dsh/sessions 与所选模型配置正常。启动证据来自用户，本地代理未执行新模型请求；先前 bootstrap 的模型请求验证独立保留。CD-01 部署与 CD 设置完成；c 操作交付提交为 f02f567，已推送。本步仅同步摘要与任务状态，不保存真实会话 ID 或日志；git diff --check 通过，不重复运行应用测试。
+
 ### CD-01c 首次实际发布与操作交付（2026-09-29）
 提交 a632121 的 [CI 36550812881](https://github.com/BeforeLanding/mini-DSH/actions/runs/36550812881) 四组全部 success，自动触发 [Deploy ECS 36550955877](https://github.com/BeforeLanding/mini-DSH/actions/runs/36550955877)。attempt1 在服务器 git clone 阶段因 GitHub 连接中断失败，未切换 current；重试 attempt2 实际 success，服务器语法 65 文件、测试 107/107（fail0/skipped0）。current 已切换到 a632121c0d928d0b18604fdef5f4b3462a11a2fb，实际 HEAD/REVISION、共享 .env 链接、构建入口及配置/工作区/会话目录身份核验均通过。没有读取配置或会话内容；目录身份核验不宣称全部数据内容逐字节校验。
 交付 docs/ECS_DEPLOYMENT.md 与 README 入口，包含日常启动、Secrets/服务器前置条件、发布状态、固定目录、版本核验及带锁的原子回滚说明。三个 Bash 代码块的 bash -n 与 git diff --check 通过；回滚未执行。CD-01a 73988b5、b a632121 均已推送；本步为独立文档提交。新版本实际交互启动待用户在服务器运行 ~/bin/mini-dsh；先前用户模型验证来自 bootstrap，不混记为新版本模型验收。

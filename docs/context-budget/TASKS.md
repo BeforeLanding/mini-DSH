@@ -1,11 +1,12 @@
 # 任务清单
 
 ## CD-01 阿里云 CLI 发布
-- 状态：自动发布链路已实测通过；服务器手动安装与模型请求先前由用户确认，新发布版本的交互启动待用户核验。
+- 状态：done；自动发布链路已实测通过，用户已确认发布后的启动入口正常进入 CLI，工作区与持久会话目录正确；模型请求先前已在 bootstrap 验证。
 - CD-01a：仅手动触发的公网 SSH 连接/运行环境检查；YAML 解析、main/production/手动触发门槛核验、runner/remote 两段 Bash 语法和 git diff --check 均通过；done；73988b5；[公网预检 36550421451](https://github.com/BeforeLanding/mini-DSH/actions/runs/36550421451) success。
 - CD-01b：CI 成功后部署对应 main SHA、串行发布和版本切换；done；a632121；YAML、成功/push/同仓库/main 门槛、精确 SHA、并发设置、runner/remote Bash 语法、pnpm check（65 文件）、pnpm test（107/107）和 git diff --check 通过；[CI 36550812881](https://github.com/BeforeLanding/mini-DSH/actions/runs/36550812881) 四组 success。
 - CD-01c：首次 CD 实际发布、版本/目录保持核验及回滚说明；done；[Deploy ECS 36550955877](https://github.com/BeforeLanding/mini-DSH/actions/runs/36550955877) 首次因服务器 GitHub 连接中断失败，重试 attempt2 success，服务器 check（65 文件）/test（107/107、无跳过）及 HEAD/REVISION/共享链接/目录身份均通过。操作说明三个 Bash 代码块语法及 git diff --check 通过，回滚仅说明未执行；独立文档提交后报告编号。
 - 不将真实服务器地址、公钥、私钥、模型密钥或实际会话日志写入仓库。运行时功能和事件契约保持；发布不重启已有 CLI。
+- CD-01d：用户启动核验收尾；用户提供的启动输出确认 launcher、固定工作区、持久会话目录及模型配置正常；仅记录摘要，不保存会话 ID/原始日志；git diff --check；独立文档提交。
 
 ## NX-13 可靠编辑、冲突与变更交付
 - 关联 R-16 / M6；状态：done（2026-09-29），patch 按需延后。
