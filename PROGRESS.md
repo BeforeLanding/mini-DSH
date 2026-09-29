@@ -1,5 +1,9 @@
 # 开发进度
 
+### NX-13c（2026-09-29）
+read_file 返回完整文件指纹；edit/write 接入快照、expectedHash、具体范围与有界审批 diff、最终冲突检查及原子替换；成功返回结构化 diff/hash，无变化不请求审批。同一实例拒绝并发编辑同一路径，超限读取注明指纹不可用。
+初次回归暴露新测试缺少 systemPrompt 导致 sandbox 未装配，以及旧测试仍断言 wrote 文本；修正装配和结构化结果断言后 pnpm check（63 文件）、pnpm test（101/101）和 git diff --check 通过。核心提交 4b7cfd2 已推送；下一步任务持久记录。
+
 ### NX-13b（2026-09-29）
 file-edit.ts 增加有界字节快照、SHA-256、唯一替换、单 hunk unified diff 和同目录 sync/rename 提交。拒绝非法文本、超限、版本冲突、取消和路径变化，失败清理临时文件。pnpm check（62 文件）、核心测试 3/3 和 git diff --check 通过。尚未接入工具与任务记录；契约提交 6081892。
 

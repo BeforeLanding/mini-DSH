@@ -142,7 +142,8 @@ test('Cordis persists a stopped file task then resumes without repeating the com
       resumedRequests++
       assertToolProtocol(messages)
       assert.equal(messages.filter(m => m.role === 'user').length, 1)
-      assert.match(messages.filter(m => m.role === 'tool')[0].content ?? '', /wrote once/)
+      const write = JSON.parse(messages.filter(m => m.role === 'tool')[0].content ?? '{}')
+      assert.equal(write.path, 'once.txt'); assert.equal(write.status, 'applied')
       return { content: 'completed without repeating write' }
     } })
     const resumed = second.agents.create({ sessionId: session.id, model: before.model, loop: second.agentLoop, budget: { maxModelRequests: 2 } })
