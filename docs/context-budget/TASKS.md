@@ -215,12 +215,12 @@
 - CB-15d：allowJs=false；原测试及配置迁移，pnpm check / test 22/22 通过；CI 四组合保留，远程四组合已通过，最终功能验收 CI 36508829785。
 
 ## NX-07 有界代码读取、搜索与大结果回读
-- 关联：M6、R-15；状态：进行中。
-- NX-07a / 需求、参数与契约 / git diff --check / done（仅文档）/ 本步提交后报告。
-- NX-07b / 分段文件读取 / 类型构建、读取边界测试 / todo / 独立提交读取及测试。
-- NX-07c / 有界搜索和分页 / 遍历/扫描/输出/取消/路径测试与回归 / todo / 独立提交搜索及测试。
-- NX-07d / 持久结果存储与有界回读 / 隔离、完整性、容量、重启测试 / todo / 独立提交公共结果存储。
-- NX-07e / 工具预览、Bash 采集及回读集成 / Cordis 模拟模型、pnpm check/test/fixtures:check / todo / 独立提交工具集成及使用文档。
+- 关联：M6、R-15；状态：done（2026-09-29）。
+- NX-07a / 需求、参数与契约 / git diff --check / done（仅文档）/ 5ef5b2e。
+- NX-07b / 分段文件读取 / pnpm check（56 文件）、pnpm test（89/89）/ done / 21ee528。
+- NX-07c / 有界搜索和分页 / pnpm check（57 文件）、pnpm test（91/91）/ done / 04f5c4b。
+- NX-07d / 持久结果存储与有界回读 / pnpm check（59 文件）、结果存储测试（2/2）/ done / dd45f75。
+- NX-07e / 工具预览、Bash 采集及回读集成 / pnpm check（60 文件）、pnpm test（96/96）、pnpm fixtures:check / done / 6c03300。
 
 NX-07b：done；src/core/bounded-text.ts 流式扫描和 src/tools/files.ts 分段读取；pnpm check（56 文件）、pnpm test（89/89，无跳过）通过。覆盖中文/CRLF、空文件、末行、输出/扫描上限、长行、非法编码、二进制、取消及非文件；NX-07a 提交 5ef5b2e。下一步搜索。
 
@@ -229,3 +229,7 @@ NX-07c：done；有界 glob/grep 返回 matches、nextOffset、eof、reason、�
 NX-07d：done；ToolResultStore 使用 UUID、session 哈希、SHA-256、sync 和串行写入，保存有界采集并按字符边界分页回读；磁盘文件数/总字节有限额。pnpm check（59 文件）、node --test dist/test/tool-results.test.js（2/2）与 git diff --check 通过。覆盖重启、session 隔离、缺失/损坏、UTF-8 偏移、采集/磁盘额度、取消和失败后恢复；NX-07c 提交 04f5c4b。
 
 NX-07e：done；结果投影可释放并保留错误状态，CLI 注册 read_tool_result，Bash 采集改为配置上限并标注超限；存储目录忽略提交。真实 Cordis 模型通过引用读取 40004 字节日志尾部，模型消息/事件只含有限预览；服务重建后同 session 可继续回读；错误日志、采集超限、无 session 兼容、存储失败与插件释放通过。pnpm check（60 文件）、pnpm test（96/96，无跳过）、pnpm fixtures:check（初始 0/3、参考 3/3）及 git diff --check 通过。本地 Windows Node24；未调用付费 API，远端 CI 提交后核验。NX-07d 提交 dd45f75。
+
+- NX-07f / 最终提交与跨平台验收记录 / CI 36538591870 四组 success，提交清单核对与 git diff --check 通过 / done / 仅文档，本步提交后报告编号。
+
+NX-07 最终验收：a 5ef5b2e、b 21ee528、c 04f5c4b、d dd45f75、e 6c03300，均在下一步开发前验证、独立提交并推送。最终功能提交 6c03300 的 [CI 36538591870](https://github.com/BeforeLanding/mini-DSH/actions/runs/36538591870) 四组 Ubuntu/Windows × Node22/24 全部 success。本地 check/test/fixtures 验收见 e；此收尾仅同步文档，无运行时改动，不重复功能测试。

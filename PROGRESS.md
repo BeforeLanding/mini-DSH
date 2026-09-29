@@ -256,3 +256,10 @@ read_file 增加 startLine/maxLines、行号、nextLine/eof 和截断原因，�
 工具结果投影与 CLI 集成完成：大输出保存后只记录预览/引用，read_tool_result 同 session 有界回读；Bash 成功/非零退出日志均可回读，采集超限明确标注。真实 Cordis 模拟模型读取超过旧 32 KiB 限额的日志尾部，重建服务继续回读；错误状态、存储失败、无 session 兼容和释放已验证。README/忽略规则同步。
 
 首次验证因测试误用 RunState.stopReason 字段未编译；已改为实际 status 后重新通过 pnpm check（60 文件）、pnpm test（96/96）、pnpm fixtures:check（初始全部失败、参考全部通过）。diff 核对及 git diff --check 通过，未调用付费 API。结果存储提交 dd45f75 已推送；本步提交后核验远端 CI 并回填实际提交清单。
+
+### NX-07 完成与跨平台验收（2026-09-29）
+NX-07 已完成：有界分段读取、有界搜索分页、持久结果引用与同 session 回读、Bash 日志采集和模型/事件预览。子步骤提交 a 5ef5b2e、b 21ee528、c 04f5c4b、d dd45f75、e 6c03300 均已逐步验证并推送；TASKS 已回填实际编号和 done 状态。
+
+本地 pnpm check（60 文件）、pnpm test（96/96，无跳过）、pnpm fixtures:check（初始 0/3、参考 3/3）通过。最终功能提交 6c03300 的 [CI 36538591870](https://github.com/BeforeLanding/mini-DSH/actions/runs/36538591870) 已完成且 success，Windows/Ubuntu × Node22/24 四组全部通过。未调用付费 API；结果采集及扫描仍有明确上限，不代表无限输出保留；多进程共享目录没有全局配额锁。
+
+本步 NX-07f 仅核对提交清单并回填最终验收证据，git diff --check 通过，不重复不受影响的运行时测试。下一主线可推进 NX-13 可靠编辑或 NX-14 独立执行验证；NX-05b、NX-15 尚未实现。
