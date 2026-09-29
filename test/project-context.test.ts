@@ -30,7 +30,7 @@ test('project rules follow only the target ancestor chain with explicit scopes a
       ['AGENTS.md', 'AGENTS.md', '.', 'root-rule'], ['src/AGENTS.md', 'src/AGENTS.md', 'src', 'src-rule'],
     ])
     assert.equal(loaded.directory, 'src/nested')
-    assert.equal(loaded.contentBytes, Buffer.byteLength('root-rulesrc-rule'))
+    assert.equal(loaded.contentBytes, Buffer.byteLength('root-rulesrc-rule') + Buffer.byteLength(JSON.stringify(loaded.metadata)))
     assert.equal((await loader.load()).rules.length, 1)
     await fs.writeFile(path.join(f.workspace, 'src', 'AGENTS.md'), 'updated-rule')
     assert.equal((await loader.load('src')).rules.at(-1)?.content, 'updated-rule')
@@ -94,5 +94,73 @@ test('rule loading rejects escaped directories and outward file/directory symlin
       assert.equal((await loader.load()).rules[0].source, 'shared.md')
       assert.equal((await loader.load()).rules[0].scope, '.')
     }
+  } finally { await f.close() }
+})
+
+test('project metadata selects nearest explicit package and config markers without executing scripts', async () => {
+  const f = await fixture()
+  try {
+    await fs.mkdir(path.join(f.workspace, '.git'))
+    await fs.mkdir(path.join(f.workspace, 'app'))
+    await fs.writeFile(path.join(f.workspace, 'package.json'), JSON.stringify({ packageManager: 'npm@11', scripts: { test: 'parent-test' } }))
+    await fs.writeFile(path.join(f.workspace, 'app', 'package.json'), JSON.stringify({ packageManager: 'pnpm@11.22.0', engines: { node: '>=22' },
+      scripts: { test: 'node -e "require(\'fs\').writeFileSync(\'executed\', \'bad\')"', check: 'node check.mjs', postinstall: 'must-not-load' } }))
+    for (const name of ['tsconfig.json', 'pnpm-lock.yaml', 'README.md']) await fs.writeFile(path.join(f.workspace, name), 'marker-only')
+    const loader = new ProjectContextRuntime(f.workspace)
+    const result = await loader.load('app')
+    assert.equal(result.metadata.repositoryRoot, '.')
+    assert.equal(result.metadata.package?.path, 'app/package.json')
+    assert.equal(result.metadata.package?.source, 'app/package.json')
+    assert.equal(result.metadata.package?.packageManager, 'pnpm@11.22.0')
+    assert.equal(result.metadata.package?.node, '>=22')
+    assert.equal(result.metadata.package?.scripts.check, 'node check.mjs')
+    assert.deepEqual(Object.keys(result.metadata.package!.scripts), ['test', 'check'])
+    assert.deepEqual(result.metadata.markers.map(m => m.kind), ['typescript', 'pnpm-lock', 'readme'])
+    await assert.rejects(fs.access(path.join(f.workspace, 'app', 'executed')))
+    await fs.writeFile(path.join(f.workspace, 'app', 'package.json'), '{"scripts":{"lint":"updated"}}')
+    assert.deepEqual((await loader.load('app')).metadata.package?.scripts, { lint: 'updated' })
+  } finally { await f.close() }
+})
+
+test('non-Git and missing, malformed or oversized project configs degrade with explicit notices', async () => {
+  const f = await fixture()
+  try {
+    const loader = new ProjectContextRuntime(f.workspace)
+    const empty = await loader.load()
+    assert.deepEqual(empty.metadata, { repositoryRoot: null, markers: [], notices: [] })
+    await fs.mkdir(path.join(f.workspace, 'app'))
+    await fs.writeFile(path.join(f.workspace, 'package.json'), '{"scripts":{"test":"parent"}}')
+    await fs.writeFile(path.join(f.workspace, 'app', 'package.json'), '{')
+    const invalid = await loader.load('app')
+    assert.equal(invalid.metadata.package, undefined)
+    assert.match(invalid.metadata.notices.join('\n'), /app\/package.json/)
+    await fs.writeFile(path.join(f.workspace, 'app', 'package.json'), '{"scripts":{"test":7,"check":"ok"}}')
+    const script = await loader.load('app')
+    assert.deepEqual(script.metadata.package?.scripts, { check: 'ok' })
+    assert.match(script.metadata.notices.join('\n'), /invalid test script/)
+    const capped = await new ProjectContextRuntime(f.workspace, { maxFileBytes: 1 }).load('app')
+    assert.equal(capped.metadata.package, undefined)
+    assert.match(capped.metadata.notices.join('\n'), /maxFileBytes/)
+    const aggregate = await new ProjectContextRuntime(f.workspace, { maxContentBytes: 1 }).load('app')
+    assert.equal(aggregate.metadata.package, undefined)
+    assert.match(aggregate.metadata.notices.join('\n'), /maxContentBytes/)
+    assert.equal(aggregate.contentBytes, 0)
+  } finally { await f.close() }
+})
+
+test('project metadata never reads outward symlink configs or README bodies', async () => {
+  const f = await fixture()
+  try {
+    const outside = path.join(f.directory, 'outside')
+    await fs.mkdir(outside)
+    await fs.writeFile(path.join(outside, 'package.json'), '{"scripts":{"test":"external-secret"}}')
+    if (process.platform === 'win32') await fs.symlink(outside, path.join(f.workspace, 'package.json'), 'junction')
+    else await fs.symlink(path.join(outside, 'package.json'), path.join(f.workspace, 'package.json'))
+    await fs.writeFile(path.join(f.workspace, 'README.md'), 'readme-body-not-for-injection'.repeat(1000))
+    const context = await new ProjectContextRuntime(f.workspace).load()
+    assert.equal(context.metadata.package, undefined)
+    assert.match(context.metadata.notices.join('\n'), /package.json/)
+    assert.doesNotMatch(JSON.stringify(context), /external-secret|readme-body-not-for-injection/)
+    assert.deepEqual(context.metadata.markers, [{ path: 'README.md', kind: 'readme' }])
   } finally { await f.close() }
 })
