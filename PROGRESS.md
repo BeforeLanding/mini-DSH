@@ -1,5 +1,9 @@
 # 开发进度
 
+### CD-01c 首次实际发布与操作交付（2026-09-29）
+提交 a632121 的 [CI 36550812881](https://github.com/BeforeLanding/mini-DSH/actions/runs/36550812881) 四组全部 success，自动触发 [Deploy ECS 36550955877](https://github.com/BeforeLanding/mini-DSH/actions/runs/36550955877)。attempt1 在服务器 git clone 阶段因 GitHub 连接中断失败，未切换 current；重试 attempt2 实际 success，服务器语法 65 文件、测试 107/107（fail0/skipped0）。current 已切换到 a632121c0d928d0b18604fdef5f4b3462a11a2fb，实际 HEAD/REVISION、共享 .env 链接、构建入口及配置/工作区/会话目录身份核验均通过。没有读取配置或会话内容；目录身份核验不宣称全部数据内容逐字节校验。
+交付 docs/ECS_DEPLOYMENT.md 与 README 入口，包含日常启动、Secrets/服务器前置条件、发布状态、固定目录、版本核验及带锁的原子回滚说明。三个 Bash 代码块的 bash -n 与 git diff --check 通过；回滚未执行。CD-01a 73988b5、b a632121 均已推送；本步为独立文档提交。新版本实际交互启动待用户在服务器运行 ~/bin/mini-dsh；先前用户模型验证来自 bootstrap，不混记为新版本模型验收。
+
 ### CD-01b 自动发布工作流（2026-09-29）
 CD-01a 已提交并推送 73988b5；[公网 SSH 预检 36550421451](https://github.com/BeforeLanding/mini-DSH/actions/runs/36550421451) 实际 success，确认 GitHub 托管 runner 的连接与部署前置环境。
 新增 Deploy ECS，通过 workflow_run 仅接受同仓库 main push 的 CI 全部成功结果，以 head_sha 调用用户已安装的发布脚本；production Secrets、严格主机密钥校验、无交互 SSH、串行发布且不中途取消。发布后核验实际 Git HEAD/REVISION、共享 .env 链接、构建入口和配置/工作区/会话目录身份；过期 main 提交跳过，应用版本与 CI SHA 必须一致。未读取任何密钥或会话内容。
