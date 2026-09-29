@@ -1,3 +1,4 @@
+import { resolveBudget } from './budget.js'
 import type { Agent, RunOptions } from './contracts.js'
 import type { SessionRuntime } from './session-runtime.js'
 import type { SystemPromptRuntime } from './system-prompt-runtime.js'
@@ -17,7 +18,8 @@ export class AgentLoopRuntime {
         this.llm = llm
     }
 
-    async run(agent: Agent, input: string, { signal, onReasoning, onContent, onToolCall, onToolResult }: RunOptions = {}) {
+    async run(agent: Agent, input: string, { signal, onReasoning, onContent, onToolCall, onToolResult, budget }: RunOptions = {}) {
+        resolveBudget(agent.budget, budget)
         const sessionId = agent.sessionId
 
         this.sessions.append(sessionId, 'user/message', { content: input })

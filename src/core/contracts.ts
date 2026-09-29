@@ -1,3 +1,4 @@
+import type { BudgetPolicy } from './budget.js'
 export type Arguments = Record<string, unknown>
 export type ModelSelection = string | { provider: string; model: string } | null
 export interface ToolCall { id: string; name: string; arguments?: Arguments }
@@ -16,12 +17,13 @@ export interface ChatRequest {
 export interface ChatResponse { content?: string; reasoningContent?: string; toolCalls?: ToolCall[] }
 export interface Adapter { models?: string[]; chat(request: ChatRequest): Promise<ChatResponse> }
 export interface RunOptions {
+  budget?: BudgetPolicy
   signal?: AbortSignal; onReasoning?: (chunk: string) => void; onContent?: (chunk: string) => void
   onToolCall?: (call: ToolCall) => void
   onToolResult?: (result: ToolResult & { renderedContent: string; name: string; toolCallId: string }) => void
 }
 export interface Agent {
-  id: string; name: string; sessionId: string; model: ModelSelection
+  id: string; name: string; sessionId: string; model: ModelSelection; budget?: BudgetPolicy
   send(input: string, options?: RunOptions): Promise<string>
 }
 export interface Loop { run(agent: Agent, input: string, options?: RunOptions): Promise<string> }

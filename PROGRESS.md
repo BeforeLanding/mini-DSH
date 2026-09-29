@@ -58,3 +58,6 @@
 
 ### CB-15d（2026-09-29）
 原 22 条测试与 plugins.config 迁移 TS，关闭 allowJs；CI 使用类型/构建/产物检查，README/AGENTS 同步。pnpm check / test 通过，22/22 无跳过；Windows Node 24 本地通过。远程 Node22/24 × Ubuntu/Windows 矩阵尚待核验，未宣称跨平台通过。下一步配置契约。
+
+### CB-01 配置快照（2026-09-29）
+配置快照、覆盖和零额度校验已实现；pnpm check / test 24/24 通过，非法配置无事件或模型副作用。调度限制待后续阶段。

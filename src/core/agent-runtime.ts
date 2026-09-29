@@ -23,12 +23,13 @@ export class AgentRuntime {
     }
 
     // Create a new agent instance with a unique ID, session ID, model selection, and an optional name. The agent is registered in the runtime and can send messages through the provided loop.
-    create({ sessionId, model, loop, name = 'default' }: { sessionId: string; model: ModelSelection; loop: Loop; name?: string }) {
+    create({ sessionId, model, loop, name = 'default', budget }: { sessionId: string; model: ModelSelection; loop: Loop; name?: string; budget?: import('./budget.js').BudgetPolicy }) {
         const agent: Agent = {
             id: randomUUID(),
             name,
             sessionId,
             model,
+            budget,
 
             async send(input, options = {}) {
                 return loop.run(agent, input, options)
