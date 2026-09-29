@@ -1,5 +1,9 @@
 # 开发进度
 
+### CD-02b Actions 传包接入（2026-09-29）
+CD-02a 8df3beb 已独立提交推送；Deploy ECS checkout CI head_sha（完整历史、禁用保留凭据），在 Linux runner 执行 bundle 发布 fixture，生成完整 Git bundle 并通过 SSH/SCP 传送到随机 incoming 目录，使用该提交的脚本 prepare。构建成功后 runner 再通过 GitHub API 核验 main，仍匹配才 activate；版本切换前后核验持久目录身份、共享配置链接与实际 HEAD/REVISION。运行结束清理明确的传输文件，保留版本目录。不再调用服务器旧的 GitHub clone 脚本。
+本地 YAML、CI 触发门槛、精确 checkout SHA/完整历史、两次 main 核验、runner/prepare/activate Bash 语法与 git diff --check 通过；本步只改工作流与说明，应用回归沿用 a 的 107/107，实际四组 CI、Linux fixture 和服务器发布待推送后验证。
+
 ### CD-02a 离线传包发布脚本（2026-09-29）
 19f4ec9 的部署 36551890832 在服务器 git clone 时连接 github.com:443 超时，current 未切换。新增 scripts/deploy-ecs-bundle.sh：prepare 校验本地完整 bundle 与精确 SHA、构建/测试后写 receipt，activate 校验 receipt/HEAD/REVISION/共享 .env/产物，持锁保存上一版本并原子切换。服务器侧没有 GitHub 下载操作。MINI_DSH_DEPLOY_BASE 用于临时 fixture，默认沿用已有服务器布局。
 新增 scripts/test-ecs-bundle.sh，本地真实 Git bundle 导入与错误 SHA/路径/REVISION 拒绝通过；Git Bash 缺少 flock 时仅 fixture 使用替身，Linux 原子激活场景留待下一步在 Actions 执行，不报告本地已覆盖。两个脚本 bash -n、pnpm check（65 文件）、pnpm test（107/107、无跳过）、git diff --check 通过。当前脚本尚未接入 CD，远端修复待 b。

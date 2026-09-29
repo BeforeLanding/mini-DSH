@@ -14,7 +14,9 @@
 
 向 GitHub 仓库 `main` 推送提交后，打开仓库的 Actions 页面：先查看 **CI**，再查看 **Deploy ECS**。四组 Ubuntu/Windows、Node22/24 的 CI 全部成功后才发布；失败或取消时跳过部署。手动 **ECS SSH Check** 只检查连接和环境，不发布版本。
 
-Deploy ECS 使用 CI 的 `head_sha`，通过严格主机密钥校验的 SSH 调用服务器 `~/bin/deploy-mini-dsh`。服务器脚本创建独立版本目录、安装锁定依赖、执行 `pnpm check` 和 `pnpm test`，成功后原子切换 `current`。如果 main 已有更新提交，旧发布跳过版本切换。工作流串行执行；服务器脚本另使用 `flock` 锁，避免并行切换。
+Deploy ECS 在 GitHub runner 下载 CI 的 `head_sha`，打包为完整 Git bundle，通过严格主机密钥校验的 SSH/SCP 传送 bundle 和该版本的 scripts/deploy-ecs-bundle.sh。服务器从本地 bundle 导入精确提交，创建独立版本目录、安装锁定依赖、执行 `pnpm check` 和 `pnpm test`。runner 在构建前后通过 GitHub API 检查 main，最新提交仍一致才原子切换 `current`。工作流串行执行；服务器脚本另使用 `flock` 锁。服务器发布代码时无需连接 github.com；安装依赖仍需要访问包注册表。
+
+bundle 保留 Git 提交与 HEAD，可离线校验；依据见 [Git 官方 bundle 文档](https://git-scm.com/docs/git-bundle)。临时传包目录位于 `~/apps/mini-DSH/incoming`，传输文件在运行结束时清理，旧版本目录保留。
 
 触发机制使用 GitHub 官方的 [workflow_run](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run)；工作流限定同仓库、main、push 和成功结论。没有从 PR 直接发布的入口。
 
@@ -26,7 +28,7 @@ Deploy ECS 使用 CI 的 `head_sha`，通过严格主机密钥校验的 SSH 调�
 - `~/workspaces/default`：固定工作区。
 - `~/.mini-dsh/sessions`：持久会话记录。
 - `~/bin/mini-dsh`：加载 nvm Node24、解析 current、进入实际版本目录并启动构建产物。
-- `~/bin/deploy-mini-dsh`：已手动安装的发布脚本，权限 700；更换服务器时需要重新安装。
+- `~/bin/deploy-mini-dsh`：初期手动安装的 GitHub 拉取脚本，新 CD 已改为随 bundle 传送仓库发布脚本，不再调用此入口。
 
 共享 `.env` 中设置 `MINI_DSH_WORKSPACE=/home/deploy/workspaces/default` 与 `MINI_DSH_SESSION_DIR=/home/deploy/.mini-dsh/sessions`。服务器已有 nvm Node24 与 pnpm11.22.0，以及 Git、Bash、`flock`。模型密钥只保存在共享配置中。
 
@@ -45,7 +47,7 @@ cat ~/apps/mini-DSH/current/REVISION
 
 发布失败时先打开 Actions 中的失败步骤。构建/测试失败发生在版本切换前，仍可使用原版本。版本切换后的核验失败需先查看 `current` 与日志，再决定回滚。不要删除旧版本目录；已有 CLI 可能仍在使用它们。
 
-如果失败日志是服务器下载 GitHub 时连接中断，可在该运行页面点击 **Re-run jobs → Re-run failed jobs** 重试。首次发布曾遇到这一错误，重试成功；构建或测试错误应先修复再发布。
+可在运行页面点击 **Re-run jobs → Re-run failed jobs** 重试临时 SSH/包注册表故障。旧工作流曾因服务器访问 GitHub 超时失败；新工作流通过 runner 传包解决这一下载依赖。构建或测试错误应先修复再发布。
 
 ## 回滚到上一版本
 

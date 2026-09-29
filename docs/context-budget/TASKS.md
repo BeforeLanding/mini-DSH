@@ -3,7 +3,7 @@
 ## CD-02 修复服务器 GitHub 下载失败
 - 状态：进行中；最新 19f4ec9 的 CI success，但部署 36551890832 在 git clone 连接 github.com:443 超时，未切换版本。
 - CD-02a：离线 Git bundle 发布脚本，分 prepare/activate，构建失败或 SHA 不符不得切换；实现与本地验证完成，两个 Bash 脚本语法、真实 bundle 导入、错误 SHA/路径/REVISION 拒绝、pnpm check（65 文件）/test（107/107）和 git diff --check 通过。Windows 无 flock/原生 Linux 软链，本地锁用 fixture 替身，原子激活验收待 b 的 Linux runner 与服务器实际运行；独立提交。
-- CD-02b：Actions 下载 CI SHA，传 bundle/脚本，服务器构建后由 runner 查 main 再激活；工作流门槛/语法、实际 CI/CD、版本与持久目录核验；独立提交。
+- CD-02b：Actions 下载 CI SHA，传 bundle/脚本，服务器构建后由 runner 查 main 再激活；本地实现完成，a 已提交 8df3beb；YAML、成功/push/main/同仓库门槛、精确 SHA/完整历史 checkout、两次 main 核验、runner/prepare/activate Bash 语法和 git diff --check 通过；实际 CI/CD 待推送运行；独立提交。
 - CD-02c：记录真实部署结果；独立验收文档提交，不提前宣称远端成功。
 - 保留 production Secrets、严格主机校验、服务器发布锁和旧版本；不读取模型密钥或会话内容。
 

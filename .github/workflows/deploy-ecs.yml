@@ -24,9 +24,19 @@ jobs:
     timeout-minutes: 30
     environment: production
     steps:
+      - name: Check out the commit verified by CI
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify bundle deployment failure boundaries
+        run: bash scripts/test-ecs-bundle.sh
       - name: Publish tested main commit
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
           DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
           ECS_HOST: ${{ secrets.ECS_HOST }}
           ECS_PORT: ${{ secrets.ECS_PORT }}
@@ -42,53 +52,76 @@ jobs:
           [[ "$ECS_USER" == 'deploy' ]] || { echo 'ECS_USER must be deploy'; exit 1; }
           [[ -n "$SSH_KEY" && -n "$KNOWN_HOSTS" ]] || { echo 'SSH secrets are missing'; exit 1; }
 
+          test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+          latest_sha() {
+            curl --fail --silent --show-error --retry 3 --connect-timeout 10 --max-time 30 \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github+json' \
+              "https://api.github.com/repos/$REPOSITORY/git/ref/heads/main" | jq -er '.object.sha'
+          }
+          latest="$(latest_sha)"
+          [[ "$latest" =~ ^[0-9a-f]{40}$ ]]
+          if [[ "$latest" != "$DEPLOY_SHA" ]]; then
+            echo 'Superseded main commit; deployment skipped.'
+            exit 0
+          fi
+
           umask 077
           credentials="$(mktemp -d "$RUNNER_TEMP/mini-dsh-ssh.XXXXXX")"
-          trap 'rm -f -- "$credentials/key" "$credentials/known_hosts"; rmdir -- "$credentials"' EXIT
+          upload=''
           printf '%s\n' "$SSH_KEY" > "$credentials/key"
           printf '%s\n' "$KNOWN_HOSTS" > "$credentials/known_hosts"
           unset SSH_KEY KNOWN_HOSTS
-
-          ssh -T \
-            -i "$credentials/key" \
-            -p "$ECS_PORT" \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
-            -o HostKeyAlgorithms=ssh-ed25519 \
-            -o "UserKnownHostsFile=$credentials/known_hosts" \
-            -o ConnectTimeout=15 \
-            -o ServerAliveInterval=15 \
-            -o ServerAliveCountMax=3 \
-            "$ECS_USER@$ECS_HOST" "bash -se -- $DEPLOY_SHA" <<'REMOTE'
+          ssh_options=(
+            -i "$credentials/key"
+            -o BatchMode=yes
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+            -o HostKeyAlgorithms=ssh-ed25519
+            -o "UserKnownHostsFile=$credentials/known_hosts"
+            -o ConnectTimeout=15
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=3
+          )
+          remote() { ssh -T "${ssh_options[@]}" -p "$ECS_PORT" "$ECS_USER@$ECS_HOST" "$@"; }
+          cleanup() {
+            if [[ "$upload" =~ ^/home/deploy/apps/mini-DSH/incoming/transfer\.[A-Za-z0-9]+$ ]]; then
+              remote "rm -f -- '$upload/source.bundle' '$upload/deploy.sh' '$upload/release-path' '$upload/identities'; rmdir -- '$upload'" || true
+            fi
+            rm -f -- "$credentials/key" "$credentials/known_hosts" "$credentials/source.bundle"
+            rmdir -- "$credentials"
+          }
+          trap cleanup EXIT
+          git bundle create "$credentials/source.bundle" HEAD
+          git bundle verify "$credentials/source.bundle"
+          upload="$(remote 'umask 077; mkdir -p "$HOME/apps/mini-DSH/incoming" && mktemp -d "$HOME/apps/mini-DSH/incoming/transfer.XXXXXX"')"
+          [[ "$upload" =~ ^/home/deploy/apps/mini-DSH/incoming/transfer\.[A-Za-z0-9]+$ ]] || { echo 'Invalid remote transfer path'; exit 1; }
+          scp "${ssh_options[@]}" -P "$ECS_PORT" "$credentials/source.bundle" "$ECS_USER@$ECS_HOST:$upload/source.bundle"
+          scp "${ssh_options[@]}" -P "$ECS_PORT" scripts/deploy-ecs-bundle.sh "$ECS_USER@$ECS_HOST:$upload/deploy.sh"
+          remote "bash -se -- $DEPLOY_SHA $upload" <<'PREPARE'
           sha="$1"
+          upload="$2"
           test "$(id -un)" = deploy
           base="$HOME/apps/mini-DSH"
-          workspace="$HOME/workspaces/default"
-          sessions="$HOME/.mini-dsh/sessions"
-          test -d "$workspace"
-          test -d "$sessions"
-          workspace_identity="$(stat -c '%d:%i' "$workspace")"
-          sessions_identity="$(stat -c '%d:%i' "$sessions")"
-          env_identity="$(stat -c '%d:%i' "$base/shared/.env")"
-          bash "$HOME/bin/deploy-mini-dsh" "$sha"
-          test "$(stat -c '%d:%i' "$workspace")" = "$workspace_identity"
-          test "$(stat -c '%d:%i' "$sessions")" = "$sessions_identity"
-          test "$(stat -c '%d:%i' "$base/shared/.env")" = "$env_identity"
-          current="$(readlink -f "$base/current")"
-          if [[ "$(cat "$current/REVISION" 2>/dev/null || true)" != "$sha" ]]; then
-            latest="$(git ls-remote --exit-code https://github.com/BeforeLanding/mini-DSH.git refs/heads/main | cut -f1)"
-            if [[ "$latest" != "$sha" ]]; then
-              echo 'Superseded main commit; no version switch required.'
-              exit 0
-            fi
-            echo 'Current release does not match the tested commit.'
-            exit 1
+          stat -c '%d:%i' "$base/shared/.env" "$HOME/workspaces/default" "$HOME/.mini-dsh/sessions" > "$upload/identities"
+          bash "$upload/deploy.sh" prepare "$sha" "$upload"
+          PREPARE
+          latest="$(latest_sha)"
+          [[ "$latest" =~ ^[0-9a-f]{40}$ ]]
+          if [[ "$latest" != "$DEPLOY_SHA" ]]; then
+            echo 'Superseded during build; current unchanged.'
+            exit 0
           fi
+          remote "bash -se -- $DEPLOY_SHA $upload" <<'ACTIVATE'
+          sha="$1"
+          upload="$2"
+          base="$HOME/apps/mini-DSH"
+          cmp "$upload/identities" <(stat -c '%d:%i' "$base/shared/.env" "$HOME/workspaces/default" "$HOME/.mini-dsh/sessions")
+          bash "$upload/deploy.sh" activate "$sha" "$upload"
+          cmp "$upload/identities" <(stat -c '%d:%i' "$base/shared/.env" "$HOME/workspaces/default" "$HOME/.mini-dsh/sessions")
+          current="$(readlink -f "$base/current")"
+          test "$(cat "$current/REVISION")" = "$sha"
           test "$(git -C "$current" rev-parse HEAD)" = "$sha"
           test "$(readlink -f "$current/.env")" = "$base/shared/.env"
-          test -f "$current/dist/src/index.js"
-          printf 'Published commit: %s\n' "$sha"
-          printf 'Current release: %s\n' "$current"
           echo 'Deployment verified; shared configuration, workspace and sessions retained.'
-          REMOTE
+          ACTIVATE
