@@ -76,3 +76,6 @@ JsonlStore 单写入者锁、串行 append+sync、序号检查、调度前 flush
 
 ### CB-11 损坏恢复（2026-09-29）
 JSONL 串行 sync、单写入者锁与写入故障屏障；严格载荷/序号/版本、半条尾部拒绝并提供显式备份隔离；pnpm check / test 30/30 通过。CLI 持久化入口待后续。
+
+### CB-03 usage与输出协议（2026-09-29）
+2026-09-29 核验 https://api-docs.deepseek.com/api/create-chat-completion/；max_tokens、include_usage、usage-only/重复末包归一化，reasoning 为输出子集；截断/残缺调用不执行。pnpm check / test 33/33 通过；缺失 usage 的统一估算在 CB-04 接入。

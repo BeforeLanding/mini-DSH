@@ -1,3 +1,5 @@
+import { ModelStreamError } from './model-error.js'
+import type { Usage } from './budget.js'
 import { randomUUID } from 'node:crypto'
 import { BudgetStop } from './budget.js'
 import { resolveBudget } from './budget.js'
@@ -50,10 +52,20 @@ export class AgentLoopRuntime {
             const messages = this.sessions.deriveMessages(sessionId)
 
             state.counters.modelRequests++
-            append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId: randomUUID() })
+            const requestId = randomUUID()
+            append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId })
+            const settle = (usage?: Usage) => {
+                if (!usage) return
+                state.usage.push(usage)
+                state.counters.inputTokens += usage.inputTokens
+                state.counters.outputTokens += usage.outputTokens
+                state.counters.totalTokens += usage.totalTokens
+                append(sessionId, 'model/usage', { taskId: state.taskId, runId: state.runId, requestId, usage })
+            }
             await this.sessions.flush(sessionId)
             const response = await this.llm.chat(
                 {
+                    maxOutputTokens: policy.maxOutputTokens,
                     system,
                     messages,
                     tools: this.tools.schemas(),
@@ -62,7 +74,9 @@ export class AgentLoopRuntime {
                     onContent,
                 },
                 agent.model,
-            )
+            ).catch(error => { if (error instanceof ModelStreamError) settle(error.partial.usage); throw error })
+            settle(response.usage)
+            if (response.complete === false) throw new BudgetStop(response.finishReason === 'length' ? 'output_limit' : 'error', state)
             //step3: Use the LLM to generate a response based on the system prompt, the derived messages, available tools, and any provided callbacks for reasoning and content. The model used is specified by the agent's model selection.
 
             const toolCalls = response.toolCalls ?? []

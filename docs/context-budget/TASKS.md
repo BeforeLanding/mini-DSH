@@ -56,8 +56,8 @@
 - 依赖：CB-01、CB-02。
 - 行为：核验官方协议，归一化 usage/finishReason，支持可选输出 token 上限；无 usage 返回可解释估算。
 - 验证：模拟 fetch/SSE 的完整、usage-only、缺失、重复、流中断；核对输出限制字段；残缺 tool JSON 不执行。
-- 状态：todo；D-04 官方协议调研完成，实际适配器测试未实施。
-- 证据：尚无；完成时附官方文档链接与核验日期、协议测试名及结果。
+- 状态：in_progress（2026-09-29）。
+- 证据：2026-09-29 核验 https://api-docs.deepseek.com/api/create-chat-completion/；max_tokens、include_usage、usage-only/重复末包归一化，reasoning 为输出子集；截断/残缺调用不执行。pnpm check / test 33/33 通过；缺失 usage 的统一估算在 CB-04 接入。
 
 ## CB-12 Session 重建与未知执行识别
 - 关联：R-11；M1；D-08。

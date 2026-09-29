@@ -1,8 +1,11 @@
+import type { Usage } from '../core/budget.js'
+import { isRecord } from '../core/event-store.js'
+import { ModelStreamError } from '../core/model-error.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Adapter, Arguments, ChatRequest } from '../core/contracts.js'
 interface WireCall { id: string; name: string; arguments: string }
 interface Delta { index?: number; id?: string; function?: { name?: string; arguments?: string } }
-interface StreamEvent { error?: { message?: string }; choices?: { delta?: { content?: string; reasoning_content?: string; tool_calls?: Delta[] } }[] }
+interface StreamEvent { usage?: unknown; error?: { message?: string }; choices?: { finish_reason?: string; delta?: { content?: string; reasoning_content?: string; tool_calls?: Delta[] } }[] }
 // DeepSeek LLM provider for mini-DSH, which handles streaming responses and tool calls.
 
 export const name = 'mini-model-deepseek'
@@ -19,7 +22,10 @@ export async function* parseSSE(response: { body: { getReader(): { read(): Promi
     if (!trimmed.startsWith('data:')) return undefined
     const data = trimmed.slice(5).trim()
     if (data === '[DONE]') return null
-    return data ? JSON.parse(data) : undefined
+    if (!data) return undefined
+    const event: unknown = JSON.parse(data)
+    if (!isRecord(event) || (event.choices !== undefined && !Array.isArray(event.choices))) throw new Error('invalid SSE event')
+    return event as StreamEvent
   }
   try {
     while (true) {
@@ -51,7 +57,11 @@ export function accumulateToolCallDelta(map: Map<number, WireCall>, delta: Delta
 // Parse tool arguments from a JSON string, throwing an error if the JSON is incomplete or invalid.
 export function parseToolArguments(text: string): Arguments {
   if (!text?.trim()) return {}
-  try { return JSON.parse(text) } catch (error) {
+  try {
+    const value: unknown = JSON.parse(text)
+    if (!isRecord(value)) throw new Error('tool arguments must be an object')
+    return value
+  } catch (error) {
     throw new Error('incomplete tool arguments JSON', { cause: error })
   }
 }
@@ -63,19 +73,30 @@ export function finalizeToolCalls(map: Map<number, WireCall>) {
     .map(([index, call]) => ({ id: call.id || `call_${index}`, name: call.name, arguments: parseToolArguments(call.arguments) }))
 }
 
-export function apply(ctx: Context, config: { apiKey?: string; baseUrl?: string; models?: string[]; defaultModel?: string; thinking?: string } = {}) {
+export interface DeepSeekConfig { apiKey?: string; baseUrl?: string; models?: string[]; defaultModel?: string; thinking?: string; fetch?: typeof fetch }
+export function normalizeUsage(raw: unknown): Usage | undefined {
+  if (raw == null) return undefined
+  if (!isRecord(raw)) throw new Error('invalid model usage')
+  const input = raw.prompt_tokens, output = raw.completion_tokens
+  if (typeof input !== 'number' || !Number.isSafeInteger(input) || input < 0 || typeof output !== 'number' || !Number.isSafeInteger(output) || output < 0 || raw.total_tokens !== input + output) throw new Error('invalid model usage counts')
+  const reasoning = isRecord(raw.completion_tokens_details) ? raw.completion_tokens_details.reasoning_tokens : undefined
+  if (reasoning !== undefined && (typeof reasoning !== 'number' || !Number.isSafeInteger(reasoning) || reasoning < 0 || reasoning > output)) throw new Error('invalid reasoning usage')
+  return { inputTokens: input, outputTokens: output, totalTokens: input + output, source: 'provider', uncertain: false, ...(typeof reasoning === 'number' ? { reasoningTokens: reasoning } : {}) }
+}
+export function createDeepSeekAdapter(config: DeepSeekConfig = {}): Adapter {
   const apiKey = config.apiKey ?? process.env.DEEPSEEK_API_KEY
   if (!apiKey) throw new Error('missing DEEPSEEK_API_KEY; copy .env.example to .env and fill it in')
   const baseUrl = (config.baseUrl ?? process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com').replace(/\/+$/, '')
   const models = config.models ?? ['deepseek-v4-pro', 'deepseek-v4-flash']
   const adapter: Adapter = {
     models,
-    async chat({ system, messages = [], tools = [], model, signal, onReasoning, onContent }: ChatRequest) {
-      const response = await fetch(`${baseUrl}/chat/completions`, {
+    async chat({ system, messages = [], tools = [], model, signal, onReasoning, onContent, maxOutputTokens }: ChatRequest) {
+      const response = await (config.fetch ?? fetch)(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, signal,
         body: JSON.stringify({
-          model, stream: true,
+          model, stream: true, stream_options: { include_usage: true },
+          ...(maxOutputTokens !== undefined ? { max_tokens: maxOutputTokens } : {}),
           thinking: { type: config.thinking ?? process.env.DEEPSEEK_THINKING ?? 'enabled' },
           messages: [...(system ? [{ role: 'system', content: system }] : []), ...messages],
           ...(tools.length ? { tools } : {}),
@@ -85,16 +106,27 @@ export function apply(ctx: Context, config: { apiKey?: string; baseUrl?: string;
       let content = ''
       let reasoningContent = ''
       const calls = new Map<number, WireCall>()
+      let usage: Usage | undefined
+      let finishReason: string | undefined
+      try {
       for await (const event of parseSSE(response)) {
         if (event.error) throw new Error(event.error.message ?? 'DeepSeek stream error')
+        if (event.usage != null) usage = normalizeUsage(event.usage)
+        finishReason = event.choices?.[0]?.finish_reason ?? finishReason
         const delta = event.choices?.[0]?.delta
         if (!delta) continue
         if (delta.reasoning_content) { reasoningContent += delta.reasoning_content; onReasoning?.(delta.reasoning_content) }
         if (delta.content) { content += delta.content; onContent?.(delta.content) }
         for (const call of delta.tool_calls ?? []) accumulateToolCallDelta(calls, call)
       }
-      return { content, reasoningContent, toolCalls: finalizeToolCalls(calls) }
+      const complete = finishReason === 'stop' || finishReason === 'tool_calls'
+      return { content, reasoningContent, usage, finishReason, complete, toolCalls: complete ? finalizeToolCalls(calls) : [] }
+      } catch (error) { throw new ModelStreamError(error instanceof Error ? error.message : String(error), { content, reasoningContent, usage, finishReason, complete: false }, error) }
     },
   }
-  ctx.effect(() => ctx.llm.register('deepseek', adapter, { defaultModel: config.defaultModel ?? models[0] }), 'register deepseek provider')
+  return adapter
+}
+export function apply(ctx: Context, config: DeepSeekConfig = {}) {
+  const adapter = createDeepSeekAdapter(config)
+  ctx.effect(() => ctx.llm.register('deepseek', adapter, { defaultModel: config.defaultModel ?? adapter.models?.[0] }), 'register deepseek provider')
 }

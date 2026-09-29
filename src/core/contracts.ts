@@ -11,10 +11,11 @@ export interface Message {
 }
 export interface ToolSchema { type: 'function'; function: { name: string; description: string; parameters: Arguments } }
 export interface ChatRequest {
+  maxOutputTokens?: number
   system?: string; messages?: Message[]; tools?: ToolSchema[]; model?: string
   signal?: AbortSignal; onReasoning?: (chunk: string) => void; onContent?: (chunk: string) => void
 }
-export interface ChatResponse { content?: string; reasoningContent?: string; toolCalls?: ToolCall[] }
+export interface ChatResponse { usage?: Usage; finishReason?: string; complete?: boolean; content?: string; reasoningContent?: string; toolCalls?: ToolCall[] }
 export interface Adapter { models?: string[]; chat(request: ChatRequest): Promise<ChatResponse> }
 export interface RunOptions {
   budget?: BudgetPolicy
