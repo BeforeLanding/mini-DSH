@@ -3,8 +3,8 @@
 ## NX-12 coding profile 与仓库上下文
 - 关联：M6、R-14；依赖 NX-05a。
 - 状态：in_progress（2026-09-29）。
-- NX-12a / 作用域与加载契约 / 核对 R-14 与 PLAN 的边界、来源、默认限制 / done（仅文档，git diff --check 通过）/ 提交后报告编号。
-- NX-12b / general/coding 身份选择 / 配置、实际 prompt、无规则加载副作用和插件释放 / todo / 独立提交 runtime-context 身份及测试。
+- NX-12a / 作用域与加载契约 / 核对 R-14 与 PLAN 的边界、来源、默认限制 / done（仅文档，git diff --check 通过）/ c5dd04b。
+- NX-12b / general/coding 身份选择 / 配置、实际 prompt、无规则加载副作用和插件释放 / done（pnpm check 50 文件、pnpm test 75/75）/ 本步提交后报告编号。
 - NX-12c / 有界目录规则加载 / 祖先链与作用域、重新读取、超限/UTF-8/路径和软链 / todo / 独立提交 core 规则加载器及测试。
 - NX-12d / 显式项目配置与检查入口 / 最近配置、非 Git/缺失/非法/超限退化、不执行脚本 / todo / 独立提交元数据发现及测试。
 - NX-12e / prompt 与按需工具集成 / 真实 Cordis 模型请求、其他目录查询、工作区边界与工具释放、完整回归 / todo / 独立提交插件装配、集成测试及使用说明。
