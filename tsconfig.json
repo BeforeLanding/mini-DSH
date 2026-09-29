@@ -7,11 +7,16 @@
     "noEmitOnError": true,
     "verbatimModuleSyntax": true,
     "sourceMap": true,
-    "allowJs": true,
-    "checkJs": false,
+    "allowJs": false,
     "rootDir": ".",
     "outDir": "dist",
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["src/**/*", "test/**/*", "plugins.config.js"]
+  "include": [
+    "src/**/*",
+    "test/**/*",
+    "plugins.config.ts"
+  ]
 }

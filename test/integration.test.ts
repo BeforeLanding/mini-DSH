@@ -1,3 +1,4 @@
+import type { Arguments } from '../src/core/contracts.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
@@ -25,7 +26,7 @@ test('the whole plugin stack boots on Cordis and runs a full model -> tool -> mo
     await root.plugin(sandbox, { workspace, autoApprove: true })
     await root.plugin(bash, { workspace })
     const filePlugin = await root.plugin(files, { workspace })
-    for (const service of ['sessions', 'systemPrompt', 'tools', 'llm', 'agents', 'agentLoop', 'sandbox']) assert.ok(root[service])
+    for (const service of ['sessions', 'systemPrompt', 'tools', 'llm', 'agents', 'agentLoop', 'sandbox'] as const) assert.ok(root[service])
     assert.deepEqual(root.tools.list().map(tool => tool.name).sort(), ['bash', 'edit_file', 'glob', 'grep', 'read_file', 'write_file'])
     const prompt = await root.systemPrompt.assemble({ step: 0 })
     assert.match(prompt, /You are a general-purpose agent/)
@@ -35,15 +36,17 @@ test('the whole plugin stack boots on Cordis and runs a full model -> tool -> mo
     let calls = 0
     root.llm.register('mock', {
       models: ['smoke'],
-      async chat({ system, messages, tools: schemas }) {
+      async chat({ system = '', messages = [], tools: schemas = [] }) {
         calls++
         if (calls === 1) {
           assert.ok(schemas.some(tool => tool.function.name === 'bash'))
           assert.ok(system.includes('Runtime Context'))
           return { toolCalls: [{ id: 't1', name: 'bash', arguments: { command: 'pwd' } }] }
         }
-        assert.equal(messages.at(-1).role, 'tool')
-        assert.match(messages.at(-1).content, /mini-dsh-smoke/)
+        const last = messages.at(-1)
+        assert.ok(last)
+        assert.equal(last.role, 'tool')
+        assert.match(last.content ?? '', /mini-dsh-smoke/)
         return { content: 'done', toolCalls: [] }
       },
     }, { defaultModel: 'smoke' })
@@ -55,10 +58,10 @@ test('the whole plugin stack boots on Cordis and runs a full model -> tool -> mo
     assert.equal(calls, 2)
     assert.deepEqual(session.events.map(event => event.type), ['session/start', 'user/message', 'assistant/tool_calls', 'tool/result', 'assistant/message'])
 
-    const execute = async (name, args) => {
+    const execute = async (name: string, args: Arguments) => {
       const result = await root.tools.execute(name, args)
       assert.equal(result.isError, false, root.tools.renderResult(result))
-      return result.value
+      return result.value as string
     }
     await execute('write_file', { path: 'nested/a.txt', content: 'hello world\nhello again' })
     await execute('edit_file', { path: 'nested/a.txt', oldText: 'world', newText: 'Harness' })

@@ -11,7 +11,7 @@
   "scripts": {
     "start": "pnpm build && node dist/src/index.js",
     "test": "pnpm build && node --test dist/test/*.test.js",
-    "check": "pnpm typecheck && node scripts/check-syntax.js",
+    "check": "pnpm build && node scripts/check-syntax.js",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",

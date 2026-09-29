@@ -9,7 +9,7 @@ export const name = 'mini-model-deepseek'
 export const inject = ['llm']
 
 // The apply function registers the DeepSeek LLM provider with the mini-DSH context, allowing it to be used for chat operations. It requires an API key and optionally accepts a base URL, a list of models, and a default model selection.
-export async function* parseSSE(response: Pick<Response, "body">): AsyncGenerator<StreamEvent> {
+export async function* parseSSE(response: { body: { getReader(): { read(): Promise<{ done: boolean; value?: Uint8Array }>; releaseLock(): void } } | null }): AsyncGenerator<StreamEvent> {
   if (!response.body) throw new Error('DeepSeek API returned no response body')
   const reader = response.body.getReader()
   const decoder = new TextDecoder()

@@ -44,7 +44,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check JavaScript syntax
+      - name: Typecheck, build and check emitted ESM
         run: pnpm check
 
       - name: Run unit and integration tests

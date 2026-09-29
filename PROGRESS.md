@@ -55,3 +55,6 @@
 
 ### CB-15c（2026-09-29）
 入口、Cordis 服务、DeepSeek、文件/Bash 工具迁移 TS；使用 Cordis Context 类型增强，保留注册释放。pnpm check / test 成功，原 22/22 通过；配置动态导入路径保持。修正 dist 忽略规则换行。下一步测试和 CI。
+
+### CB-15d（2026-09-29）
+原 22 条测试与 plugins.config 迁移 TS，关闭 allowJs；CI 使用类型/构建/产物检查，README/AGENTS 同步。pnpm check / test 通过，22/22 无跳过；Windows Node 24 本地通过。远程 Node22/24 × Ubuntu/Windows 矩阵尚待核验，未宣称跨平台通过。下一步配置契约。

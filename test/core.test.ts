@@ -1,3 +1,4 @@
+import type { ChatRequest, ToolCall, ToolResult } from '../src/core/contracts.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { AgentLoopRuntime } from '../src/core/agent-loop-runtime.js'
@@ -23,7 +24,7 @@ test('Session derives tool-call history from the event log and keeps reasoning_c
 
   const messages = sessions.deriveMessages(s.id)
   assert.equal(messages[1].reasoning_content, 'I need to call bash date')
-  assert.equal(messages[1].tool_calls[0].function.name, 'bash')
+  assert.equal(messages[1].tool_calls![0].function.name, 'bash')
   assert.equal(messages[2].role, 'tool')
 })
 
@@ -38,7 +39,7 @@ test('Session clear keeps the same id and drops derived chat history', () => {
 
   assert.equal(sessions.get(id).id, id)
   assert.equal(sessions.get(id).events[0].type, 'session/start')
-  assert.equal(sessions.get(id).events[0].data.reset, true)
+  assert.equal((sessions.get(id).events[0].data as { reset?: boolean }).reset, true)
   assert.deepEqual(sessions.deriveMessages(id), [])
 })
 
@@ -71,7 +72,7 @@ test('SystemPrompt assembles by order and disposer unregisters fragments', async
 
 test('LlmRuntime routes chat to the selected provider and disposer unregisters it', async () => {
   const llm = new LlmRuntime()
-  const calls = []
+  const calls: ChatRequest[] = []
   const dispose = llm.register('mock', {
     models: ['fast'],
     chat: async request => {
@@ -131,7 +132,7 @@ test('Agent loop completes a model -> tool -> model turn', async () => {
     'mock',
     {
       models: ['demo'],
-      async chat({ messages }) {
+      async chat({ messages = [] }) {
         calls += 1
         if (calls === 1) {
           return {
@@ -141,6 +142,7 @@ test('Agent loop completes a model -> tool -> model turn', async () => {
         }
 
         const toolMessage = messages.at(-1)
+        assert.ok(toolMessage)
         assert.equal(toolMessage.role, 'tool')
         assert.equal(messages[1].reasoning_content, 'look up the time first')
         return { content: `it is ${toolMessage.content}`, toolCalls: [] }
@@ -261,10 +263,10 @@ test('Agent loop streams reasoning, content, tool-call, and tool-result chunks',
     loop,
   })
 
-  const reasoningChunks = []
-  const contentChunks = []
-  const toolCalls = []
-  const toolResults = []
+  const reasoningChunks: string[] = []
+  const contentChunks: string[] = []
+  const toolCalls: ToolCall[] = []
+  const toolResults: (ToolResult & { renderedContent: string })[] = []
 
   const answer = await agent.send('test stream', {
     onReasoning: c => reasoningChunks.push(c),
@@ -328,7 +330,7 @@ test('Cancelling a multi-tool turn still records a result for every tool_call', 
   const messages = sessions.deriveMessages(s.id)
   const requested = messages
     .filter(message => message.tool_calls)
-    .flatMap(message => message.tool_calls.map(call => call.id))
+    .flatMap(message => message.tool_calls!.map(call => call.id))
   const answered = messages
     .filter(message => message.role === 'tool')
     .map(message => message.tool_call_id)
@@ -387,8 +389,8 @@ test('parseSSE flushes a last line without a trailing newline and recognizes dat
   const events = []
   for await (const event of parseSSE(response)) events.push(event)
   assert.equal(events.length, 2)
-  assert.equal(events[0].choices[0].delta.content, 'Hel')
-  assert.equal(events[1].choices[0].delta.content, 'lo')
+  assert.equal(events[0].choices![0].delta!.content, 'Hel')
+  assert.equal(events[1].choices![0].delta!.content, 'lo')
   const doneResponse = new Response(': heartbeat\n\ndata: {"ok":true}\ndata:[DONE]\ndata: invalid')
   const beforeDone = []
   for await (const event of parseSSE(doneResponse)) beforeDone.push(event)
@@ -508,7 +510,7 @@ test('Sandbox blocks dangerous commands and allows ordinary workspace commands',
   for (const [command, pattern] of Object.entries(deny)) {
     const result = sandbox.inspectCommand(command)
     assert.equal(result.action, 'deny', command)
-    assert.match(result.reason, pattern, command)
+    assert.match(result.reason ?? '', pattern, command)
   }
 })
 
