@@ -1,4 +1,8 @@
 # 开发进度
+### NX-05b2 dedupe fixture（2026-09-30）
+
+新增按 id 保留首次对象的去重任务，初始与参考解均由独立验收器核对。正常用户权限 `pnpm fixtures:check`：初始 0/5、参考 5/5；Cordis 文件/Bash 流程回归 12/12。下一项 pagination 单独提交。
+
 ### NX-05b1 normalize fixture（2026-09-30）
 
 新增姓名规整任务的初始工作区、公开检查、参考修改及独立验收，注册后既有模拟模型通过真实文件/Bash 工具完成。正常用户权限 `pnpm fixtures:check`：初始 0/4、参考 4/4；`node --test dist/test/coding-fixtures.test.js`：10/10。未使用付费模型；下一项 dedupe 单独提交。
