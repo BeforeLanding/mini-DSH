@@ -5,6 +5,7 @@ import { positiveLimit, readTextRange } from '../core/bounded-text.js'
 import { searchFiles } from '../core/bounded-search.js'
 import { snapshot, checkHash, replaceUnique, unifiedDiff, commitFile, validateText, fingerprint, FileSizeLimit } from '../core/file-edit.js'
 import { TaskChanges, taskChanges } from '../core/task-changes.js'
+import { taskReport } from '../core/task-verification.js'
 
 export const name = 'mini-tools-files'
 export const inject = ['tools', 'sandbox']
@@ -98,6 +99,16 @@ export function apply(ctx: Context, config: FilesConfig = {}) {
   const string = { type: 'string' }
   const searchParameters = { path: string, pattern: string, includeIgnored: { type: 'boolean' }, offset: { type: 'integer', minimum: 0 }, maxResults: { type: 'integer', minimum: 1, maximum: searchLimits.maxResults } }
   const definitions: ToolDefinition[] = [
+    {
+      name: 'task_report', description: 'Inspect delivery evidence for the current task across continuation/restart: confirmed file edits, current-version check coverage, failed/unknown/stale checks and run status. Passing checks cover declared files/commands only and never assert task acceptance. File and verification pages are independent; use next offsets. Logs remain in verification events and original Bash results.',
+      parameters: parameters({ fileOffset: { type: 'integer', minimum: 0 }, verificationOffset: { type: 'integer', minimum: 0 }, maxFiles: { type: 'integer', minimum: 1, maximum: maxTrackedFiles }, maxRecords: { type: 'integer', minimum: 1, maximum: 100 } }),
+      async execute(args, exec) {
+        const service = sessions()
+        if (!exec.sessionId || !service) throw new Error('task_report requires a session')
+        const offset = (value: unknown) => { if (value === undefined) return 0; if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error('offset must be a nonnegative integer'); return value }
+        return taskReport(service, exec.sessionId, file => resolve(file), maxEditBytes, exec.signal, offset(args.fileOffset), offset(args.verificationOffset), positiveLimit(args.maxFiles, Math.min(20, maxTrackedFiles), 'maxFiles', maxTrackedFiles), positiveLimit(args.maxRecords, 20, 'maxRecords', 100))
+      },
+    },
     {
       name: 'read_file', description: 'Read a bounded UTF-8 line range with line numbers and nextLine/eof. Includes a full-file SHA-256 for expectedHash when within the edit limit. Use startLine to continue.',
       parameters: parameters({ path: string, startLine: { type: 'integer', minimum: 1 }, maxLines: { type: 'integer', minimum: 1, maximum: limits.maxLines } }, ['path']),
