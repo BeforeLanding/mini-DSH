@@ -2,5 +2,6 @@ node_modules/
 .env
 .DS_Store
 *.log
+!test/fixtures/coding/*/initial/diagnostics/*.log
 dist/
 .mini-dsh/tool-results/
