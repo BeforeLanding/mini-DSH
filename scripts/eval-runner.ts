@@ -1,3 +1,4 @@
+import { CLI_BUDGET } from '../src/core/budget.js'
 import type { BudgetPolicy, Counters, StopReason } from '../src/core/budget.js'
 
 // PLAN「NX-08 评测批次上限（预注册）」固定的参数。请求数 32 是约束（两臂获得相同工作量，被比较的才是
@@ -5,6 +6,11 @@ import type { BudgetPolicy, Counters, StopReason } from '../src/core/budget.js'
 export const singleRunBudget: Readonly<BudgetPolicy> = Object.freeze({
   maxModelRequests: 32, maxToolCalls: 64, maxActiveDurationMs: 300_000, maxTotalTokens: 2_000_000,
 })
+// 预注册只覆盖上面四项，其余必须走 PLAN「默认参数与行为」的文档值（输入目标 65,536、输出上限 16,384、
+// 输出预留下限 4,096、容量余量 2,048、请求/审批/收尾超时）。只用 singleRunBudget 会让投影拿不到
+// inputTargetTokens 与 contextWindowTokens：ContextBudgetRuntime 对两者均未配置时恒判 fits，裁剪与
+// context_overflow 全部失效，A/B 两臂的上下文差异也随之归零。
+export const evalPolicy: Readonly<BudgetPolicy> = Object.freeze({ ...CLI_BUDGET, ...singleRunBudget })
 export type PhaseName = 'screening' | 'armA' | 'armB'
 export interface BatchCaps { runs: number; requests: number; tokens: number }
 export const phaseCaps: Readonly<Record<PhaseName, BatchCaps>> = Object.freeze({

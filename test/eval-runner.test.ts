@@ -1,8 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { runPhase, summarize, phaseCaps, batchCaps, singleRunBudget, capKeys } from '../scripts/eval-runner.js'
+import { runPhase, summarize, phaseCaps, batchCaps, singleRunBudget, evalPolicy, capKeys } from '../scripts/eval-runner.js'
 import type { RunOutcome } from '../scripts/eval-runner.js'
 import { runFixtureTask, scriptedAdapter } from '../scripts/eval-fixture.js'
+import { CLI_BUDGET } from '../src/core/budget.js'
 import type { Counters } from '../src/core/budget.js'
 
 const counters = (modelRequests: number, totalTokens: number): Counters =>
@@ -20,6 +21,19 @@ test('pre-registered caps match PLAN and the phase caps sum to the whole-batch c
   for (const cap of capKeys) assert.equal(batchCaps[cap], phaseCaps.screening[cap] + phaseCaps.armA[cap] + phaseCaps.armB[cap], cap)
   // 单次预算不能替代整批上限：每个 run 都用满单次 token 预算时总量远超整批上限，正是 PLAN 要求独立整批上限的理由。
   assert.ok(batchCaps.runs * (singleRunBudget.maxTotalTokens ?? 0) > batchCaps.tokens)
+})
+
+// 预注册只固定四项；上下文目标与窗口必须由文档默认值补上，否则投影不裁剪、context_overflow 不再触发，
+// 两臂的上下文差异被一起抹掉。这条断言防止以后把 evalPolicy 退回成 singleRunBudget。
+test('the evaluation policy keeps the pre-registered overrides on top of the documented defaults', () => {
+  assert.deepEqual(evalPolicy, { ...CLI_BUDGET, ...singleRunBudget })
+  assert.equal(evalPolicy.maxModelRequests, 32)
+  assert.equal(evalPolicy.maxToolCalls, 64)
+  assert.equal(evalPolicy.maxActiveDurationMs, 300_000)
+  assert.equal(evalPolicy.maxTotalTokens, 2_000_000)
+  assert.equal(evalPolicy.inputTargetTokens, 65_536)
+  assert.equal(evalPolicy.maxOutputTokens, 16_384)
+  assert.equal(singleRunBudget.inputTargetTokens, undefined)
 })
 
 test('a phase whose run cap equals the planned count completes without a false abort', async () => {
@@ -67,6 +81,26 @@ test('the runner drives real fixtures through the harness with a scripted model'
   assert.ok(report.executed.every(run => run.status === 'completed' && run.accepted === true && run.error === undefined))
   assert.ok(report.executed.every(run => run.counters.modelRequests > 0 && run.counters.totalTokens > 0))
   assert.ok(report.totals.requests < phaseCaps.screening.requests)
+})
+
+// 目标值必须在真实 Harness 里生效：把输入目标压到 1 token 后，投影应判定装不下并以 context_overflow
+// 停止；若预算策略再次丢掉 inputTargetTokens，这里会退化成 completed。
+test('the configured input target reaches the projection inside the harness', { timeout: 60_000 }, async () => {
+  const outcome = await runFixtureTask('boundary', scriptedAdapter, { ...evalPolicy, inputTargetTokens: 1 })
+  assert.equal(outcome.status, 'context_overflow')
+  assert.equal(outcome.accepted, false)
+  assert.equal(outcome.counters.modelRequests, 0)
+})
+
+// 适配器未声明窗口容量时必须明确失败，而不是以非空断言把缺失的 run 状态伪装成一次运行结论。
+test('a policy with a context target fails clearly when the adapter declares no window', { timeout: 60_000 }, async () => {
+  const outcome = await runFixtureTask('boundary', fixture => {
+    const { chat } = scriptedAdapter(fixture)
+    return { provider: 'nocapability', model: 'fixture', chat }
+  }, evalPolicy)
+  assert.equal(outcome.status, 'error')
+  assert.match(outcome.error ?? '', /context capacity must be explicitly configured/)
+  assert.deepEqual(outcome.counters, counters(0, 0))
 })
 
 test('a failing execution is recorded on its own run and does not abort the phase', async () => {
