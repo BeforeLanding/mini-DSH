@@ -4,7 +4,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { Context } from '@deepseek-ai/cordis'
-import { createFixture, fixtureIds } from '../scripts/coding-fixtures.js'
+import { createFixture, fixtureIds, fixtureProcessTimeoutMs } from '../scripts/coding-fixtures.js'
 import type { FixtureId } from '../scripts/coding-fixtures.js'
 import type { ToolCall } from '../src/core/contracts.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
@@ -110,7 +110,7 @@ test('independent acceptance rejects bypassed public checks, partial migration a
   try {
     const originalCheck = await fs.readFile(path.join(fixture.workspace, 'check.mjs'))
     await fs.writeFile(path.join(fixture.workspace, 'check.mjs'), "console.log('public checks passed')\n")
-    const publicResult = spawnSync(process.execPath, ['check.mjs'], { cwd: fixture.workspace, encoding: 'utf8', timeout: 10_000, windowsHide: true })
+    const publicResult = spawnSync(process.execPath, ['check.mjs'], { cwd: fixture.workspace, encoding: 'utf8', timeout: fixtureProcessTimeoutMs, windowsHide: true })
     assert.equal(publicResult.status, 0)
     const tampered = await fixture.evaluate()
     assert.equal(tampered.passed, false)

@@ -8,6 +8,12 @@ export const fixtureIds = ['boundary', 'options', 'interface', 'normalize', 'ded
 export type FixtureId = typeof fixtureIds[number]
 const repository = fileURLToPath(new URL('../../', import.meta.url))
 const fixtures = path.join(repository, 'test', 'fixtures', 'coding')
+// Cold-starting a Node process inside a freshly created temp workspace costs far more on
+// Windows CI than the work itself: the same merge verification measured 120ms on Ubuntu
+// but exceeded a 10s budget on windows-latest/Node22, while the next test on that machine
+// finished a heavier flow in 1s. This budget bounds a hung candidate, not a performance
+// target, so it keeps headroom for a cold start rather than tracking typical latency.
+export const fixtureProcessTimeoutMs = 30_000
 const sources: Record<FixtureId, string[]> = {
   boundary: ['src/index.mjs'], options: ['src/join.mjs'], interface: ['src/pricing.mjs', 'src/receipt.mjs'], summary: ['src/summary.mjs'], inventory: ['src/order.mjs', 'src/receipt.mjs'], csv: ['src/csv.mjs'], merge: ['src/merge.mjs', 'src/value.mjs'], retry: ['src/retry.mjs'], query: ['src/query.mjs'], pagination: ['src/page.mjs'], dedupe: ['src/unique.mjs'], normalize: ['src/name.mjs'],
 }
@@ -43,7 +49,7 @@ export async function createFixture(id: FixtureId) {
       async applyReference() {
         for (const edit of edits) await fs.writeFile(path.join(workspace, edit.path), edit.newText)
       },
-      async evaluate({ timeoutMs = 10_000, maxOutputBytes = 32 * 1024 } = {}): Promise<Acceptance> {
+      async evaluate({ timeoutMs = fixtureProcessTimeoutMs, maxOutputBytes = 32 * 1024 } = {}): Promise<Acceptance> {
         if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || !Number.isSafeInteger(maxOutputBytes) || maxOutputBytes <= 0) throw new Error('invalid acceptance limits')
         const protectedFilesChanged: string[] = []
         for (const { filename, content } of protectedFiles) {
