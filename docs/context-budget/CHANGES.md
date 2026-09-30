@@ -2,6 +2,28 @@
 
 更新：2026-09-30。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-08d0-3 真实适配器评测入口与逐 run 证据落盘
+- 关联：M7；承接 d0-1 的预算口径与 d0-2 的结论分类。状态：done（2026-09-30，本地通过，含 2 次真实调用）。本次开始调用付费模型。
+- NX-08d0-3 / `scripts/eval-screening.ts`（`pnpm eval:screening`）把真实 DeepSeek 适配器接到既有运行器与 fixture 驱动上。四处关键行为：**协议探测**先发一次裸请求与一次走适配器的流式请求，记录服务端回显的 `model`、`finish_reason` 与原始 usage 字段，排在落盘检查之后，证据目录冲突时不会先花钱；**参数显式化**要求 `MINI_DSH_MODEL`／`MINI_DSH_EVAL_MODEL` 给出模型名，缺失即失败，不回退到适配器默认模型列表（首位 `deepseek-v4-pro`，价格约为 flash 的 4 倍），窗口能力官方端点取 1,000,000、自定义端点必须显式声明；**证据落盘**把每个 run 的事件日志写入 `.eval-evidence/<phase>-<scope>/sessions/<fixture>/<sessionId>/events.jsonl`，每跑完一个 run 立刻追加一行 `runs.jsonl`，结束时写 `report.json`，同一范围的记录已存在时拒绝开跑；**成本可见**逐个 run 打印状态、验收结论、请求/工具数与本批累计量。`runFixtureTask` 增加可选 `sessionDirectory`，在 `finally` 里先等写入队列排空再关存储，证据没落盘的 run 不以成功结论结束 / `pnpm check`（82 文件）、`pnpm test`（172/172，无失败/跳过）、`pnpm eval:offline`（12/12，退出码 0）、`pnpm eval:screening --probe-only` 与 `--tasks merge` 均退出码 0 通过 / done / 4d10f2c（本地及四组合 CI 通过）。
+- 协议探测结果（核验日期 2026-09-30）：请求体写 `deepseek-v4-flash` 时服务端回显 `model=deepseek-flash`，确认旧名映射成立并留下实际服务名作为证据；原始 usage 含 `prompt_tokens 11 / completion_tokens 1 / total_tokens 12 / prompt_cache_hit_tokens 0 / prompt_cache_miss_tokens 11 / prompt_tokens_details.cached_tokens 0`，满足 `normalizeUsage` 的 `total = prompt + completion` 校验；适配器流式路径 `finishReason=stop`、`complete=true`，thinking 打开时 `reasoningTokens` 如实落在 usage 里。
+- 烟测（同一天，`merge`，真实调用 2 次）：两次都 `completed` 且通过独立验收，退出码 0。第一次 5 请求 / 10 工具 / 24,677 token / 主动 20.2s；第二次 9 请求 / 16 工具 / 119,689 token（输入 104,691、输出 14,998，其中 reasoning 10,700）/ 主动 69.7s。差异来源已定位到日志：请求 #2 单次产生 6,820 reasoning token，且输入按请求累积重发（1,664 → 22,752），工具次数不同会把总量放大数倍。第一次烟测的证据目录在布局调整时被删除，只保留终端输出的计数，不作为可复核证据；第二次的完整证据在 `.eval-evidence/screening-merge/`（不入库）。
+- 两次烟测都**没有触发上下文裁剪**：`removedTaskIds` 全为空、最大估算输入 27,147 < 输入目标 65,536。这是 NX-08e 任务集选择的前置证据——见 PLAN「NX-08 评测批次上限」中的对照有效性条件。
+- 未纳入本步：筛查跑本身（NX-08d）。脚本不重试、不跳过、不因单次失败中止阶段；未通过验收是评测数据而非脚本失败，只有整批中止或基础设施失败才非零退出。会话日志含模型正文，留在 `.eval-evidence/` 且已加入 `.gitignore`。
+- 跨平台证据：`pnpm fixtures:check` 初始 0/12、参考 12/12，退出码 0。三个 d0 提交在本 SHA 上 [CI 36681430450](https://github.com/BeforeLanding/mini-DSH/actions/runs/36681430450) 四组（Ubuntu/Windows × Node22/24）success、attempt=1；同一批推送只产生 CI run，最近一次 Deploy ECS 早于本次推送三小时，未被触发。d0-1 [CI 36680225323](https://github.com/BeforeLanding/mini-DSH/actions/runs/36680225323)、d0-2 [CI 36680420356](https://github.com/BeforeLanding/mini-DSH/actions/runs/36680420356) 同样四组 success、attempt=1。
+
+## NX-08d0-2 评测 run 结论分类与显式成功率口径
+- 关联：M7；依赖 d0-1。状态：done（2026-09-30，本地通过）。本次不调用真实模型。
+- NX-08d0-2 / `RunOutcome` 增加可选 `acceptance`（`passed`、`exitCode`、验收输出、受保护文件变更）与 `infeasible`，`runFixtureTask` 把 fixture 的完整验收结论原样回传；`summarize` 增加 `infeasible` 计数与 `rate { numerator, denominator, excludedInfeasible, excludedErrored }`，分子只数通过验收的 run，分母排除不可行任务与基础设施失败，两者都单列计数。`accepted`／`rejected` 保持原有原始计数语义，已有消费者不受影响 / `pnpm check`（81 文件）、`pnpm test`（172/172，无失败/跳过）、`pnpm eval:offline`（accepted 12、rate 12/12，退出码 0）通过 / done / 9eb3769。
+- 不可行标记只能由 `runPhase` 的可选 `classify` 追加，不能改写已观测的验收结论；`eval:screening` 要求 `--infeasible` 必须同时给出 `--infeasible-reason`，没有理由就不允许使用这个口径。
+- 用例覆盖：三类结果各自进入正确的分子/分母（原始计数与口径计数分别断言）、不可行的 run 即使通过验收也不进分子、无结论（`accepted: null`）的 run 仍占分母且不计为通过、fixture 驱动回传的原始验收证据。未重试、未跳过、未引入新的事件或预算契约。
+
+## NX-08d0-1 评测预算接入上下文目标与模型窗口能力
+- 关联：M7；首次真实调用前的前置修复。状态：done（2026-09-30，本地通过）。本次不调用真实模型。
+- 诊断：`runFixtureTask` 默认只传 `singleRunBudget` 的四项（32 / 64 / 300,000 / 2,000,000），`inputTargetTokens` 与 `contextWindowTokens` 都没有配置。`agent-loop-runtime` 只在 `configured.inputTargetTokens` 存在时才去查模型窗口容量，而 `ContextBudgetRuntime` 对两者均为 `undefined` 时恒判 `fits`——结果是投影从不裁剪、`context_overflow` 从不触发，PLAN「默认参数与行为」的输入目标 65,536 与 1,000,000 窗口在评测路径上从未生效。对筛查影响有限，但会让 NX-08e／NX-08f 的两臂上下文差异一起归零，对照测不出东西。
+- NX-08d0-1 / 新增 `evalPolicy = {...CLI_BUDGET, ...singleRunBudget}`：预注册四项覆盖在文档默认值之上，其余取 PLAN 文档值（输入目标 65,536、输出上限 16,384、输出预留下限 4,096、容量余量 2,048、请求/审批/收尾超时）。被比较的预算值一项未动。`FixtureAdapter` 增加可选 `capabilities` 并透传给 `llm.register`；查不到窗口容量时 `resolveBudget` 以 `context capacity must be explicitly configured` 硬失败，避免静默退化成无上限。`runFixtureTask` 默认预算改为 `evalPolicy`，run 状态缺失时按基础设施失败报告，不再用非空断言把缺失状态伪装成一次运行结论 / `pnpm check`（81 文件）、`pnpm test`（168/168，无失败/跳过）、`pnpm eval:offline`（12/12 accepted、66 请求，退出码 0）通过 / done / 8fd78a9。
+- 用例覆盖：`evalPolicy` 合成与四项取值（防止退回成 `singleRunBudget`）、把输入目标压到 1 token 后经真实 Harness 跑出 `context_overflow`（预算再次丢字段会退化成 `completed`）、适配器不声明 capabilities 时得到明确错误而非 TypeError。
+- 观察（非本次改动引起）：离线 token 总数在多次运行间有 ±30 量级抖动，实测 194,439～194,466。原因是 bash 工具结果里的 `durationMs` 位数不同，而工具结果文本参与输入估算；请求数（66）、工具数与逐项验收结论稳定。此前文档记录的单一数值 194,474 不可复现，属同类抖动。
+
 ## NX-08c 输入估算误差实验
 - 关联：M7；承接 NX-08a／NX-08b 的导出契约与运行器。状态：done（2026-09-30，本地及四组合 CI 通过）。本次不调用真实模型。
 - 被测版本：`src/core/token-estimator.ts` SHA-256 `5147905a6feac08718f5d180365f0c1e3ea9ad3b58a4c3da3747c1d65b0aed0f`（ASCII 0.3 / 非 ASCII 1.0 token，每消息 32、每请求 256 开销）。参考方为 DeepSeek 文档提供的离线 tokenizer 包 `https://cdn.deepseek.com/api-docs/deepseek_v4_tokenizer.zip`，`tokenizer.json` SHA-256 `89085f12ef79460ac5f66d1119325ddfc694b4ab209d80bbd81d35f081dc9614`，词表 128,000，工具 `tokenizers 0.22.2 (Rust)`，计数取 `add_special_tokens=false`。**核验日期 2026-09-30**；实测版本与日期固定在 [reference.json](../../test/fixtures/estimation/reference.json)，估算器或语料一变即失配。

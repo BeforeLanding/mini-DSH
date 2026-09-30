@@ -179,7 +179,7 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 
 ## 官方依据
 核验日期：2026-09-28；Chat Completions 于 2026-09-29 复核并通过模拟 SSE 协议测试。开发时模型版本变化需复核。
-- [DeepSeek 模型说明](https://api-docs.deepseek.com/quick_start/pricing/)：当前窗口 1M、最大输出 384K，旧 deepseek-v4-flash 名称已映射新版 Flash。
+- [DeepSeek 模型说明](https://api-docs.deepseek.com/quick_start/pricing/)：当前窗口 1M、最大输出 384K，旧 deepseek-v4-flash 名称已映射新版 Flash；名称映射经实测确认（NX-08d0-3，2026-09-30）：请求体写 `deepseek-v4-flash` 时服务端回显 `model=deepseek-flash`。计费按实际服务名对应的档位核对。
 - [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)：max_tokens、usage、reasoning 细分及流末包；[Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/)：工具模式的 reasoning 回传。
 - [Token 说明](https://api-docs.deepseek.com/quick_start/token_usage/)：字符比例只是近似；官方离线 tokenizer 与当前聊天模板的一致性尚未验证。NX-08c 实测确认该离线包自带的 `chat_template` 完全不引用 `tools`，渲染结果不含工具定义，故服务端真实 prompt 无法离线复现；同一测量也发现官方 zip 示例代码的 `transformers.AutoTokenizer` 路径对该包会丢弃非 ASCII（中文得 0 token），须改用 `tokenizers.Tokenizer.from_file`。
 - [Node TypeScript](https://nodejs.org/api/typescript.html)、[TS 模块](https://www.typescriptlang.org/docs/handbook/modules/reference.html)：类型剥离与 NodeNext；[文件 API](https://nodejs.org/api/fs.html)：写入协调和 sync；[测试 API](https://nodejs.org/api/test.html)：mock/计时器。
@@ -206,6 +206,8 @@ NX-07 集成补充：搜索也默认忽略 .mini-dsh；read/search 的 maxOutput
 - 各臂一致的单次 run 预算：模型请求 32 次、工具调用 64 次、主动时间 300,000ms、累计 2,000,000 token。
 - 其中请求数 32 是**约束**：两臂获得相同工作量，被比较的才是上下文策略而不是预算。2,000,000 token 是**兜底**，正常 fixture 任务不应触及，否则"预算耗尽"会混进所测的 token 用量。
 - 该组值低于 CLI 默认的 64/128/600,000ms/2,000,000 token；CLI 默认面向通用使用，对小型 fixture 过宽，会掩盖上下文策略差异。
+- 上列四项是**覆盖值**，其余参数取「默认参数与行为」的文档值；评测侧由 `evalPolicy = {...CLI_BUDGET, ...singleRunBudget}` 组装（NX-08d0-1），模型窗口按端点显式声明，官方端点取 1,000,000。只传这四项会让投影失去输入目标与窗口：`ContextBudgetRuntime` 对两者均未配置时恒判可容纳，裁剪与 `context_overflow` 全部失效。
+- 对照有效性条件：两臂只有在历史确实超过输入目标 65,536 时才可能产生差异；若任务全过程的最大估算输入低于该值，裁剪永不触发，全历史臂与裁剪臂完全等价。NX-08e 选任务前必须先测量候选任务的历史规模；NX-08d0-3 烟测已实测 `merge` 在 9 次请求后最大估算输入仅 27,147，现有 12 个 fixture 都不满足该条件。
 
 整批上限（运行器侧硬中止，按阶段独立计数；触顶即中止该阶段并报告，不记作任务失败）：
 
