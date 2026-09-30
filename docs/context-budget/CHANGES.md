@@ -16,6 +16,9 @@
 ## OPS-04 修订提交粒度规则
 - OPS-04a / 以“可独立 revert 且存在可观察行为差异”为提交边界；同一能力的重复扩展按行为类别分组，不按 fixture 机械拆分；保留三项禁止合并的反模式，并让任务、证据和 PROGRESS 更新职责与新结构一致 / AGENTS 不再含“每完成一个小内容”“多个独立 fixture”或“每提交同步 PROGRESS”，明确保留“同属一个任务”“最后一起跑测试”“减少提交次数”，相关段落一致性检索及 `git diff --check` 通过 / done / 本步提交后回填。
 
+## OPS-05 版本标签与发布锚点
+- OPS-05a / 定义不可移动的 `vMAJOR.MINOR.PATCH` annotated tag、精确 SHA 的 main/CI 前置核验、tag push 部署、可选同名 GitHub Release、手动旧 tag 重部署与服务器上一版本回滚 / 7 个 Bash 代码块语法、触发规范必需字段、相对链接、任务锚点及 `git diff --check` 通过；本地 tag 数仍为 0 / done / 本步提交后回填；未创建或推送实际 tag/release。
+
 ## NX-06 请求 trace 与编程结果报告
 - 关联：M7、R-19；依赖 NX-14/NX-15；状态：done（2026-09-30，本地及四组合 CI 通过）。
 - NX-06a / 固定 trace、报告身份/用量/停止语义及隐私、分页边界 / REQUIREMENTS、PLAN、TASKS、PROGRESS 一致，`git diff --check` / done / c5ebe81。

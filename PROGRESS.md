@@ -11,6 +11,7 @@
 - T2 提交：`263d439`；[CI 36662938984](https://github.com/BeforeLanding/mini-DSH/actions/runs/36662938984) 四组成功。纯文档提交 `ef46988` 的 workflow run 与 check run 均为 0，路径过滤已远端验收。
 - T3 已完成：本文件从 500 行历史日志改为 31 行当前状态页，原文移动归档；TASKS 从 336 行降为 39 行，详细证据迁入 CHANGES，证据集合与链接检查通过。
 - T4 已完成：AGENTS 的提交边界改为“可独立 revert 且存在可观察行为差异”，同一能力的 fixture 扩展按类别分组；三项禁止合并反模式保留，任务、证据与 PROGRESS 的更新职责同步新文档结构。
+- T5 已完成：ECS 部署文档定义不可移动的 `vMAJOR.MINOR.PATCH`、精确 SHA 的 main/CI 前置核验、可选 GitHub Release 及标签化回滚流程；7 个 Bash 示例语法通过，未创建 tag 或 release。
 
 ## 阻塞
 
