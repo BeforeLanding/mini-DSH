@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { Context } from '@deepseek-ai/cordis'
-import { createFixture, fixtureIds, fixtureProcessTimeoutMs, readTaskSequence } from '../scripts/coding-fixtures.js'
+import { createFixture, screeningIds, sequenceIds, fixtureProcessTimeoutMs, readTaskSequence } from '../scripts/coding-fixtures.js'
 import type { FixtureId } from '../scripts/coding-fixtures.js'
 import type { ToolCall } from '../src/core/contracts.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
@@ -25,7 +25,9 @@ const locationCases: Record<string, { token: string; source: string }> = {
   csv: { token: 'NX05B-CSV-LOCATE', source: 'src/csv.mjs' },
 }
 
-for (const id of fixtureIds) {
+// 逐 fixture 的两个用例只对筛查批次的单任务 fixture 成立：它们发送 fixture.tasks[0] 并断言工作区终态，
+// 多阶段序列要到最后一个阶段才验收，进这个循环会假失败。多阶段路径另有用例覆盖。
+for (const id of screeningIds) {
   test(`coding fixture ${id}: initial failure, reference acceptance and fresh workspace`, async () => {
     const fixture = await createFixture(id), fresh = await createFixture(id)
     try {
@@ -178,12 +180,32 @@ test('stage layout reads TASKS in name order and refuses the ambiguous layouts',
   } finally { await fs.rm(root, { recursive: true, force: true }) }
 })
 
-test('every shipped fixture is still a single task', async () => {
-  // 阶段序列只对声明了 TASKS/ 的 fixture 生效。这条断言固定「现有 12 个 fixture 与多阶段改造之前
-  // 完全一致」，否则离线基线与筛查跑的历史结果都不能再当作对照。
-  for (const id of fixtureIds) {
+test('the screening batch is still twelve single-task fixtures', async () => {
+  // 阶段序列只对声明了 TASKS/ 的 fixture 生效。这条断言固定「筛查批次的 12 个 fixture 与多阶段改造
+  // 之前完全一致」，否则离线基线与筛查跑的历史结果都不能再当作对照。
+  for (const id of screeningIds) {
     const fixture = await createFixture(id)
     try { assert.equal(fixture.tasks.length, 1) } finally { await fixture.close() }
+  }
+})
+
+test('the sequence fixture declares its stages in file-name order and passes acceptance only as a whole', async () => {
+  assert.ok(sequenceIds.length > 0)
+  for (const id of sequenceIds) {
+    const fixture = await createFixture(id)
+    try {
+      assert.ok(fixture.tasks.length > 1, `${id} must ship more than one stage`)
+      // 阶段顺序由文件名前缀承载：每一阶段自己声明它是第几个，与目录项返回顺序无关。
+      fixture.tasks.forEach((task, at) => assert.match(task.split('\n')[0], new RegExp(`^# 0${at + 1} `), `${id} stage ${at + 1}`))
+      const initial = await fixture.evaluate()
+      assert.equal(initial.passed, false)
+      assert.equal(initial.exitCode, 1, initial.output)
+      assert.match(initial.output, /AssertionError/)
+      await fixture.applyReference()
+      const reference = await fixture.evaluate()
+      assert.equal(reference.passed, true, reference.output)
+      assert.equal(reference.output.trim(), `acceptance passed: ${id}`)
+    } finally { await fixture.close() }
   }
 })
 

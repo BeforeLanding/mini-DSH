@@ -4,7 +4,12 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 
-export const fixtureIds = ['boundary', 'options', 'interface', 'normalize', 'dedupe', 'pagination', 'query', 'retry', 'merge', 'csv', 'inventory', 'summary'] as const
+// 筛查批次固定为这 12 个单任务 fixture：NX-08d 的 12/12 历史结论与 phaseCaps.screening 的上限都以它为准，
+// 新增 fixture 不应改变这个批次，否则旧结论与旧上限都不再对应同一个任务集。
+export const screeningIds = ['boundary', 'options', 'interface', 'normalize', 'dedupe', 'pagination', 'query', 'retry', 'merge', 'csv', 'inventory', 'summary'] as const
+// 对照 A 的仪器：同一会话内按序下发的多阶段任务序列（TASKS/*.md），后阶段依赖前阶段产物。
+export const sequenceIds = ['pipeline'] as const
+export const fixtureIds = [...screeningIds, ...sequenceIds] as const
 export type FixtureId = typeof fixtureIds[number]
 const repository = fileURLToPath(new URL('../../', import.meta.url))
 const fixtures = path.join(repository, 'test', 'fixtures', 'coding')
@@ -16,6 +21,7 @@ const fixtures = path.join(repository, 'test', 'fixtures', 'coding')
 export const fixtureProcessTimeoutMs = 30_000
 const sources: Record<FixtureId, string[]> = {
   boundary: ['src/index.mjs'], options: ['src/join.mjs'], interface: ['src/pricing.mjs', 'src/receipt.mjs'], summary: ['src/summary.mjs'], inventory: ['src/order.mjs', 'src/receipt.mjs'], csv: ['src/csv.mjs'], merge: ['src/merge.mjs', 'src/value.mjs'], retry: ['src/retry.mjs'], query: ['src/query.mjs'], pagination: ['src/page.mjs'], dedupe: ['src/unique.mjs'], normalize: ['src/name.mjs'],
+  pipeline: ['src/parse.mjs', 'src/order.mjs', 'src/cycles.mjs', 'src/batches.mjs', 'src/report.mjs', 'src/delta.mjs', 'src/pipeline.mjs'],
 }
 async function exists(target: string): Promise<boolean> { return fs.stat(target).then(() => true, () => false) }
 // 一个 fixture 要么是单个任务（TASK.md），要么是同一会话内按序下发的多个阶段（TASKS/*.md，按文件名

@@ -1,10 +1,12 @@
-import { fixtureIds } from './coding-fixtures.js'
+import { screeningIds } from './coding-fixtures.js'
 import { runPhase, phaseCaps, summarize } from './eval-runner.js'
 import { runFixtureTask, scriptedAdapter } from './eval-fixture.js'
 
 // 离线验证：用模拟模型把筛查阶段的 12 个任务全部跑完，证明运行器接线与整批上限核算成立。
 // 通过率不作为模型能力证据，真实对照自 NX-08d 起换用真实适配器。
-const report = await runPhase('screening', fixtureIds.map(id => ({ id })), phaseCaps.screening, task => runFixtureTask(task.id, scriptedAdapter))
+// 这里用 screeningIds 而不是 fixtureIds：筛查批次是固定的 12 个单任务 fixture，多阶段序列属于对照 A
+// 的仪器，不进筛查批次，否则 phaseCaps.screening.runs = 12 会把新 fixture 挤出计划。
+const report = await runPhase('screening', screeningIds.map(id => ({ id })), phaseCaps.screening, task => runFixtureTask(task.id, scriptedAdapter))
 console.log(JSON.stringify({
   note: '模拟模型驱动，用于验证运行器与整批上限；通过率不作为模型能力证据',
   ...summarize(report),

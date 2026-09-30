@@ -1,0 +1,9 @@
+source: app.deps
+order: 6
+batches: 4
+  1: util
+  2: log, store
+  3: core
+  4: api, cli
+external: (none)
+cycles: 0
