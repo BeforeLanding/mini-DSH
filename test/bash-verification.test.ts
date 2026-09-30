@@ -86,3 +86,25 @@ test('timeout and cancellation record real command outcomes while failed result 
     assert.equal((await taskVerifications(root.sessions, next.id, file => root.sandbox.resolvePath(file), 1024, new AbortController().signal)).records[0].status, 'unknown')
   } finally { await root.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
 })
+
+test('verification rechecks cwd after durable intent and refuses a directory alias swapped during persistence', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'verification-cwd-'))
+  const { root, session, exec, report } = await boot(workspace)
+  try {
+    await fs.mkdir(path.join(workspace, 'one')); await fs.mkdir(path.join(workspace, 'two'))
+    const alias = path.join(workspace, 'alias')
+    await fs.symlink(path.join(workspace, 'one'), alias, process.platform === 'win32' ? 'junction' : 'dir')
+    const store: EventStore = { async append(event) {
+      if (event.type === 'verification/start') {
+        await fs.unlink(alias)
+        await fs.symlink(path.join(workspace, 'two'), alias, process.platform === 'win32' ? 'junction' : 'dir')
+      }
+    }, async read() { return [] }, async close() {} }
+    root.sessions.attachStore(session.id, store)
+    const result = await root.tools.execute('bash', { command: 'touch marker', cwd: 'alias', verification: { files: ['a'] } }, exec)
+    assert.equal(result.isError, true); assert.match(root.tools.renderResult(result), /cwd changed before/)
+    await assert.rejects(fs.access(path.join(workspace, 'one', 'marker')))
+    await assert.rejects(fs.access(path.join(workspace, 'two', 'marker')))
+    assert.equal((await report()).records[0].status, 'unknown')
+  } finally { await root.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
+})

@@ -6,7 +6,8 @@
 - NX-15b / 验证意图、结果、版本查询与 JSONL 校验恢复 / pnpm check（70 文件）、pnpm test（117/117，无跳过）、git diff --check / done / 4d1ea34；推送待明确授权。
 - NX-15c / Bash 显式 verification 文件范围、审批后快照和结果记录 / pnpm check（71 文件）、Bash/验证记录 7/7、git diff --check / done / 6744816；推送待明确授权。
 - NX-15d1 / task_report 文件覆盖与验证分页 / pnpm check（72 文件）、报告/验证/变更 7/7、git diff --check / done / 67acc56；推送待明确授权。
-- NX-15d2 / CLI /report 和结束交付报告、coding 提示 / pnpm check（72 文件）、pnpm test（122/122，无跳过）、git diff --check / done / 本步独立提交后报告编号；推送待明确授权。
+- NX-15d2 / CLI /report 和结束交付报告、coding 提示 / pnpm check（72 文件）、pnpm test（122/122，无跳过）、git diff --check / done / a79b495；推送待明确授权。
+- NX-15c2 / 意图落盘等待后的 cwd 复核 / pnpm check（72 文件）、真实目录换址与 Bash 6/6、git diff --check / done / 本步独立提交后报告编号，先于 e。
 - NX-15e / 用户文档、实际提交与最终验收 / check、test、fixtures:check、diff 和远端 CI / pending / 独立收尾提交。
 - 每步验收、回填、提交并推送后才进入下一步；验证通过仅覆盖显式文件与命令，不自动证明任务验收。
 

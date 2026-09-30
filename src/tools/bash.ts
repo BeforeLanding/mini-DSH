@@ -48,6 +48,8 @@ export function apply(ctx: Context, config: { executable?: string; workspace?: s
       const before = paths ? await verificationFiles(paths, file => ctx.sandbox.resolvePath(file), maxVerificationFileBytes, exec.signal) : undefined
       const verificationId = journal && before ? await journal.start({ command, cwd: directory, toolCallId: exec.toolCallId, files: before }) : undefined
       exec.signal.throwIfAborted()
+      ctx.sandbox.assertCommand(command)
+      if (resolveCwd() !== directory) throw new Error('cwd changed before command execution')
       const result = await runCommand({ executable, args: ['-lc', command], command, cwd: directory, signal: exec.signal, maxCaptureBytes, timeoutMs })
       if (journal && verificationId && paths) {
         // Cancelled collection must not bypass the signal to perform fresh file reads.

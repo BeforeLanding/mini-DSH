@@ -1,4 +1,6 @@
 # 开发进度
+### NX-15c2 意图持久化后 cwd 复核（2026-09-30）
+验证增加 await 意图落盘窗口；执行前再次核验真实 cwd 与命令策略，窗口中目录 alias 换址即拒绝，无命令副作用，已持久意图保守 unknown。正常权限 pnpm check（72 文件）、真实换址/Bash 6/6 和 git diff --check 通过。d2 已提交 a79b495；c2 独立修复先于 e，推送待授权。
 ### NX-15d2 CLI 交付闭环（2026-09-30）
 CLI 增加 /report、运行结束摘要、独立文件/检查页与 UTF-8 字节续读；coding 身份引导显式检查范围和交付前查询。模拟模型经真实文件/Bash/task_report 保留失败→成功证据，CLI completed 不标任务验收；JSONL 恢复只读报告、reset 隔离。正常权限 pnpm check（72 文件）、pnpm test（122/122，fail0/skipped0）与 git diff --check 通过。d1 已提交 67acc56，远端推送/CI 待授权。
 ### NX-15d1 交付查询（2026-09-30）
