@@ -53,9 +53,11 @@ export class TaskChanges {
 }
 
 export async function taskChanges(sessions: Sessions, sessionId: string, resolve: (file: string) => string, maxBytes: number, signal: AbortSignal, includeDiff = true, offset = 0, maxFiles = 100) {
-  const state = sessions.latestRun(sessionId)
-  if (!state) return { taskId: null, files: [], attempts: [], nextOffset: 0, eof: true, scope: 'file tools only' }
-  const events = sessions.confirmedEvents(sessionId).filter(e => e.taskId === state.taskId)
+  const confirmed = sessions.confirmedEvents(sessionId)
+  const latest = [...confirmed].reverse().find(event => event.type === 'run/start')
+  const taskId = latest?.type === 'run/start' ? latest.data.state.taskId : null
+  if (!taskId) return { taskId: null, files: [], attempts: [], nextOffset: 0, eof: true, scope: 'file tools only' }
+  const events = confirmed.filter(e => e.taskId === taskId)
   const attempts = events.filter(e => e.type === 'file/change').map(event => {
     const result = events.find(e => e.type === 'file/change-result' && e.data.changeId === event.data.changeId)
     return { ...event.data, status: result?.type === 'file/change-result' ? result.data.status : 'unknown', error: result?.type === 'file/change-result' ? result.data.error : undefined }
@@ -85,5 +87,5 @@ export async function taskChanges(sessions: Sessions, sessionId: string, resolve
       attempts: own.map(({ changeId, tool, status, error }) => ({ changeId, tool, status, error })) })
   }
   const nextOffset = Math.min(paths.length, offset + files.length)
-  return { taskId: state.taskId, files, nextOffset, eof: nextOffset >= paths.length, scope: 'file tools only; diff is confirmed edits relative to first observation; external changes are not attributed' }
+  return { taskId, files, nextOffset, eof: nextOffset >= paths.length, scope: 'file tools only; diff is confirmed edits relative to first observation; external changes are not attributed' }
 }

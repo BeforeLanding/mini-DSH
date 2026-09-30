@@ -4,6 +4,8 @@ import type { CommandResult } from './command-runner.js'
 import { commandFailed } from './command-runner.js'
 import { snapshot } from './file-edit.js'
 import { taskChanges } from './task-changes.js'
+import { emptyCounters } from './budget.js'
+import type { SessionEvent } from './contracts.js'
 
 export interface VerificationFile { path: string; hash?: string; location?: string; error?: string }
 export interface VerificationStart { verificationId: string; command: string; cwd: string; toolCallId?: string; files: VerificationFile[] }
@@ -45,8 +47,10 @@ export class TaskVerification {
 }
 
 export async function taskVerifications(sessions: Sessions, sessionId: string, resolve: (file: string) => string, maxBytes: number, signal: AbortSignal, offset = 0, maxRecords = 20) {
-  const run = sessions.latestRun(sessionId)
-  const events = run ? sessions.confirmedEvents(sessionId).filter(e => e.taskId === run.taskId) : []
+  const confirmed = sessions.confirmedEvents(sessionId)
+  const latest = [...confirmed].reverse().find(event => event.type === 'run/start')
+  const taskId = latest?.type === 'run/start' ? latest.data.state.taskId : null
+  const events = taskId ? confirmed.filter(e => e.taskId === taskId) : []
   const starts = events.filter(e => e.type === 'verification/start')
   const records = []
   for (const event of starts.slice(offset, offset + maxRecords)) {
@@ -62,7 +66,38 @@ export async function taskVerifications(sessions: Sessions, sessionId: string, r
     records.push({ ...start, runId: event.runId, status, freshness, currentFiles: current, ...(result?.type === 'verification/result' ? { commandResult: result.data.commandResult, afterFiles: result.data.files } : {}) })
   }
   const nextOffset = Math.min(starts.length, offset + records.length)
-  return { taskId: run?.taskId ?? null, runStatus: run?.status ?? null, records, total: starts.length, nextOffset, eof: nextOffset >= starts.length, scope: 'declared files and commands only; passing checks do not establish task acceptance' }
+  const finish = latest?.type === 'run/start' ? [...events].reverse().find(event => event.type === 'run/finish' && event.data.state.runId === latest.data.state.runId) : undefined
+  return { taskId, runStatus: finish?.type === 'run/finish' ? finish.data.state.status : latest ? 'running' : null, records, total: starts.length, nextOffset, eof: nextOffset >= starts.length, scope: 'declared files and commands only; passing checks do not establish task acceptance' }
+}
+
+function taskRunReport(events: SessionEvent[], taskId: string | null) {
+  if (!taskId) return []
+  return events.filter(event => event.type === 'run/start' && event.data.state.taskId === taskId).map(start => {
+    if (start.type !== 'run/start') throw new Error('unreachable run event')
+    const runId = start.data.state.runId
+    const finish = [...events].reverse().find(event => event.type === 'run/finish' && event.data.state.runId === runId)
+    const usage = events.flatMap(event => event.type === 'model/usage' && event.runId === runId ? [event.data.usage] : [])
+    const counters = finish?.type === 'run/finish' ? finish.data.state.counters : {
+      ...emptyCounters(),
+      modelRequests: events.filter(event => event.type === 'model/start' && event.runId === runId).length,
+      toolCalls: events.filter(event => event.type === 'tool/start' && event.runId === runId).length,
+      inputTokens: usage.reduce((total, item) => total + item.inputTokens, 0),
+      outputTokens: usage.reduce((total, item) => total + item.outputTokens, 0),
+      totalTokens: usage.reduce((total, item) => total + item.totalTokens, 0),
+    }
+    const state = finish?.type === 'run/finish' ? finish.data.state : start.data.state
+    return {
+      runId,
+      ...(state.previousRunId ? { previousRunId: state.previousRunId } : {}),
+      model: state.model,
+      status: finish?.type === 'run/finish' ? finish.data.state.status : 'running',
+      stopReason: finish?.type === 'run/finish' ? finish.data.state.status : null,
+      counters,
+      usage,
+      startedAt: start.at,
+      finishedAt: finish?.at ?? null,
+    }
+  })
 }
 
 export async function taskReport(sessions: Sessions, sessionId: string, resolve: (file: string) => string, maxBytes: number, signal: AbortSignal, fileOffset = 0, verificationOffset = 0, maxFiles = 20, maxRecords = 20) {
@@ -101,5 +136,14 @@ export async function taskReport(sessions: Sessions, sessionId: string, resolve:
   }
   // Command logs remain in immutable verification events and the original Bash result.
   const records = verification.records.map(({ commandResult, ...record }) => ({ ...record, ...(commandResult ? { commandResult: { command: commandResult.command, cwd: commandResult.cwd, status: commandResult.status, exitCode: commandResult.exitCode, signal: commandResult.signal, durationMs: commandResult.durationMs, timedOut: commandResult.timedOut, cancelled: commandResult.cancelled, stdoutTruncated: commandResult.stdout.truncated, stderrTruncated: commandResult.stderr.truncated, error: commandResult.error } } : {}) }))
-  return { taskId: changes.taskId, runStatus: verification.runStatus, acceptance: 'not_asserted', files, unverifiedFiles: files.filter(f => f.verification === 'unverified').map(f => f.path), fileNextOffset: changes.nextOffset, filesEof: changes.eof, checks: records, verificationTotal: verification.total, verificationNextOffset: verification.nextOffset, verificationsEof: verification.eof, scope: 'file-tool changes; checks cover only declared files/commands; logs in verification events and original Bash result; no automatic task acceptance' }
+  const confirmed = sessions.confirmedEvents(sessionId)
+  const runs = taskRunReport(confirmed, changes.taskId)
+  const current = runs.at(-1)
+  const taskCounters = runs.reduce((total, run) => {
+    for (const key of Object.keys(total) as (keyof typeof total)[]) total[key] += run.counters[key]
+    return total
+  }, emptyCounters())
+  const allUsage = runs.flatMap(run => run.usage)
+  const taskUsage = { inputTokens: taskCounters.inputTokens, outputTokens: taskCounters.outputTokens, totalTokens: taskCounters.totalTokens, sources: [...new Set(allUsage.map(item => item.source))], uncertain: allUsage.some(item => item.uncertain) }
+  return { sessionId, taskId: changes.taskId, currentRunId: current?.runId ?? null, runStatus: current?.status ?? verification.runStatus, stopReason: current?.stopReason ?? null, runs, taskCounters, taskUsage, acceptance: 'not_asserted', files, unverifiedFiles: files.filter(f => f.verification === 'unverified').map(f => f.path), fileNextOffset: changes.nextOffset, filesEof: changes.eof, checks: records, verificationTotal: verification.total, verificationNextOffset: verification.nextOffset, verificationsEof: verification.eof, scope: 'file-tool changes; checks cover only declared files/commands; logs in verification events and original Bash result; no automatic task acceptance' }
 }

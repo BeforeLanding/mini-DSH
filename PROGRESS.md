@@ -1,4 +1,8 @@
 # 开发进度
+### NX-06d 编程结果报告身份、用量与停止原因（2026-09-30）
+
+task_report 现在返回 sessionId、taskId、currentRunId、每个 run 的模型/前序 run/状态/停止原因/counters/usage/起止时间，以及任务累计 counters 和按来源汇总的 usage；running 段只从已确认事件派生，不冒用未落盘内存状态。task_changes/taskVerifications 的只读查询也改用已确认的当前 task。既有文件 hash、verificationId、命令结果摘要、失败历史和 acceptance=not_asserted 保留。正常权限 `pnpm check`（74 文件）、报告/验证/变更回归 8/8 与 `git diff --check` 通过；覆盖预算停止→续跑、running、completed、JSONL 恢复和 reset。
+
 ### NX-06c request_trace 模型工具（2026-09-30）
 
 files 插件注册有界 request_trace，要求 session，校验 requestOffset 与 maxRequests（最多 100），插件释放时注销；工具说明明确省略正文与分页非快照边界。Cordis 工具清单和真实执行已更新。正常权限 `pnpm check`（74 文件）、trace/集成测试 5/5 与 `git diff --check` 通过；沙箱测试因既有 Cordis 依赖不可见失败，正常权限使用同一 dist 产物通过，未变更依赖。
