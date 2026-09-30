@@ -4,12 +4,12 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 
-export const fixtureIds = ['boundary', 'options', 'interface', 'normalize', 'dedupe', 'pagination'] as const
+export const fixtureIds = ['boundary', 'options', 'interface', 'normalize', 'dedupe', 'pagination', 'query'] as const
 export type FixtureId = typeof fixtureIds[number]
 const repository = fileURLToPath(new URL('../../', import.meta.url))
 const fixtures = path.join(repository, 'test', 'fixtures', 'coding')
 const sources: Record<FixtureId, string[]> = {
-  boundary: ['src/index.mjs'], options: ['src/join.mjs'], interface: ['src/pricing.mjs', 'src/receipt.mjs'], pagination: ['src/page.mjs'], dedupe: ['src/unique.mjs'], normalize: ['src/name.mjs'],
+  boundary: ['src/index.mjs'], options: ['src/join.mjs'], interface: ['src/pricing.mjs', 'src/receipt.mjs'], query: ['src/query.mjs'], pagination: ['src/page.mjs'], dedupe: ['src/unique.mjs'], normalize: ['src/name.mjs'],
 }
 export interface Acceptance {
   passed: boolean; exitCode: number | null; output: string; protectedFilesChanged: string[]

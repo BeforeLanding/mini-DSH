@@ -1,4 +1,8 @@
 # 开发进度
+### NX-05b4 query fixture（2026-09-30）
+
+新增 query 编程任务，初始态失败、参考解通过；模拟模型经真实文件/Bash 工具完成。正常用户权限 `pnpm fixtures:check`：初始 0/7、参考 7/7；Cordis 回归 16/16。
+
 ### NX-05b3 pagination fixture（2026-09-30）
 
 新增 pagination 编程任务，初始态失败、参考解通过；模拟模型经真实文件/Bash 工具完成。正常用户权限 `pnpm fixtures:check`：初始 0/6、参考 6/6；Cordis 回归 14/14。

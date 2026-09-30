@@ -5,8 +5,9 @@
 - NX-05b0 / 固定九项新增任务及提交边界 / `git diff --check` / done / 56b3c8e。
 - NX-05b1 / normalize 任务、初始代码、公开检查、参考解、独立验收与注册 / `pnpm fixtures:check` 初始 0/4、参考 4/4；Cordis 流程回归 10/10；`git diff --check` / done / a11f510。
 - NX-05b2 / dedupe 同范围 / `pnpm fixtures:check` 初始 0/5、参考 5/5；Cordis 流程回归 12/12；`git diff --check` / done / 4761987。
-- NX-05b3 / pagination 同范围 / `pnpm fixtures:check` 初始 0/6、参考 6/6；Cordis 流程回归 14/14；`git diff --check` / done / 本步提交后填号。
-- NX-05b4～b9 / 依次增加 query、retry、merge、csv、inventory、summary，各自独立提交相同范围 / 每项 `pnpm fixtures:check` 初始全失败且参考全通过，`node --test dist/test/coding-fixtures.test.js` 和 `git diff --check` / todo / 待提交。
+- NX-05b3 / pagination 同范围 / `pnpm fixtures:check` 初始 0/6、参考 6/6；Cordis 流程回归 14/14；`git diff --check` / done / 2992fb8。
+- NX-05b4 / query 同范围 / `pnpm fixtures:check` 初始 0/7、参考 7/7；Cordis 流程回归 16/16；`git diff --check` / done / 本步提交后填号。
+- NX-05b5～b9 / 依次增加 retry、merge、csv、inventory、summary，各自独立提交相同范围 / 每项 `pnpm fixtures:check` 初始全失败且参考全通过，`node --test dist/test/coding-fixtures.test.js` 和 `git diff --check` / todo / 待提交。
 - NX-05b10 / 12 项总体验收与使用说明 / `pnpm check`、`pnpm test`、`pnpm fixtures:check`、`git diff --check`，记录真实结果与全部提交 / todo / 待提交。
 - 九项逐步覆盖字符串规整、去重、分页、查询编码、异步重试、深层合并、CSV 引号解析、跨文件库存计算与聚合统计。每项工作区仅含任务初始代码与公开检查；参考修改及独立验收留在工作区外。每项验证和提交后再开发下一项，不合并提交。
 
