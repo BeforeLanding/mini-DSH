@@ -1,4 +1,8 @@
 # 开发进度
+### CI-05b 修复远端验收（2026-09-30）
+
+精确 SHA 83e6396552e3457134316d7d0317ad8732ae4147 的 [CI 36658529725](https://github.com/BeforeLanding/mini-DSH/actions/runs/36658529725) Ubuntu/Windows × Node22/24 四组 success；[Deploy ECS 36658656903](https://github.com/BeforeLanding/mini-DSH/actions/runs/36658656903) success，日志明确 `Deployment verified; shared configuration, workspace and sessions retained.`。这证明修复后测试与自动部署链路均完成。此次仅回填真实运行记录，文档提交后核验最新 main CI，不无限追加验收记录。
+
 ### CI-05b CLI 集成测试时序修复（2026-09-30）
 
 Windows Node24 在 CI 36657375472 中唯一失败的 CLI 交付测试达到固定 5 秒输出等待；此次仅将该流程的等待上限设为 15 秒、外层测试上限设为 45 秒，其余 CLI 测试仍默认 5 秒。正常用户权限 `pnpm check` 72 文件、CLI 5/5、全量 `pnpm test` 147/147 与 `git diff --check` 通过；远端四组合待提交后核验。此为测试负载下的时序稳健性修复，不改变运行时行为。
