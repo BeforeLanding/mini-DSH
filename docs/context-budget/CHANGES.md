@@ -2,6 +2,26 @@
 
 更新：2026-09-30。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-08e0-2 评测驱动支持同一会话内的任务序列
+- 关联：NX-08e 的前置；承接 e0-1 的条件修正。状态：done（2026-09-30，本地通过）。本次不调用真实模型。
+- **为什么需要这一步**：对照 A 要求会话中存在已结束且可裁剪的旧任务，而驱动原先每个 fixture 只建一个 session、只发一次 `agent.send()`（`scripts/eval-fixture.ts:42-50`），会话里永远只有一个 task，`removedTaskIds` 恒为空。加大任务不会改变这一点，因为当前 task 恒受保护（见 e0-1）。因此前置是把驱动扩成「一个 fixture = 一个任务序列」，而不是放大某一条任务。
+- `scripts/coding-fixtures.ts` 新增 `readTaskSequence`，并新增两种互斥布局：`TASK.md` 是单任务，`TASKS/*.md` 是按**文件名**排序的阶段序列（顺序由 `01-`/`02-` 前缀承载，不由目录项返回顺序承载）。同时存在两者报错、`TASKS/` 里没有 `.md` 也报错，都不静默退回单任务——接受哪一种就决定了模型被要求做多少，而读者很难察觉，这与 e0-1 修正的那条错误判据属同一类陷阱。描述符的 `task` 字段由 `tasks: readonly string[]` 取代（旧字段在单任务与多阶段两种布局下含义不同，保留会让调用点静默只跑第一阶段）。
+- `scripts/eval-fixture.ts` 改为对 `fixture.tasks` 逐阶段 `await agent.send()`，每次 `send` 分配新 `taskId`，先前结束的阶段因此成为可裁剪的旧任务。**不使用 `/continue` 串联阶段**：它复用 `taskId`，所有 run 并进同一个受保护组，裁剪同样不会触发（R-12）。验收仍在最后对工作区终态做一次判定，不新增阶段级验收契约。
+- `RunOutcome` 增加 `tasks: RunTaskDetail[]`（`taskId`/`status`/`counters` 逐阶段明细），`status` 取最后一个阶段，`counters` 改为各阶段之和——`phaseCaps` 的 `requests`/`tokens` 是整批累计量，按阶段各记一次会把实际用量少算数倍；runs 仍按 fixture 运行次数计。**上限口径因此变化：`armA`/`armB` 的「12 任务 × 2 臂 × 3 次」算式在 fixture 变成阶段序列后失效，必须在开跑对照 A 之前重新预注册。** 本步不动 `phaseCaps` 的任何数值。
+- 非 `BudgetStop` 的基础设施失败记入 `error` 后中止后续阶段：会话或工作区已经不健康，继续下发只会把同一个失败重复记成多份，而每一份都会进入阶段累计用量。预算触顶不属于这一类，它由 run 状态承载并继续下一阶段。
+- **用例覆盖**：`readTaskSequence` 的顺序（含非 `.md` 文件被忽略）、两种布局并存报错、`TASKS/` 无 `.md` 报错、`TASK.md` 单任务回落；「现有 12 个 fixture 各只有一项 `tasks`」（固定离线基线与筛查跑历史结论不受本步影响）；以及经真实 `agent.send` 的三阶段会话——容量只比装下全部三阶段少 1 token，第三个任务的投影必须裁掉最早的阶段，断言 `removedTaskIds === [第一个 taskId]`、发送的正文不含第一阶段、阶段二与三仍在，且 `session.events` 的既有前缀一条未改（裁剪只作用于请求投影，`/history` 与恢复仍读得到旧阶段原文）。
+- 验证：`pnpm check`（82 文件）、`pnpm test`（176/176，新增 3 条用例，无失败/跳过）、`pnpm eval:offline`（12 accepted，退出码 0）、`pnpm fixtures:check`（初始 0/12、参考 12/12，退出码 0）在本机通过。全部离线，未产生付费请求。
+- **本步未覆盖**：多阶段路径只有单元级与 Harness 级证据，**尚无声明 `TASKS/` 布局的真实 fixture 走完 `runFixtureTask`**，因此 `tasks` 明细、阶段 counters 求和与「基础设施失败中止后续阶段」这三条驱动行为要等 e0-3 之后的 fixture 才在端到端路径上被覆盖。现在不把该缺口当作已验证。
+
+## NX-08e0-1 修正对照触发条件与需求（文档）
+- 关联：NX-08e 的前置。状态：done（2026-09-30）。本步只改文档，不触碰代码。
+- **诊断**：NX-08e 的前置条件原先被写成规模问题——PLAN、TASKS、PROGRESS 都说「候选任务必须产生超过输入目标 65,536 的历史，否则裁剪永不触发」，据此推出的动作是「构造更大的任务」。该判据不成立：`groupHistory` 按 `taskId` 分组，只有 `taskId === currentTaskId` 的组被标 `protected`（`src/core/context-runtime.ts:29`），`project()` 的循环只移除 `!protected && complete` 的组（同文件 `:68-70`）；新的 `agent.send()` 一律分配新 `taskId`，只有 `/continue` 复用旧 `taskId`（`src/core/session-runtime.ts:135`），而 `/continue` 把所有 run 并进同一个受保护组。因此**当前 task 无论多大都不会被裁剪**，能被裁剪的只有同一会话中更早结束的其它任务。筛查跑 12 个单任务 fixture 的 `removedTaskIds` 全为空是**结构性必然**，与任务规模无关。
+- PLAN 的「对照有效性条件」重写为两个条件（会话组成 + 规模），逐条给出源码依据；同时说明对照 B 不受此限制（有界工具输出改变的是当前 task 内部的历史规模，单任务下就会让一臂 `context_overflow`、另一臂完成），两者可测性不对称。并标注 `phaseCaps` 的旧算术在 fixture 变成阶段序列后失效、须在开跑前重新预注册。
+- **数值混用更正**：27,147 是 NX-08d0-3 的 `merge` 烟测（9 次请求）的估算输入，PROGRESS 与 PLAN 曾把它记成 12 个 fixture 的最大值；筛查跑的对应数是 17,220。两处现在分列。CHANGES 的 NX-08d、NX-08d0-3、NX-08d0-1 三节各加一条带日期的修正注记，**原始数值与当时的结论都保留，不重写历史记录**；d0-1 的注记另说明该修复是必要条件而非充分条件。
+- REQUIREMENTS 新增 **R-21 评测对照的有效性条件**（此前 CHANGES 已记录「REQUIREMENTS 尚无 NX-08 条目」；R-20 已被 NX-17 占用）：两个必要条件、两臂共用模型/prompt/初始状态/验收器/单次预算、整批上限先预注册、报告口径与「每成功任务有效 token 只在成功次数非零时计算」，以及「改变当前 task 完整保护契约须先修订 R-03 与 D-02」的边界。状态写明 NX-08e/f/g 尚未开跑，无对照结论。
+- 验证：`pnpm check`（82 文件）、`pnpm test`（173/173，无失败/跳过）在本机通过；纯文档改动不影响运行时行为。
+- 提交：`a46d1fc`。
+
 ## NX-17 沙箱命令闸门误判修复（筛查跑发现）
 - 关联：NX-08d 观察 4；不依赖 NX-08，可独立验收。状态：done（2026-09-30，本地通过，不调用模型）。
 - **现象与根因**：合并成一句话会失真，实际是三个互相独立的机制，不是一个规则写错。

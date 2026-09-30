@@ -32,11 +32,20 @@ export interface AcceptanceDetail {
   output: string
   protectedFilesChanged: string[]
 }
+// 一个 fixture 可以是一个任务，也可以是同一会话内按序下发的多个阶段任务（见 coding-fixtures.ts 的
+// readTaskSequence）。RunOutcome 描述整次 fixture 运行：status 取最后一个阶段，counters 是各阶段之和，
+// 验收仍是工作区终态一次判定；逐阶段的观测留在 tasks 里，用于定位是哪个阶段把预算或上下文用光。
+export interface RunTaskDetail {
+  taskId: string
+  status: StopReason | 'running'
+  counters: Counters
+}
 export interface RunOutcome {
   status: StopReason | 'running'
   counters: Counters
   accepted: boolean | null
   acceptance?: AcceptanceDetail
+  tasks?: RunTaskDetail[]
   // 任务按规格不可解（fixture 或 Harness 缺陷，而非模型能力）。只影响成功率分母的口径，必须由人来判定
   // 并在报告中给出理由；没有证据就不设该字段。
   infeasible?: boolean

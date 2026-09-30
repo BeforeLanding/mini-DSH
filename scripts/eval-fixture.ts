@@ -2,9 +2,9 @@ import { Context } from '@deepseek-ai/cordis'
 import { createFixture } from './coding-fixtures.js'
 import type { FixtureId } from './coding-fixtures.js'
 import { evalPolicy } from './eval-runner.js'
-import type { AcceptanceDetail, RunOutcome } from './eval-runner.js'
+import type { AcceptanceDetail, RunOutcome, RunTaskDetail } from './eval-runner.js'
 import { BudgetStop, emptyCounters } from '../src/core/budget.js'
-import type { BudgetPolicy } from '../src/core/budget.js'
+import type { BudgetPolicy, Counters } from '../src/core/budget.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
 import { JsonlStore } from '../src/core/event-store.js'
 import type { Adapter, ChatRequest, ChatResponse, ToolCall } from '../src/core/contracts.js'
@@ -23,10 +23,25 @@ export type Fixture = Awaited<ReturnType<typeof createFixture>>
 // 校验会以“缺少上下文容量”直接失败，而不是静默退化成无上限。
 export interface FixtureAdapter { provider: string; model: string; chat: Adapter['chat']; capabilities?: Adapter['capabilities'] }
 
+// 各阶段 counters 求和：phaseCaps 的 requests/tokens 是整批累计量，按阶段各记一次会把同一台机器的
+// 实际用量少算数倍。runs 仍按 fixture 运行次数计，不动，因此上限口径的变化需要在预注册里单独说明。
+const sumCounters = (all: readonly Counters[]): Counters => all.reduce((total, counters) => ({
+  modelRequests: total.modelRequests + counters.modelRequests,
+  toolCalls: total.toolCalls + counters.toolCalls,
+  inputTokens: total.inputTokens + counters.inputTokens,
+  outputTokens: total.outputTokens + counters.outputTokens,
+  totalTokens: total.totalTokens + counters.totalTokens,
+  activeDurationMs: total.activeDurationMs + counters.activeDurationMs,
+  approvalDurationMs: total.approvalDurationMs + counters.approvalDurationMs,
+}), emptyCounters())
+
 // 适配器在 fixture 建好之后才构造：模拟模型需要读取该 fixture 的参考改动来生成工具序列。
 // 真实适配器忽略入参即可，运行器因此不感知模型来源。
 // sessionDirectory 给出时把该次 run 的事件日志落盘（每个 run 一个子目录，因 session 是随机 id），
 // 让真实付费调用留下的证据不随进程退出消失；不给出时保持原有的纯内存行为，离线路径不受影响。
+// fixture.tasks 的阶段按序在同一个 session 内下发：每次 send 分配新 taskId，于是先前结束的阶段成为
+// 可裁剪的旧任务——这是对照 A 能产生差异的前提（单任务会话无论多大都不会触发裁剪）。验收仍在最后
+// 对工作区终态做一次判定，不按阶段拆分。
 export async function runFixtureTask(
   id: FixtureId, makeAdapter: (fixture: Fixture) => FixtureAdapter,
   budget: Readonly<BudgetPolicy> = evalPolicy, sessionDirectory?: string,
@@ -46,21 +61,29 @@ export async function runFixtureTask(
     }
     const agent = root.agents.create({ sessionId: session.id, model: `${adapter.provider}/${adapter.model}`, loop: root.agentLoop, budget })
     let error: string | undefined
-    try {
-      await agent.send(fixture.task)
-    } catch (cause) {
-      // 预算触顶是 run 的停止原因，由状态承载；只有基础设施失败才记作 error。
-      if (!(cause instanceof BudgetStop)) error = cause instanceof Error ? cause.message : String(cause)
+    const stages: RunTaskDetail[] = []
+    for (const stage of fixture.tasks) {
+      try {
+        await agent.send(stage)
+      } catch (cause) {
+        // 预算触顶是 run 的停止原因，由状态承载；只有基础设施失败才记作 error。
+        if (!(cause instanceof BudgetStop)) error = cause instanceof Error ? cause.message : String(cause)
+      }
+      const state = root.sessions.latestRun(session.id)
+      if (state) stages.push({ taskId: state.taskId, status: state.status, counters: state.counters })
+      // 基础设施失败后不再下发下一阶段：会话或工作区已经不健康，继续跑只会把同一个失败重复记成多份，
+      // 而每一份都会进入阶段累计用量。预算触顶不属于这一类，它由状态承载并继续下一阶段。
+      if (error !== undefined) break
     }
-    const state = root.sessions.latestRun(session.id)
     const acceptance = await fixture.evaluate()
     const detail: AcceptanceDetail = {
       passed: acceptance.passed, exitCode: acceptance.exitCode, output: acceptance.output, protectedFilesChanged: acceptance.protectedFilesChanged,
     }
     // 预算校验或装配在 beginRun 之前失败时不会留下 run 状态；此时按基础设施失败报告，不用非空断言把
     // 缺失状态伪装成一次真实的运行结论。
-    if (!state) return { status: 'error', counters: emptyCounters(), accepted: acceptance.passed, acceptance: detail, error: error ?? 'no run was recorded' }
-    return { status: state.status, counters: state.counters, accepted: acceptance.passed, acceptance: detail, ...(error === undefined ? {} : { error }) }
+    const last = stages.at(-1)
+    if (!last) return { status: 'error', counters: emptyCounters(), accepted: acceptance.passed, acceptance: detail, error: error ?? 'no run was recorded' }
+    return { status: last.status, counters: sumCounters(stages.map(stage => stage.counters)), accepted: acceptance.passed, acceptance: detail, tasks: stages, ...(error === undefined ? {} : { error }) }
   } finally {
     // 先等写入队列排空再关存储：失败会抛出，使证据没落盘的 run 不以成功结论结束。
     if (store) await root.sessions.close()

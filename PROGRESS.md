@@ -6,7 +6,8 @@
 
 - **NX-08d 筛查跑完成（2026-09-30，首次真实模型调用）**：模型 `deepseek/deepseek-v4-flash`（服务端回显 `deepseek-flash`，对应 `DeepSeek-V4.1-Flash`），12 个任务各 1 次，**原始分子/分母 12/12**，无拒绝、无不可行、无基础设施失败，因此本步没有失败案例可报告。81 请求（20.3% 上限）/ 412,176 token（5.2% 上限），81/81 usage 来自 provider，成本约 $0.15。12 次全部 `completed`，未触发任何裁剪或预算停止。证据在 `.eval-evidence/screening-full/`（不入库），[详细证据](docs/context-budget/CHANGES.md#nx-08d-筛查跑12-任务--1首次真实模型调用)。**该结果只说明模型能在这条链路上跑通并交付，不能推断长任务或大仓库场景下的表现**：任务集有天花板效应（公开 `check.mjs`、零依赖、改动数十行），且只有 1 次重复，测不出波动。
 - **NX-17 完成（2026-09-30）**：筛查跑发现的沙箱命令闸门误判已修复，两个提交可分别回退——`5322291` 修分词与路径形状（双引号按 shell 语义识别 `\"`；事故命令由 49 token 变为 6 token），`c4a02ae` 把出网规则从「出现在命令里」改为能力判据（`echo`/`printf` 参数里的 URL 放行，接管道时仍拦截）。`..`、系统路径、工作区外路径、`//etc`、UNC 与 `curl`/`wget`/`git clone` 全部照旧拒绝，由测试逐条固定。设计决策与未放宽清单写入 [CHANGES](docs/context-budget/CHANGES.md#nx-17-沙箱命令闸门误判修复筛查跑发现)，新增 R-20 固化命令策略契约。改前发现的相邻缺陷另立两项待办，未塞进这两个提交：[NX-18 `..` 族误判](docs/context-budget/TASKS.md)、[NX-19 出网拦截的真实缺口](docs/context-budget/TASKS.md)。
-- 主分支基线：TypeScript / Cordis 本地 coding agent harness。本地 `pnpm check`（82 文件）、173/173 测试、12 项 fixture 基线（初始 0/12、参考 12/12）通过。`pnpm check`、`pnpm test`、`pnpm eval:offline`、`pnpm fixtures:check` 均不调用付费模型。
+- **NX-08e0 前置设施推进中（2026-09-30）**：对照 A 的触发条件从「规模问题」修正为「会话组成 + 规模」（提交 `a46d1fc`，新增 R-21），评测驱动已能在同一会话内按序下发任务序列（`readTaskSequence` 支持 `TASKS/*.md` 布局并与 `TASK.md` 互斥；`runFixtureTask` 逐阶段 `send`，`RunOutcome` 增加 `tasks` 明细、`counters` 改为各阶段之和）。契约见 [PLAN](docs/context-budget/PLAN.md)。剩余 e0-3：离线量化越过输入目标所需的旧任务规模，之后才新建多阶段依赖 fixture 并重新预注册整批上限。两步均未调用真实模型。
+- 主分支基线：TypeScript / Cordis 本地 coding agent harness。本地 `pnpm check`（82 文件）、176/176 测试、12 项 fixture 基线（初始 0/12、参考 12/12）通过。`pnpm check`、`pnpm test`、`pnpm eval:offline`、`pnpm fixtures:check` 均不调用付费模型。
 - NX-08d0 完成：首次真实调用的设施补齐，3 个提交（`8fd78a9`、`9eb3769`、`4d10f2c`）已推送，三个 SHA 上 CI 四组 success、attempt=1（[4d10f2c](https://github.com/BeforeLanding/mini-DSH/actions/runs/36681430450)），同一批推送未触发 Deploy ECS。修复了评测路径上输入目标 65,536 与 1,000,000 窗口从未生效（投影不裁剪、`context_overflow` 不触发）的问题；补齐 run 结论分类与显式成功率口径；新增 `pnpm eval:screening` 真实适配器入口与逐 run 证据落盘。**自 2026-09-30 起开始调用付费模型**。
 - 真实调用烟测（2026-09-30，`merge` 两次）：均 completed 且通过独立验收，退出码 0。第一次 5 请求 / 24,677 token，第二次 9 请求 / 119,689 token（输入 104,691、输出 14,998，其中 reasoning 10,700）。差异来自 thinking 输出与工具次数导致的输入累积重发。协议探测记录：请求体写 `deepseek-v4-flash` 时服务端回显 `model=deepseek-flash`。完整证据在 `.eval-evidence/screening-merge/`（不入库），[详细证据](docs/context-budget/CHANGES.md#nx-08d0-3-真实适配器评测入口与逐-run-证据落盘)。
 - 运维整改 OPS-01～OPS-05 与文档结构整改已落地，提交号与 CI 证据见 [TASKS](docs/context-budget/TASKS.md) 和 [CHANGES](docs/context-budget/CHANGES.md)：部署改为 tag 触发，CI 的 main push 忽略纯文档，PROGRESS/TASKS 改为状态页，提交粒度规则改为可判断判据，ECS 标签与回滚规范已定义。
@@ -19,13 +20,13 @@
 ## 阻塞
 
 - 无功能阻塞。
-- NX-08e 的任务集尚不满足对照前提，且原判据有误（2026-09-30 修正）：裁剪要求会话中存在**已结束且可裁剪的旧任务**，当前 task 与 `/continue` 的续跑段恒受保护（`src/core/context-runtime.ts:29,68-70`、`src/core/session-runtime.ts:135`），因此**加大单个任务不会触发裁剪**。现有驱动每个 fixture 只发一次 `send`（`scripts/eval-fixture.ts:42-50`），筛查跑 `removedTaskIds` 全为空是结构性必然。两处实测数值需分列：筛查跑 12 个 fixture 最大估算输入 17,220；NX-08d0-3 的 `merge` 烟测（9 次请求）为 27,147，不是 12 个 fixture 的最大值。前置工作是让驱动支持同一会话内的任务序列，其次才是规模。该项不阻塞 NX-08d 筛查跑；对照 B 不受此结构限制。
+- NX-08e 的**驱动侧**前置已解决，任务集仍未就绪：裁剪要求会话中存在**已结束且可裁剪的旧任务**，当前 task 与 `/continue` 的续跑段恒受保护（`src/core/context-runtime.ts:29,68-70`、`src/core/session-runtime.ts:135`），因此加大单个任务不会触发裁剪。驱动现已支持同一会话内的任务序列（NX-08e0-2），但**尚无声明 `TASKS/` 布局的 fixture**：现有 12 个 fixture 全部是单任务，`tasks` 各只有一项，筛查跑 `removedTaskIds` 全为空的结论不受本次改动影响。剩余前置是 e0-3 的离线规模量化，以及据此新建多阶段依赖 fixture 并重新预注册整批上限（`phaseCaps` 的旧算式已不适用）。该项不阻塞 NX-08d 筛查跑；对照 B 不受此结构限制。
 - 部署新路径未验证（见上）；首次发布前须实跑一次 tag 部署并核对回滚。
 - T6 Biome 只读诊断已有结论：仓库**没有 `biome.json`**，Biome 以默认规则（制表符、双引号、导入排序）运行，与全仓库既有风格相反，因此对每个文件都报错；`pnpm check` 与 CI 均未接入 `lint`，该脚本从未绿过。在用户选择处置方案前不修改 Biome、依赖或 CI 门禁。
 
 ## 下一步
 
-1. **NX-08e 的前置（修正版）：先让评测驱动能产出多任务会话**。裁剪只能移除同一会话中更早结束的任务；当前 task 与续跑段恒受保护，所以筛查跑 12 个单任务 fixture 的 `removedTaskIds` 全为空是结构性的，不是「任务太小」。顺序是：① 修正对照触发条件与相关文档（已完成）→ ② 评测驱动支持同一会话内的任务序列 → ③ 离线量化「要越过 65,536 需要多大的旧任务累计规模」→ ④ 才轮到新建多阶段依赖 fixture。对照 B 不受此结构限制，可在单任务下直接分辨两臂。
+1. **NX-08e0-3：离线量化「要越过 65,536 需要多大的旧任务累计规模」**。诊断探针用真实 Cordis 栈在同一会话内按序下发多个任务，打印每阶段的估算输入与 `removedTaskIds`，给出第几次任务开始触发裁剪的具体数值；结论回填 PLAN/TASKS/PROGRESS。据此才新建多阶段依赖 fixture 并重新预注册整批上限。对照 B 不受此结构限制，可在单任务下直接分辨两臂。
 2. NX-18／NX-19 由用户决定是否排期：`..` 族误判（`echo "see ../docs"`、`grep -n ".."`、`git log --grep "../ fixes"` 被判逃逸）是「放宽」方向，但要动 NX-17 明确保护的 `..` 规则；出网缺口（`bash -c "curl …"`、`nc`、`ssh`、`$(…)`、反斜杠 UNC）是「加强」方向。两者都需先补需求/设计决策。
 3. NX-09 / NX-10 最小演示不依赖 NX-08，可并行先行；真实模型结果一节须等 NX-08 完成后回填。
 4. T6 Biome 处置方案由用户选择：修到绿并设为门禁，或移除 Biome（诊断结论见“阻塞”）。

@@ -137,6 +137,33 @@ test('oversized current input, system or schemas stop without a model request', 
   }
 })
 
+test('a session with several ended tasks drops only the oldest and keeps every raw event', async () => {
+  let captured: import('../src/core/contracts.js').ChatRequest | undefined
+  const h = harness(async request => { captured = request; return { content: 'answer' } })
+  const stages = ['first stage '.repeat(200), 'second stage '.repeat(200), 'third stage']
+  const taskIds: string[] = []
+  for (const stage of stages.slice(0, 2)) {
+    await h.agent.send(stage)
+    taskIds.push(h.sessions.latestRun(h.session.id)!.taskId)
+  }
+  const before = structuredClone(h.session.events)
+  // 容量只比「装下全部三个阶段」少 1 token，第三个任务因此必须裁掉最早的阶段才发得出去。
+  // 这是对照 A 的触发形状：单任务会话无论多大都走不到这里，因为当前 task 恒受保护。
+  const fullInput = estimateInput({ system: '', tools: [], messages: [...h.sessions.deriveMessages(h.session.id), { role: 'user', content: stages[2] }] })
+  await h.agent.send(stages[2], { budget: { contextWindowTokens: fullInput + 2048 + 1000 - 1, maxOutputTokens: 1000, minimumOutputTokens: 1 } })
+  taskIds.push(h.sessions.latestRun(h.session.id)!.taskId)
+  const projection = h.session.events.filter(e => e.type === 'context/projection').at(-1)!
+  assert.deepEqual(projection.data.removedTaskIds, [taskIds[0]])
+  assert.equal(h.sessions.latestRun(h.session.id)?.status, 'completed')
+  const sent = captured!.messages!.map(message => message.content ?? '').join('\n')
+  assert.doesNotMatch(sent, /first stage/)
+  assert.match(sent, /second stage/)
+  assert.match(sent, /third stage/)
+  // 裁剪只作用于请求投影：旧阶段的正文仍在原始事件里，/history 与恢复都还能读到。
+  assert.deepEqual(h.session.events.slice(0, before.length), before)
+  assertToolProtocol(h.sessions.deriveMessages(h.session.id))
+})
+
 test('projection uses remaining output allowance before trimming and recalculates after removal', async () => {
   for (const mode of ['exact', 'below', 'minimum', 'exhausted'] as const) {
     let captured: import('../src/core/contracts.js').ChatRequest | undefined

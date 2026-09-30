@@ -1,10 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { Context } from '@deepseek-ai/cordis'
-import { createFixture, fixtureIds, fixtureProcessTimeoutMs } from '../scripts/coding-fixtures.js'
+import { createFixture, fixtureIds, fixtureProcessTimeoutMs, readTaskSequence } from '../scripts/coding-fixtures.js'
 import type { FixtureId } from '../scripts/coding-fixtures.js'
 import type { ToolCall } from '../src/core/contracts.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
@@ -94,7 +95,7 @@ for (const id of fixtureIds) {
       const session = root.sessions.create({ source: 'coding-fixture', fixtureId: id })
       const agent = root.agents.create({ sessionId: session.id, model: 'scripted/fixture', loop: root.agentLoop,
         budget: { maxModelRequests: 16, maxToolCalls: 16, maxActiveDurationMs: 20_000 } })
-      assert.equal(await agent.send(fixture.task, { onToolResult: result => { if (result.name === 'bash') checks.push(!result.isError) } }), 'scripted fixture finished')
+      assert.equal(await agent.send(fixture.tasks[0], { onToolResult: result => { if (result.name === 'bash') checks.push(!result.isError) } }), 'scripted fixture finished')
       assert.deepEqual(checks, id === 'options' ? [false, false, true] : [false, true])
       assert.equal(root.sessions.latestRun(session.id)?.status, 'completed')
       const acceptance = await fixture.evaluate()
@@ -153,6 +154,39 @@ test('independent acceptance protects nested diagnostic evidence', async () => {
   } finally { await fixture.close() }
 })
 
+test('stage layout reads TASKS in name order and refuses the ambiguous layouts', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-sequence-'))
+  try {
+    const stages = path.join(root, 'TASKS')
+    await fs.mkdir(stages)
+    // 写入顺序与期望顺序不同：承载阶段顺序的必须是文件名（01-/02- 前缀），不是目录项返回顺序。
+    await fs.writeFile(path.join(stages, '02-second.md'), 'second')
+    await fs.writeFile(path.join(stages, '01-first.md'), 'first')
+    await fs.writeFile(path.join(stages, 'notes.txt'), 'ignored')
+    assert.deepEqual(await readTaskSequence(root), ['first', 'second'])
+
+    await fs.writeFile(path.join(root, 'TASK.md'), 'single')
+    await assert.rejects(readTaskSequence(root), /both TASK\.md and TASKS\//)
+
+    await fs.rm(stages, { recursive: true })
+    assert.deepEqual(await readTaskSequence(root), ['single'])
+
+    await fs.rm(path.join(root, 'TASK.md'))
+    await fs.mkdir(stages)
+    await fs.writeFile(path.join(stages, 'notes.txt'), 'ignored')
+    await assert.rejects(readTaskSequence(root), /no \.md stage/)
+  } finally { await fs.rm(root, { recursive: true, force: true }) }
+})
+
+test('every shipped fixture is still a single task', async () => {
+  // 阶段序列只对声明了 TASKS/ 的 fixture 生效。这条断言固定「现有 12 个 fixture 与多阶段改造之前
+  // 完全一致」，否则离线基线与筛查跑的历史结果都不能再当作对照。
+  for (const id of fixtureIds) {
+    const fixture = await createFixture(id)
+    try { assert.equal(fixture.tasks.length, 1) } finally { await fixture.close() }
+  }
+})
+
 async function runFixtureAcrossBudgetStop(id: FixtureId) {
   const fixture = await createFixture(id), root = new Context()
   try {
@@ -186,7 +220,7 @@ async function runFixtureAcrossBudgetStop(id: FixtureId) {
     const session = root.sessions.create({ source: 'coding-fixture-continuation', fixtureId: id })
     const agent = root.agents.create({ sessionId: session.id, model: 'continuation/fixture', loop: root.agentLoop,
       budget: { maxModelRequests: 3, maxToolCalls: 8, maxActiveDurationMs: 20_000 } })
-    await assert.rejects(agent.send(fixture.task), /max_steps/)
+    await assert.rejects(agent.send(fixture.tasks[0]), /max_steps/)
     const stopped = root.sessions.latestRun(session.id)!
     assert.equal(stopped.status, 'max_steps')
     assert.equal(step, 3)

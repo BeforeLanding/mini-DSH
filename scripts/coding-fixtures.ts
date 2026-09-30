@@ -17,6 +17,19 @@ export const fixtureProcessTimeoutMs = 30_000
 const sources: Record<FixtureId, string[]> = {
   boundary: ['src/index.mjs'], options: ['src/join.mjs'], interface: ['src/pricing.mjs', 'src/receipt.mjs'], summary: ['src/summary.mjs'], inventory: ['src/order.mjs', 'src/receipt.mjs'], csv: ['src/csv.mjs'], merge: ['src/merge.mjs', 'src/value.mjs'], retry: ['src/retry.mjs'], query: ['src/query.mjs'], pagination: ['src/page.mjs'], dedupe: ['src/unique.mjs'], normalize: ['src/name.mjs'],
 }
+async function exists(target: string): Promise<boolean> { return fs.stat(target).then(() => true, () => false) }
+// 一个 fixture 要么是单个任务（TASK.md），要么是同一会话内按序下发的多个阶段（TASKS/*.md，按文件名
+// 排序，所以承载顺序的是 01-/02- 这类前缀）。两种布局互斥：若同时接受，读到哪一份就决定了模型被要求
+// 做多少，而读者很难察觉——这正是「任务做大一点就能触发裁剪」那条错误判据的同一类陷阱。
+// 阶段序列是上下文对照的前提：裁剪只移除同一会话中更早结束的任务，单任务会话无论多大都不会触发。
+export async function readTaskSequence(source: string): Promise<string[]> {
+  const directory = path.join(source, 'TASKS')
+  if (!(await exists(directory))) return [await fs.readFile(path.join(source, 'TASK.md'), 'utf8')]
+  if (await exists(path.join(source, 'TASK.md'))) throw new Error('fixture has both TASK.md and TASKS/')
+  const stages = (await fs.readdir(directory)).filter(name => name.endsWith('.md')).sort()
+  if (!stages.length) throw new Error('fixture TASKS directory has no .md stage')
+  return Promise.all(stages.map(name => fs.readFile(path.join(directory, name), 'utf8')))
+}
 async function protectedFilesIn(directory: string, editable: readonly string[], prefix = ''): Promise<{ filename: string; content: Buffer }[]> {
   const result: { filename: string; content: Buffer }[] = []
   for (const entry of await fs.readdir(path.join(directory, prefix), { withFileTypes: true })) {
@@ -37,7 +50,7 @@ export async function createFixture(id: FixtureId) {
   const workspace = path.join(directory, 'workspace')
   try {
     await fs.cp(path.join(source, 'initial'), workspace, { recursive: true, errorOnExist: true })
-    const task = await fs.readFile(path.join(source, 'TASK.md'), 'utf8')
+    const tasks = await readTaskSequence(source)
     const edits = await Promise.all(sources[id].map(async filename => ({
       path: filename,
       oldText: await fs.readFile(path.join(source, 'initial', filename), 'utf8'),
@@ -45,7 +58,7 @@ export async function createFixture(id: FixtureId) {
     })))
     const protectedFiles = await protectedFilesIn(path.join(source, 'initial'), sources[id])
     return {
-      id, workspace, task, edits,
+      id, workspace, tasks, edits,
       async applyReference() {
         for (const edit of edits) await fs.writeFile(path.join(workspace, edit.path), edit.newText)
       },
