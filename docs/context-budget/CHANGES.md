@@ -25,7 +25,7 @@
 - **用例覆盖**：`readTaskSequence` 的顺序（含非 `.md` 文件被忽略）、两种布局并存报错、`TASKS/` 无 `.md` 报错、`TASK.md` 单任务回落；「现有 12 个 fixture 各只有一项 `tasks`」（固定离线基线与筛查跑历史结论不受本步影响）；以及经真实 `agent.send` 的三阶段会话——容量只比装下全部三阶段少 1 token，第三个任务的投影必须裁掉最早的阶段，断言 `removedTaskIds === [第一个 taskId]`、发送的正文不含第一阶段、阶段二与三仍在，且 `session.events` 的既有前缀一条未改（裁剪只作用于请求投影，`/history` 与恢复仍读得到旧阶段原文）。
 - 验证：`pnpm check`（82 文件）、`pnpm test`（176/176，新增 3 条用例，无失败/跳过）、`pnpm eval:offline`（12 accepted，退出码 0）、`pnpm fixtures:check`（初始 0/12、参考 12/12，退出码 0）在本机通过。全部离线，未产生付费请求。
 - **本步未覆盖**：多阶段路径只有单元级与 Harness 级证据，**尚无声明 `TASKS/` 布局的真实 fixture 走完 `runFixtureTask`**，因此 `tasks` 明细、阶段 counters 求和与「基础设施失败中止后续阶段」这三条驱动行为要等 e0-3 之后的 fixture 才在端到端路径上被覆盖。现在不把该缺口当作已验证。
-- 提交：`18a50cc`。
+- 提交：`18a50cc`。跨平台证据：[CI 36690199979](https://github.com/BeforeLanding/mini-DSH/actions/runs/36690199979) 在该 SHA 上 Ubuntu/Windows × Node22/24 四组 success、attempt=1，无重跑；同一批推送未触发 Deploy ECS。e0-3 的提交只改文档与 `docs/` 下的诊断脚本，按 OPS-02 的路径过滤不产生 CI run。
 
 ## NX-08e0-1 修正对照触发条件与需求（文档）
 - 关联：NX-08e 的前置。状态：done（2026-09-30）。本步只改文档，不触碰代码。
