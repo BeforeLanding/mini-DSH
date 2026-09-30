@@ -1,4 +1,7 @@
 # 开发进度
+### NX-14e1（2026-09-30）
+独立增加真实超时/取消边界：两流部分日志保留，POSIX 核对实际 SIGKILL/SIGTERM，取消后等待超过子进程副作用定时器并确认没有写入。Windows 使用实际 taskkill /T /F；预取消不启动。正常权限 build、syntax（68 文件）、command-runner 4/4、git diff --check 通过。
+细化 e1（进程边界）→ e2（持久化恢复）→ e3（文档验收）提交。保留 Loop 的既有 unknown 语义：run 停止等待早于进程 close 时不冒称已收到结构化结果，恢复不重跑。d 提交 254008f 已推送。
 ### NX-14d（2026-09-30）
 大 Bash 日志分别投影 stdout/stderr，每流保留 text 预览、bytes/采集截断、previewTruncated、ref/storedBytes/storageTruncated。命令、cwd、status、exitCode 等始终保留在事件/模型的 JSON 中。存储失败保留执行元信息并标 storageError/isError，不丢失非零退出证据。
 模拟模型真实 Bash 40KB 回读与重启隔离、两流分离、采集/存储截断和存储失败通过。正常用户权限 build、syntax（68 文件）、tool-results 6/6 与 git diff --check 通过；c 提交 3f05f34 已推送。

@@ -8,6 +8,7 @@
 - maxCaptureBytes 为两流共享字节额度；分别标注截断，UTF-8 边界不完整尾部舍弃，非 UTF-8 字节替换解码。timeoutMs 是插件配置，不由模型扩大。cwd 默认为 sandbox.workspace，可指定工作区内现存目录；真实路径在审批后复核，应用策略不承诺 OS 隔离或消除所有外部竞态。
 - 工具 output 增加可选 isError 分类，不以抛异常丢失已执行结果。大命令日志逐流投影，使用既有 ToolResultStore/read_tool_result；每流保留预览及 ref/存储截断，元信息不被整段日志预览覆盖。取消后不使用新 signal 绕过取消写存储；留下有界日志和明确存储错误。
 - 沿用现有 tool/result JSON 文本，不修改事件版本；run completed 仍只表示运行段结束，命令退出 0 不是任务验收。
+- run 的主动超时/取消先结束等待时，沿用 unknown 结果，不等待命令清理来改写唯一终态；直接工具调用的取消结果在进程 close 后返回结构化 cancelled。unknown 恢复不重放。取消后日志存储不得绕过已取消 signal。
 
 严格 TypeScript / NodeNext 编译产物运行；Session 使用版本化 JSONL 事件恢复；Loop 实现上下文投影、执行预算与同 task 续跑；DeepSeek 归一化 usage 并限制输出；CLI 提供 /budget、/continue 和 session 恢复。原始基线及逐步变更保留在 PROGRESS。
 
