@@ -7,8 +7,8 @@
 - NX-05b12c / 工作区外验收保护非源码诊断文件，提供大日志定位测试支撑 / 嵌套诊断文件被篡改即拒，`pnpm check` 72 文件、fixture 回归 28/28 / done / 7f59566。
 - NX-05b12d / pagination 加入 66 KiB、350 行诊断日志及 grep/续读定位流程 / 线索在第 320 行，初始 0/12、参考 12/12，工具搜索/读取/编辑/重测 28/28，`pnpm check` 72 文件 / done / 222c212 + 2822d79（前一提交漏纳被忽略的日志，后一提交修复并重验）。
 - NX-05b12e / query 加入大诊断日志及 grep/续读定位流程 / 线索在第 320 行，初始 0/12、参考 12/12，工具回归 28/28，`pnpm check` 72 文件 / done / dc8ad78。
-- NX-05b12f / csv 同范围 / 线索在第 320 行，初始 0/12、参考 12/12，工具回归 28/28，`pnpm check` 72 文件 / done / 本步提交后填号。
-- NX-05b12g / 预算停止与显式续跑的通用测试支撑 / 真实 Cordis 两段运行、历史协议与副作用计数 / todo / 待提交。
+- NX-05b12f / csv 同范围 / 线索在第 320 行，初始 0/12、参考 12/12，工具回归 28/28，`pnpm check` 72 文件 / done / 7eca20f。
+- NX-05b12g / 预算停止与显式续跑的通用测试支撑 / 真实 Cordis 两段运行、已完成工具不重放、skipped 调用后补做，`pnpm check` 72 文件、fixture 回归 29/29 / done / 本步提交后填号。
 - NX-05b12h～j / dedupe、retry、summary 分别实施长任务约束与续跑任务及独立回归 / 每项预算停止→显式继续→独立验收，检查未重复已执行副作用 / todo / 各自独立提交。
 - NX-05b12k / 四类各三总体验收、文档及提交证据 / `pnpm check`、`pnpm test`、`pnpm fixtures:check`、四组合 CI、`git diff --check` / todo / 待提交。
 - 分类以主要验证场景计：单文件 boundary/options/normalize；多文件 interface/inventory/merge；大文件或日志定位 pagination/query/csv；长任务约束与续跑 dedupe/retry/summary。长任务类须有真实分段运行证据；模拟模型只证明 Harness 流程，不代表自主编程成功率。

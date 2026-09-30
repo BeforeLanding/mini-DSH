@@ -5,6 +5,7 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { Context } from '@deepseek-ai/cordis'
 import { createFixture, fixtureIds } from '../scripts/coding-fixtures.js'
+import type { FixtureId } from '../scripts/coding-fixtures.js'
 import type { ToolCall } from '../src/core/contracts.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
 import * as sessions from '../src/plugins/session.js'
@@ -150,6 +151,64 @@ test('independent acceptance protects nested diagnostic evidence', async () => {
     assert.equal(result.passed, false)
     assert.deepEqual(result.protectedFilesChanged, ['diagnostics/context.txt'])
   } finally { await fixture.close() }
+})
+
+async function runFixtureAcrossBudgetStop(id: FixtureId) {
+  const fixture = await createFixture(id), root = new Context()
+  try {
+    for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
+    await root.plugin(sandbox, { workspace: fixture.workspace, autoApprove: true })
+    await root.plugin(files); await root.plugin(bash)
+    const commands: ToolCall[] = [
+      { id: 'inspect-source', name: 'read_file', arguments: { path: fixture.edits[0].path } },
+      { id: 'failed-check', name: 'bash', arguments: { command: 'node check.mjs' } },
+      { id: 'deferred-fix', name: 'edit_file', arguments: fixture.edits[0] },
+      ...fixture.edits.map((edit, index) => ({ id: `fix-${index}`, name: 'edit_file', arguments: edit })),
+      { id: 'passing-check', name: 'bash', arguments: { command: 'node check.mjs' } },
+    ]
+    let step = 0
+    root.llm.register('continuation', { models: ['fixture'], chat: async ({ messages = [] }) => {
+      assertToolProtocol(messages)
+      const previous = commands[step - 1]
+      if (previous) {
+        const result = messages.at(-1)!
+        assert.equal(result.role, 'tool')
+        assert.equal(result.tool_call_id, previous.id)
+        if (previous.name === 'bash') {
+          assert.doesNotMatch(result.content ?? '', /ToolError:/)
+          const check = JSON.parse(result.content ?? '{}')
+          assert.equal(check.exitCode, previous.id === 'passing-check' ? 0 : 1)
+        } else if (previous.id === 'deferred-fix') assert.match(result.content ?? '', /skipped after max_steps/)
+        else assert.doesNotMatch(result.content ?? '', /ToolError:/)
+      }
+      return step < commands.length ? { toolCalls: [commands[step++]] } : { content: 'continued fixture finished' }
+    } })
+    const session = root.sessions.create({ source: 'coding-fixture-continuation', fixtureId: id })
+    const agent = root.agents.create({ sessionId: session.id, model: 'continuation/fixture', loop: root.agentLoop,
+      budget: { maxModelRequests: 3, maxToolCalls: 8, maxActiveDurationMs: 20_000 } })
+    await assert.rejects(agent.send(fixture.task), /max_steps/)
+    const stopped = root.sessions.latestRun(session.id)!
+    assert.equal(stopped.status, 'max_steps')
+    assert.equal(step, 3)
+    assert.equal((await fixture.evaluate()).passed, false)
+    const beforeResults = session.events.filter(e => e.type === 'tool/result')
+    assert.equal(beforeResults.length, 3)
+    assert.equal(beforeResults.find(e => e.data.toolCallId === 'deferred-fix')?.data.status, 'skipped')
+    agent.budget = { maxModelRequests: 8, maxToolCalls: 8, maxActiveDurationMs: 20_000 }
+    assert.equal(await agent.continue(), 'continued fixture finished')
+    assert.equal(root.sessions.latestRun(session.id)?.status, 'completed')
+    assert.equal((await fixture.evaluate()).passed, true)
+    assert.equal(root.sessions.taskState(session.id, stopped.taskId).continuations, 1)
+    const results = session.events.filter(e => e.type === 'tool/result')
+    assert.equal(results.length, commands.length)
+    assert.equal(results.filter(e => e.data.toolCallId === 'inspect-source').length, 1)
+    assert.equal(results.filter(e => e.data.toolCallId === 'failed-check').length, 1)
+    assertToolProtocol(root.sessions.deriveMessages(session.id))
+  } finally { await root.fiber.dispose(); await fixture.close() }
+}
+
+test('fixture continuation driver stops at request budget and resumes one task without repeating tools', { timeout: 30_000 }, async () => {
+  await runFixtureAcrossBudgetStop('boundary')
 })
 
 test('acceptance bounds hung code and output, rejects invalid limits and reports infrastructure failure', async () => {
