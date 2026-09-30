@@ -207,7 +207,12 @@ NX-07 集成补充：搜索也默认忽略 .mini-dsh；read/search 的 maxOutput
 - 其中请求数 32 是**约束**：两臂获得相同工作量，被比较的才是上下文策略而不是预算。2,000,000 token 是**兜底**，正常 fixture 任务不应触及，否则"预算耗尽"会混进所测的 token 用量。
 - 该组值低于 CLI 默认的 64/128/600,000ms/2,000,000 token；CLI 默认面向通用使用，对小型 fixture 过宽，会掩盖上下文策略差异。
 - 上列四项是**覆盖值**，其余参数取「默认参数与行为」的文档值；评测侧由 `evalPolicy = {...CLI_BUDGET, ...singleRunBudget}` 组装（NX-08d0-1），模型窗口按端点显式声明，官方端点取 1,000,000。只传这四项会让投影失去输入目标与窗口：`ContextBudgetRuntime` 对两者均未配置时恒判可容纳，裁剪与 `context_overflow` 全部失效。
-- 对照有效性条件：两臂只有在历史确实超过输入目标 65,536 时才可能产生差异；若任务全过程的最大估算输入低于该值，裁剪永不触发，全历史臂与裁剪臂完全等价。NX-08e 选任务前必须先测量候选任务的历史规模；NX-08d0-3 烟测已实测 `merge` 在 9 次请求后最大估算输入仅 27,147，现有 12 个 fixture 都不满足该条件。
+- 对照有效性条件（2026-09-30 修正）：两臂要产生差异必须**同时**满足两个条件——**会话组成**上存在已结束且可裁剪的旧任务，**规模**上这些旧任务的累计估算输入足以让 `fits` 为假。原表述只写了规模条件（「历史超过输入目标 65,536」），据此推出的「构造更大的任务」不成立，理由如下。
+- 裁剪的触发条件是会话组成，不是任务规模。`ContextBudgetRuntime.groupHistory` 按 `taskId` 分组，只有 `taskId === currentTaskId` 的组被标 `protected`（`src/core/context-runtime.ts:29`），`project()` 的循环只移除 `!protected && complete` 的组（同文件 `:68-70`）。而新的 `agent.send()` 一律分配新 `taskId`，只有 `/continue` 才复用旧 taskId（`src/core/session-runtime.ts:135`）。因此**当前 task 无论多大都不会被裁剪，`/continue` 的续跑段同样恒受保护**（R-12 与 `test/continue.test.ts` 的「完整当前过程跨续跑保留」）。能够被裁剪的只有**同一会话中更早结束的其它任务**。
+- 由此，`scripts/eval-fixture.ts` 现有驱动每个 fixture 只建一个 session、只发一次 `agent.send()`（`:42-50`），会话里永远只有一个 task，`removedTaskIds` 恒为空是**结构性必然**，与任务规模无关。筛查跑 12 个 fixture 全部 `removedTaskIds` 为空，不能据此推断任务「太小」。
+- 因此 NX-08e 的前置是让评测驱动产出**多任务会话**（同一 session 内多个 `taskId`），而不是放大单个任务。对照 A 采用同仓库、后阶段依赖前阶段产物的多阶段任务序列。（对照 B 不受此限制：有界工具输出改变的是当前 task 内部的历史规模，单任务下就会让一臂 `context_overflow`、另一臂完成，两臂可直接分辨。）
+- 实测数值分列，不可混用：筛查跑 12 个 fixture 的最大估算输入为 17,220（`CHANGES.md` 的 NX-08d 节）；NX-08d0-3 的 `merge` 烟测在 9 次请求后达到 27,147（`CHANGES.md` 的 NX-08d0-3 节）。后者是单 fixture 重复两次烟测得到的数，不是 12 个 fixture 的最大值。
+- 覆盖值重算：`phaseCaps` 的 `armA`/`armB` 各 72 次运行按「12 任务 × 2 臂 × 3 次」算出（`scripts/eval-runner.ts:16-19`）。一旦 fixture 变成多任务序列，`runs`/`requests`/`tokens` 的口径与算术都要重算并**在开跑前重新预注册**；本轮不做该调整，也不改变现有数值。
 
 整批上限（运行器侧硬中止，按阶段独立计数；触顶即中止该阶段并报告，不记作任务失败）：
 
