@@ -101,7 +101,19 @@ CLI 默认每段模型请求64次、工具128次、主动10分钟、累计2M tok
 
 有 session 和 tool-results 插件时，每流超过 maxPreviewBytes/2 的日志保存独立引用；stdout/stderr.text 是预览，bytes 是采集字节数，truncated 表示采集截断，previewTruncated 表示预览截断，ref/storedBytes/storageTruncated 表示持久日志位置与存储截断。用 `read_tool_result({ref:result.stderr.ref,offset:0})` 回读原始 stderr。退出码、状态等元信息始终保留，存储失败提供 storageError 和有界预览并标工具错误；不会把日志不可用描述成检查成功。
 
-取消会终止进程树，直接工具调用在 close 后返回 cancelled；若 run 的取消/主动超时已先停止等待，事件仍按既有协议记 unknown，重启不自动重跑。取消 signal 不被绕过以保存新日志。进程组/taskkill 清理不等于操作系统隔离，主动脱离进程树的程序和外部路径竞态仍是应用策略限制。命令退出 0 与 run completed 均不代表任务验收；NX-15 的独立验证记录尚未实现。
+取消会终止进程树，直接工具调用在 close 后返回 cancelled；若 run 的取消/主动超时已先停止等待，事件仍按既有协议记 unknown，重启不自动重跑。取消 signal 不被绕过以保存新日志。进程组/taskkill 清理不等于操作系统隔离，主动脱离进程树的程序和外部路径竞态仍是应用策略限制。命令退出 0 与 run completed 均不代表任务验收；显式验证与交付查询见 NX-15。
+
+## 编程验证与交付报告（NX-15）
+
+用 `bash({command:"pnpm test",verification:{files:["src/example.ts","test/example.test.ts","package.json"]}})` 显式记录一次检查。files 相对工作区根，与命令 cwd 无关；需包含此次检查依赖的源码、测试和配置。默认最多 100 文件、每个 1 MiB，通过 Bash 插件的 maxVerificationFiles/maxVerificationFileBytes 配置；支持有界 UTF-8 普通文件和 missing，超限/二进制/非法路径明确失败。普通 Bash 不自动识别为测试或验证。
+
+审批展示命令、cwd 和文件范围；批准后读取 SHA-256 与真实位置，verification/start 确认落盘后再执行，执行前重新核验 cwd。verification/result 记录有界原始命令结果及检查后版本。拒批或意图写入失败不启动命令；结果未确认、取消前未启动或崩溃留下 unknown，恢复不会重新执行。取消后的版本读取不绕过 signal；真实命令结果可持久化，后版本明确不可用。验证事件保留有界日志，原 Bash 输出仍支持 NX-14 的逐流引用；交付摘要不重复日志。
+
+模型调用 `task_report({fileOffset:0,verificationOffset:0,maxFiles:20,maxRecords:20})`；CLI 用 `/report [fileOffset] [verificationOffset] [byteOffset]`，运行结束也展示报告。文件与检查独立分页，按返回的 next offset 或 CLI 提示续读；正文默认使用 maxChangeOutputBytes 的 32 KiB 上界，UTF-8 截断提供字节续读提示。分页重新读取当前文件，期间文件变化时不是固定快照。`/changes` 与 `/diff` 保留。
+
+报告分别显示 runStatus、checks 的 status（passed/failed/unknown/stale/unavailable）与 freshness（current/stale/unavailable）、文件工具变更及未覆盖文件。passed 表示命令成功且声明文件检查前后版本一致；之后声明的任一文件变化或文件工具再次应用修改（即使改回原字节）使证据过期。文件覆盖从同 task 全部已确认检查计算，报告仍保留失败历史；未覆盖列表只对应当前文件页，须检查所有页。记录跨续跑/重启保存，reset 隔离。
+
+报告的 acceptance 始终是 not_asserted：显式文件和命令证据不自动证明任务验收。未声明的依赖、目录新增、检查中修改后恢复、文件工具之外的修改归因及外部文件竞态均不在完整保证内；Bash/external 编辑不计入文件工具变更清单。无显式检查时明确未验证。没有付费模型质量或本轮远端 CI 结论；本地验收与提交证据见 TASKS/PROGRESS。
 
 ## 有界读取、搜索与日志回读（NX-07）
 

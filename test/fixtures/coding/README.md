@@ -25,7 +25,7 @@ pnpm test
 
 复用接口在 [coding-fixtures.ts](../../../scripts/coding-fixtures.ts)：`createFixture(id)` 返回 workspace、task、参考 edits、applyReference、evaluate 和 close。创建者须在 finally 调用 close；参考 edits 只供离线测试驱动使用，后续真实模型评测只发送 task 和初始工作区。`evaluate` 默认超时 10 秒、输出上限 32 KiB，可通过 timeoutMs / maxOutputBytes 配置。
 
-可信验收器不从候选工作区读取测试逻辑；package.json / check.mjs 的内容和软链状态也受检查。公开检查被删改、只迁移一半接口或导入时提前退出都不会被这组回归误判为通过。临时目录与子进程不是操作系统安全隔离；这是已知离线 fixture 的验收设施，不声称能防御任意恶意代码。未新增生产验证事件、版本关联或任务交付报告，这些仍属于 NX-15。
+可信验收器不从候选工作区读取测试逻辑；package.json / check.mjs 的内容和软链状态也受检查。公开检查被删改、只迁移一半接口或导入时提前退出都不会被这组回归误判为通过。临时目录与子进程不是操作系统安全隔离；这是已知离线 fixture 的验收设施，不声称能防御任意恶意代码。NX-05a 本步未新增生产验证事件、版本关联或任务交付报告；后续 NX-15 已独立实现显式文件范围验证与交付查询，仍不将普通 Bash 或 fixture 流程自动标为任务验收。
 
 ## 修改前基线（2026-09-29）
 
