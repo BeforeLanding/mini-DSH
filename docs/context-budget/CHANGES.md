@@ -2,6 +2,13 @@
 
 更新：2026-09-30。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-08b 评测运行器与整批上限强制
+- 关联：M7；承接 NX-08a 的导出契约。状态：done（2026-09-30，本地通过，四组合 CI 待提交后核验）。本次不调用真实模型。
+- NX-08b / `scripts/eval-runner.ts` 固定单次 run 预算与三阶段整批上限，按阶段串行执行并累计 runs/requests/tokens，触顶中止该阶段并在报告中与任务结果分开呈现；`scripts/eval-fixture.ts` 把「插件栈 + 适配器 + fixture 验收」做成适配器注入的驱动，真实适配器与模拟适配器共用同一条路径；`pnpm eval:offline` 用模拟模型跑完筛查阶段 12 个任务 / `pnpm check`（74 文件 → 78 文件）、`pnpm test`（160/160，无失败/跳过）、`pnpm fixtures:check`（初始 0/12、参考 12/12）、`pnpm eval:offline`（planned 12、executed 12、aborted null、completed 12、accepted 12、66 请求 / 194,474 token，退出码 0）通过 / done / 本步提交后回填。
+- 上限语义由 7 个用例固定：预注册常数与 PLAN 一致且阶段上限之和等于全程上限；上限恰好等于计划数时不误报中止；调小上限复现整批中止且已执行 run 仍保留各自状态与验收结论；请求上限在启动负担不起的 run 之前停止；整批上限不中断已开始的 run，超出量以单次 run 为上界；单次执行失败只记在该 run 上、不中止阶段；运行器经真实 Harness 驱动 fixture 的接线。
+- 分工写入 PLAN：单次预算在 run 内由 Agent 循环强制，整批上限由运行器在 run 前后检查；开跑前用“累计 ≥ 上限”、跑完用“累计 > 上限” / done / 本步提交后回填。
+- 未纳入本步：真实适配器接入与筛查跑（NX-08d）、估算误差实验（NX-08c）。12 个任务的完整离线跑由 `pnpm eval:offline` 承担，CI 内只以 2 个 fixture 覆盖接线，以免把 12 次真实子进程验收再加进 Windows CI。
+
 ## NX-08a 评测导出契约与投影归属
 - 关联：M7；依赖 NX-06 的 request trace。状态：done（2026-09-30，本地通过，四组合 CI 待提交后核验）。本次不调用真实模型。
 - NX-08a / `context/projection` 增加可选 `requestId`，与随后 `model/start` 同号，使投影归属成为日志中可读的事实而非位置推断；发射端在投影之前生成 id，因此因 `context_overflow`／token 预算未发出的请求仍带 id 可辨。`requestTrace` 优先按 id 归属，旧日志无该字段时退回“同一 run 内最近投影”，并以 `projectionLink` 如实标注所用方式；新增 `unsentProjections` 与每 run 终值 `counters`（补齐 `activeDurationMs`／`approvalDurationMs`），未结束的 run 报 `null` 而不是起始零值。事件信封仍为 version 1，新字段可选并按仓库既有 `optionalString` 惯例校验 / `pnpm check`（74 文件）、`pnpm test`（153/153，无失败/跳过）、`pnpm fixtures:check`（初始 0/12、参考 12/12）通过；新增用例覆盖同一 run 多次投影的按 id 归属、缺 id 的位置回退、未发出请求单列、计数空值、真实循环下投影与 `model/start` 同号及溢出后投影无对应请求 / done / 本步提交后回填。
