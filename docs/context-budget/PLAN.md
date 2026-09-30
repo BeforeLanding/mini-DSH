@@ -3,6 +3,12 @@
 更新：2026-09-29。M0 至 M4 的功能已实现，验收证据见 TASKS/PROGRESS。需求见 [REQUIREMENTS](REQUIREMENTS.md)，执行状态见 [TASKS](TASKS.md) 和 [PROGRESS](../../PROGRESS.md)。本文件是技术决策和默认参数的唯一维护位置；初值可配置，已测量模拟 JSONL 追加成本；未经付费模型的真实任务质量实验。
 
 ## 当前实现
+## NX-14 决策
+- 使用独立前台执行核心，Bash 插件仍负责输入、路径与审批。结果 version=1/type=command，状态为 exited / spawn_error / timed_out / cancelled；exitCode 与 signal 保留实际 close 值，时长从 spawn 前单调计时，不包含审批。
+- maxCaptureBytes 为两流共享字节额度；分别标注截断，UTF-8 边界不完整尾部舍弃，非 UTF-8 字节替换解码。timeoutMs 是插件配置，不由模型扩大。cwd 默认为 sandbox.workspace，可指定工作区内现存目录；真实路径在审批后复核，应用策略不承诺 OS 隔离或消除所有外部竞态。
+- 工具 output 增加可选 isError 分类，不以抛异常丢失已执行结果。大命令日志逐流投影，使用既有 ToolResultStore/read_tool_result；每流保留预览及 ref/存储截断，元信息不被整段日志预览覆盖。取消后不使用新 signal 绕过取消写存储；留下有界日志和明确存储错误。
+- 沿用现有 tool/result JSON 文本，不修改事件版本；run completed 仍只表示运行段结束，命令退出 0 不是任务验收。
+
 严格 TypeScript / NodeNext 编译产物运行；Session 使用版本化 JSONL 事件恢复；Loop 实现上下文投影、执行预算与同 task 续跑；DeepSeek 归一化 usage 并限制输出；CLI 提供 /budget、/continue 和 session 恢复。原始基线及逐步变更保留在 PROGRESS。
 
 ## 首阶段之后的方向

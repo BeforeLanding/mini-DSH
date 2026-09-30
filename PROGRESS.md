@@ -1,4 +1,6 @@
 # 开发进度
+### NX-14a（2026-09-30）
+已补充 R-17、结构化命令/逐流日志决策，列出 a～e 五个独立验收与提交边界。git diff --check 通过；仅文档，运行时尚未实现。不增加 NX-15 验证状态、后台服务或交互终端。
 
 ### CD-02c 传包 CD 实测验收（2026-09-29）
 修复按 a 8df3beb（离线脚本）→ b c9f452c（工作流接入）独立验证提交并推送。[CI 36573968144](https://github.com/BeforeLanding/mini-DSH/actions/runs/36573968144) 四组全部 success；[Deploy ECS 36574173979](https://github.com/BeforeLanding/mini-DSH/actions/runs/36574173979) 实际 success。Linux runner 的 bundle 导入、错误 SHA/路径/REVISION 拒绝、真实 flock/软链原子激活、PREVIOUS_RELEASE/共享配置 fixture 通过；服务器构建语法 65 文件、测试 107/107（fail0/skipped0），实际发布 c9f452cf47732ffc6be91bfd300b15af4d23d017，HEAD/REVISION、共享 .env 与持久目录身份核验通过。该服务器发布没有请求 GitHub 拉取源码，旧网络阻塞已由 runner 下载与 SSH 传包消除；安装依赖仍访问包注册表。
