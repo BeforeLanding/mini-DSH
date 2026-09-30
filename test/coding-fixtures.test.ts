@@ -211,6 +211,10 @@ test('fixture continuation driver stops at request budget and resumes one task w
   await runFixtureAcrossBudgetStop('boundary')
 })
 
+test('dedupe task survives budget stop and continues without repeating completed checks', { timeout: 30_000 }, async () => {
+  await runFixtureAcrossBudgetStop('dedupe')
+})
+
 test('acceptance bounds hung code and output, rejects invalid limits and reports infrastructure failure', async () => {
   const fixture = await createFixture('boundary')
   try {
