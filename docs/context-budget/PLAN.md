@@ -157,6 +157,7 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 - 可替换估算器初值：Unicode ASCII/非 ASCII 字符分别按 0.3/1.0 token，加上角色、调用 ID、参数 JSON、reasoning、schema 等实际序列化内容；每消息 32、每请求 256 token 封装开销。这不是真实 tokenizer，代码/特殊符号可能有误差，来源标 estimated。
 - 先移除最旧已结束完整任务/轮次；不截短当前 task 过程。当前集合无法容纳时 context_overflow；/continue 不自动扩大输入目标。
 - 输出触及 length 时标 output_limit，不执行残缺调用；usage 结算后记录估算偏差。
+- 估算偏差已实测（NX-08c，核验日期 2026-09-30，估算器 SHA-256 见 [CHANGES](CHANGES.md#nx-08c-输入估算误差实验)）：中文 +28%、英文 +40% 一致高估；代码与 JSON 不是一致安全，40 个样本中 4 个低估、最深 −22.5%，**超过容量余量的 10%**。因此输入目标 65,536 与容量余量都只按估算器口径成立，按真实 token 计会更宽松；反向地，单个请求仍可能超出估算判断。参数按估算器口径固定，不因本结论在真实调用开始前调整。
 
 ### 每段执行与续跑
 - 模型请求 64 次，工具调用 128 次，主动时间 600,000ms，累计输入加输出 2,000,000 token。
@@ -180,7 +181,7 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 核验日期：2026-09-28；Chat Completions 于 2026-09-29 复核并通过模拟 SSE 协议测试。开发时模型版本变化需复核。
 - [DeepSeek 模型说明](https://api-docs.deepseek.com/quick_start/pricing/)：当前窗口 1M、最大输出 384K，旧 deepseek-v4-flash 名称已映射新版 Flash。
 - [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)：max_tokens、usage、reasoning 细分及流末包；[Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/)：工具模式的 reasoning 回传。
-- [Token 说明](https://api-docs.deepseek.com/quick_start/token_usage/)：字符比例只是近似；官方离线 tokenizer 与当前聊天模板的一致性尚未验证。
+- [Token 说明](https://api-docs.deepseek.com/quick_start/token_usage/)：字符比例只是近似；官方离线 tokenizer 与当前聊天模板的一致性尚未验证。NX-08c 实测确认该离线包自带的 `chat_template` 完全不引用 `tools`，渲染结果不含工具定义，故服务端真实 prompt 无法离线复现；同一测量也发现官方 zip 示例代码的 `transformers.AutoTokenizer` 路径对该包会丢弃非 ASCII（中文得 0 token），须改用 `tokenizers.Tokenizer.from_file`。
 - [Node TypeScript](https://nodejs.org/api/typescript.html)、[TS 模块](https://www.typescriptlang.org/docs/handbook/modules/reference.html)：类型剥离与 NodeNext；[文件 API](https://nodejs.org/api/fs.html)：写入协调和 sync；[测试 API](https://nodejs.org/api/test.html)：mock/计时器。
 - [SQLite 原子提交](https://www.sqlite.org/atomiccommit.html)、[Node SQLite](https://nodejs.org/api/sqlite.html)：事务能力与 Node 22.5 起的内置接口；外部工具副作用不属于数据库事务。
 - [LangGraph 持久化](https://docs.langchain.com/oss/javascript/langgraph/persistence)、[中断副作用](https://github.com/langchain-ai/docs/blob/main/src/oss/langgraph/interrupts.mdx)：检查点不免除副作用恢复责任。

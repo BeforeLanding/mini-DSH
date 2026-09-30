@@ -2,6 +2,26 @@
 
 更新：2026-09-30。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-08c 输入估算误差实验
+- 关联：M7；承接 NX-08a／NX-08b 的导出契约与运行器。状态：done（2026-09-30，本地通过，四组合 CI 待提交后核验）。本次不调用真实模型。
+- 被测版本：`src/core/token-estimator.ts` SHA-256 `5147905a6feac08718f5d180365f0c1e3ea9ad3b58a4c3da3747c1d65b0aed0f`（ASCII 0.3 / 非 ASCII 1.0 token，每消息 32、每请求 256 开销）。参考方为 DeepSeek 文档提供的离线 tokenizer 包 `https://cdn.deepseek.com/api-docs/deepseek_v4_tokenizer.zip`，`tokenizer.json` SHA-256 `89085f12ef79460ac5f66d1119325ddfc694b4ab209d80bbd81d35f081dc9614`，词表 128,000，工具 `tokenizers 0.22.2 (Rust)`，计数取 `add_special_tokens=false`。**核验日期 2026-09-30**；实测版本与日期固定在 [reference.json](../../test/fixtures/estimation/reference.json)，估算器或语料一变即失配。
+- 语料 40 个样本（中文、英文、代码、schema 各 10，共 54,296 字符）取自 Harness 实际处理的文本：8 个编程 fixture 的 `TASK.md`、本仓库源码拷贝、运行期下发的工具 schema，另有 10 个代表性英文输入；来源与重新测量步骤见[语料说明](../../test/fixtures/estimation/README.md)。相对误差 =（估算 − 参考）/ 参考，正为高估；`ratio` 为总量比。
+
+| 类别 | 样本 | 字符 | 参考 token | 估算 token | ratio | 最小 | p25 | 中位 | p75 | 最大 | 低估数 | 最深低估 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 中文 | 10 | 3,931 | 1,928 | 2,467 | 1.2796 | 0.1712 | 0.2294 | 0.2796 | 0.3220 | 0.3630 | 0 | — |
+| 英文 | 10 | 4,606 | 991 | 1,386 | 1.3986 | 0.3173 | 0.3273 | 0.3870 | 0.4287 | 0.6296 | 0 | — |
+| 代码 | 10 | 32,372 | 8,686 | 10,034 | 1.1552 | −0.1579 | 0.1374 | 0.1613 | 0.1746 | 0.2242 | 1 | −0.1579 |
+| schema | 10 | 13,387 | 3,633 | 4,020 | 1.1065 | −0.2252 | −0.0408 | 0.2000 | 0.2439 | 0.3393 | 3 | −0.2252 |
+| 合计 | 40 | 54,296 | 15,238 | 17,907 | 1.1752 | −0.2252 | 0.1632 | 0.2308 | 0.3287 | 0.6296 | 4 | −0.2252 |
+
+- 结论一：估算器对自然语言一致保守，且偏差不小——中文 10/10 高估，最小 +17.1%；英文 10/10 高估，最小 +31.7%。中文偏差来自把非 ASCII 记 1.0 token，而官方文档给的中文近似值是 0.6，实测语料约合 0.55。方向安全（不会因低估而溢出），代价是输入目标 65,536 实际装下的内容少于字面值，裁剪比设计更早发生。
+- 结论二：结构化工况**不是**一致安全。40 个样本有 4 个低估，最深 −22.5%（`schema/tool-results`），超过容量余量 `max(2,048, 10%)` 的 10%。四个低估样本是 `code/fixture-verify-csv`（−15.8%）、`schema/package-root`（−15.2%）、`schema/tool-results`（−22.5%）、`schema/tsconfig`（−6.7%），共同点是 ASCII 密集且标点、转义或短键密集，实际 token 密度高于 0.3/字符。这与 REQUIREMENTS「估算偏差可导致真实用量超出阈值」一致，现在有了量级：单次请求仍可能超出 `inputTargetTokens`／`contextWindowTokens` 的判断。
+- 请求级补充测量（不固定，随请求内容变化）：同一份 JSON 序列化载荷交给估算器与官方 tokenizer，pagination 最大请求 10,002 字符 → 3,094 token，`estimateInput` 报 3,553（+14.8%）；boundary 9,531 字符 → 2,923 token，估算报 3,399（+16.3%）。工具 schema 占这两份载荷字符的 52.3% 与 54.9%，是 `estimateInput` 计费的最大单项。**这不是端到端比较**：该包自带的 `chat_template` 全文 0 次出现 `tools`，渲染结果不含工具定义，无法复现服务端实际 prompt；PLAN「官方依据」中“官方离线 tokenizer 与当前聊天模板的一致性尚未验证”由此得到证实。
+- 实现：`scripts/estimation-corpus.ts` 负责语料读取、摘要与分位数计算，`scripts/eval-estimate.ts`（`pnpm eval:estimate`）现算估算值并打印分布，估算器或语料与 `reference.json` 失配时以退出码 1 拒绝静默通过；`test/estimation.test.ts` 的 5 个用例固定语料结构、三方摘要、逐类结论、「自然语言保守 / 结构化非一致安全」两条方向性判断，以及 CRLF 检出下的摘要稳定性（`core.autocrlf` 会把已提交的 LF 在 Windows 检出成 CRLF，摘要与参考值都按 LF 归一后计算）。参考值由官方 tokenizer 一次性测量后固定，生成步骤需要 Python，不进入 CI 与构建依赖 / `pnpm check`（78 文件 → 81 文件）、`pnpm test`（160/160 → 165/165，无失败/跳过）、`pnpm eval:estimate`（退出码 0）、`pnpm fixtures:check`（初始 0/12、参考 12/12）、`git diff --check` 通过 / done / 本步提交后回填。
+- 复现陷阱已写入语料说明：官方 zip 示例代码用 `transformers.AutoTokenizer.from_pretrained(dir, trust_remote_code=True)`，实测在该包上得到 `LlamaTokenizer`，对非 ASCII 返回空 id——`encode("修复索引边界问题")` 得 `[]`，会把中文算成 0 token；必须走 `tokenizers.Tokenizer.from_file`，同一文本在 Rust 路径下可完整往返且中文比例与文档的 0.6 一致。
+- 未纳入本步：真实模型调用（NX-08d 起），也不调整估算器系数——预注册参数在真实调用开始前固定，改动需要整体重跑。本步的结论是后续修订估算器的依据，不是已经实施的修订。
+
 ## NX-08b 评测运行器与整批上限强制
 - 关联：M7；承接 NX-08a 的导出契约。状态：done（2026-09-30，本地通过，四组合 CI 待提交后核验）。本次不调用真实模型。
 - NX-08b / `scripts/eval-runner.ts` 固定单次 run 预算与三阶段整批上限，按阶段串行执行并累计 runs/requests/tokens，触顶中止该阶段并在报告中与任务结果分开呈现；`scripts/eval-fixture.ts` 把「插件栈 + 适配器 + fixture 验收」做成适配器注入的驱动，真实适配器与模拟适配器共用同一条路径；`pnpm eval:offline` 用模拟模型跑完筛查阶段 12 个任务 / `pnpm check`（74 文件 → 78 文件）、`pnpm test`（160/160，无失败/跳过）、`pnpm fixtures:check`（初始 0/12、参考 12/12）、`pnpm eval:offline`（planned 12、executed 12、aborted null、completed 12、accepted 12、66 请求 / 194,474 token，退出码 0）通过 / done / 本步提交后回填。

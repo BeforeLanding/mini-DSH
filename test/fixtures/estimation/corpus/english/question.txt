@@ -1,0 +1,5 @@
+I am trying to understand why the agent logs a context/projection event immediately
+before every model request instead of once per run. Is the projection meant to be a description of the
+request that is about to be sent, or a description of the pruning decision that was made? If it is the
+former, then a projection that has no matching model request should be an error rather than a valid
+state, and I would expect the recovery path to reject it.

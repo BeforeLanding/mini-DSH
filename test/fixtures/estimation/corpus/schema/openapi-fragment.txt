@@ -1,0 +1,108 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Session Events",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/sessions/{sessionId}/events": {
+      "get": {
+        "operationId": "listSessionEvents",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "afterSeq",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "maxEvents",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page of events in ascending sequence order.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SessionEvent"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown session."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SessionEvent": {
+        "type": "object",
+        "required": [
+          "version",
+          "sessionId",
+          "id",
+          "seq",
+          "type",
+          "data",
+          "at"
+        ],
+        "properties": {
+          "version": {
+            "const": 1
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer"
+          },
+          "type": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    }
+  }
+}

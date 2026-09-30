@@ -1,0 +1,228 @@
+{
+  "note": "Corpus and reference token counts for NX-08c. Counts come from the tokenizer DeepSeek publishes for offline use; they are a pinned measurement, not a runtime dependency.",
+  "verifiedAt": "2026-09-30",
+  "tokenizer": {
+    "name": "deepseek_v4_tokenizer",
+    "url": "https://cdn.deepseek.com/api-docs/deepseek_v4_tokenizer.zip",
+    "sha256": "89085f12ef79460ac5f66d1119325ddfc694b4ab209d80bbd81d35f081dc9614",
+    "tool": "tokenizers 0.22.2 (Rust) / Python 3.12.10",
+    "vocabSize": 129280,
+    "addSpecialTokens": false
+  },
+  "estimator": {
+    "file": "src/core/token-estimator.ts",
+    "sha256": "5147905a6feac08718f5d180365f0c1e3ea9ad3b58a4c3da3747c1d65b0aed0f"
+  },
+  "corpus": {
+    "sha256": "9e3aceb547a46801080d78e11f63bcc1571ad96df6149af5d0836a7e69549c5e",
+    "samples": 40,
+    "categories": [
+      "chinese",
+      "english",
+      "code",
+      "schema"
+    ]
+  },
+  "counts": {
+    "chinese/doc-plan-estimation": {
+      "chars": 557,
+      "asciiChars": 319,
+      "tokens": 272
+    },
+    "chinese/doc-readme-context": {
+      "chars": 1374,
+      "asciiChars": 745,
+      "tokens": 650
+    },
+    "chinese/task-boundary": {
+      "chars": 234,
+      "asciiChars": 132,
+      "tokens": 113
+    },
+    "chinese/task-csv": {
+      "chars": 255,
+      "asciiChars": 114,
+      "tokens": 145
+    },
+    "chinese/task-dedupe": {
+      "chars": 235,
+      "asciiChars": 85,
+      "tokens": 131
+    },
+    "chinese/task-interface": {
+      "chars": 320,
+      "asciiChars": 213,
+      "tokens": 146
+    },
+    "chinese/task-normalize": {
+      "chars": 147,
+      "asciiChars": 69,
+      "tokens": 76
+    },
+    "chinese/task-options": {
+      "chars": 258,
+      "asciiChars": 136,
+      "tokens": 123
+    },
+    "chinese/task-pagination": {
+      "chars": 281,
+      "asciiChars": 160,
+      "tokens": 137
+    },
+    "chinese/task-retry": {
+      "chars": 270,
+      "asciiChars": 123,
+      "tokens": 135
+    },
+    "code/core-bounded-search": {
+      "chars": 3950,
+      "asciiChars": 3950,
+      "tokens": 1022
+    },
+    "code/core-bounded-text": {
+      "chars": 3469,
+      "asciiChars": 3469,
+      "tokens": 910
+    },
+    "code/core-budget": {
+      "chars": 3611,
+      "asciiChars": 3611,
+      "tokens": 932
+    },
+    "code/core-context-runtime": {
+      "chars": 3985,
+      "asciiChars": 3985,
+      "tokens": 977
+    },
+    "code/core-contracts": {
+      "chars": 5413,
+      "asciiChars": 5326,
+      "tokens": 1420
+    },
+    "code/core-file-edit": {
+      "chars": 6409,
+      "asciiChars": 6409,
+      "tokens": 1694
+    },
+    "code/core-token-estimator": {
+      "chars": 944,
+      "asciiChars": 944,
+      "tokens": 241
+    },
+    "code/fixture-page": {
+      "chars": 189,
+      "asciiChars": 189,
+      "tokens": 49
+    },
+    "code/fixture-verify-csv": {
+      "chars": 477,
+      "asciiChars": 477,
+      "tokens": 171
+    },
+    "code/scripts-eval-runner": {
+      "chars": 3925,
+      "asciiChars": 3558,
+      "tokens": 1270
+    },
+    "english/api-docs": {
+      "chars": 476,
+      "asciiChars": 476,
+      "tokens": 106
+    },
+    "english/bug-report": {
+      "chars": 497,
+      "asciiChars": 497,
+      "tokens": 109
+    },
+    "english/changelog": {
+      "chars": 450,
+      "asciiChars": 450,
+      "tokens": 89
+    },
+    "english/code-review": {
+      "chars": 455,
+      "asciiChars": 455,
+      "tokens": 104
+    },
+    "english/email-thread": {
+      "chars": 437,
+      "asciiChars": 437,
+      "tokens": 81
+    },
+    "english/question": {
+      "chars": 448,
+      "asciiChars": 448,
+      "tokens": 94
+    },
+    "english/spec": {
+      "chars": 449,
+      "asciiChars": 449,
+      "tokens": 96
+    },
+    "english/stack-trace": {
+      "chars": 548,
+      "asciiChars": 548,
+      "tokens": 125
+    },
+    "english/task-prompt": {
+      "chars": 413,
+      "asciiChars": 413,
+      "tokens": 94
+    },
+    "english/test-plan": {
+      "chars": 433,
+      "asciiChars": 433,
+      "tokens": 93
+    },
+    "schema/fixture-package": {
+      "chars": 18,
+      "asciiChars": 18,
+      "tokens": 5
+    },
+    "schema/fixture-package-merge": {
+      "chars": 18,
+      "asciiChars": 18,
+      "tokens": 5
+    },
+    "schema/json-schema-config": {
+      "chars": 1130,
+      "asciiChars": 1130,
+      "tokens": 327
+    },
+    "schema/openapi-fragment": {
+      "chars": 2323,
+      "asciiChars": 2323,
+      "tokens": 533
+    },
+    "schema/package-root": {
+      "chars": 1095,
+      "asciiChars": 1095,
+      "tokens": 388
+    },
+    "schema/tool-bash": {
+      "chars": 820,
+      "asciiChars": 820,
+      "tokens": 196
+    },
+    "schema/tool-request-trace": {
+      "chars": 556,
+      "asciiChars": 556,
+      "tokens": 138
+    },
+    "schema/tool-results": {
+      "chars": 2051,
+      "asciiChars": 2051,
+      "tokens": 795
+    },
+    "schema/tool-schemas": {
+      "chars": 4957,
+      "asciiChars": 4957,
+      "tokens": 1111
+    },
+    "schema/tsconfig": {
+      "chars": 419,
+      "asciiChars": 419,
+      "tokens": 135
+    }
+  }
+}

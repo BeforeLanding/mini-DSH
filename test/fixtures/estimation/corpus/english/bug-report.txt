@@ -1,0 +1,5 @@
+We are seeing intermittent failures when the retry helper is used with a custom backoff
+function. Steps to reproduce: call `withRetry` with `attempts: 3` and a backoff that returns 0 for the
+first attempt. Expected: the operation is attempted three times and the last error is thrown. Actual:
+the second attempt never runs and the original error is swallowed. This only happens when the backoff
+returns a falsy value, which suggests the guard is testing the delay rather than the attempt counter.

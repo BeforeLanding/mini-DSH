@@ -1,0 +1,5 @@
+Goal: the summary command must group events by category and report both a count and a
+monetary total per category. Requirements: (1) unknown categories are reported under a single
+"other" bucket rather than being dropped; (2) amounts are summed in integer minor units and the
+formatted output uses two decimal places; (3) an empty input produces an empty report, not an error.
+Out of scope: currency conversion and any change to the receipt module.

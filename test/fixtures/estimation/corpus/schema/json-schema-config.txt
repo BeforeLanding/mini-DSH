@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HarnessBudget",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "maxModelRequests",
+    "maxToolCalls"
+  ],
+  "properties": {
+    "maxModelRequests": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Upper bound on model requests within a single run."
+    },
+    "maxToolCalls": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "maxActiveDurationMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "maxTotalTokens": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "inputTargetTokens": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "contextWindowTokens": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "minimumOutputTokens": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "approvalTimeoutMs": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "contextWindowTokens"
+        ]
+      },
+      "then": {
+        "required": [
+          "inputTargetTokens"
+        ]
+      }
+    }
+  ]
+}

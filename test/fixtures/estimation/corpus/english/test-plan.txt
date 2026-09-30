@@ -1,0 +1,5 @@
+Acceptance criteria for the import rewrite. Given a directory containing one valid
+and one malformed record file, when the importer runs, then it imports the valid records, reports the
+malformed file by name, and exits non-zero. Given the same input twice, the second run must be a no-op.
+Given a read-only destination, the importer must fail before writing anything. The public check script
+must not be modified to make these pass.

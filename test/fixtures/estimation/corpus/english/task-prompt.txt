@@ -1,0 +1,5 @@
+Please add a `--dry-run` flag to the import command. When it is set, the command should
+report every file it would have written, in sorted order, and exit with status 0 without touching
+the filesystem. Without the flag the behaviour must not change. Update the CLI help text and the
+README table of flags. Existing tests must keep passing; add at least one test that asserts no file
+is created under `--dry-run`.

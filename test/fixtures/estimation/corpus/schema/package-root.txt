@@ -13,7 +13,6 @@
     "test": "pnpm build && node --test dist/test/*.test.js",
     "fixtures:check": "pnpm build && node dist/scripts/check-coding-fixtures.js",
     "eval:offline": "pnpm build && node dist/scripts/eval-offline.js",
-    "eval:estimate": "pnpm build && node dist/scripts/eval-estimate.js",
     "check": "pnpm build && node scripts/check-syntax.js",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",

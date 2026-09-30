@@ -1,0 +1,5 @@
+Following up on yesterday's discussion. The regression only appears when the
+history contains more than one task, which is consistent with the pruning logic removing an incomplete
+task. I would rather we stop the run with an explicit reason than silently drop half a conversation,
+so please make the overflow path terminal and record which tasks were removed. We can revisit
+compaction once we have measurements from the evaluation run.

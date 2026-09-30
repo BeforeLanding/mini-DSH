@@ -1,0 +1,5 @@
+This release focuses on making failures easier to diagnose. Bounded reads now report
+the offset to continue from, so a truncated file no longer looks like a missing one. Tool results that
+exceed the inline preview are written to the session directory and replaced by a short reference that
+can be read back later. The event log gained a terminal counter snapshot, which means a finished run
+can be audited without replaying every intermediate event.

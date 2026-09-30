@@ -4,11 +4,10 @@
 
 ## 待办
 
-下一步主线是 **NX-08 真实模型任务对照与估算误差实验**。整批上限、各臂一致的单次 run 预算与预注册口径见 [PLAN 的评测批次上限](PLAN.md#nx-08-评测批次上限预注册)；这些参数固定前不得开始真实模型调用。
+下一步主线是 **NX-08 真实模型任务对照**（从筛查跑起）。整批上限、各臂一致的单次 run 预算与预注册口径见 [PLAN 的评测批次上限](PLAN.md#nx-08-评测批次上限预注册)；这些参数固定前不得开始真实模型调用。离线部分（a／b／c）已完成。
 
 | 子步骤 | 内容 | 验收 | 提交边界 |
 | --- | --- | --- | --- |
-| NX-08c | 输入估算误差实验 | 中文、英文、代码、schema 四类均有相对误差分布与低估幅度，结论标注 estimator 版本与核验日期 | 1 次 |
 | NX-08d | 筛查跑（12 任务 × 1） | 报告原始分子/分母与失败案例；不可行任务如实标记为不可行且不计入成功率 | 1 次 |
 | NX-08e | 对照 A：全历史 vs 现有裁剪 | 仅用能安全容纳全量输入的任务，两臂预算一致、每题 3 次；报告通过率、回归失败数、编辑失败率、修复迭代次数、人工介入、provider/estimated token 分列、每成功任务有效 token、延迟与停止原因 | 1 次 |
 | NX-08f | 对照 B：现有裁剪 vs 裁剪加有界工具输出 | 同 e，其余条件与 A 一致；两次比较的结论分开陈述，不合并收益 | 1 次 |
@@ -24,6 +23,7 @@
 
 ## 已完成
 
+- **NX-08c 输入估算误差实验 — done**：40 个样本（中文、英文、代码、schema 各 10）对照 DeepSeek 官方离线 tokenizer，四类均有相对误差分布与低估幅度；结论标注估算器 SHA-256 与核验日期 2026-09-30。自然语言一致高估（中文 +28%、英文 +40%），结构化载荷 4/40 低估、最深 −22.5%，超过 10% 的容量余量；[详细证据](CHANGES.md#nx-08c-输入估算误差实验)。
 - **NX-08b 评测运行器与整批上限强制 — done**：`scripts/eval-runner.ts` 按阶段串行执行并核算 runs/requests/tokens 累计值，触顶中止阶段且不记作任务失败，已开始的 run 不被中途终止；`scripts/eval-fixture.ts` 提供适配器注入的 fixture 驱动，`pnpm eval:offline` 用模拟模型跑完筛查阶段全部 12 个任务；单次预算与整批上限的分工已写入 [PLAN](PLAN.md#nx-08-评测批次上限预注册)；[详细证据](CHANGES.md#nx-08b-评测运行器与整批上限强制)。
 - **NX-08a 评测批次上限与事件导出契约 — done**：`context/projection` 带可选 `requestId` 并与随后 `model/start` 同号，未发出的请求因此可辨；`requestTrace` 增 `projectionLink`、`unsentProjections`，并补齐 run 终值 `counters`（含主动与审批时间）；[详细证据](CHANGES.md#nx-08a-评测导出契约与投影归属)。
 - **OPS-01 停止文档提交触发生产部署 — done**：提交 [2ac85bd](https://github.com/BeforeLanding/mini-DSH/commit/2ac85bd1bcd69b85ed0329847cf3791a87472bd4)、纯文档探针 `92507d4`、[CI 36662206000](https://github.com/BeforeLanding/mini-DSH/actions/runs/36662206000)；[详细证据](CHANGES.md#ops-01-停止文档提交触发生产部署)。

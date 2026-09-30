@@ -1,0 +1,7 @@
+### 请求规模与估算
+- 输入目标 65,536 token；输出上限 16,384（reasoning + 正文）；输出预留最低 4,096。
+- 容量余量 max(2,048, ceil(estimatedInputTokens × 10%))。输入估算不含此余量；input <= 输入目标，且 input + 输出预留 + 余量 <= 模型窗口。
+- DeepSeek 官方 1M 窗口先保守配置为 1,000,000；自定义端点必须明确能力。显式 max_tokens，不沿用供应商默认大额度。
+- 可替换估算器初值：Unicode ASCII/非 ASCII 字符分别按 0.3/1.0 token，加上角色、调用 ID、参数 JSON、reasoning、schema 等实际序列化内容；每消息 32、每请求 256 token 封装开销。这不是真实 tokenizer，代码/特殊符号可能有误差，来源标 estimated。
+- 先移除最旧已结束完整任务/轮次；不截短当前 task 过程。当前集合无法容纳时 context_overflow；/continue 不自动扩大输入目标。
+- 输出触及 length 时标 output_limit，不执行残缺调用；usage 结算后记录估算偏差。

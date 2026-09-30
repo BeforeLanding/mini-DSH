@@ -1,0 +1,9 @@
+Running the same script under Node 20 and Node 22 gives different results:
+
+    TypeError: Cannot read properties of undefined (reading 'map')
+        at mergeConfig (/app/src/merge.mjs:14:24)
+        at Object.<anonymous> (/app/src/index.mjs:7:1)
+
+The stack points at the recursive merge, but the input is a plain object with no arrays in it. What
+could make `value` undefined on the second call? I cannot reproduce it locally with the fixtures in
+the repository, so I suspect the difference is in how the two Node versions order key enumeration.

@@ -1,0 +1,5 @@
+Two things before this can land. First, the new helper duplicates the bounds check that
+already exists in `clampIndex`; please call that instead of open-coding the comparison, otherwise the
+empty-collection behaviour will drift again. Second, the test only covers the happy path. Add cases
+for a length of one, a negative index, and an index past the end. I would also drop the `else` after
+the early return, but that is style and I will not block on it.

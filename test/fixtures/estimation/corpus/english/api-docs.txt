@@ -1,0 +1,5 @@
+The endpoint accepts a JSON body with a required `messages` array and an optional
+`tools` array. Each message has a `role` of either `user`, `assistant`, or `tool`, and a `content`
+string. Assistant messages may instead carry `tool_calls`, in which case `content` must be null. The
+response streams deltas and terminates with a final chunk that repeats the usage counters; clients
+must treat that final chunk as authoritative because earlier chunks may be dropped by a proxy.
