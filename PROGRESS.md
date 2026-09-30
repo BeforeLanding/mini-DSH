@@ -1,4 +1,8 @@
 # 开发进度
+### NX-05b3 pagination fixture（2026-09-30）
+
+新增 pagination 编程任务，初始态失败、参考解通过；模拟模型经真实文件/Bash 工具完成。正常用户权限 `pnpm fixtures:check`：初始 0/6、参考 6/6；Cordis 回归 14/14。
+
 ### NX-05b2 dedupe fixture（2026-09-30）
 
 新增按 id 保留首次对象的去重任务，初始与参考解均由独立验收器核对。正常用户权限 `pnpm fixtures:check`：初始 0/5、参考 5/5；Cordis 文件/Bash 流程回归 12/12。下一项 pagination 单独提交。
