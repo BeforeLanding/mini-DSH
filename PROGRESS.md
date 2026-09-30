@@ -1,4 +1,8 @@
 # 开发进度
+### NX-06c request_trace 模型工具（2026-09-30）
+
+files 插件注册有界 request_trace，要求 session，校验 requestOffset 与 maxRequests（最多 100），插件释放时注销；工具说明明确省略正文与分页非快照边界。Cordis 工具清单和真实执行已更新。正常权限 `pnpm check`（74 文件）、trace/集成测试 5/5 与 `git diff --check` 通过；沙箱测试因既有 Cordis 依赖不可见失败，正常权限使用同一 dist 产物通过，未变更依赖。
+
 ### NX-06b 请求 trace 核心（2026-09-30）
 
 新增只读 requestTrace，按当前 reset epoch 和当前 task 的已确认 model/start 分页；关联相邻请求区间内的 projection、model/end/usage、回答/工具调用、结果状态及 changeId/verificationId。重复 toolCallId 按请求隔离；输出不包含提示词、推理、参数、结果正文或日志。JSONL 恢复结果一致，未确认事件不进入 trace，reset 隔离旧任务。正常权限 `pnpm check`（74 文件）、trace 回归 1/1 与 `git diff --check` 通过；沙箱读取既有依赖失败后按仓库规则在正常权限验证，未安装或修改依赖。

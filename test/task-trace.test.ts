@@ -3,9 +3,15 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { Context } from '@deepseek-ai/cordis'
 import { JsonlStore } from '../src/core/event-store.js'
 import { SessionRuntime } from '../src/core/session-runtime.js'
 import { requestTrace } from '../src/core/task-trace.js'
+import * as tools from '../src/plugins/tools.js'
+import * as sandbox from '../src/plugins/sandbox.js'
+import * as systemPrompt from '../src/plugins/system-prompt.js'
+import * as sessionPlugin from '../src/plugins/session.js'
+import * as files from '../src/tools/files.js'
 
 const usage = (source: 'provider' | 'estimated' = 'provider') => ({ inputTokens: 10, outputTokens: 2, totalTokens: 12, source, uncertain: source === 'estimated' })
 
@@ -84,4 +90,28 @@ test('request trace links requests, repeated tool ids and evidence within each r
     assert.equal(path.dirname(directory), path.resolve(os.tmpdir()))
     await fs.rm(directory, { recursive: true, force: true })
   }
+})
+
+test('request_trace tool enforces session and pagination limits and is released with the files plugin', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'request-trace-tool-')), root = new Context()
+  try {
+    for (const plugin of [sessionPlugin, tools, systemPrompt]) await root.plugin(plugin)
+    await root.plugin(sandbox, { workspace, autoApprove: true }); await root.plugin(files)
+    const session = root.sessions.create({ workspace }), run = root.sessions.beginRun(session.id, {}, 'mock/tool')
+    root.sessions.append(session.id, 'context/projection', { estimatedInputTokens: 10, reservedOutputTokens: 5, safetyMarginTokens: 2, removedTaskIds: [] }, run)
+    root.sessions.append(session.id, 'model/start', { taskId: run.taskId, runId: run.runId, requestId: 'tool-visible' }, run)
+    root.sessions.append(session.id, 'model/end', { requestId: 'tool-visible', complete: true }, run)
+    root.sessions.append(session.id, 'assistant/message', { content: 'private answer' }, run)
+    assert.equal((await root.tools.execute('request_trace')).isError, true)
+    for (const args of [{ requestOffset: -1 }, { requestOffset: 0.5 }, { maxRequests: 0 }, { maxRequests: 101 }]) {
+      assert.equal((await root.tools.execute('request_trace', args, { sessionId: session.id })).isError, true)
+    }
+    const result = await root.tools.execute('request_trace', { requestOffset: 0, maxRequests: 1 }, { sessionId: session.id })
+    assert.equal(result.isError, false)
+    const trace = result.value as ReturnType<typeof requestTrace>
+    assert.equal(trace.sessionId, session.id); assert.equal(trace.taskId, run.taskId)
+    assert.deepEqual(trace.requests.map(request => request.requestId), ['tool-visible'])
+    assert.doesNotMatch(JSON.stringify(trace), /private answer/)
+    const service = root.tools; await root.fiber.dispose(); assert.equal(service.get('request_trace'), undefined)
+  } finally { await root.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
 })

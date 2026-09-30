@@ -6,6 +6,7 @@ import { searchFiles } from '../core/bounded-search.js'
 import { snapshot, checkHash, replaceUnique, unifiedDiff, commitFile, validateText, fingerprint, FileSizeLimit } from '../core/file-edit.js'
 import { TaskChanges, taskChanges } from '../core/task-changes.js'
 import { taskReport } from '../core/task-verification.js'
+import { requestTrace } from '../core/task-trace.js'
 
 export const name = 'mini-tools-files'
 export const inject = ['tools', 'sandbox']
@@ -99,6 +100,17 @@ export function apply(ctx: Context, config: FilesConfig = {}) {
   const string = { type: 'string' }
   const searchParameters = { path: string, pattern: string, includeIgnored: { type: 'boolean' }, offset: { type: 'integer', minimum: 0 }, maxResults: { type: 'integer', minimum: 1, maximum: searchLimits.maxResults } }
   const definitions: ToolDefinition[] = [
+    {
+      name: 'request_trace', description: 'Inspect a bounded request-by-request trace for the current task across continuation/restart. Links request/run identity, context projection, usage, completion, tool result status and file/check evidence IDs. Omits prompts, reasoning, arguments, result bodies and logs; pages are not snapshots.',
+      parameters: parameters({ requestOffset: { type: 'integer', minimum: 0 }, maxRequests: { type: 'integer', minimum: 1, maximum: 100 } }),
+      execute(args, exec) {
+        const service = sessions()
+        if (!exec.sessionId || !service) throw new Error('request_trace requires a session')
+        const requestOffset = args.requestOffset ?? 0
+        if (typeof requestOffset !== 'number' || !Number.isSafeInteger(requestOffset) || requestOffset < 0) throw new Error('requestOffset must be a nonnegative integer')
+        return requestTrace(service, exec.sessionId, requestOffset, positiveLimit(args.maxRequests, 20, 'maxRequests', 100))
+      },
+    },
     {
       name: 'task_report', description: 'Inspect delivery evidence for the current task across continuation/restart: confirmed file edits, current-version check coverage, failed/unknown/stale checks and run status. Passing checks cover declared files/commands only and never assert task acceptance. File and verification pages are independent; use next offsets. Logs remain in verification events and original Bash results.',
       parameters: parameters({ fileOffset: { type: 'integer', minimum: 0 }, verificationOffset: { type: 'integer', minimum: 0 }, maxFiles: { type: 'integer', minimum: 1, maximum: maxTrackedFiles }, maxRecords: { type: 'integer', minimum: 1, maximum: 100 } }),
