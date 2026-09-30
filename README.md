@@ -20,7 +20,7 @@ pnpm start
 
 启动前在 `.env` 中填写 `DEEPSEEK_API_KEY`。`.env.example` 默认选择 `deepseek/deepseek-v4-flash`；未设置 `MINI_DSH_MODEL` 时选择 `deepseek/deepseek-v4-pro`。`MINI_DSH_WORKSPACE` 指定工作目录，默认是启动目录。Context7 为可选 MCP 服务，连接失败仍可进入 CLI。
 
-CLI 支持 `/tools`、`/models`、`/model provider/model`、`/history`、`/prompt`、`/reset`、`/continue`、`/budget`、`/changes [fileOffset]`、`/diff [fileOffset] [byteOffset]` 和 `/exit`。`/reset` 追加事件、清理可见历史并保留 session id 与原始 JSONL。运行或审批时按 Esc 取消，方向键不会触发取消。
+CLI 支持 `/tools`、`/models`、`/model provider/model`、`/history`、`/prompt`、`/reset`、`/continue`、`/budget`、`/changes [fileOffset]`、`/diff [fileOffset] [byteOffset]`、`/report [fileOffset] [verificationOffset] [byteOffset]`、`/trace [requestOffset] [byteOffset]` 和 `/exit`。`/reset` 追加事件、清理可见历史并保留 session id 与原始 JSONL。运行或审批时按 Esc 取消，方向键不会触发取消。
 
 写文件、编辑文件和执行 Bash 前会询问 `Allow this? [Y/n]`，空回车或 `y` / `yes` 同意。审批等待暂停主动时间，并有独立超时。`MINI_DSH_AUTO_APPROVE=1` 可用于受信任的测试环境。
 
@@ -47,7 +47,7 @@ pnpm check
 pnpm test
 ```
 
-当前 115 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读、可靠编辑/任务变更和结构化命令测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
+当前 150 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读、可靠编辑/任务变更、结构化命令、验证报告与请求 trace 测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
 
 NX-05a 提供三个可重复的 [编程任务 fixture](test/fixtures/coding/README.md)：边界修复、功能扩展和跨文件接口修改。运行 `pnpm fixtures:check` 核验初始失败/参考通过基线；`pnpm test` 还覆盖模拟模型经真实文件/Bash 工具完成失败→修改→重跑的流程。每次使用新临时工作区，独立验收器保留在工作区外；模拟结果不代表真实模型编程成功率。
 
@@ -114,6 +114,12 @@ CLI 默认每段模型请求64次、工具128次、主动10分钟、累计2M tok
 报告分别显示 runStatus、checks 的 status（passed/failed/unknown/stale/unavailable）与 freshness（current/stale/unavailable）、文件工具变更及未覆盖文件。passed 表示命令成功且声明文件检查前后版本一致；之后声明的任一文件变化或文件工具再次应用修改（即使改回原字节）使证据过期。文件覆盖从同 task 全部已确认检查计算，报告仍保留失败历史；未覆盖列表只对应当前文件页，须检查所有页。记录跨续跑/重启保存，reset 隔离。
 
 报告的 acceptance 始终是 not_asserted：显式文件和命令证据不自动证明任务验收。未声明的依赖、目录新增、检查中修改后恢复、文件工具之外的修改归因及外部文件竞态均不在完整保证内；Bash/external 编辑不计入文件工具变更清单。无显式检查时明确未验证。未调用付费模型；87360a1 的 [CI 36653379987](https://github.com/BeforeLanding/mini-DSH/actions/runs/36653379987) Ubuntu/Windows × Node22/24 四组合通过，每组 check72/test123/123，无失败或跳过，这是 NX-15 历史证据。NX-05b 将 fixture 扩为 12 项，初始 0/12、参考 12/12；补齐单文件、多文件、大日志定位与预算续跑各三项后，本地全量测试 147/147，精确 SHA 53e5aba 的 [CI 36657576782](https://github.com/BeforeLanding/mini-DSH/actions/runs/36657576782) 四组合通过。[任务集说明](test/fixtures/coding/README.md) 与 TASKS/PROGRESS 记录实际边界及提交证据。
+
+## 请求 trace 与编程结果报告（NX-06）
+
+模型调用 `request_trace({requestOffset:0,maxRequests:20})`，CLI 使用 `/trace [requestOffset] [byteOffset]`。trace 按当前 task 的已确认模型请求分页，关联 session/task/run/request、模型、上下文投影、provider 或 estimated usage、完成状态、工具结果分类及 file change/verification 证据 ID。重复 toolCallId 按请求区间隔离；提示词、推理、工具参数、结果正文和命令日志不会复制进摘要，完整原始审计仍使用 `/history`。
+
+`task_report` 在 NX-15 的文件 hash、检查版本和命令结果摘要之上，增加 session/currentRun、每个续跑段的模型、状态、停止原因、counters/usage，以及任务累计用量。running 只表示已确认事件中尚无终态；completed 仍不等于代码验收，acceptance 保持 not_asserted。trace、文件和验证分页都会重新读取当前事件/文件，不是固定快照；CLI 输出受 maxChangeOutputBytes 限制并支持 UTF-8 字节续读。
 
 ## 有界读取、搜索与日志回读（NX-07）
 

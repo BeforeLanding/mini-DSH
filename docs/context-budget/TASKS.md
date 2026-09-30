@@ -1,12 +1,12 @@
 # 任务清单
 
 ## NX-06 请求 trace 与编程结果报告
-- 关联：M7、R-19；依赖 NX-14/NX-15；状态：in_progress（2026-09-30）。
+- 关联：M7、R-19；依赖 NX-14/NX-15；状态：done（2026-09-30，本地验收；跨平台 CI 待最终功能提交后核验）。
 - NX-06a / 固定 trace、报告身份/用量/停止语义及隐私、分页边界 / REQUIREMENTS、PLAN、TASKS、PROGRESS 一致，`git diff --check` / done / c5ebe81。
 - NX-06b / 已确认事件的请求 trace 核心，正确关联投影、usage、响应、工具结果和证据 ID / 纯回答、批工具、失败/skipped/unknown、重复 toolCallId、缺失末包、分页、续跑/reset 单元测试，`pnpm check` / done / b39e82a。
 - NX-06c / 注册有界 `request_trace` 模型工具 / session 必需、参数范围、插件释放、恢复读取与既有工具清单回归，`pnpm check` 和针对性测试 / done / 513de75。
-- NX-06d / task_report 增加 session/current run、全部 run、累计 counters/usage 与停止原因 / completed/预算停止/续跑/running/恢复/reset，保留文件 hash 与命令证据，针对性测试及 `pnpm check` / done / 本步提交后报告编号。
-- NX-06e / CLI `/trace`、增强 `/report` 展示与 README 收尾 / UTF-8 字节分页、恢复后零模型调用、完整 `pnpm check`、`pnpm test`、`pnpm fixtures:check`、`git diff --check` / todo / 待提交。
+- NX-06d / task_report 增加 session/current run、全部 run、累计 counters/usage 与停止原因 / completed/预算停止/续跑/running/恢复/reset，保留文件 hash 与命令证据，针对性测试及 `pnpm check` / done / 04b4b57。
+- NX-06e / CLI `/trace`、增强 `/report` 展示与 README 收尾 / UTF-8 字节分页、恢复后零模型调用、完整 `pnpm check`、`pnpm test`、`pnpm fixtures:check`、`git diff --check` / done / 本步提交后报告编号。
 - 每步验证并回填后独立提交、推送，再开始下一步；跨平台结论仅在实际 CI 完成后记录。无真实模型/付费请求。
 
 ## NX-05b 将编程任务集扩展到 12 项

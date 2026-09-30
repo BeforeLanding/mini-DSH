@@ -73,6 +73,11 @@ test('CLI and scripted model deliver versioned verification, restore reports wit
     const hint = /report truncated; continue: \/report (\d+) (\d+) (\d+)/.exec(restored.text())!
     restored.input.write(`/report ${hint[1]} ${hint[2]} ${hint[3]}\n/report -1\n/report 0 0 999999\n`)
     await restored.waitFor('byteOffset must be within the report')
+    restored.input.write('/trace\n')
+    await restored.waitFor('trace truncated; continue: /trace')
+    const traceHint = /trace truncated; continue: \/trace (\d+) (\d+)/.exec(restored.text())!
+    restored.input.write(`/trace ${traceHint[1]} ${traceHint[2]}\n/trace -1\n/trace 0 999999\n`)
+    await restored.waitFor('byteOffset must be within the trace')
     assert.equal(restored.models(), 0); assert.equal(await fs.readFile(path.join(temp, 'a'), 'utf8'), '中文😀')
     assert.match(restored.text(), /offset must be a nonnegative safe integer/)
     restored.input.write('/reset\n/report\n')

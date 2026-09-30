@@ -1,4 +1,8 @@
 # 开发进度
+### NX-06e CLI、文档与本地完整验收（2026-09-30）
+
+CLI 新增 `/trace [requestOffset] [byteOffset]`，展示请求/run、projection、usage、完成状态、工具结果和证据 ID；增强 `/report` 展示 session/currentRun、每段停止原因和任务累计用量。两者均按 maxChangeOutputBytes 做 UTF-8 字节续读，JSONL 恢复后只读查询不调用模型；README/需求/计划/路线同步实际边界。正常权限 `pnpm check`（74 文件）、`pnpm test`（150/150，fail0/skipped0）、`pnpm fixtures:check`（初始 0/12、参考 12/12）与 `git diff --check` 通过。全部模型为模拟，未调用付费 API；跨平台 CI 待本步功能提交后核验。
+
 ### NX-06d 编程结果报告身份、用量与停止原因（2026-09-30）
 
 task_report 现在返回 sessionId、taskId、currentRunId、每个 run 的模型/前序 run/状态/停止原因/counters/usage/起止时间，以及任务累计 counters 和按来源汇总的 usage；running 段只从已确认事件派生，不冒用未落盘内存状态。task_changes/taskVerifications 的只读查询也改用已确认的当前 task。既有文件 hash、verificationId、命令结果摘要、失败历史和 acceptance=not_asserted 保留。正常权限 `pnpm check`（74 文件）、报告/验证/变更回归 8/8 与 `git diff --check` 通过；覆盖预算停止→续跑、running、completed、JSONL 恢复和 reset。

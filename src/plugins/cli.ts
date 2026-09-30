@@ -12,6 +12,7 @@ import { positiveLimit } from '../core/bounded-text.js'
 import { utf8Prefix } from '../core/tool-result-store.js'
 import type { taskChanges } from '../core/task-changes.js'
 import type { taskReport } from '../core/task-verification.js'
+import type { requestTrace } from '../core/task-trace.js'
 export const name = 'mini-cli'
 export const inject = ['sessions', 'agents', 'agentLoop', 'tools', 'systemPrompt', 'llm', 'sandbox']
 export interface CliConfig {
@@ -62,7 +63,7 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
     const escape = (chunk: Buffer | string) => { const bytes = Buffer.from(chunk); if (bytes.length === 1 && bytes[0] === 0x1b) controller?.abort() }
     input.on('data', escape)
     print('mini-dsh — a local agent Harness')
-    print('Commands: /tools /models /model /history /prompt /reset /continue /budget [JSON] /changes [fileOffset] /diff [fileOffset] [byteOffset] /report [fileOffset] [verificationOffset] [byteOffset] /exit')
+    print('Commands: /tools /models /model /history /prompt /reset /continue /budget [JSON] /changes [fileOffset] /diff [fileOffset] [byteOffset] /report [fileOffset] [verificationOffset] [byteOffset] /trace [requestOffset] [byteOffset] /exit')
     print(`Sandbox workspace: ${workspace}`)
     print(`Session: ${session.id}${store ? ` (${store.directory})` : ' (memory)'}`)
     print('Writes and bash execution ask [Y/n] first. Press Esc to cancel, including during approval.')
@@ -120,7 +121,9 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
       const parameter = isRecord(properties) ? properties.maxFiles : undefined
       const maxFiles = isRecord(parameter) && typeof parameter.maximum === 'number' ? Math.min(20, parameter.maximum) : 20
       const report = await tool.execute({ fileOffset, verificationOffset, maxFiles, maxRecords: 20 }, { sessionId: session.id, signal: new AbortController().signal }) as Awaited<ReturnType<typeof taskReport>>
-      const lines = [`[Report] task=${report.taskId ?? 'none'} run=${report.runStatus ?? 'none'}; task acceptance not asserted`,
+      const lines = [`[Report] session=${report.sessionId} task=${report.taskId ?? 'none'} run=${report.runStatus ?? 'none'} currentRun=${report.currentRunId ?? 'none'} stop=${report.stopReason ?? 'none'}; task acceptance not asserted`,
+        `[Task usage] model=${report.taskCounters.modelRequests} tools=${report.taskCounters.toolCalls} input=${report.taskUsage.inputTokens} output=${report.taskUsage.outputTokens} total=${report.taskUsage.totalTokens} sources=${report.taskUsage.sources.join('+') || 'none'} uncertain=${report.taskUsage.uncertain}`,
+        ...report.runs.map(run => `[Run] id=${run.runId} previous=${run.previousRunId ?? 'none'} model=${JSON.stringify(run.model)} status=${run.status} stop=${run.stopReason ?? 'none'} requests=${run.counters.modelRequests} tools=${run.counters.toolCalls} tokens=${run.counters.totalTokens}`),
         ...report.files.map(file => `[File] ${file.status} ${JSON.stringify(file.path)} verification=${file.verification}${file.externalChange ? ' externalChange=true' : ''}${file.currentError ? ` unavailable=${JSON.stringify(file.currentError)}` : ''}`),
         ...report.checks.map(check => `[Check] ${check.status} version=${check.freshness} id=${check.verificationId} command=${JSON.stringify(check.command)} cwd=${JSON.stringify(check.cwd)} exit=${check.commandResult?.exitCode ?? 'unknown'} files=${JSON.stringify(check.files)}`),
         ...(report.verificationTotal === 0 ? ['[Verification] no explicit checks recorded; code is unverified'] : []),
@@ -133,6 +136,24 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
       const preview = utf8Prefix(bytes.subarray(byteOffset), maxChangeOutputBytes)
       print(preview.toString('utf8'))
       if (byteOffset + preview.length < bytes.length) print(`[report truncated; continue: /report ${fileOffset} ${verificationOffset} ${byteOffset + preview.length}]`)
+    }
+    async function showTrace(requestOffset = 0, byteOffset = 0) {
+      const tool = ctx.tools.get('request_trace')
+      if (!tool) { print('[Trace unavailable] request_trace is not installed'); return }
+      const trace = await tool.execute({ requestOffset, maxRequests: 20 }, { sessionId: session.id, signal: new AbortController().signal }) as ReturnType<typeof requestTrace>
+      const lines = [`[Trace] session=${trace.sessionId} task=${trace.taskId ?? 'none'} requests=${trace.total} offset=${trace.offset}`]
+      for (const request of trace.requests) {
+        lines.push(`[Request] id=${request.requestId} run=${request.runId} model=${JSON.stringify(request.model)} runStatus=${request.runStatus} stop=${request.stopReason ?? 'none'} estimatedInput=${request.estimatedInputTokens ?? 'unknown'} usage=${request.usage ? `${request.usage.totalTokens}/${request.usage.source}${request.usage.uncertain ? '/uncertain' : ''}` : 'missing'} complete=${request.completion?.complete ?? 'missing'} finish=${request.completion?.finishReason ?? 'none'} response=${request.response.kind}`)
+        if (request.projection) lines.push(`[Projection] input=${request.projection.estimatedInputTokens} outputReserve=${request.projection.reservedOutputTokens} margin=${request.projection.safetyMarginTokens} removedTasks=${request.projection.removedTaskIds.length}`)
+        if (request.response.kind === 'tool_calls') for (const call of request.response.toolCalls) lines.push(`[Tool trace] id=${call.toolCallId} name=${call.name} started=${call.started} outcome=${call.outcome} changes=${JSON.stringify(call.changeIds)} verifications=${JSON.stringify(call.verificationIds)}`)
+      }
+      lines.push('[Trace scope] confirmed current-task summaries only; prompts, reasoning, arguments, result bodies and logs omitted')
+      if (!trace.eof) lines.push(`[more requests: /trace ${trace.nextOffset}]`)
+      const bytes = Buffer.from(lines.join('\n'))
+      if (byteOffset > bytes.length || (byteOffset < bytes.length && (bytes[byteOffset] & 0xc0) === 0x80)) throw new Error('byteOffset must be within the trace at a UTF-8 boundary')
+      const preview = utf8Prefix(bytes.subarray(byteOffset), maxChangeOutputBytes)
+      print(preview.toString('utf8'))
+      if (byteOffset + preview.length < bytes.length) print(`[trace truncated; continue: /trace ${requestOffset} ${byteOffset + preview.length}]`)
     }
     async function runInput(text?: string) {
       controller = new AbortController()
@@ -190,6 +211,7 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
         case '/changes': if (parts.length > 1) throw new Error('usage: /changes [fileOffset]'); await showChanges(false, offset(parts[0])); break
         case '/diff': if (parts.length > 2) throw new Error('usage: /diff [fileOffset] [byteOffset]'); await showChanges(true, offset(parts[0]), offset(parts[1])); break
         case '/report': if (parts.length > 3) throw new Error('usage: /report [fileOffset] [verificationOffset] [byteOffset]'); await showReport(offset(parts[0]), offset(parts[1]), offset(parts[2])); break
+        case '/trace': if (parts.length > 2) throw new Error('usage: /trace [requestOffset] [byteOffset]'); await showTrace(offset(parts[0]), offset(parts[1])); break
         case '/history': print(JSON.stringify(ctx.sessions.get(session.id).events, null, 2)); break
         case '/prompt': print(await ctx.systemPrompt.assemble({ agent, sessionId: session.id })); break
         case '/reset': ctx.sessions.clear(session.id); await persistConfig(); print(`Session reset: ${session.id}`); break
