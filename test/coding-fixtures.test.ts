@@ -20,6 +20,7 @@ import * as bash from '../src/tools/bash.js'
 const locationCases: Record<string, { token: string; source: string }> = {
   pagination: { token: 'NX05B-PAGE-LOCATE', source: 'src/page.mjs' },
   query: { token: 'NX05B-QUERY-LOCATE', source: 'src/query.mjs' },
+  csv: { token: 'NX05B-CSV-LOCATE', source: 'src/csv.mjs' },
 }
 
 for (const id of fixtureIds) {
