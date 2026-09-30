@@ -105,6 +105,19 @@ test('independent acceptance rejects bypassed public checks, partial migration a
   } finally { await fixture.close() }
 })
 
+test('merge fixture requires both entry point and helper migration', async () => {
+  const fixture = await createFixture('merge')
+  try {
+    for (const edit of fixture.edits) {
+      await fs.writeFile(path.join(fixture.workspace, edit.path), edit.newText)
+      assert.equal((await fixture.evaluate()).passed, false, `partial merge unexpectedly passed: ${edit.path}`)
+      await fs.writeFile(path.join(fixture.workspace, edit.path), edit.oldText)
+    }
+    await fixture.applyReference()
+    assert.equal((await fixture.evaluate()).passed, true)
+  } finally { await fixture.close() }
+})
+
 test('acceptance bounds hung code and output, rejects invalid limits and reports infrastructure failure', async () => {
   const fixture = await createFixture('boundary')
   try {
