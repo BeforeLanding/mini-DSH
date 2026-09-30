@@ -10,8 +10,8 @@
 - NX-05b12f / csv 同范围 / 线索在第 320 行，初始 0/12、参考 12/12，工具回归 28/28，`pnpm check` 72 文件 / done / 7eca20f。
 - NX-05b12g / 预算停止与显式续跑的通用测试支撑 / 真实 Cordis 两段运行、已完成工具不重放、skipped 调用后补做，`pnpm check` 72 文件、fixture 回归 29/29 / done / 786e9ae。
 - NX-05b12h / dedupe 任务约束与显式续跑 / 首次对象 identity、严格 id 区分、预算停止→继续→独立验收，`pnpm check` 72 文件、fixture 回归 30/30、初始 0/12、参考 12/12 / done / e299adf。
-- NX-05b12i / retry 任务约束与显式续跑 / 成功值 0、最终错误 identity、预算停止→继续→独立验收，`pnpm check` 72 文件、fixture 回归 31/31、初始 0/12、参考 12/12 / done / 本步提交后填号。
-- NX-05b12j / summary 任务约束与显式续跑 / 预算停止→显式继续→独立验收，检查未重复已执行副作用 / todo / 待提交。
+- NX-05b12i / retry 任务约束与显式续跑 / 成功值 0、最终错误 identity、预算停止→继续→独立验收，`pnpm check` 72 文件、fixture 回归 31/31、初始 0/12、参考 12/12 / done / c35a75a。
+- NX-05b12j / summary 任务约束与显式续跑 / 负值/零值及原数组保持，预算停止→显式继续→独立验收，检查未重复已执行副作用；`pnpm check` 72 文件、fixture 回归 32/32、初始 0/12、参考 12/12 / done / 本步提交后填号。
 - NX-05b12k / 四类各三总体验收、文档及提交证据 / `pnpm check`、`pnpm test`、`pnpm fixtures:check`、四组合 CI、`git diff --check` / todo / 待提交。
 - 分类以主要验证场景计：单文件 boundary/options/normalize；多文件 interface/inventory/merge；大文件或日志定位 pagination/query/csv；长任务约束与续跑 dedupe/retry/summary。长任务类须有真实分段运行证据；模拟模型只证明 Harness 流程，不代表自主编程成功率。
 - NX-05b0 / 固定九项新增任务及提交边界 / `git diff --check` / done / 56b3c8e。

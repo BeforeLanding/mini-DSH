@@ -219,6 +219,10 @@ test('retry task resumes after budget stop without replaying completed tools', {
   await runFixtureAcrossBudgetStop('retry')
 })
 
+test('summary task resumes after budget stop and keeps the prior failed check', { timeout: 30_000 }, async () => {
+  await runFixtureAcrossBudgetStop('summary')
+})
+
 test('acceptance bounds hung code and output, rejects invalid limits and reports infrastructure failure', async () => {
   const fixture = await createFixture('boundary')
   try {
