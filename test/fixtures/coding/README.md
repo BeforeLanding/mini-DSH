@@ -48,4 +48,4 @@ pnpm test
 
 ## NX-05b 本地基线（2026-09-30）
 
-Windows / Node v24.16.0 / pnpm 11.22.0：`pnpm fixtures:check` 初始 0/12、参考 12/12；`pnpm test` 141/141（其中 12 项模拟模型流程均通过）；`pnpm check` 72 文件语法通过，`git diff --check` 通过。每项参考解和验收器均留在候选工作区外。新增九项主要是短小、确定性的行为修复与扩展；原路线中按大文件/日志定位和长任务/续跑各三项分布的设想尚未覆盖，后续评测不能据此宣称这些场景的效果。没有付费模型实验或本轮跨平台 CI 结论。
+Windows / Node v24.16.0 / pnpm 11.22.0：`pnpm fixtures:check` 初始 0/12、参考 12/12；`pnpm test` 141/141（其中 12 项模拟模型流程均通过）；`pnpm check` 72 文件语法通过，`git diff --check` 通过。每项参考解和验收器均留在候选工作区外。新增九项主要是短小、确定性的行为修复与扩展；原路线中按大文件/日志定位和长任务/续跑各三项分布的设想尚未覆盖，后续评测不能据此宣称这些场景的效果。没有付费模型实验。精确 SHA 6d1fd3b 的 [CI 36655224744](https://github.com/BeforeLanding/mini-DSH/actions/runs/36655224744) Ubuntu/Windows × Node22/24 四组均 success。

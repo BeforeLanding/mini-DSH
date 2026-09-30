@@ -1,4 +1,8 @@
 # 开发进度
+### NX-05b 远端验收完成（2026-09-30）
+
+用户明确授权推送后，NX-05b 独立提交已到 `origin/main`。精确 SHA 6d1fd3b439678c5bb5eb518a9c0f2f2607af1032 的 [CI 36655224744](https://github.com/BeforeLanding/mini-DSH/actions/runs/36655224744) Ubuntu/Windows × Node22/24 四组均 success，均执行类型/构建/语法及全量测试。原先推送自动审批拒绝是历史状态，授权后已解除。本步仅回填实际远端证据，`git diff --check`；文档提交后核验最新 main CI，不无限追加验收记录。
+
 ### NX-05b 本地交付（2026-09-30）
 
 编程任务从 3 项扩为 12 项，每项有初始工作区、中文任务、公开检查、参考修改和工作区外独立验收；模拟模型通过真实文件/Bash 流程。小步提交：规划 56b3c8e；normalize a11f510；dedupe 4761987；pagination 2992fb8；query 7b97939；retry 4d35a39；merge a6db3d2；csv f60ea98；inventory b258056；summary 0c7511d；最终说明 73cf6e1。正常用户权限 `pnpm check`（72 文件）、`pnpm test`（141/141）、`pnpm fixtures:check`（初始 0/12、参考 12/12）与 `git diff --check` 通过。没有真实模型实验。此轮任务偏短小，大文件/日志及长任务/续跑的原路线分布尚未实现。
