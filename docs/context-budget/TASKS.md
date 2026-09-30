@@ -2,11 +2,36 @@
 
 更新：2026-09-30。每项只保留当前状态和证据入口；行为、边界、逐步提交与完整验收记录见 [CHANGES](CHANGES.md)。状态：`todo`、`in_progress`、`blocked`、`done`。
 
+## 待办
+
+下一步主线是 **NX-08 真实模型任务对照与估算误差实验**。整批上限、各臂一致的单次 run 预算与预注册口径见 [PLAN 的评测批次上限](PLAN.md#nx-08-评测批次上限预注册)；这些参数固定前不得开始真实模型调用。
+
+| 子步骤 | 内容 | 验收 | 提交边界 |
+| --- | --- | --- | --- |
+| NX-08a | 评测批次上限与事件导出契约 | 导出字段覆盖输入估算、usage、来源、输出预留、裁剪任务、停止原因、主动与审批时间；`context/projection` 与 run/request 的顺序关联在多次投影下可判定 | 1 次：PLAN 参数 + 契约 + 测试 |
+| NX-08b | 评测运行器与整批上限强制 | mock 模型离线跑完全部 12 个任务；人为调小上限可复现整批中止而不是任务失败；单次 run 预算与整批上限的优先关系明确 | 1 次 |
+| NX-08c | 输入估算误差实验 | 中文、英文、代码、schema 四类均有相对误差分布与低估幅度，结论标注 estimator 版本与核验日期 | 1 次 |
+| NX-08d | 筛查跑（12 任务 × 1） | 报告原始分子/分母与失败案例；不可行任务如实标记为不可行且不计入成功率 | 1 次 |
+| NX-08e | 对照 A：全历史 vs 现有裁剪 | 仅用能安全容纳全量输入的任务，两臂预算一致、每题 3 次；报告通过率、回归失败数、编辑失败率、修复迭代次数、人工介入、provider/estimated token 分列、每成功任务有效 token、延迟与停止原因 | 1 次 |
+| NX-08f | 对照 B：现有裁剪 vs 裁剪加有界工具输出 | 同 e，其余条件与 A 一致；两次比较的结论分开陈述，不合并收益 | 1 次 |
+| NX-08g | 评测报告与结论 | 含样本量、重复间波动、失败案例、成本与不可行项；不写未验证的提升比例，明确区分 harness 行为与真实模型能力 | 1 次 |
+
+其他待办，按依赖排序：
+
+- **NX-16 持久化结构化编程任务状态与可选 compaction — todo（条件阶段，依赖 NX-08）**：只有评测确认当前 task 膨胀仍是主要失败源后才实现 compaction；实施前必须修订 R-03/D-02 的“当前 task 所有 run 原文进入请求”契约，不能作为小优化塞入。范围见[路线图 M8](../INTERNSHIP_ROADMAP.md)。
+- **NX-09 README 增加定位、原创增量、架构图与 5 分钟运行入口 — todo**：不依赖 NX-08，可先行；真实模型结果一节须等 NX-08 完成后回填，不得提前填写期望提升比例。
+- **NX-10 固定代码修复演示 — todo**：展示项目规则→定位→修改→失败测试→再修复→diff 与证据；另需展示预算停止/恢复和 unknown。
+- **NX-11 整理设计取舍 — todo**：事件与投影分离、协议完整性、可靠编辑、验证时效、未知副作用恢复，须能从代码和测试解释选择。
+- **T6 Biome 只读诊断与处置 — todo**：先诊断告警数量与类别、评估修绿成本，再由用户选择修到绿并设为门禁、或移除 Biome；选定前不修改 Biome、依赖或 CI 门禁。
+
+## 已完成
+
 - **OPS-01 停止文档提交触发生产部署 — done**：提交 [2ac85bd](https://github.com/BeforeLanding/mini-DSH/commit/2ac85bd1bcd69b85ed0329847cf3791a87472bd4)、纯文档探针 `92507d4`、[CI 36662206000](https://github.com/BeforeLanding/mini-DSH/actions/runs/36662206000)；[详细证据](CHANGES.md#ops-01-停止文档提交触发生产部署)。
 - **OPS-02 CI push 路径过滤 — done**：提交 [263d439](https://github.com/BeforeLanding/mini-DSH/commit/263d439efd064ba27870dd8b2e6d95c11e581430)、[CI 36662938984](https://github.com/BeforeLanding/mini-DSH/actions/runs/36662938984)、纯文档提交 `ef46988` 为 0 个 run/check；[详细证据](CHANGES.md#ops-02-ci-push-路径过滤)。
 - **OPS-03 文档当前状态化 — done**：PROGRESS 归档提交 `ef46988`；TASKS/CHANGES 证据迁移为本步提交；[详细证据](CHANGES.md#ops-03-文档当前状态化)。
 - **OPS-04 修订提交粒度规则 — done**：以独立回退与可观察行为差异为判据，按能力类别分组 fixture；[详细证据](CHANGES.md#ops-04-修订提交粒度规则)。
 - **OPS-05 版本标签与发布锚点 — done**：定义 `vMAJOR.MINOR.PATCH`、CI 前置、不可移动标签、Release 与回滚映射；[详细证据](CHANGES.md#ops-05-版本标签与发布锚点)。
+- **NX-04 文档当前/历史状态清理与 F1–F3 回归接入 CI — done**：文档歧义由 OPS-03 处理；F1 回归见 `test/context.test.ts` 的投影输出额度重算用例（`mode === 'exact'` 保留旧任务并发 100 输出额度），F2 见 `test/deadline.test.ts` 的终态 sync 跨 deadline、有界收尾与错误路径独立上界用例，F3 见 `test/store.test.ts` 的崩溃重放投影合并用例；三者随 `pnpm test` 进入四组合 CI。详见 [CHANGES](CHANGES.md#f1-输出额度与历史裁剪联动)。
 - **NX-06 请求 trace 与编程结果报告 — done**：提交 [08158b9](https://github.com/BeforeLanding/mini-DSH/commit/08158b9)、[CI 36661121345](https://github.com/BeforeLanding/mini-DSH/actions/runs/36661121345)；[详细证据](CHANGES.md#nx-06-请求-trace-与编程结果报告)。
 - **NX-05b 将编程任务集扩展到 12 项 — done**：提交 [53e5aba](https://github.com/BeforeLanding/mini-DSH/commit/53e5aba)、[CI 36657576782](https://github.com/BeforeLanding/mini-DSH/actions/runs/36657576782)；[详细证据](CHANGES.md#nx-05b-将编程任务集扩展到-12-项)。
 - **NX-15 编程验证记录与交付报告 — done**：提交 [87360a1](https://github.com/BeforeLanding/mini-DSH/commit/87360a1)、[CI 36653379987](https://github.com/BeforeLanding/mini-DSH/actions/runs/36653379987)；[详细证据](CHANGES.md#nx-15-编程验证记录与交付报告)。
