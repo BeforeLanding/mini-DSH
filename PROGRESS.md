@@ -5,8 +5,8 @@
 ## 当前状态
 
 - **NX-08d 筛查跑完成（2026-09-30，首次真实模型调用）**：模型 `deepseek/deepseek-v4-flash`（服务端回显 `deepseek-flash`，对应 `DeepSeek-V4.1-Flash`），12 个任务各 1 次，**原始分子/分母 12/12**，无拒绝、无不可行、无基础设施失败，因此本步没有失败案例可报告。81 请求（20.3% 上限）/ 412,176 token（5.2% 上限），81/81 usage 来自 provider，成本约 $0.15。12 次全部 `completed`，未触发任何裁剪或预算停止。证据在 `.eval-evidence/screening-full/`（不入库），[详细证据](docs/context-budget/CHANGES.md#nx-08d-筛查跑12-任务--1首次真实模型调用)。**该结果只说明模型能在这条链路上跑通并交付，不能推断长任务或大仓库场景下的表现**：任务集有天花板效应（公开 `check.mjs`、零依赖、改动数十行），且只有 1 次重复，测不出波动。
-- 筛查跑发现一处沙箱命令闸门误判（记为 NX-17）：`//` 作为独立 token 一律被判 `path escapes the workspace`（最小复现 `echo //`），模型因此白丢一次请求后自行绕过；`http(s)://` 出现在任何命令中即判未授权出网。两者都不影响本次验收结论。
-- 主分支基线：TypeScript / Cordis 本地 coding agent harness。本地 `pnpm check`（82 文件）、172/172 测试、12 项 fixture 基线（初始 0/12、参考 12/12）通过。`pnpm check`、`pnpm test`、`pnpm eval:offline`、`pnpm fixtures:check` 均不调用付费模型。
+- **NX-17 完成（2026-09-30）**：筛查跑发现的沙箱命令闸门误判已修复，两个提交可分别回退——`5322291` 修分词与路径形状（双引号按 shell 语义识别 `\"`；事故命令由 49 token 变为 6 token），`c4a02ae` 把出网规则从「出现在命令里」改为能力判据（`echo`/`printf` 参数里的 URL 放行，接管道时仍拦截）。`..`、系统路径、工作区外路径、`//etc`、UNC 与 `curl`/`wget`/`git clone` 全部照旧拒绝，由测试逐条固定。设计决策与未放宽清单写入 [CHANGES](docs/context-budget/CHANGES.md#nx-17-沙箱命令闸门误判修复筛查跑发现)，新增 R-20 固化命令策略契约。改前发现的相邻缺陷另立两项待办，未塞进这两个提交：[NX-18 `..` 族误判](docs/context-budget/TASKS.md)、[NX-19 出网拦截的真实缺口](docs/context-budget/TASKS.md)。
+- 主分支基线：TypeScript / Cordis 本地 coding agent harness。本地 `pnpm check`（82 文件）、173/173 测试、12 项 fixture 基线（初始 0/12、参考 12/12）通过。`pnpm check`、`pnpm test`、`pnpm eval:offline`、`pnpm fixtures:check` 均不调用付费模型。
 - NX-08d0 完成：首次真实调用的设施补齐，3 个提交（`8fd78a9`、`9eb3769`、`4d10f2c`）已推送，三个 SHA 上 CI 四组 success、attempt=1（[4d10f2c](https://github.com/BeforeLanding/mini-DSH/actions/runs/36681430450)），同一批推送未触发 Deploy ECS。修复了评测路径上输入目标 65,536 与 1,000,000 窗口从未生效（投影不裁剪、`context_overflow` 不触发）的问题；补齐 run 结论分类与显式成功率口径；新增 `pnpm eval:screening` 真实适配器入口与逐 run 证据落盘。**自 2026-09-30 起开始调用付费模型**。
 - 真实调用烟测（2026-09-30，`merge` 两次）：均 completed 且通过独立验收，退出码 0。第一次 5 请求 / 24,677 token，第二次 9 请求 / 119,689 token（输入 104,691、输出 14,998，其中 reasoning 10,700）。差异来自 thinking 输出与工具次数导致的输入累积重发。协议探测记录：请求体写 `deepseek-v4-flash` 时服务端回显 `model=deepseek-flash`。完整证据在 `.eval-evidence/screening-merge/`（不入库），[详细证据](docs/context-budget/CHANGES.md#nx-08d0-3-真实适配器评测入口与逐-run-证据落盘)。
 - 运维整改 OPS-01～OPS-05 与文档结构整改已落地，提交号与 CI 证据见 [TASKS](docs/context-budget/TASKS.md) 和 [CHANGES](docs/context-budget/CHANGES.md)：部署改为 tag 触发，CI 的 main push 忽略纯文档，PROGRESS/TASKS 改为状态页，提交粒度规则改为可判断判据，ECS 标签与回滚规范已定义。
@@ -26,7 +26,7 @@
 ## 下一步
 
 1. **NX-08e／NX-08f 的前置：先解决任务集可行性**。筛查跑实测现有 12 个 fixture 在真实模型下最大估算输入仅 17,220 token，对 65,536 的输入目标有 3.8 倍余量，`removedTaskIds` 全为空——裁剪从未触发，两臂会完全等价。需要先设计或选出能产生超过输入目标历史的候选任务，否则对照 A／B 得不到任何结论。
-2. NX-17 沙箱命令闸门误判由用户决定是否修：`//` 独立 token 与命令中的 `http(s)://` 误判；放宽不得削弱 `..`、系统路径与真实出网拦截，需先补需求/设计决策。
+2. NX-18／NX-19 由用户决定是否排期：`..` 族误判（`echo "see ../docs"`、`grep -n ".."`、`git log --grep "../ fixes"` 被判逃逸）是「放宽」方向，但要动 NX-17 明确保护的 `..` 规则；出网缺口（`bash -c "curl …"`、`nc`、`ssh`、`$(…)`、反斜杠 UNC）是「加强」方向。两者都需先补需求/设计决策。
 3. NX-09 / NX-10 最小演示不依赖 NX-08，可并行先行；真实模型结果一节须等 NX-08 完成后回填。
 4. T6 Biome 处置方案由用户选择：修到绿并设为门禁，或移除 Biome（诊断结论见“阻塞”）。
 

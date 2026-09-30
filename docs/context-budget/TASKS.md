@@ -20,7 +20,8 @@ NX-08e 开跑前必须先解决其前置条件：现有 12 个 fixture 在真实
 
 其他待办，按依赖排序：
 
-- **NX-17 沙箱命令闸门误判 — todo（筛查跑发现）**：`//` 作为独立 token 一律被判 `path escapes the workspace`，最小复现 `echo //`、`node -e "// comment"`、`ls -la; // done`；内联脚本里被转义的引号会破坏命令分词，使 JS 注释暴露成独立 token。同一条路径上 `http(s)://` 出现在任何命令中即判 `unauthorized outbound request`，与是否真的取网无关（如 `echo "https://docs..."`）。真实模型在筛查跑中因前者损失一次请求。放宽必须不削弱 `..`、系统路径与真实出网拦截，修改前先补需求/设计决策。
+- **NX-18 `..` 族误判 — todo（NX-17 期间发现）**：`..` 规则是整串正则，会命中引号内的惰性文本——`echo "see ../docs for details"`、`grep -n ".." src/index.ts`、`git log --grep "../ fixes"` 全部被判 `.. path escape is blocked`。该规则是用户「放宽不得削弱 `..`」条款点名保护的对象，NX-17 因此没有动它。收紧需要把判定从整串正则改为 token 级的路径操作数判定，且必须保持 `echo ../secret`、`cat ../secret`、`cp ../a b` 仍被拒；修改前先补需求/设计决策。
+- **NX-19 出网拦截的真实缺口 — todo（NX-17 期间发现）**：`bash -c "curl http://example.com"`、`sh -c "wget …"`、`echo "$(curl …)"`、`nc example.com 80`、`ssh user@example.com`、反斜杠 UNC（`cat \\server\share\secret`）当前全部放行；其中反斜杠 UNC 与 NX-17 无关，是既有缺口。出网规则只覆盖「整个 token 是一个 URL 且位于命令词可识别的段内」，命令替换、内联脚本与未被识别的取网工具都在覆盖范围之外。收口属于「加强」而非「放宽」，需要单独设计与验收，不得顺手塞进 NX-17 的提交。
 - **NX-16 持久化结构化编程任务状态与可选 compaction — todo（条件阶段，依赖 NX-08）**：只有评测确认当前 task 膨胀仍是主要失败源后才实现 compaction；实施前必须修订 R-03/D-02 的“当前 task 所有 run 原文进入请求”契约，不能作为小优化塞入。范围见[路线图 M8](../INTERNSHIP_ROADMAP.md)。
 - **NX-09 README 增加定位、原创增量、架构图与 5 分钟运行入口 — todo**：不依赖 NX-08，可先行；真实模型结果一节须等 NX-08 完成后回填，不得提前填写期望提升比例。
 - **NX-10 固定代码修复演示 — todo**：展示项目规则→定位→修改→失败测试→再修复→diff 与证据；另需展示预算停止/恢复和 unknown。
@@ -29,6 +30,9 @@ NX-08e 开跑前必须先解决其前置条件：现有 12 个 fixture 在真实
 
 ## 已完成
 
+- **NX-17-3 NX-17 设计决策与文档回填 — done**：设计决策（形状判据、能力判据、明确不采用的网络工具清单方案）与未放宽清单写入 CHANGES，新增 R-20 固化命令策略契约，README 说明策略范围与已知缺口；[详细证据](CHANGES.md#nx-17-沙箱命令闸门误判修复筛查跑发现)。
+- **NX-17-2 出网规则改用能力判据 — done**：`echo`／`printf` 参数里的 URL 不再判出网，本段接管道时仍拦截，`||` 不计作管道；`curl`／`wget` 操作数、`git clone <url>` 照旧拒绝。提交 `c4a02ae`；[详细证据](CHANGES.md#nx-17-沙箱命令闸门误判修复筛查跑发现)。
+- **NX-17-1 命令分词与路径形状修复 — done**：双引号按 shell 语义识别 `\"`（事故命令由 49 token 变为 6 token，注释不再暴露为独立 token）；纯分隔符串与「首个分量含空白」的双斜杠 token 不再当路径操作数，单个 `/`、系统路径、`//etc`、`//home/…`、UNC 与 `..` 全部照旧拒绝。提交 `5322291`；[详细证据](CHANGES.md#nx-17-沙箱命令闸门误判修复筛查跑发现)。
 - **NX-08d 筛查跑（12 任务 × 1，首次真实模型调用）— done**：`deepseek/deepseek-v4-flash`（服务端回显 `deepseek-flash`）跑完 12 个 fixture，**原始分子/分母 12/12**，无拒绝、无不可行、无基础设施失败，因此无可报告的失败案例；81 请求 / 412,176 token（20.3% 与 5.2% 的整批上限），81/81 usage 来自 provider，成本约 $0.15；12 次全部 `completed` 且未触发任何裁剪或预算停止（最大估算输入 17,220）。[详细证据](CHANGES.md#nx-08d-筛查跑12-任务--1首次真实模型调用)。
 - **NX-08d0-3 真实适配器评测入口与逐 run 证据落盘 — done**：`pnpm eval:screening` 接入真实 DeepSeek 适配器，含协议探测（请求 `deepseek-v4-flash` 时服务端回显 `model=deepseek-flash`）、模型名与窗口显式化、逐 run 事件日志与 `runs.jsonl` 落盘、逐 run 成本打印；烟测 `merge` 两次均 completed 且通过验收（5 请求 / 24,677 token，9 请求 / 119,689 token）；[详细证据](CHANGES.md#nx-08d0-3-真实适配器评测入口与逐-run-证据落盘)。
 - **NX-08d0-2 评测 run 结论分类与显式成功率口径 — done**：`RunOutcome` 增 `acceptance` 与 `infeasible`，`summarize` 输出 `rate { numerator, denominator, excludedInfeasible, excludedErrored }`，三类结果分别进入正确口径；[详细证据](CHANGES.md#nx-08d0-2-评测-run-结论分类与显式成功率口径)。

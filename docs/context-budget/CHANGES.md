@@ -2,6 +2,23 @@
 
 更新：2026-09-30。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-17 沙箱命令闸门误判修复（筛查跑发现）
+- 关联：NX-08d 观察 4；不依赖 NX-08，可独立验收。状态：done（2026-09-30，本地通过，不调用模型）。
+- **现象与根因**：合并成一句话会失真，实际是三个互相独立的机制，不是一个规则写错。
+  1. **闸门的分词与 shell 不一致**。`"[^"]*"` 不识别双引号内的 `\"`。NX-08d 里被拒的真实命令 `node check.mjs && node --input-type=module -e "…"`（内联脚本含 `//` 注释与 `\"`）在旧分词下裂成 **49 个 token**，其中两个是注释里的裸 `//`，被当作 `/` 开头的绝对路径交给 `resolveInside`，在 Windows 解析为 `D:\` 后判越界；按 shell 语义分词后是 **6 个 token**，没有任何 `/` 开头的 token。这一条单独就修掉了事故本身，与 `//` 的形状规则无关。
+  2. **`/` 开头的 token 一律当路径操作数**。`echo //`、`ls -la; // done`、`node -e "// comment"` 的 token 内容确实是 `//` 或 `// …`，不涉及引号，分词修好也不会变。
+  3. **出网规则与是否真的取网无关**。规则只在「整个 token 的内容就是一个 URL」时触发，`echo "https://docs.example.com/guide"`、`git log --grep "https://github.com/x"` 因此被判 `unauthorized outbound request`。
+- **设计决策**（按要求先定，本步据此实现）：
+  - 路径放行判据用**形状是否可能寻址**，而不是出现位置或是否被引号包裹：`/` 开头的 token 只有真的可能寻址时才算路径操作数。纯分隔符串（`//`、`///`）不含路径分量，解析结果是根而非可读内容；双斜杠开头且**首个路径分量含空白**的 token 不是可寻址的根级路径（真实的根级目录名不会以空白开头），该形状来自 JS 注释或脚本正文被引号成词。单个 `/` 仍是真实的根目录操作数，继续拒绝——`ls /` 与 `ls //` 的处理不同是有意为之。
+  - 出网规则改用**能力判据**而不是「出现在命令里」：`echo`／`printf` 只写标准输出，无法取网，其参数里的 URL 是数据。同一判据同时限定放宽边界——本段标准输出一旦接到下游命令，下游就可能取网，仍按原规则拦截。
+  - **明确不采用**「按网络工具清单收窄」（只在 curl/wget/git/npm/pip… 的操作数位置检查 URL）：清单天然不完整，未列入的工具会从「拒绝」变成「允许」，属于真实的出网拦截削弱。开工前由用户在两个选项中选择能力判据。
+- **未放宽的部分（测试逐条固定）**：`..` 逃逸、系统路径（`/etc`、`/dev`、`/proc`、`/sys`、`/root`、`/boot`）、工作区外相对与绝对路径、归一化后仍越界的双斜杠路径（`//etc/passwd`、`//home/user/.ssh/id_rsa`）、UNC（`//server/share/secret`）、`curl`／`wget` 的 URL 与裸主机名操作数、`git clone <url>`、以及 `echo "…" | xargs curl`、`echo "…" | cat > f` 这类把惰性输出接进管道的形状。`..` 规则（整串正则）与系统路径检查的代码完全未改。
+- 提交：`5322291`（分词与路径形状）、`c4a02ae`（URL 能力判据）。两者各自独立验证通过，可分别 revert。
+- 验证：`pnpm check`（82 文件）、`pnpm test`（173/173，新增 1 条引号内联脚本用例；无失败/跳过）、`pnpm fixtures:check`（初始 0/12、参考 12/12，退出码 0）、`pnpm eval:offline`（12 accepted，退出码 0）在本机通过。闸门不调用模型，本步全程未产生付费请求。
+- **本步未覆盖、已记录为独立待办**（都是改前发现的相邻缺陷，不属于本次「放宽」范围，故不塞进这两个提交）：
+  - `..` 族误判（**NX-18**）：`..` 规则是整串正则，会命中引号内的惰性文本——`echo "see ../docs for details"`、`grep -n ".." src/index.ts`、`git log --grep "../ fixes"` 全部被判 `.. path escape is blocked`。这条规则正是用户「放宽不得削弱 `..`」条款点名保护的对象，因此本步没有动它；收紧需要把它改成 token 级的路径操作数判定。
+  - 出网拦截的真实缺口（**NX-19**）：`bash -c "curl http://example.com"`、`sh -c "wget …"`、`echo "$(curl …)"`、`nc example.com 80`、`ssh user@example.com`、反斜杠 UNC（`cat \\server\share\secret`）当前**全部放行**。其中反斜杠 UNC 与本步无关，是既有缺口。收口属于「加强」而不是「放宽」，需要单独设计与验收。
+
 ## NX-08d 筛查跑（12 任务 × 1，首次真实模型调用）
 - 关联：M7；依赖 NX-08d0 的设施与预注册口径。状态：done（2026-09-30，本地实跑，**已调用付费模型**）。
 - 命令：`node dist/scripts/eval-screening.js`（即 `pnpm eval:screening`）。模型 `deepseek/deepseek-v4-flash`，服务端回显 `model=deepseek-flash`，官方依据页标注该名为 Flash 当前档位的旧标签，对应版本 `DeepSeek-V4.1-Flash`；端点 `https://api.deepseek.com`，窗口按 PLAN 保守配置 1,000,000。单次 run 预算 32 请求 / 64 工具 / 300,000ms / 2,000,000 token，整批上限 400 请求 / 8,000,000 token，均为预注册值，本步未调整任何一项。证据：`.eval-evidence/screening-full/`（会话日志、`runs.jsonl`、`report.json`，不入库）。
@@ -28,7 +45,7 @@
 - **观察 1：上下文裁剪从未触发**。12 次 run 的 `removedTaskIds` 全为空，最大估算输入 17,220 token，对 65,536 的输入目标有 3.8 倍余量；12 次全部以 `completed` 结束，没有一次 `context_overflow`、`token_budget`、`max_steps`、`timeout` 或 `output_limit`。这印证了 PLAN 与 TASKS 中 NX-08e 的前置条件：**该任务集无法用于「全历史 vs 现有裁剪」的对照**，两臂会完全等价。
 - **观察 2：模型确实使用了验证路径**。12 次 run 共产生 20 条 `verification/start`，即模型按工具说明显式声明了 `verification.files`，而不是把退出码当成验收。
 - **观察 3：文件纪律**。12 次 run 的 `file/change` 与写工具调用完全一致，只落在各自 fixture 的可编辑文件上（`interface`／`inventory`／`merge` 各改两个文件），工作区没有游离文件，受保护文件无一被改动（验收的 `protectedFilesChanged` 全为空）。烟测那次曾留下一个 `src/__extra_check.mjs` 自测文件，整批没有出现。
-- **观察 4：沙箱命令闸门误判（已复现，记为待办）**。`merge` 的一次请求被 `ToolError: path escapes the workspace` 拒绝，而该命令中不含 `..`。最小复现：`echo //`、`node -e \"// comment\"`、`ls -la; // done` 均被拒。原因是命令分词把独立的 `//` 当作以 `/` 开头的绝对路径，交给 `resolveInside` 后判越界；内联脚本里被转义的引号会破坏 `"[^"]*"` 分组，使 JS 注释暴露成独立 token。模型自行改用其他命令后仍通过验收，损失限于一次请求。同一路径上还发现 `echo \"http://x.com\"` 被判 `unauthorized outbound request`——只要命令里出现 `http(s)://` 即拒绝，与是否真的取网无关。
+- **观察 4：沙箱命令闸门误判（已复现；修复见上一节 NX-17）**。`merge` 的一次请求被 `ToolError: path escapes the workspace` 拒绝，而该命令中不含 `..`。最小复现：`echo //`、`node -e \"// comment\"`、`ls -la; // done` 均被拒。原因是命令分词把独立的 `//` 当作以 `/` 开头的绝对路径，交给 `resolveInside` 后判越界；内联脚本里被转义的引号会破坏 `"[^"]*"` 分组，使 JS 注释暴露成独立 token。模型自行改用其他命令后仍通过验收，损失限于一次请求。同一路径上还发现 `echo \"http://x.com\"` 被判 `unauthorized outbound request`——只要命令里出现 `http(s)://` 即拒绝，与是否真的取网无关。**三个机制均已由 NX-17 修复，见上一节**。
 - **结论边界（不可宣称的部分）**：12/12 是这 12 个任务的通过率，不是真实编程任务的成功率。任务集本身有天花板效应——工作区提供公开的 `check.mjs`、任务说明直接给出命令、依赖为零、改动规模在数十行内；本批只有 1 次重复，测不出重复间波动；全程没有触发任何预算与裁剪边界。因此本结果证明的是「真实模型能在这条 Harness 链路上跑通并交付」，不能用于推断模型在长任务、大仓库或上下文压缩场景下的表现。
 
 ## NX-08d0-3 真实适配器评测入口与逐 run 证据落盘
