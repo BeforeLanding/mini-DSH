@@ -2,6 +2,11 @@
 
 更新：2026-09-30。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-08a 评测导出契约与投影归属
+- 关联：M7；依赖 NX-06 的 request trace。状态：done（2026-09-30，本地通过，四组合 CI 待提交后核验）。本次不调用真实模型。
+- NX-08a / `context/projection` 增加可选 `requestId`，与随后 `model/start` 同号，使投影归属成为日志中可读的事实而非位置推断；发射端在投影之前生成 id，因此因 `context_overflow`／token 预算未发出的请求仍带 id 可辨。`requestTrace` 优先按 id 归属，旧日志无该字段时退回“同一 run 内最近投影”，并以 `projectionLink` 如实标注所用方式；新增 `unsentProjections` 与每 run 终值 `counters`（补齐 `activeDurationMs`／`approvalDurationMs`），未结束的 run 报 `null` 而不是起始零值。事件信封仍为 version 1，新字段可选并按仓库既有 `optionalString` 惯例校验 / `pnpm check`（74 文件）、`pnpm test`（153/153，无失败/跳过）、`pnpm fixtures:check`（初始 0/12、参考 12/12）通过；新增用例覆盖同一 run 多次投影的按 id 归属、缺 id 的位置回退、未发出请求单列、计数空值、真实循环下投影与 `model/start` 同号及溢出后投影无对应请求 / done / 本步提交后回填。
+- 未纳入本步：整批上限的运行器侧强制（NX-08b）与估算误差实验（NX-08c）。REQUIREMENTS 尚无 NX-08 条目，是否补 R-20 待定。
+
 ## OPS-01 停止文档提交触发生产部署
 - OPS-01a / Deploy ECS 改为 `vMAJOR.MINOR.PATCH` 标签或手动 ref 触发，目标须属于 main 历史 / 正常用户权限 `pnpm check`（74 文件）、`pnpm test`（150/150，无失败/跳过）、`pnpm fixtures:check`（初始 0/12、参考 12/12）、YAML 结构、三个内嵌 Bash 块、bundle 失败边界与 `git diff --check` 通过 / done / 2ac85bd；[CI 36662206000](https://github.com/BeforeLanding/mini-DSH/actions/runs/36662206000) 四组 success，同一 SHA 没有 Deploy ECS run。
 - OPS-01b / 以仅修改 TASKS/PROGRESS 的提交验证纯文档 main push / 首次 CI 36662393361 的 Windows Node22 因 merge fixture 子进程 10 秒超时失败，其余 149 项和三组 matrix 通过；失败作业重跑后四组 success，同一 SHA 始终无 Deploy ECS run，远端 `workflow_dispatch` 必填 ref 可见，`git diff --check` 通过 / done / 92507d4。

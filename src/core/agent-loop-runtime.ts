@@ -73,10 +73,12 @@ export class AgentLoopRuntime {
             const maxOutputTokens = control.outputAllowance(estimatedInputTokens)
             const reservedOutputTokens = maxOutputTokens ?? 0
             state.estimatedInputTokens = estimatedInputTokens
-            append(sessionId, 'context/projection', { estimatedInputTokens, reservedOutputTokens, safetyMarginTokens: projection.safetyMarginTokens, removedTaskIds: projection.removedTaskIds })
+            // 请求 id 在投影之前生成：溢出检查在两者之间抛出，此处的顺序让“已准备但未发出”的请求在日志里
+            // 仍带 id 可辨，而消费端无需依赖投影与 model/start 的相邻位置来判定归属。
+            const requestId = randomUUID()
+            append(sessionId, 'context/projection', { requestId, estimatedInputTokens, reservedOutputTokens, safetyMarginTokens: projection.safetyMarginTokens, removedTaskIds: projection.removedTaskIds })
             if ((policy.inputTargetTokens !== undefined && estimatedInputTokens > policy.inputTargetTokens) ||
                 (policy.contextWindowTokens !== undefined && estimatedInputTokens + reservedOutputTokens + projection.safetyMarginTokens > policy.contextWindowTokens)) throw new BudgetStop('context_overflow', state)
-            const requestId = randomUUID()
             append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId, estimatedInputTokens })
             const settle = (usage?: Usage) => {
                 if (!usage) return

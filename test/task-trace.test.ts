@@ -92,6 +92,52 @@ test('request trace links requests, repeated tool ids and evidence within each r
   }
 })
 
+test('request trace links projections by request id, reports run counters and lists never-sent requests', async () => {
+  const sessions = new SessionRuntime(), session = sessions.create()
+  const run = sessions.beginRun(session.id, {}, 'mock/link')
+  const append = <K extends Parameters<SessionRuntime['append']>[1]>(type: K, data: Parameters<SessionRuntime['append']>[2]) => sessions.append(session.id, type, data as never, run)
+  append('context/projection', { requestId: 'q1', estimatedInputTokens: 100, reservedOutputTokens: 20, safetyMarginTokens: 10, removedTaskIds: [] })
+  append('model/start', { taskId: run.taskId, runId: run.runId, requestId: 'q1', estimatedInputTokens: 100 })
+  append('model/usage', { taskId: run.taskId, runId: run.runId, requestId: 'q1', usage: usage() })
+  append('model/end', { requestId: 'q1', complete: true })
+  append('assistant/message', { content: 'first' })
+  append('context/projection', { requestId: 'q2', estimatedInputTokens: 200, reservedOutputTokens: 20, safetyMarginTokens: 20, removedTaskIds: ['old'] })
+  append('model/start', { taskId: run.taskId, runId: run.runId, requestId: 'q2', estimatedInputTokens: 200 })
+  append('model/end', { requestId: 'q2', complete: false })
+  // 投影已落盘但请求尚未发出。run 未结束时这不构成既有事实，读取时机不应改变结论。
+  append('context/projection', { requestId: 'q3', estimatedInputTokens: 999, reservedOutputTokens: 0, safetyMarginTokens: 2048, removedTaskIds: ['old'] })
+  const running = requestTrace(sessions, session.id)
+  assert.deepEqual(running.requests.map(request => request.requestId), ['q1', 'q2'])
+  assert.deepEqual(running.requests.map(request => request.projectionLink), ['requestId', 'requestId'])
+  assert.deepEqual(running.requests.map(request => request.projection?.estimatedInputTokens), [100, 200])
+  assert.deepEqual(running.requests.map(request => request.projection?.removedTaskIds), [[], ['old']])
+  assert.deepEqual(running.unsentProjections, [])
+  // 进行中的 run 只在 run/start 落盘全零计数，报 null 而不是把起始零值当成已发生的用量。
+  assert.equal(running.requests[0].counters, null)
+  sessions.finishRun(run, 'context_overflow')
+  const finished = requestTrace(sessions, session.id)
+  assert.equal(finished.total, 2)
+  assert.equal(finished.requests[1].stopReason, 'context_overflow')
+  assert.deepEqual(Object.keys(finished.requests[1].counters!).sort(),
+    ['activeDurationMs', 'approvalDurationMs', 'inputTokens', 'modelRequests', 'outputTokens', 'toolCalls', 'totalTokens'])
+  assert.deepEqual(finished.unsentProjections.map(projection => [projection.requestId, projection.estimatedInputTokens]), [['q3', 999]])
+  assert.deepEqual(finished.unsentProjections[0].removedTaskIds, ['old'])
+})
+
+test('a projection without a request id still links positionally for logs written before the field existed', async () => {
+  const sessions = new SessionRuntime(), session = sessions.create()
+  const run = sessions.beginRun(session.id, {}, 'mock/legacy')
+  sessions.append(session.id, 'context/projection', { estimatedInputTokens: 50, reservedOutputTokens: 5, safetyMarginTokens: 2, removedTaskIds: ['legacy'] }, run)
+  sessions.append(session.id, 'model/start', { taskId: run.taskId, runId: run.runId, requestId: 'old', estimatedInputTokens: 50 }, run)
+  sessions.append(session.id, 'assistant/message', { content: 'legacy' }, run)
+  sessions.finishRun(run, 'completed')
+  const trace = requestTrace(sessions, session.id)
+  assert.equal(trace.requests[0].projectionLink, 'positional')
+  assert.equal(trace.requests[0].projection?.estimatedInputTokens, 50)
+  assert.deepEqual(trace.requests[0].projection?.removedTaskIds, ['legacy'])
+  assert.deepEqual(trace.unsentProjections, [])
+})
+
 test('request_trace tool enforces session and pagination limits and is released with the files plugin', async () => {
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'request-trace-tool-')), root = new Context()
   try {

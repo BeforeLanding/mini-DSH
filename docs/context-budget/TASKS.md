@@ -8,7 +8,6 @@
 
 | 子步骤 | 内容 | 验收 | 提交边界 |
 | --- | --- | --- | --- |
-| NX-08a | 评测批次上限与事件导出契约 | 导出字段覆盖输入估算、usage、来源、输出预留、裁剪任务、停止原因、主动与审批时间；`context/projection` 与 run/request 的顺序关联在多次投影下可判定 | 1 次：PLAN 参数 + 契约 + 测试 |
 | NX-08b | 评测运行器与整批上限强制 | mock 模型离线跑完全部 12 个任务；人为调小上限可复现整批中止而不是任务失败；单次 run 预算与整批上限的优先关系明确 | 1 次 |
 | NX-08c | 输入估算误差实验 | 中文、英文、代码、schema 四类均有相对误差分布与低估幅度，结论标注 estimator 版本与核验日期 | 1 次 |
 | NX-08d | 筛查跑（12 任务 × 1） | 报告原始分子/分母与失败案例；不可行任务如实标记为不可行且不计入成功率 | 1 次 |
@@ -26,6 +25,7 @@
 
 ## 已完成
 
+- **NX-08a 评测批次上限与事件导出契约 — done**：`context/projection` 带可选 `requestId` 并与随后 `model/start` 同号，未发出的请求因此可辨；`requestTrace` 增 `projectionLink`、`unsentProjections`，并补齐 run 终值 `counters`（含主动与审批时间）；[详细证据](CHANGES.md#nx-08a-评测导出契约与投影归属)。
 - **OPS-01 停止文档提交触发生产部署 — done**：提交 [2ac85bd](https://github.com/BeforeLanding/mini-DSH/commit/2ac85bd1bcd69b85ed0329847cf3791a87472bd4)、纯文档探针 `92507d4`、[CI 36662206000](https://github.com/BeforeLanding/mini-DSH/actions/runs/36662206000)；[详细证据](CHANGES.md#ops-01-停止文档提交触发生产部署)。
 - **OPS-02 CI push 路径过滤 — done**：提交 [263d439](https://github.com/BeforeLanding/mini-DSH/commit/263d439efd064ba27870dd8b2e6d95c11e581430)、[CI 36662938984](https://github.com/BeforeLanding/mini-DSH/actions/runs/36662938984)、纯文档提交 `ef46988` 为 0 个 run/check；[详细证据](CHANGES.md#ops-02-ci-push-路径过滤)。
 - **OPS-03 文档当前状态化 — done**：PROGRESS 归档提交 `ef46988`；TASKS/CHANGES 证据迁移为本步提交；[详细证据](CHANGES.md#ops-03-文档当前状态化)。

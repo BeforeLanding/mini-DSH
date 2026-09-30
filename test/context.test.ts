@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { estimateInput, estimateText } from '../src/core/token-estimator.js'
 import { harness } from './harness.js'
+import { requestTrace } from '../src/core/task-trace.js'
 import { assertToolProtocol, groupHistory, ContextBudgetRuntime } from '../src/core/context-runtime.js'
 test('token estimator covers Unicode, schemas, reasoning and protocol envelope', () => {
   assert.equal(estimateText('abc'), 1)
@@ -34,6 +35,37 @@ test('history groups entire tasks including multiple runs and never splits pendi
   assert.equal(pending.protected, true)
   assert.throws(() => assertToolProtocol(h.sessions.deriveMessages(h.session.id)), /missing tool result/)
 })
+test('projections carry the id of the request they prepared and an overflowed request keeps its id unsent', async () => {
+  const h = harness(async () => ({ content: 'answer' }))
+  await h.agent.send('old-context '.repeat(100))
+  const projections = () => h.session.events.filter(event => event.type === 'context/projection')
+  const starts = () => h.session.events.filter(event => event.type === 'model/start')
+  assert.equal(projections().length, 1)
+  assert.equal(projections()[0].data.requestId, starts()[0].data.requestId)
+  const trace = requestTrace(h.sessions, h.session.id)
+  assert.equal(trace.requests[0].projectionLink, 'requestId')
+  assert.equal(trace.requests[0].projection?.requestId, starts()[0].data.requestId)
+  assert.deepEqual(trace.unsentProjections, [])
+  assert.equal(trace.requests[0].counters?.modelRequests, 1)
+  assert.equal(trace.requests[0].counters?.toolCalls, 0)
+  assert.ok((trace.requests[0].counters?.totalTokens ?? 0) > 0)
+  assert.ok((trace.requests[0].counters?.activeDurationMs ?? -1) >= 0)
+  const sent = starts().length
+  const fullInput = estimateInput({ system: '', tools: [], messages: [...h.sessions.deriveMessages(h.session.id), { role: 'user', content: 'current' }] })
+  await assert.rejects(h.agent.send('current', { budget: {
+    contextWindowTokens: fullInput + 2048 + 100 - 1, maxOutputTokens: 1000, minimumOutputTokens: 1, maxTotalTokens: fullInput + 100,
+  } }), /context_overflow/)
+  assert.equal(starts().length, sent)
+  assert.equal(projections().length, sent + 1)
+  const blocked = projections().at(-1)!
+  assert.equal(typeof blocked.data.requestId, 'string')
+  assert.ok(!starts().some(start => start.data.requestId === blocked.data.requestId))
+  // 该请求属于溢出那次 run 的 task，因此不出现在按当前 task 分页的 requests 中，只能由 unsentProjections 体现。
+  const after = requestTrace(h.sessions, h.session.id)
+  assert.equal(after.total, 0)
+  assert.deepEqual(after.unsentProjections.map(projection => projection.requestId), [blocked.data.requestId])
+})
+
 test('missing usage and interrupted streams record estimated nonzero consumption', async () => {
   const h = harness(async ({ onContent }) => { onContent?.('partial'); throw new Error('network interrupted') })
   await assert.rejects(h.agent.send('mock input'), /interrupted/)
