@@ -3,8 +3,8 @@
 ## NX-15 编程验证记录与交付报告
 - 状态：进行中（2026-09-30）；关联 R-18，依赖 NX-13/NX-14。
 - NX-15a / 需求、契约和提交边界 / git diff --check 通过 / done / 0a6383f（推送受自动审批阻止）。
-- NX-15b / 验证意图、结果、版本查询与 JSONL 校验恢复 / pnpm check（70 文件）、pnpm test（117/117，无跳过）、git diff --check / done / 本步独立提交后报告编号；推送待明确授权。
-- NX-15c / Bash 显式 verification 文件范围、审批后快照和结果记录 / build、真实 Bash 与失败边界回归 / pending / 工具及直接测试独立提交。
+- NX-15b / 验证意图、结果、版本查询与 JSONL 校验恢复 / pnpm check（70 文件）、pnpm test（117/117，无跳过）、git diff --check / done / 4d1ea34；推送待明确授权。
+- NX-15c / Bash 显式 verification 文件范围、审批后快照和结果记录 / pnpm check（71 文件）、Bash/验证记录 7/7、git diff --check / done / 本步独立提交后报告编号；推送待明确授权。
 - NX-15d / task_report、CLI /report 和结束交付报告 / check、CLI/模型闭环及全量测试 / pending / 展示与集成独立提交。
 - NX-15e / 用户文档、实际提交与最终验收 / check、test、fixtures:check、diff 和远端 CI / pending / 独立收尾提交。
 - 每步验收、回填、提交并推送后才进入下一步；验证通过仅覆盖显式文件与命令，不自动证明任务验收。
@@ -47,7 +47,7 @@
 
 ## NX-12 CI 修复：Windows 短路径 junction
 - 状态：本地修复完成，提交后核验远端 CI（2026-09-29）。
-- CI-12a / 统一真实路径解析，内部短路径 junction 不误报越界 / 本地复现、短路径及既有越界回归、pnpm check（54 文件）与 pnpm test（87/87，无跳过）、git diff --check 通过 / done / 0a6383f（推送受自动审批阻止）。
+- CI-12a / 统一真实路径解析，内部短路径 junction 不误报越界 / 本地复现、短路径及既有越界回归、pnpm check（54 文件）与 pnpm test（87/87，无跳过）、git diff --check 通过 / done / 本步独立提交后报告编号。
 - 本步完成并提交后推送，核验 Ubuntu/Windows × Node 22/24 四组 CI；远端未通过前不报告修复已验收。
 
 ## NX-12 coding profile 与仓库上下文
