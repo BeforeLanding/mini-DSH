@@ -1,5 +1,12 @@
 # 任务清单
 
+## NX-05b 将编程任务集扩展到 12 项
+- 关联：M7；基于 NX-05a 的独立临时工作区、参考解与可信验收器；状态：开发中（2026-09-30）。
+- NX-05b0 / 固定九项新增任务及提交边界 / `git diff --check`，逐项列出初始态与参考解验收 / 开发中 / 待提交。
+- NX-05b1～b9 / 依次增加 normalize、dedupe、pagination、query、retry、merge、csv、inventory、summary，每项独立提交其任务、初始代码、公开检查、参考解、独立验收与注册 / 每项 `pnpm fixtures:check` 初始全失败且参考全通过，`node --test dist/test/coding-fixtures.test.js` 和 `git diff --check` / todo / 待提交。
+- NX-05b10 / 12 项总体验收与使用说明 / `pnpm check`、`pnpm test`、`pnpm fixtures:check`、`git diff --check`，记录真实结果与全部提交 / todo / 待提交。
+- 九项逐步覆盖字符串规整、去重、分页、查询编码、异步重试、深层合并、CSV 引号解析、跨文件库存计算与聚合统计。每项工作区仅含任务初始代码与公开检查；参考修改及独立验收留在工作区外。每项验证和提交后再开发下一项，不合并提交。
+
 ## NX-15 编程验证记录与交付报告
 - 状态：done（2026-09-30）；关联 R-18，依赖 NX-13/NX-14；本地及四组合 CI 通过。
 - NX-15a / 需求、契约和提交边界 / git diff --check 通过 / done / 0a6383f；已推送。
