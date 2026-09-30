@@ -92,6 +92,15 @@ test('the configured input target reaches the projection inside the harness', { 
   assert.equal(outcome.counters.modelRequests, 0)
 })
 
+// 失败案例要有原始证据：验收结论连同退出码、验收输出与受保护文件变更一起回传，报告不能只有 passed。
+test('the fixture driver reports the raw acceptance evidence of each run', { timeout: 60_000 }, async () => {
+  const outcome = await runFixtureTask('boundary', scriptedAdapter)
+  assert.equal(outcome.accepted, true)
+  assert.equal(outcome.acceptance?.exitCode, 0)
+  assert.equal(outcome.acceptance?.output.trim(), 'acceptance passed: boundary')
+  assert.deepEqual(outcome.acceptance?.protectedFilesChanged, [])
+})
+
 // 适配器未声明窗口容量时必须明确失败，而不是以非空断言把缺失的 run 状态伪装成一次运行结论。
 test('a policy with a context target fails clearly when the adapter declares no window', { timeout: 60_000 }, async () => {
   const outcome = await runFixtureTask('boundary', fixture => {
@@ -101,6 +110,36 @@ test('a policy with a context target fails clearly when the adapter declares no 
   assert.equal(outcome.status, 'error')
   assert.match(outcome.error ?? '', /context capacity must be explicitly configured/)
   assert.deepEqual(outcome.counters, counters(0, 0))
+})
+
+// 成功率口径：分子只数通过验收的 run；不可行任务与基础设施失败都从分母排除并各自单列，不能静默丢弃。
+test('the success rate excludes infeasible tasks and infrastructure failures, keeping both countable', async () => {
+  // 任务 0/1 通过、任务 2 未通过但可解、任务 3 基础设施失败、任务 4 不可行。
+  const passed = new Set([0, 1, 4])
+  const report = await runPhase('screening', tasks(5), phaseCaps.screening, async task => ({
+    ...done(), accepted: passed.has(task.id), ...(task.id === 3 ? { error: 'connection reset' } : {}),
+  }), record => (record.task.id === 4 ? { infeasible: true } : undefined))
+  const summary = summarize(report)
+  assert.equal(summary.accepted, 3)
+  assert.equal(summary.rejected, 2)
+  assert.equal(summary.infeasible, 1)
+  assert.equal(summary.errored, 1)
+  assert.deepEqual(summary.rate, { numerator: 2, denominator: 3, excludedInfeasible: 1, excludedErrored: 1 })
+})
+
+// 不可行是任务属性，不是验收结论的改写：即使某次 run 通过验收，被判定不可行也不进分子。
+test('an infeasible run never enters the numerator even if its acceptance passed', async () => {
+  const report = await runPhase('screening', tasks(2), phaseCaps.screening, async () => done(),
+    record => (record.task.id === 0 ? { infeasible: true } : undefined))
+  const summary = summarize(report)
+  assert.equal(summary.accepted, 2)
+  assert.deepEqual(summary.rate, { numerator: 1, denominator: 1, excludedInfeasible: 1, excludedErrored: 0 })
+})
+
+// 未结束的 run（accepted 为 null）既不在分子也不在分母之外：它仍占分母，且不计为通过。
+test('a run with no verdict stays in the denominator without counting as a pass', async () => {
+  const report = await runPhase('screening', tasks(2), phaseCaps.screening, async task => ({ ...done(), accepted: task.id === 0 ? null : true }))
+  assert.deepEqual(summarize(report).rate, { numerator: 1, denominator: 2, excludedInfeasible: 0, excludedErrored: 0 })
 })
 
 test('a failing execution is recorded on its own run and does not abort the phase', async () => {

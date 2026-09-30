@@ -24,10 +24,22 @@ export const capKeys = ['runs', 'requests', 'tokens'] as const
 // 单次 run 预算与整批上限的优先关系：单次预算由 Agent 循环在 run 内强制，触顶只停止该次 run 并给出停止
 // 原因，该 run 仍计入阶段；整批上限由本运行器在每次 run 之前与之后检查阶段累计值，触顶中止整个阶段并
 // 报告。因此一个已经开始的 run 不会被整批上限中途终止，触顶时的超出量以单次 run 的用量为上界。
+// 独立验收的原始结论：passed 是唯一判定，其余字段是失败案例所需的证据（退出码、验收输出、被改动的
+// 受保护文件）。报告必须能解释某次失败是模型没做出来，还是验收环境本身出了问题。
+export interface AcceptanceDetail {
+  passed: boolean
+  exitCode: number | null
+  output: string
+  protectedFilesChanged: string[]
+}
 export interface RunOutcome {
   status: StopReason | 'running'
   counters: Counters
   accepted: boolean | null
+  acceptance?: AcceptanceDetail
+  // 任务按规格不可解（fixture 或 Harness 缺陷，而非模型能力）。只影响成功率分母的口径，必须由人来判定
+  // 并在报告中给出理由；没有证据就不设该字段。
+  infeasible?: boolean
   error?: string
 }
 export interface RunRecord<T> extends RunOutcome { task: T }
@@ -49,7 +61,9 @@ function overCap(totals: PhaseTotals, caps: BatchCaps, crossed: boolean): PhaseA
 }
 
 // 阶段内串行执行：整批上限是累计量，并发会让触顶时的已执行集合不确定。
-export async function runPhase<T>(phase: PhaseName, planned: readonly T[], caps: BatchCaps, execute: (task: T) => Promise<RunOutcome>): Promise<PhaseReport<T>> {
+// classify 用于在 run 结束后判定“任务按规格不可解”；它只能追加这一标记，不能改写已观测的验收结论。
+export async function runPhase<T>(phase: PhaseName, planned: readonly T[], caps: BatchCaps, execute: (task: T) => Promise<RunOutcome>,
+  classify?: (record: RunRecord<T>) => { infeasible?: boolean } | undefined): Promise<PhaseReport<T>> {
   const executed: RunRecord<T>[] = []
   const totals = { runs: 0, requests: 0, tokens: 0 }
   let aborted: PhaseAbort | null = null
@@ -64,7 +78,9 @@ export async function runPhase<T>(phase: PhaseName, planned: readonly T[], caps:
       // 单次执行失败记在该 run 上并继续，不中止阶段：中止只由整批上限触发，否则会掩盖其余任务的证据。
       outcome = { status: 'error', counters: { modelRequests: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, activeDurationMs: 0, approvalDurationMs: 0 }, accepted: null, error: error instanceof Error ? error.message : String(error) }
     }
-    executed.push({ ...outcome, task })
+    const record: RunRecord<T> = { ...outcome, task }
+    if (classify?.(record)?.infeasible) record.infeasible = true
+    executed.push(record)
     totals.runs += 1
     totals.requests += outcome.counters.modelRequests
     totals.tokens += outcome.counters.totalTokens
@@ -75,18 +91,27 @@ export async function runPhase<T>(phase: PhaseName, planned: readonly T[], caps:
 }
 
 // 阶段中止不是任务失败：已执行的 run 保留各自的真实状态与验收结论，中止只说明剩余 run 未执行。
+// accepted/rejected 是原始计数；rate 是成功率口径——分子只数通过验收的 run，分母排除不可行任务与
+// 基础设施失败（两者都单列，不能静默丢掉，否则“少跑了几个”会被读成“模型失败率下降了”）。
 export function summarize<T>(report: PhaseReport<T>) {
+  const executed = report.executed
+  const infeasible = executed.filter(run => run.infeasible).length
+  const errored = executed.filter(run => !run.infeasible && run.error !== undefined).length
+  const rateable = executed.filter(run => !run.infeasible && run.error === undefined)
+  const numerator = rateable.filter(run => run.accepted === true).length
   return {
     phase: report.phase,
     planned: report.planned,
-    executed: report.executed.length,
-    notExecuted: report.planned - report.executed.length,
+    executed: executed.length,
+    notExecuted: report.planned - executed.length,
     aborted: report.aborted,
     totals: report.totals,
-    completed: report.executed.filter(run => run.status === 'completed').length,
-    stopped: report.executed.filter(run => run.status !== 'completed' && !run.error).length,
-    errored: report.executed.filter(run => run.error !== undefined).length,
-    accepted: report.executed.filter(run => run.accepted === true).length,
-    rejected: report.executed.filter(run => run.accepted === false).length,
+    completed: executed.filter(run => run.status === 'completed').length,
+    stopped: executed.filter(run => run.status !== 'completed' && !run.error).length,
+    errored: executed.filter(run => run.error !== undefined).length,
+    accepted: executed.filter(run => run.accepted === true).length,
+    rejected: executed.filter(run => run.accepted === false).length,
+    infeasible,
+    rate: { numerator, denominator: rateable.length, excludedInfeasible: infeasible, excludedErrored: errored },
   }
 }

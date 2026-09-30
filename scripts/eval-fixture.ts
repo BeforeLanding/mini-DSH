@@ -2,7 +2,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { createFixture } from './coding-fixtures.js'
 import type { FixtureId } from './coding-fixtures.js'
 import { evalPolicy } from './eval-runner.js'
-import type { RunOutcome } from './eval-runner.js'
+import type { AcceptanceDetail, RunOutcome } from './eval-runner.js'
 import { BudgetStop, emptyCounters } from '../src/core/budget.js'
 import type { BudgetPolicy } from '../src/core/budget.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
@@ -45,10 +45,13 @@ export async function runFixtureTask(
     }
     const state = root.sessions.latestRun(session.id)
     const acceptance = await fixture.evaluate()
+    const detail: AcceptanceDetail = {
+      passed: acceptance.passed, exitCode: acceptance.exitCode, output: acceptance.output, protectedFilesChanged: acceptance.protectedFilesChanged,
+    }
     // 预算校验或装配在 beginRun 之前失败时不会留下 run 状态；此时按基础设施失败报告，不用非空断言把
     // 缺失状态伪装成一次真实的运行结论。
-    if (!state) return { status: 'error', counters: emptyCounters(), accepted: acceptance.passed, error: error ?? 'no run was recorded' }
-    return { status: state.status, counters: state.counters, accepted: acceptance.passed, ...(error === undefined ? {} : { error }) }
+    if (!state) return { status: 'error', counters: emptyCounters(), accepted: acceptance.passed, acceptance: detail, error: error ?? 'no run was recorded' }
+    return { status: state.status, counters: state.counters, accepted: acceptance.passed, acceptance: detail, ...(error === undefined ? {} : { error }) }
   } finally {
     await root.fiber.dispose()
     await fixture.close()
