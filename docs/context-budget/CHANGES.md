@@ -13,6 +13,9 @@
 - OPS-03a / 将 500 行 PROGRESS 原文移动到 `docs/history/PROGRESS-2026-09-28--2026-09-30.md`，根文件保留当前状态、阻塞、下一步 31 行 / 18 个外部 URL、90 个 SHA 集合一致，7 个相对链接随目录修正后均可达，`git diff --check` 通过 / done / ef46988。
 - OPS-03b / TASKS 改为一行状态清单，原 336 行详细行为、验证和证据迁入本文件并保留原 CHANGES 实现总结 / TASKS 降至 39 行，CHANGES 为 430 行；任务 ID、提交 SHA、CI URL、非标题证据行、35 个清单锚点与相对链接检查通过，`git diff --check` 通过 / done / 本步提交后回填。
 
+## OPS-04 修订提交粒度规则
+- OPS-04a / 以“可独立 revert 且存在可观察行为差异”为提交边界；同一能力的重复扩展按行为类别分组，不按 fixture 机械拆分；保留三项禁止合并的反模式，并让任务、证据和 PROGRESS 更新职责与新结构一致 / AGENTS 不再含“每完成一个小内容”“多个独立 fixture”或“每提交同步 PROGRESS”，明确保留“同属一个任务”“最后一起跑测试”“减少提交次数”，相关段落一致性检索及 `git diff --check` 通过 / done / 本步提交后回填。
+
 ## NX-06 请求 trace 与编程结果报告
 - 关联：M7、R-19；依赖 NX-14/NX-15；状态：done（2026-09-30，本地及四组合 CI 通过）。
 - NX-06a / 固定 trace、报告身份/用量/停止语义及隐私、分页边界 / REQUIREMENTS、PLAN、TASKS、PROGRESS 一致，`git diff --check` / done / c5ebe81。
