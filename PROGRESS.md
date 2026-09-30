@@ -1,4 +1,7 @@
 # 开发进度
+### NX-15 远端验收完成（2026-09-30）
+用户明确授权推送至 GitHub 并继续核验 CI；0a6383f～87360a1 七个独立提交已推送 origin/main。精确 SHA 87360a1e48d241e1593ea772b274d3c76d87bf0c 的 [CI 36653379987](https://github.com/BeforeLanding/mini-DSH/actions/runs/36653379987) Ubuntu/Windows × Node22/24 四组均 success；实际日志每组 check72/test123/123、fail0/skipped0。先前待授权状态为历史阻塞，现已解除。
+本步仅同步 README、需求/计划/路线、TASKS 与真实远端证据，git diff --check 通过；不重复已通过的本地功能测试。独立提交并推送后核验最新 main 的 CI；不为追加自身验收记录无限生成提交。未调用付费模型、未手动触发部署。
 ### NX-15 本地交付与最终验收（2026-09-30）
 已完成显式 Bash 验证与文件版本关联、持久 start/result、失败/unknown/过期查询、文件工具改动的当前检查覆盖、task_report 和 CLI /report/结束报告。run completed、检查成功与任务验收明确分开；acceptance 不自动断言，未声明依赖与外部竞态不作完整保证。README、需求/决策、路线与 fixture 历史说明已同步。
 实际小步提交：a 0a6383f → b 4d1ea34 → c 6744816 → d1 67acc56 → d2 a79b495 → c2 4849b16；e 本步独立收尾文档提交后报告编号。各步先验收后提交，未改写历史；推送被自动审批拒绝（未明确授权 GitHub 目标与源码外传风险），已完成全部不受影响的本地工作，远端 CI pending，待用户明确授权。

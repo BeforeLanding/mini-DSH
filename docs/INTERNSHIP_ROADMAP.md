@@ -200,7 +200,7 @@ NX-01～NX-03、NX-05a 与 NX-12 已完成，以下其余功能均为 **todo**�
 - `NX-07`：有界代码读取、搜索与大结果回读；优先改善代码定位和测试日志读取。
 - `NX-13`（done）：可靠编辑、冲突检测、持久任务变更清单与分页 diff；107/107 本地回归和四组合 CI 通过；需要时再增加 patch。
 - `NX-14`（done）：结构化前台命令结果、分别采集 stdout/stderr 与持久引用；保留审批、cwd 闸门、取消和进程树清理；本地 115/115 与 Windows/Ubuntu × Node22/24 CI 通过，实际分步提交及验证见 TASKS/PROGRESS。
-- `NX-15`（本地实现，远端验收待授权）：显式 Bash 检查关联文件版本，持久验证 start/result，task_report 与 CLI /report 分页交付，区分 run 结束、命令结果、当前版本覆盖与任务验收；独立提交及真实检查见 TASKS/PROGRESS。
+- `NX-15`（done，本地 123/123 与四组合 CI 通过）：显式 Bash 检查关联文件版本，持久验证 start/result，task_report 与 CLI /report 分页交付，区分 run 结束、命令结果、当前版本覆盖与任务验收；独立提交及真实检查见 TASKS/PROGRESS。
 
 依赖顺序：NX-05a → NX-12/NX-07 → NX-13/NX-14 → NX-15。每项用现有 node:test 与 Cordis 集成独立验收，不要求一次改完 Loop。运行状态和验证事件契约变化先同步需求/设计。
 

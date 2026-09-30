@@ -1,17 +1,19 @@
 # 任务清单
 
 ## NX-15 编程验证记录与交付报告
-- 状态：本地开发与验收完成（2026-09-30）；关联 R-18，依赖 NX-13/NX-14；推送与远端 CI 待明确授权，未声称跨平台通过。
-- NX-15a / 需求、契约和提交边界 / git diff --check 通过 / done / 0a6383f（推送受自动审批阻止）。
-- NX-15b / 验证意图、结果、版本查询与 JSONL 校验恢复 / pnpm check（70 文件）、pnpm test（117/117，无跳过）、git diff --check / done / 4d1ea34；推送待明确授权。
-- NX-15c / Bash 显式 verification 文件范围、审批后快照和结果记录 / pnpm check（71 文件）、Bash/验证记录 7/7、git diff --check / done / 6744816；推送待明确授权。
-- NX-15d1 / task_report 文件覆盖与验证分页 / pnpm check（72 文件）、报告/验证/变更 7/7、git diff --check / done / 67acc56；推送待明确授权。
-- NX-15d2 / CLI /report 和结束交付报告、coding 提示 / pnpm check（72 文件）、pnpm test（122/122，无跳过）、git diff --check / done / a79b495；推送待明确授权。
-- NX-15c2 / 意图落盘等待后的 cwd 复核 / pnpm check（72 文件）、真实目录换址与 Bash 6/6、git diff --check / done / 4849b16，先于 e；推送待明确授权。
-- NX-15e / 用户文档、实际提交与本地最终验收 / 正常用户权限 pnpm check（72 文件）、pnpm test（123/123，fail0/skipped0）、pnpm fixtures:check（初始 0/3、参考 3/3）、git diff --check / 本地 done，远端 CI pending / 独立收尾提交后报告编号。
-- 实际提交顺序 a 0a6383f → b 4d1ea34 → c 6744816 → d1 67acc56 → d2 a79b495 → c2 4849b16 → e；逐步验收与提交，无 squash/amend/rebase，无付费 API。
-- 推送的自动审批因未明确授权远端目标与潜在敏感源码外传风险拒绝；遵循拒绝，未用绕过方式推送。继续完成本地安全工作；获明确授权后再推送 origin（https://github.com/BeforeLanding/mini-DSH.git）并核验四组合 CI。
-- 验证通过仅覆盖显式文件与命令，不自动证明任务验收。Windows/Node24 为本地证据；不套用 NX-14 的历史 CI。
+- 状态：done（2026-09-30）；关联 R-18，依赖 NX-13/NX-14；本地及四组合 CI 通过。
+- NX-15a / 需求、契约和提交边界 / git diff --check 通过 / done / 0a6383f；已推送。
+- NX-15b / 验证意图、结果、版本查询与 JSONL 校验恢复 / pnpm check（70 文件）、pnpm test（117/117，无跳过）、git diff --check / done / 4d1ea34；已推送。
+- NX-15c / Bash 显式 verification 文件范围、审批后快照和结果记录 / pnpm check（71 文件）、Bash/验证记录 7/7、git diff --check / done / 6744816；已推送。
+- NX-15d1 / task_report 文件覆盖与验证分页 / pnpm check（72 文件）、报告/验证/变更 7/7、git diff --check / done / 67acc56；已推送。
+- NX-15d2 / CLI /report 和结束交付报告、coding 提示 / pnpm check（72 文件）、pnpm test（122/122，无跳过）、git diff --check / done / a79b495；已推送。
+- NX-15c2 / 意图落盘等待后的 cwd 复核 / pnpm check（72 文件）、真实目录换址与 Bash 6/6、git diff --check / done / 4849b16，先于 e；已推送。
+- NX-15e / 用户文档、实际提交与本地最终验收 / 正常用户权限 pnpm check（72 文件）、pnpm test（123/123，fail0/skipped0）、pnpm fixtures:check（初始 0/3、参考 3/3）、git diff --check / done / 87360a1；已推送，CI 36653379987 四组合 success。
+- 实际提交顺序 a 0a6383f → b 4d1ea34 → c 6744816 → d1 67acc56 → d2 a79b495 → c2 4849b16 → e 87360a1；逐步验收与提交，无 squash/amend/rebase，无付费 API。
+- 先前推送遭自动审批拒绝；用户随后明确授权推送至 GitHub 并核验 CI，七个提交已推送 origin。87360a1 的 [CI 36653379987](https://github.com/BeforeLanding/mini-DSH/actions/runs/36653379987) Ubuntu/Windows × Node22/24 四组合 success，每组 check72/test123/123、fail0/skipped0。
+- 验证通过仅覆盖显式文件与命令，不自动证明任务验收。本地 Windows/Node24 与本轮精确提交 CI 均有实际证据，不套用 NX-14 的历史 CI。
+
+- NX-15f / 明确授权后的远端验收回填 / 精确 SHA 与四组作业/日志核验、git diff --check / done / 独立文档提交后核验最新 main CI，不继续循环生成验收提交。
 
 ## CD-02 修复服务器 GitHub 下载失败
 - 状态：传包修复已实测成功；原 19f4ec9 在 git clone 超时，修复提交 c9f452c 已实际发布，最终验收记录提交后核验最新 main。
