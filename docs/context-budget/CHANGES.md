@@ -14,6 +14,7 @@
   - **明确不采用**「按网络工具清单收窄」（只在 curl/wget/git/npm/pip… 的操作数位置检查 URL）：清单天然不完整，未列入的工具会从「拒绝」变成「允许」，属于真实的出网拦截削弱。开工前由用户在两个选项中选择能力判据。
 - **未放宽的部分（测试逐条固定）**：`..` 逃逸、系统路径（`/etc`、`/dev`、`/proc`、`/sys`、`/root`、`/boot`）、工作区外相对与绝对路径、归一化后仍越界的双斜杠路径（`//etc/passwd`、`//home/user/.ssh/id_rsa`）、UNC（`//server/share/secret`）、`curl`／`wget` 的 URL 与裸主机名操作数、`git clone <url>`、以及 `echo "…" | xargs curl`、`echo "…" | cat > f` 这类把惰性输出接进管道的形状。`..` 规则（整串正则）与系统路径检查的代码完全未改。
 - 提交：`5322291`（分词与路径形状）、`c4a02ae`（URL 能力判据）。两者各自独立验证通过，可分别 revert。
+- 复跑入口：`node docs/context-budget/nx17-gate-probes.mjs`（`pnpm build` 之后）。它按 NX-17 前、修复中、仍拒绝、NX-18／NX-19 缺口五组打印每条的裁决与理由，并对「约定行偏离目标」和「缺口行仍未达标」分开计数——与 `review-probes.mjs` 同类，是诊断脚本而不是回归断言或 CI 门禁，契约仍由 `test/core.test.ts` 固定。当前输出：24 条约定行全部 `ok`，6 条缺口行 `open`，无契约漂移。
 - 验证：`pnpm check`（82 文件）、`pnpm test`（173/173，新增 1 条引号内联脚本用例；无失败/跳过）、`pnpm fixtures:check`（初始 0/12、参考 12/12，退出码 0）、`pnpm eval:offline`（12 accepted，退出码 0）在本机通过。闸门不调用模型，本步全程未产生付费请求。
 - **本步未覆盖、已记录为独立待办**（都是改前发现的相邻缺陷，不属于本次「放宽」范围，故不塞进这两个提交）：
   - `..` 族误判（**NX-18**）：`..` 规则是整串正则，会命中引号内的惰性文本——`echo "see ../docs for details"`、`grep -n ".." src/index.ts`、`git log --grep "../ fixes"` 全部被判 `.. path escape is blocked`。这条规则正是用户「放宽不得削弱 `..`」条款点名保护的对象，因此本步没有动它；收紧需要把它改成 token 级的路径操作数判定。
