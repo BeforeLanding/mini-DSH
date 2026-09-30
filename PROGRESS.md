@@ -1,4 +1,8 @@
 # 开发进度
+### NX-05b7 csv fixture（2026-09-30）
+
+新增 csv 编程任务，初始态失败、参考解通过；模拟模型经真实文件/Bash 工具完成。正常用户权限 `pnpm fixtures:check`：初始 0/10、参考 10/10；Cordis 回归 22/22。
+
 ### NX-05b6 merge fixture（2026-09-30）
 
 新增 merge 编程任务，初始态失败、参考解通过；模拟模型经真实文件/Bash 工具完成。正常用户权限 `pnpm fixtures:check`：初始 0/9、参考 9/9；Cordis 回归 20/20。
