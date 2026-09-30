@@ -1,4 +1,7 @@
 # 开发进度
+### NX-14c（2026-09-30）
+Bash 接入结构化核心，ToolDefinition.output.isError 可将非零/超时/取消标为工具错误而保留 value。cwd 默认工作区，允许现存子目录，审批展示真实目录并复核路径/链接；拒批和非法 cwd 不启动命令。迁移原 fixture 的文本错误断言为实际 exitCode/stdout；新增 Cordis 路径、链接换址、拒批和释放测试。
+正常用户权限等价命令 build、syntax（68 文件）、全量 111/111（无失败/跳过）与 git diff --check 通过。b 提交 8cec028 已推送。大结果暂沿用整体投影，下一步独立增加逐流引用与元信息保留。
 ### NX-14b（2026-09-30）
 新增独立 command-runner，保留实际退出/信号、两流日志、共享采集额度、单调时长、超时/取消状态与进程树清理。真实 Node 子进程覆盖两流、退出 7、启动失败、Unicode/共享截断和空输出。Windows ENOENT close 返回负内部错误码，已归一化 spawn_error.exitCode=null，避免误认为命令退出码。
 固定 pnpm 11.22.0 与 Cordis 正常权限导入核验通过，原基线 107/107 通过；沙箱无法解析依赖且 pnpm 引导挂起，后续使用 AGENTS 允许的等价 Node 命令并在正常用户权限执行。build、syntax（67 文件）、核心 2/2 与 diff --check 通过；尚未接入 Bash。

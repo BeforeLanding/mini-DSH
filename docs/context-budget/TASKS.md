@@ -18,7 +18,7 @@
 ## NX-14 结构化命令执行结果
 - NX-14a：需求、决策与提交边界；git diff --check；done；本步提交后报告编号。
 - NX-14b：独立前台执行核心、两流有界采集与执行状态；正常用户权限 node scripts/build.js、node scripts/check-syntax.js（67 文件）、node --test dist/test/command-runner.test.js（2/2）、git diff --check；done；本步提交后报告编号。
-- NX-14c：Bash 结构化结果、错误分类与 cwd 审批/闸门；真实 Cordis 成功/失败/路径/拒批测试、全量回归；pending；独立提交。
+- NX-14c：Bash 结构化结果、错误分类与 cwd 审批/闸门；正常用户权限 node scripts/build.js、node scripts/check-syntax.js（68 文件）、node --test dist/test/*.test.js（111/111）、git diff --check；done；本步提交后报告编号。
 - NX-14d：逐流大日志引用与元信息保留；模拟模型回读、重启隔离、存储失败；pending；独立提交。
 - NX-14e：取消/超时日志、进程树和事件恢复验收、README/路线收尾；针对边界测试、check/test/fixtures、实际提交核对；pending；独立提交，CI 按实际证据记录。
 

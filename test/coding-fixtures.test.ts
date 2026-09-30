@@ -60,7 +60,11 @@ for (const id of fixtureIds) {
           const result = messages.at(-1)!
           assert.equal(result.role, 'tool')
           assert.equal(result.tool_call_id, previous.id)
-          if (previous.name === 'bash') assert.match(result.content ?? '', previous.id === 'after' ? /public checks passed/ : /bash exited with code 1/)
+          if (previous.name === 'bash') {
+            const command = JSON.parse(result.content ?? '{}')
+            assert.equal(command.exitCode, previous.id === 'after' ? 0 : 1)
+            if (previous.id === 'after') assert.match(command.stdout.text, /public checks passed/)
+          }
           else assert.doesNotMatch(result.content ?? '', /ToolError:/)
         }
         return step < commands.length ? { toolCalls: [commands[step++]] } : { content: 'scripted fixture finished' }

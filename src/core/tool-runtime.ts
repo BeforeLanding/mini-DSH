@@ -86,7 +86,7 @@ export class ToolRuntime {
                 ? tool.output.render(args, value)
                 : [{ type: 'text', text: toText(value) }]
 
-            result = { value, content, isError: false }
+            result = { value, content, isError: tool.output?.isError?.(value) ?? false }
             if (typeof tool.finalizeContent === 'function') {
                 const finalized = await tool.finalizeContent(execution, result)
                 if (finalized !== undefined) result = { ...result, content: finalized }

@@ -42,7 +42,7 @@ export interface ToolResult { value: unknown; content: ContentBlock[]; isError: 
 export interface ToolDefinition {
   name: string; description?: string; parameters?: Arguments
   execute(args: Arguments, execution: Execution): unknown | Promise<unknown>
-  output?: { render(args: Arguments, value: unknown): ContentBlock[] }
+  output?: { render(args: Arguments, value: unknown): ContentBlock[]; isError?(value: unknown): boolean }
   finalizeContent?(execution: Execution, result: ToolResult): ContentBlock[] | undefined | Promise<ContentBlock[] | undefined>
 }
 export interface PromptContext { agent?: Agent; sessionId?: string; step?: number }
