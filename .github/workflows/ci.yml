@@ -3,6 +3,12 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "PROGRESS.md"
+      - "README.md"
+      - "AGENTS.md"
+      - "docs/history/**"
   pull_request:
   workflow_dispatch:
 

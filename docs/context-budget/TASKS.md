@@ -4,6 +4,9 @@
 - OPS-01a / Deploy ECS 改为 `vMAJOR.MINOR.PATCH` 标签或手动 ref 触发，目标须属于 main 历史 / 正常用户权限 `pnpm check`（74 文件）、`pnpm test`（150/150，无失败/跳过）、`pnpm fixtures:check`（初始 0/12、参考 12/12）、YAML 结构、三个内嵌 Bash 块、bundle 失败边界与 `git diff --check` 通过 / done / 2ac85bd；[CI 36662206000](https://github.com/BeforeLanding/mini-DSH/actions/runs/36662206000) 四组 success，同一 SHA 没有 Deploy ECS run。
 - OPS-01b / 以仅修改 TASKS/PROGRESS 的提交验证纯文档 main push / CI 成功且 Deploy ECS 不运行，`git diff --check` / in_progress / 本步提交后回填并远端核验。
 
+## OPS-02 CI push 路径过滤
+- OPS-02a / main push 忽略 docs、PROGRESS、README、AGENTS 与 history，PR 仍全量触发 / YAML 结构与触发配置、matrix、concurrency 检查通过；正常用户权限 `pnpm check`（74 文件）、`pnpm test`（150/150，无失败/跳过）、`pnpm fixtures:check`（初始 0/12、参考 12/12）及 `git diff --check` 通过 / done / 本步提交后回填；纯文档推送不产生 CI 的远端确认由后续 T3 文档提交验证。
+
 ## NX-06 请求 trace 与编程结果报告
 - 关联：M7、R-19；依赖 NX-14/NX-15；状态：done（2026-09-30，本地及四组合 CI 通过）。
 - NX-06a / 固定 trace、报告身份/用量/停止语义及隐私、分页边界 / REQUIREMENTS、PLAN、TASKS、PROGRESS 一致，`git diff --check` / done / c5ebe81。
