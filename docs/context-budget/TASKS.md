@@ -1,6 +1,8 @@
 # 任务清单
 
 ## NX-05b 将编程任务集扩展到 12 项
+- CI-05b-a / 核实 CD 工作流及近期 CI 结论，记录 Windows Node24 的 CLI 输出等待超时证据与修复边界 / 对照 workflow、运行结论和失败日志，`git diff --check` / 开发中 / 待提交。
+- CI-05b-b / 只放宽实测慢流程的 CLI 输出等待与测试上限，保留其他等待上限 / 本地 CLI 回归、全量 check/test、四组合 CI，`git diff --check` / todo / 待提交。
 - 关联：M7；基于 NX-05a 的独立临时工作区、参考解与可信验收器；状态：四类各三项本地及四组合 CI 验收完成（2026-09-30）。上一轮仅完成数量及短任务验收；先前 CI 只证明当时的代码通过。
 - NX-05b12a / 修正状态，固定 12 项四类各三的映射、逐步验收与提交边界 / `git diff --check` / done / 73ebb4d。
 - NX-05b12b / merge 改为双模块接口任务，与 interface、inventory 构成多文件三项 / 初始 0/12、参考 12/12，遗漏任一模块仍失败，Cordis 工具流程 27/27，`pnpm check` 72 文件 / done / 86e5f9b。

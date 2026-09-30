@@ -1,4 +1,8 @@
 # 开发进度
+### CI-05b 运行记录核对（2026-09-30）
+
+当前仓库含 `Deploy ECS` 工作流，CI push/main 成功后由 `workflow_run` 触发；最新 SHA 36cff60 的 Deploy ECS 36657984836 为 success，日志有 `Deployment verified`。最近 50 次 CI 中 success40、cancelled7、failure3；多次连续推送触发 `cancel-in-progress`，取消不等于测试失败。当前 NX-05b 补齐阶段有一次真正 failure：CI 36657375472 的 Windows Node24 作业在 CLI 集成测试等待 `[Check] passed version=current` 的 5 秒上限到期，其他三组通过；后续同代码全量 CI 成功。下一小步仅修复这个可复现的测试时序脆弱点。
+
 ### NX-05b 四类各三远端验收完成（2026-09-30）
 
 精确 SHA 53e5aba222d0c58a446509e53ce4da8c57e5623d 的 [CI 36657576782](https://github.com/BeforeLanding/mini-DSH/actions/runs/36657576782) Windows/Ubuntu × Node22/24 四组均 success。该提交已包含四类各三 fixture、保护的大诊断日志、真实搜索/有界读取与预算停止/续跑回归；本地 check 72 文件、test 147/147、初始 0/12、参考 12/12。本步仅回填远端证据并检查 diff；提交后核验最新 main CI，不循环追加自身记录。
