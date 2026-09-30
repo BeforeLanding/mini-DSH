@@ -215,6 +215,10 @@ test('dedupe task survives budget stop and continues without repeating completed
   await runFixtureAcrossBudgetStop('dedupe')
 })
 
+test('retry task resumes after budget stop without replaying completed tools', { timeout: 30_000 }, async () => {
+  await runFixtureAcrossBudgetStop('retry')
+})
+
 test('acceptance bounds hung code and output, rejects invalid limits and reports infrastructure failure', async () => {
   const fixture = await createFixture('boundary')
   try {
