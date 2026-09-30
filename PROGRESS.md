@@ -1,4 +1,9 @@
 # 开发进度
+### NX-14 完成与验收（2026-09-30）
+已交付结构化前台 Bash：command/cwd、退出码/信号、单调时长、timeout/cancel 状态、两流有界日志和逐流持久引用；保留审批、路径闸门和进程树清理。失败/截断/存储失败可解释，JSONL 恢复不重放副作用；run 先停止等待时仍保守为 unknown。未增加 NX-15 验证记录、后台服务或交互终端。
+实际小步提交均已独立验收推送：a 33520cf → b 8cec028 → c 3f05f34 → d 254008f → e1 556f66a → e2 557f27f；e3 本步仅文档/验收记录，提交后报告编号。没有合并或改写历史。
+正常用户权限 pnpm check（68 文件）、pnpm test（115/115，fail0/skipped0）、pnpm fixtures:check（初始 0/3、参考 3/3）及 git diff --check 全部通过。最终功能提交 557f27f 的 [CI 36651228195](https://github.com/BeforeLanding/mini-DSH/actions/runs/36651228195) Windows/Ubuntu × Node22/24 四组均 success。新增 8 条测试覆盖核心输出/失败/Unicode、cwd 审批与链接、逐流引用失败、取消/超时/进程树、JSONL 模型恢复；全部使用模拟模型，无付费 API 请求。
+e3 同步 README 参数/回读/限制、TASKS 实际提交、路线和需求状态。应用路径策略不承诺 OS 隔离；主动脱离进程树的程序和外部换址竞态不在严格保证范围。下一主线 NX-15。
 ### NX-14e2（2026-09-30）
 真实 Cordis 模拟模型执行退出 7 与挂起超时命令，模型收到两流引用及实际 timeout 信息；事件 isError=true，而模型结束后的 run 仍 completed，交付文本明确检查失败。JSONL 重启逐字恢复两个结果，回读原 stderr，已执行的追加文件只保留一次。
 正常权限 build、syntax（68 文件）、tool-results 7/7、git diff --check 通过。e1 提交 556f66a 已推送；下一步只同步使用说明、核验全量回归和最终 CI。

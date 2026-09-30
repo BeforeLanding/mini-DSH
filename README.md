@@ -47,7 +47,7 @@ pnpm check
 pnpm test
 ```
 
-当前 107 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读和可靠编辑/任务变更测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
+当前 115 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读、可靠编辑/任务变更和结构化命令测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
 
 NX-05a 提供三个可重复的 [编程任务 fixture](test/fixtures/coding/README.md)：边界修复、功能扩展和跨文件接口修改。运行 `pnpm fixtures:check` 核验初始失败/参考通过基线；`pnpm test` 还覆盖模拟模型经真实文件/Bash 工具完成失败→修改→重跑的流程。每次使用新临时工作区，独立验收器保留在工作区外；模拟结果不代表真实模型编程成功率。
 
@@ -93,10 +93,20 @@ CLI 默认每段模型请求64次、工具128次、主动10分钟、累计2M tok
 
 不遵守AbortSignal的第三方工具可能在停止等待后继续执行，其结果标unknown。恢复是事件重建，不能恢复文件系统快照。测试使用模拟模型，不调用付费API。
 
+## 结构化前台命令（NX-14）
+
+`bash({command:"pnpm test",cwd:"apps/web"})` 在工作区内现存目录执行，cwd 默认 `.`；审批展示真实目录，审批后复查路径和软链。返回 JSON：type=command、version=1、command、cwd、status、exitCode、signal、durationMs、timedOut/cancelled，以及分别采集的 stdout/stderr。status 为 exited/spawn_error/timed_out/cancelled；启动失败没有退出码，拒批和路径拒绝不会启动进程。
+
+非零退出、启动失败、超时和取消都标为工具错误并保留已采集日志。默认 timeoutMs=30000、maxCaptureBytes=8 MiB（两流合计），可由 Bash 插件配置；计时不含审批。截断后继续排空输出，UTF-8 不完整尾部舍弃，非法字节替换解码。首版用于有界前台命令，后台服务与交互终端仍待后续实现。
+
+有 session 和 tool-results 插件时，每流超过 maxPreviewBytes/2 的日志保存独立引用；stdout/stderr.text 是预览，bytes 是采集字节数，truncated 表示采集截断，previewTruncated 表示预览截断，ref/storedBytes/storageTruncated 表示持久日志位置与存储截断。用 `read_tool_result({ref:result.stderr.ref,offset:0})` 回读原始 stderr。退出码、状态等元信息始终保留，存储失败提供 storageError 和有界预览并标工具错误；不会把日志不可用描述成检查成功。
+
+取消会终止进程树，直接工具调用在 close 后返回 cancelled；若 run 的取消/主动超时已先停止等待，事件仍按既有协议记 unknown，重启不自动重跑。取消 signal 不被绕过以保存新日志。进程组/taskkill 清理不等于操作系统隔离，主动脱离进程树的程序和外部路径竞态仍是应用策略限制。命令退出 0 与 run completed 均不代表任务验收；NX-15 的独立验证记录尚未实现。
+
 ## 有界读取、搜索与日志回读（NX-07）
 
 模型可调用 read_file({path:"src/index.ts",startLine:1,maxLines:100}) 获取带行号的片段，按 nextLine 继续。默认最多 200 行、正文 32 KiB、扫描 8 MiB；长行、非法 UTF-8 和二进制明确失败，扫描上限需通过插件配置调整。glob/grep 返回 matches、nextOffset、eof、reason 和 skipped；例如 grep({path:"src",query:"register",pattern:"**/*.ts",maxResults:50})，后续传 offset=nextOffset。分页会重新扫描，文件变化时不是快照；达到条目/深度/扫描上限时应缩小 path/pattern。默认忽略 .git/node_modules/dist/.mini-dsh，includeIgnored=true 可显式包含；软链不递归跟随。
 
-CLI 默认装配 tool-results 插件。超过 16 KiB 的工具结果（含失败日志）只把预览与 UUID ref 送入模型和 JSONL；用 read_tool_result({ref,offset:0,maxBytes:16384}) 回读，再传 nextOffset，直到 eof。完整采集内容存于工作区 .mini-dsh/tool-results，按 session 校验；重启后须保留同 session 和结果目录。回读本身不会生成新引用，无 session 的底层 ToolRuntime 调用保持原行为。Bash 采集默认最多 8 MiB，超过时明确标记；结果存储也限制 8 MiB，captureTruncated=true 表示未保留无限输出。
+CLI 默认装配 tool-results 插件。普通工具结果超过 16 KiB 时只把预览与 UUID ref 送入模型和 JSONL；Bash 按上述逐流规则保存引用。用 read_tool_result({ref,offset:0,maxBytes:16384}) 回读，再传 nextOffset，直到 eof。完整采集内容存于工作区 .mini-dsh/tool-results，按 session 校验；重启后须保留同 session 和结果目录。回读本身不会生成新引用，无 session 的底层 ToolRuntime 调用保持原行为。Bash 采集默认最多 8 MiB，超过时明确标记；结果存储也限制 8 MiB，captureTruncated=true 表示存储未保留完整采集内容；Bash 原始采集截断另见 stream.truncated。
 
 files 插件可配置 maxLines/maxOutputBytes/maxScanBytes/maxResults/maxEntries/maxDepth/maxFileBytes；tool-results 可配置 directory/maxPreviewBytes/maxCaptureBytes/maxStoreBytes/maxFiles/maxReadBytes，Bash 可配置 maxCaptureBytes。默认搜索上限为 200 匹配、10000 条目、64 层、单文件 1 MiB、累计 8 MiB。存储默认总额 64 MiB、1000 文件，按单实例串行检查额度；多进程共享目录没有全局配额锁。存储满、损坏或缺失会明确失败，不自动删除历史。正文/匹配预算不含有界元数据和 JSON 包装，包装仍计入请求预算。结果目录已加入 .gitignore；应用层路径检查不提供操作系统隔离。

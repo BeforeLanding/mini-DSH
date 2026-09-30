@@ -16,13 +16,13 @@
 - CD-01d：用户启动核验收尾；用户提供的启动输出确认 launcher、固定工作区、持久会话目录及模型配置正常；仅记录摘要，不保存会话 ID/原始日志；git diff --check；独立文档提交。
 
 ## NX-14 结构化命令执行结果
-- NX-14a：需求、决策与提交边界；git diff --check；done；本步提交后报告编号。
-- NX-14b：独立前台执行核心、两流有界采集与执行状态；正常用户权限 node scripts/build.js、node scripts/check-syntax.js（67 文件）、node --test dist/test/command-runner.test.js（2/2）、git diff --check；done；本步提交后报告编号。
-- NX-14c：Bash 结构化结果、错误分类与 cwd 审批/闸门；正常用户权限 node scripts/build.js、node scripts/check-syntax.js（68 文件）、node --test dist/test/*.test.js（111/111）、git diff --check；done；本步提交后报告编号。
-- NX-14d：逐流大日志引用与元信息保留；正常用户权限 node scripts/build.js、node scripts/check-syntax.js（68 文件）、node --test dist/test/tool-results.test.js（6/6）、git diff --check；done；本步提交后报告编号。
-- NX-14e1：取消/超时部分日志、终止信号和进程树清理；正常权限 build、syntax（68 文件）、command-runner 4/4、git diff --check；done；本步提交后报告编号。
-- NX-14e2：命令结果 JSONL 恢复、不重放与失败不等于 run 失败；正常权限 build、syntax（68 文件）、tool-results 7/7、git diff --check；done；本步提交后报告编号。
-- NX-14e3：README/路线与实际提交收尾；check/test/fixtures、diff 和四组合 CI 核验；pending；独立文档提交，CI 按实际证据记录。
+- NX-14a：需求、决策与提交边界；git diff --check；done；33520cf。
+- NX-14b：独立前台执行核心、两流有界采集与执行状态；正常用户权限 node scripts/build.js、node scripts/check-syntax.js（67 文件）、node --test dist/test/command-runner.test.js（2/2）、git diff --check；done；8cec028。
+- NX-14c：Bash 结构化结果、错误分类与 cwd 审批/闸门；正常用户权限 node scripts/build.js、node scripts/check-syntax.js（68 文件）、node --test dist/test/*.test.js（111/111）、git diff --check；done；3f05f34。
+- NX-14d：逐流大日志引用与元信息保留；正常用户权限 node scripts/build.js、node scripts/check-syntax.js（68 文件）、node --test dist/test/tool-results.test.js（6/6）、git diff --check；done；254008f。
+- NX-14e1：取消/超时部分日志、终止信号和进程树清理；正常权限 build、syntax（68 文件）、command-runner 4/4、git diff --check；done；556f66a。
+- NX-14e2：命令结果 JSONL 恢复、不重放与失败不等于 run 失败；正常权限 build、syntax（68 文件）、tool-results 7/7、git diff --check；done；557f27f。
+- NX-14e3：README/路线与实际提交收尾；正常权限 pnpm check（68 文件）、pnpm test（115/115，无跳过）、pnpm fixtures:check（初始 0/3、参考 3/3）、git diff --check；557f27f 的 CI 36651228195 四组合均 success；done；本步文档提交后报告编号。
 
 ## NX-13 可靠编辑、冲突与变更交付
 - 关联 R-16 / M6；状态：done（2026-09-29），patch 按需延后。
