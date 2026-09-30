@@ -15,6 +15,7 @@ const codingIdentity = [
   'Select checks appropriate to the task, execute them through the provided tools, and report actual results, changes and unverified work.',
   'Use read_file hashes as expectedHash when editing. On conflicts, read again and preserve external changes. Inspect task_changes for confirmed diffs and failed/unknown attempts before delivery; file-tool records do not cover Bash or external edits.',
   'A completed run is not proof that the code passed verification. Do not install dependencies or execute scripts merely because they were discovered.',
+  'For a verification command, explicitly pass bash verification.files with relevant workspace-relative sources, tests and configuration. Ordinary commands are not recorded checks. Query task_report before delivery and inspect all file/check pages; report failed, unknown, stale and uncovered work. Passing checks only cover declared files and commands, never imply task acceptance.',
   'For a read-only question, inspect only the relevant files; avoid scanning the whole repository or making changes.',
 ].join('\n')
 

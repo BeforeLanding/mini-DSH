@@ -11,6 +11,7 @@ import { JsonlStore, isRecord } from '../core/event-store.js'
 import { positiveLimit } from '../core/bounded-text.js'
 import { utf8Prefix } from '../core/tool-result-store.js'
 import type { taskChanges } from '../core/task-changes.js'
+import type { taskReport } from '../core/task-verification.js'
 export const name = 'mini-cli'
 export const inject = ['sessions', 'agents', 'agentLoop', 'tools', 'systemPrompt', 'llm', 'sandbox']
 export interface CliConfig {
@@ -61,7 +62,7 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
     const escape = (chunk: Buffer | string) => { const bytes = Buffer.from(chunk); if (bytes.length === 1 && bytes[0] === 0x1b) controller?.abort() }
     input.on('data', escape)
     print('mini-dsh — a local agent Harness')
-    print('Commands: /tools /models /model /history /prompt /reset /continue /budget [JSON] /changes [fileOffset] /diff [fileOffset] [byteOffset] /exit')
+    print('Commands: /tools /models /model /history /prompt /reset /continue /budget [JSON] /changes [fileOffset] /diff [fileOffset] [byteOffset] /report [fileOffset] [verificationOffset] [byteOffset] /exit')
     print(`Sandbox workspace: ${workspace}`)
     print(`Session: ${session.id}${store ? ` (${store.directory})` : ' (memory)'}`)
     print('Writes and bash execution ask [Y/n] first. Press Esc to cancel, including during approval.')
@@ -112,6 +113,27 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
       if (byteOffset + preview.length < bytes.length) print(`[diff truncated; continue: /diff ${fileOffset} ${byteOffset + preview.length}]`)
       else if (!report.eof) print(`[next file: /diff ${report.nextOffset}]`)
     }
+    async function showReport(fileOffset = 0, verificationOffset = 0, byteOffset = 0, automatic = false) {
+      const tool = ctx.tools.get('task_report')
+      if (!tool) { if (!automatic) print('[Report unavailable] task_report is not installed'); return }
+      const properties = tool.parameters?.properties
+      const parameter = isRecord(properties) ? properties.maxFiles : undefined
+      const maxFiles = isRecord(parameter) && typeof parameter.maximum === 'number' ? Math.min(20, parameter.maximum) : 20
+      const report = await tool.execute({ fileOffset, verificationOffset, maxFiles, maxRecords: 20 }, { sessionId: session.id, signal: new AbortController().signal }) as Awaited<ReturnType<typeof taskReport>>
+      const lines = [`[Report] task=${report.taskId ?? 'none'} run=${report.runStatus ?? 'none'}; task acceptance not asserted`,
+        ...report.files.map(file => `[File] ${file.status} ${JSON.stringify(file.path)} verification=${file.verification}${file.externalChange ? ' externalChange=true' : ''}${file.currentError ? ` unavailable=${JSON.stringify(file.currentError)}` : ''}`),
+        ...report.checks.map(check => `[Check] ${check.status} version=${check.freshness} id=${check.verificationId} command=${JSON.stringify(check.command)} cwd=${JSON.stringify(check.cwd)} exit=${check.commandResult?.exitCode ?? 'unknown'} files=${JSON.stringify(check.files)}`),
+        ...(report.verificationTotal === 0 ? ['[Verification] no explicit checks recorded; code is unverified'] : []),
+        ...(report.unverifiedFiles.length ? [`[Unverified files on this page] ${report.unverifiedFiles.map(file => JSON.stringify(file)).join(', ')}`] : []),
+        '[Scope] file-tool edits and declared checks only; inspect every page before delivery',
+        ...(!report.filesEof ? [`[more files: /report ${report.fileNextOffset} ${verificationOffset}]`] : []),
+        ...(!report.verificationsEof ? [`[more checks: /report ${fileOffset} ${report.verificationNextOffset}]`] : [])]
+      const bytes = Buffer.from(lines.join('\n'))
+      if (byteOffset > bytes.length || (byteOffset < bytes.length && (bytes[byteOffset] & 0xc0) === 0x80)) throw new Error('byteOffset must be within the report at a UTF-8 boundary')
+      const preview = utf8Prefix(bytes.subarray(byteOffset), maxChangeOutputBytes)
+      print(preview.toString('utf8'))
+      if (byteOffset + preview.length < bytes.length) print(`[report truncated; continue: /report ${fileOffset} ${verificationOffset} ${byteOffset + preview.length}]`)
+    }
     async function runInput(text?: string) {
       controller = new AbortController()
       let segment = '', streamed = false
@@ -139,6 +161,7 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
           if (state.terminalCommit?.status === 'uncertain') print('[Persistence uncertain] Close and restore this session to verify its terminal record before continuing.')
           print(`[Task] runs=${task.runIds.length}, tokens=${task.counters.totalTokens}, model=${task.counters.modelRequests}, tools=${task.counters.toolCalls}`)
           try { await showChanges() } catch (error) { print(`[Changes unavailable] ${error instanceof Error ? error.message : String(error)}`) }
+          try { await showReport(0, 0, 0, true) } catch (error) { print(`[Report unavailable] ${error instanceof Error ? error.message : String(error)}`) }
         }
       }
     }
@@ -166,6 +189,7 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
         case '/continue': await runInput(); break
         case '/changes': if (parts.length > 1) throw new Error('usage: /changes [fileOffset]'); await showChanges(false, offset(parts[0])); break
         case '/diff': if (parts.length > 2) throw new Error('usage: /diff [fileOffset] [byteOffset]'); await showChanges(true, offset(parts[0]), offset(parts[1])); break
+        case '/report': if (parts.length > 3) throw new Error('usage: /report [fileOffset] [verificationOffset] [byteOffset]'); await showReport(offset(parts[0]), offset(parts[1]), offset(parts[2])); break
         case '/history': print(JSON.stringify(ctx.sessions.get(session.id).events, null, 2)); break
         case '/prompt': print(await ctx.systemPrompt.assemble({ agent, sessionId: session.id })); break
         case '/reset': ctx.sessions.clear(session.id); await persistConfig(); print(`Session reset: ${session.id}`); break

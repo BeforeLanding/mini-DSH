@@ -16,6 +16,7 @@ import * as cli from '../src/plugins/cli.js'
 import { JsonlStore } from '../src/core/event-store.js'
 import * as files from '../src/tools/files.js'
 import { fingerprint } from '../src/core/file-edit.js'
+import * as bash from '../src/tools/bash.js'
 async function boot(workspace: string, directory: string, resumeSessionId?: string, autoApprove = true, maxChangeOutputBytes?: number) {
   const root = new Context(), input = new PassThrough(), output = new PassThrough()
   let text = '', models = 0, executions = 0
@@ -36,6 +37,48 @@ async function boot(workspace: string, directory: string, resumeSessionId?: stri
   }
   return { root, input, output, waitFor, text: () => text, models: () => models, executions: () => executions }
 }
+
+test('CLI and scripted model deliver versioned verification, restore reports without replay and expose byte pagination', { timeout: 15000 }, async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'cli-report-')), directory = path.join(temp, 'logs')
+  const app = await boot(temp, directory)
+  let restored: Awaited<ReturnType<typeof boot>> | undefined
+  try {
+    await app.root.plugin(files); await app.root.plugin(bash)
+    const calls = [
+      { id: 'create', name: 'write_file', arguments: { path: 'a', content: '中文😀', expectedHash: 'missing' } },
+      { id: 'fail', name: 'bash', arguments: { command: 'exit 7', verification: { files: ['a'] } } },
+      { id: 'pass', name: 'bash', arguments: { command: 'printf ok', verification: { files: ['a'] } } },
+      { id: 'report', name: 'task_report', arguments: {} },
+    ]
+    let step = 0
+    app.root.llm.register('delivery', { models: ['test'], capabilities: { test: { contextWindowTokens: 1_000_000 } }, chat: async ({ messages = [] }) => {
+      if (step === calls.length) {
+        const report = JSON.parse(messages.at(-1)!.content!)
+        assert.equal(report.files[0].verification, 'covered')
+        assert.deepEqual(report.checks.map((check: { status: string }) => check.status), ['failed', 'passed'])
+        return { content: '交付：检查失败与成功均保留；未断言任务验收。' }
+      }
+      return { toolCalls: [calls[step++]] }
+    } })
+    app.input.write('/model delivery/test\n/budget {"maxModelRequests":10}\n模拟验证任务\n')
+    await app.waitFor('[Check] passed version=current')
+    assert.match(app.text(), /\[Run completed\]/); assert.match(app.text(), /\[Check\] failed version=current/)
+    assert.match(app.text(), /task acceptance not asserted/)
+    const id = app.root.sessions.list()[0].id
+    app.input.write('/model mock/test\n'); await app.waitFor('Model: mock/test')
+    app.input.write('/exit\n'); await app.root.fiber.dispose()
+    restored = await boot(temp, directory, id, true, 256); await restored.root.plugin(files)
+    restored.input.write('/report\n')
+    await restored.waitFor('report truncated; continue: /report')
+    const hint = /report truncated; continue: \/report (\d+) (\d+) (\d+)/.exec(restored.text())!
+    restored.input.write(`/report ${hint[1]} ${hint[2]} ${hint[3]}\n/report -1\n/report 0 0 999999\n`)
+    await restored.waitFor('byteOffset must be within the report')
+    assert.equal(restored.models(), 0); assert.equal(await fs.readFile(path.join(temp, 'a'), 'utf8'), '中文😀')
+    assert.match(restored.text(), /offset must be a nonnegative safe integer/)
+    restored.input.write('/reset\n/report\n')
+    await restored.waitFor('task=none run=none')
+  } finally { await app.root.fiber.dispose(); await restored?.root.fiber.dispose(); await fs.rm(temp, { recursive: true, force: true }) }
+})
 test('CLI reports budgets, continues, persists settings and resumes/reset without replay', { timeout: 15000 }, async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-cli-')), workspace = path.join(temp, 'workspace'), directory = path.join(temp, 'sessions')
   await fs.mkdir(workspace)
