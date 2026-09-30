@@ -1,5 +1,12 @@
 # 需求与验收
 
+### R-19 请求追踪与编程结果报告（NX-06，开发中）
+对当前 task 的已确认事件生成只读、可分页的请求 trace。每条记录关联 session/task/run/request，模型与请求序号、请求前上下文投影、估算及实际/回退 usage、完成状态、后续回答或工具调用，以及工具结果状态。工具调用只展示稳定标识和结果分类；文件变更通过 changeId、验证命令通过 verificationId 关联原始持久事件，不在 trace 中复制提示词、推理、工具参数、正文或命令日志。
+
+编程结果报告在 R-18 文件版本与命令证据之上补齐 session/task/current run、全部续跑段、模型、每段状态/停止原因、每段及任务累计用量。running 与已结束状态分开；completed 仍只表示 run 正常结束，acceptance 仍为 not_asserted。查询只读取当前 reset epoch 的 confirmedEvents，不写新事件、不重放模型/工具；分页不是固定快照，后续事件可能改变总数与页内容。
+
+验收：纯回答、单/批工具、失败/skipped/unknown、重复 toolCallId、缺失 model/end 或 usage、预算停止后续跑、JSONL 恢复、reset 隔离、请求分页与参数上界；模型工具和 CLI 均能查看 trace，报告可核对文件 hash、verificationId、命令退出状态、provider/estimated usage 与停止原因。输出有界，原始 `/history` 继续作为完整审计入口。
+
 ### R-18 编程验证与交付（NX-15，已实现并通过本地/四组合 CI）
 通过 Bash 显式声明 verification.files（工作区相对路径）启动检查，记录 command/cwd、关联 task/run/tool call、检查前文件 SHA-256/真实位置及结构化命令结果。意图先确认落盘再执行；无结果为 unknown，恢复不重放。普通 Bash 与模型回答不自动成为验证证据。每次检查独立保留，不以最新成功掩盖其他失败。
 

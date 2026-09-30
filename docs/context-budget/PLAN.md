@@ -3,6 +3,12 @@
 更新：2026-09-30。M0 至 M4 的功能已实现，NX-15 已实现并通过本地/四组合 CI；证据见 TASKS/PROGRESS。需求见 [REQUIREMENTS](REQUIREMENTS.md)，执行状态见 [TASKS](TASKS.md) 和 [PROGRESS](../../PROGRESS.md)。本文件是技术决策和默认参数的唯一维护位置；初值可配置，已测量模拟 JSONL 追加成本；未经付费模型的真实任务质量实验。
 
 ## 当前实现
+## NX-06 决策
+- 请求 trace 从当前 reset epoch 的 confirmedEvents 派生，不新增生产事件版本。以 model/start 为分页单位，用 requestId 关联 model/end/model/usage；用相邻 model/start 形成有界事件区间，关联该请求产生的 assistant/message 或 assistant/tool_calls、tool/start/result、file/change 和 verification/start。重复 toolCallId 按当前请求区间隔离，不能跨请求误配。
+- trace 返回 sessionId/taskId、offset/nextOffset/eof/total；每条记录返回 runId、模型、run 状态/停止原因、上下文投影、usage、完成性、响应种类及工具结果摘要。文件与检查只返回 changeId/verificationId 引用；不复制用户提示词、模型正文/推理、工具参数、工具结果正文或命令日志。完整原始事件仍由 /history 提供。
+- task_report 沿用 NX-15 的文件和验证双分页，在顶层增加 sessionId/currentRunId、task counters 与按 run 排列的模型、前序 run、状态/停止原因、counters、usage 和起止时间。数据以已确认 run/finish 为准；未结束段明确 running，不能用内存中的未确认状态冒充持久事实。
+- 模型使用 request_trace 工具；CLI 使用 /trace [requestOffset] [byteOffset]，正文继续受 maxChangeOutputBytes 限制并按 UTF-8 字节续读。查询只读，不消耗模型/工具预算，不自动写报告文件。分页会重新读取当前事件，不承诺快照一致性。
+
 ## NX-15 决策
 - Bash 的可选 verification={files:[...]} 显式选择验证；文件路径相对工作区，默认最多 100 个、每个最多 1 MiB（可配置），复用 NX-13 有界 UTF-8 快照、missing 与 SHA-256 和真实路径。只保证声明范围，依赖/目录新增及检查中改后恢复等未观察变化不能自动证明。
 - 新增 verification/start 与 verification/result，保持事件 version=1 与已有 run 终态。start 包含 verificationId、command/cwd、可选 toolCallId、files 的 path/hash/location；落盘后才能启动命令。result 包含原始有界 CommandResult 和检查后 files；检查后快照错误记录为 unavailable，不能把零退出误报通过。取消或崩溃可以留下 unknown，不重放。

@@ -1,4 +1,8 @@
 # 开发进度
+### NX-06a 请求追踪与结果报告契约（2026-09-30）
+
+开始 NX-06，新增 R-19，明确 requestId→run→session/task、上下文投影、usage、响应/工具结果及 file change/verification 证据 ID 的关联；trace 不复制提示词、推理、工具参数、结果正文或日志。task_report 将在既有文件版本/命令证据上增加全部 run、累计用量和停止原因。拆为 a 契约、b 核心 trace、c 模型工具、d 报告扩展、e CLI/文档五个独立提交边界；当前仅文档，功能尚未实现。
+
 ### CI-05b 修复远端验收（2026-09-30）
 
 精确 SHA 83e6396552e3457134316d7d0317ad8732ae4147 的 [CI 36658529725](https://github.com/BeforeLanding/mini-DSH/actions/runs/36658529725) Ubuntu/Windows × Node22/24 四组 success；[Deploy ECS 36658656903](https://github.com/BeforeLanding/mini-DSH/actions/runs/36658656903) success，日志明确 `Deployment verified; shared configuration, workspace and sessions retained.`。这证明修复后测试与自动部署链路均完成。此次仅回填真实运行记录，文档提交后核验最新 main CI，不无限追加验收记录。
