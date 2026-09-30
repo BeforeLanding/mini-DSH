@@ -1,7 +1,15 @@
 # 任务清单
 
 ## NX-05b 将编程任务集扩展到 12 项
-- 关联：M7；基于 NX-05a 的独立临时工作区、参考解与可信验收器；状态：12 项本地验收与四组合 CI 均通过（2026-09-30）。
+- 关联：M7；基于 NX-05a 的独立临时工作区、参考解与可信验收器；状态：场景分布补齐中（2026-09-30）。上一轮仅完成数量及短任务验收，原路线的四类各三项尚未达成；先前 CI 只证明当时的代码通过。
+- NX-05b12a / 修正状态，固定 12 项四类各三的映射、逐步验收与提交边界 / `git diff --check` / 开发中 / 待提交。
+- NX-05b12b / merge 改为双模块接口任务，与 interface、inventory 构成多文件三项 / 初始失败、参考通过、遗漏任一模块仍失败，Cordis 工具流程 / todo / 待提交。
+- NX-05b12c / 工作区外验收保护非源码诊断文件，提供大日志定位测试支撑 / 篡改诊断文件被拒、既有回归通过 / todo / 待提交。
+- NX-05b12d～f / pagination、query、csv 分别加入超过默认读取页的大诊断日志及真实 grep/续读定位流程 / 每项日志线索在首 200 行之外，初始失败、参考通过，工具搜索/读取/编辑/重测通过 / todo / 各自独立提交。
+- NX-05b12g / 预算停止与显式续跑的通用测试支撑 / 真实 Cordis 两段运行、历史协议与副作用计数 / todo / 待提交。
+- NX-05b12h～j / dedupe、retry、summary 分别实施长任务约束与续跑任务及独立回归 / 每项预算停止→显式继续→独立验收，检查未重复已执行副作用 / todo / 各自独立提交。
+- NX-05b12k / 四类各三总体验收、文档及提交证据 / `pnpm check`、`pnpm test`、`pnpm fixtures:check`、四组合 CI、`git diff --check` / todo / 待提交。
+- 分类以主要验证场景计：单文件 boundary/options/normalize；多文件 interface/inventory/merge；大文件或日志定位 pagination/query/csv；长任务约束与续跑 dedupe/retry/summary。长任务类须有真实分段运行证据；模拟模型只证明 Harness 流程，不代表自主编程成功率。
 - NX-05b0 / 固定九项新增任务及提交边界 / `git diff --check` / done / 56b3c8e。
 - NX-05b1 / normalize 任务、初始代码、公开检查、参考解、独立验收与注册 / `pnpm fixtures:check` 初始 0/4、参考 4/4；Cordis 流程回归 10/10；`git diff --check` / done / a11f510。
 - NX-05b2 / dedupe 同范围 / `pnpm fixtures:check` 初始 0/5、参考 5/5；Cordis 流程回归 12/12；`git diff --check` / done / 4761987。
