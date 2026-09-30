@@ -1,7 +1,8 @@
 # 任务清单
 
 ## OPS-01 停止文档提交触发生产部署
-- OPS-01a / Deploy ECS 改为 `vMAJOR.MINOR.PATCH` 标签或手动 ref 触发，目标须属于 main 历史 / 正常用户权限 `pnpm check`（74 文件）、`pnpm test`（150/150，无失败/跳过）、`pnpm fixtures:check`（初始 0/12、参考 12/12）、YAML 结构、三个内嵌 Bash 块、bundle 失败边界与 `git diff --check` 通过 / done / 本步提交后回填；纯文档推送远端探针在工作流提交生效后执行。
+- OPS-01a / Deploy ECS 改为 `vMAJOR.MINOR.PATCH` 标签或手动 ref 触发，目标须属于 main 历史 / 正常用户权限 `pnpm check`（74 文件）、`pnpm test`（150/150，无失败/跳过）、`pnpm fixtures:check`（初始 0/12、参考 12/12）、YAML 结构、三个内嵌 Bash 块、bundle 失败边界与 `git diff --check` 通过 / done / 2ac85bd；[CI 36662206000](https://github.com/BeforeLanding/mini-DSH/actions/runs/36662206000) 四组 success，同一 SHA 没有 Deploy ECS run。
+- OPS-01b / 以仅修改 TASKS/PROGRESS 的提交验证纯文档 main push / CI 成功且 Deploy ECS 不运行，`git diff --check` / in_progress / 本步提交后回填并远端核验。
 
 ## NX-06 请求 trace 与编程结果报告
 - 关联：M7、R-19；依赖 NX-14/NX-15；状态：done（2026-09-30，本地及四组合 CI 通过）。
