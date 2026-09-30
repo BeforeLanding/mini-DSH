@@ -17,11 +17,22 @@ import * as sandbox from '../src/plugins/sandbox.js'
 import * as files from '../src/tools/files.js'
 import * as bash from '../src/tools/bash.js'
 
+const locationCases: Record<string, { token: string; source: string }> = {
+  pagination: { token: 'NX05B-PAGE-LOCATE', source: 'src/page.mjs' },
+}
+
 for (const id of fixtureIds) {
   test(`coding fixture ${id}: initial failure, reference acceptance and fresh workspace`, async () => {
     const fixture = await createFixture(id), fresh = await createFixture(id)
     try {
       assert.notEqual(fixture.workspace, fresh.workspace)
+      const location = locationCases[id]
+      if (location) {
+        const log = await fs.readFile(path.join(fixture.workspace, 'diagnostics/trace.log'), 'utf8')
+        assert.ok(Buffer.byteLength(log) > 32 * 1024)
+        assert.ok(log.split('\n').findIndex(line => line.includes(location.token)) >= 200)
+        assert.match(log, new RegExp(`${location.token}: ${location.source.replaceAll('.', '\\.')}`))
+      }
       const initial = await fixture.evaluate()
       assert.equal(initial.passed, false)
       assert.equal(initial.exitCode, 1, initial.output)
@@ -41,7 +52,12 @@ for (const id of fixtureIds) {
       for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
       await root.plugin(sandbox, { workspace: fixture.workspace, autoApprove: true })
       await root.plugin(files); await root.plugin(bash)
-      const commands: ToolCall[] = fixture.edits.map((edit, index) => ({ id: `read-${index}`, name: 'read_file', arguments: { path: edit.path } }))
+      const location = locationCases[id]
+      const commands: ToolCall[] = location ? [
+        { id: 'locate', name: 'grep', arguments: { path: 'diagnostics', query: location.token } },
+        { id: 'inspect-log', name: 'read_file', arguments: { path: 'diagnostics/trace.log', startLine: 319, maxLines: 3 } },
+      ] : []
+      commands.push(...fixture.edits.map((edit, index) => ({ id: `read-${index}`, name: 'read_file', arguments: { path: edit.path } })))
       commands.push({ id: 'before', name: 'bash', arguments: { command: 'node check.mjs' } })
       if (id === 'options') {
         const edit = fixture.edits[0]
@@ -65,7 +81,10 @@ for (const id of fixtureIds) {
             assert.equal(command.exitCode, previous.id === 'after' ? 0 : 1)
             if (previous.id === 'after') assert.match(command.stdout.text, /public checks passed/)
           }
-          else assert.doesNotMatch(result.content ?? '', /ToolError:/)
+          else {
+            assert.doesNotMatch(result.content ?? '', /ToolError:/)
+            if (previous.id === 'locate' || previous.id === 'inspect-log') assert.match(result.content ?? '', new RegExp(location!.token))
+          }
         }
         return step < commands.length ? { toolCalls: [commands[step++]] } : { content: 'scripted fixture finished' }
       } })
