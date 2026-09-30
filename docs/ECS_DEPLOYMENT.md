@@ -12,13 +12,13 @@
 
 ## 发布流程
 
-向 GitHub 仓库 `main` 推送提交后，打开仓库的 Actions 页面：先查看 **CI**，再查看 **Deploy ECS**。四组 Ubuntu/Windows、Node22/24 的 CI 全部成功后才发布；失败或取消时跳过部署。手动 **ECS SSH Check** 只检查连接和环境，不发布版本。
+普通 `main` 推送不会发布生产版本。候选提交的四组 Ubuntu/Windows、Node22/24 CI 全部成功后，由用户创建并推送 `vMAJOR.MINOR.PATCH` 标签触发 **Deploy ECS**。工作流也保留手动入口，要求明确填写 tag、分支或提交 SHA；目标提交必须可从 `main` 到达。手动 **ECS SSH Check** 只检查连接和环境，不发布版本。
 
-Deploy ECS 在 GitHub runner 下载 CI 的 `head_sha`，打包为完整 Git bundle，通过严格主机密钥校验的 SSH/SCP 传送 bundle 和该版本的 scripts/deploy-ecs-bundle.sh。服务器从本地 bundle 导入精确提交，创建独立版本目录、安装锁定依赖、执行 `pnpm check` 和 `pnpm test`。runner 在构建前后通过 GitHub API 检查 main，最新提交仍一致才原子切换 `current`。工作流串行执行；服务器脚本另使用 `flock` 锁。服务器发布代码时无需连接 github.com；安装依赖仍需要访问包注册表。
+Deploy ECS 在 GitHub runner 检出标签或手动指定的精确提交，确认提交属于 `main` 历史后打包为完整 Git bundle，通过严格主机密钥校验的 SSH/SCP 传送 bundle 和该版本的 scripts/deploy-ecs-bundle.sh。服务器从本地 bundle 导入精确提交，创建独立版本目录、安装锁定依赖、执行 `pnpm check` 和 `pnpm test`，成功后才原子切换 `current`。工作流串行执行；服务器脚本另使用 `flock` 锁。服务器发布代码时无需连接 github.com；安装依赖仍需要访问包注册表。
 
 bundle 保留 Git 提交与 HEAD，可离线校验；依据见 [Git 官方 bundle 文档](https://git-scm.com/docs/git-bundle)。临时传包目录位于 `~/apps/mini-DSH/incoming`，传输文件在运行结束时清理，旧版本目录保留。
 
-触发机制使用 GitHub 官方的 [workflow_run](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run)；工作流限定同仓库、main、push 和成功结论。没有从 PR 直接发布的入口。
+触发机制使用 GitHub 官方的 [tag push](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#push) 与 [workflow_dispatch](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch)。标签名在工作流内再次校验为 `vMAJOR.MINOR.PATCH`；普通分支推送和 PR 不触发生产部署。完整的标签与回滚规范将在版本锚点步骤补齐。
 
 服务器需要保留以下布局：
 
@@ -79,4 +79,4 @@ printf '已回滚到：%s\n' "$previous"
 ROLLBACK
 ```
 
-重新运行 `~/bin/mini-dsh` 使用回滚版本。后续 main 的成功 CI 仍会触发自动发布；回滚后需要同时修复造成故障的提交。
+重新运行 `~/bin/mini-dsh` 使用回滚版本。后续普通 main CI 不会覆盖回滚结果；只有新的版本标签或人工触发才会再次发布。回滚后仍需要修复造成故障的提交。

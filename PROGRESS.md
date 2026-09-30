@@ -1,4 +1,7 @@
 # 开发进度
+### OPS-01 标签部署迁移（2026-09-30）
+Deploy ECS 已从每次成功的 main CI 自动发布改为 `vMAJOR.MINOR.PATCH` 标签发布，并保留需要明确 ref 的 `workflow_dispatch`。只读诊断确认 `workflow_run` 载荷没有可靠的变更文件列表；保留路径守卫需要 checkout 后比较或额外 API，而标签同时提供发布和回滚锚点。目标提交仍须属于 main 历史，服务器端 check/test、严格 SSH 校验、串行部署和原子切换保持。YAML 结构、三个内嵌 Bash 块及 bundle 失败边界通过；正常用户权限 `pnpm check`（74 文件）、`pnpm test`（150/150，无失败/跳过）、`pnpm fixtures:check`（初始 0/12、参考 12/12）和 `git diff --check` 通过。首次沙箱内 pnpm 引导因签名源不可达失败，正常权限重跑通过；尚未推送或触发生产部署。
+
 ### NX-06 跨平台验收完成（2026-09-30）
 
 最终功能提交 08158b9cf1e11bf2fdddeab093946d7729198445 的 [CI 36661121345](https://github.com/BeforeLanding/mini-DSH/actions/runs/36661121345) 已完成且 success；Windows/Ubuntu × Node22/24 四组均通过类型检查、构建/产物语法和 150/150 测试。NX-06a～e 提交依次为 c5ebe81、b39e82a、513de75、04b4b57、08158b9，均已推送。此次仅回填真实 CI 证据；文档提交后不循环追加其自身 CI 记录。
