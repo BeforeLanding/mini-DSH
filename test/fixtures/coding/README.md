@@ -57,4 +57,4 @@ Windows / Node v24.16.0 / pnpm 11.22.0：`pnpm fixtures:check` 初始 0/12、参
 - 大诊断日志定位：`pagination`、`query`、`csv`。每项初始工作区有约 66 KiB、350 行合成日志，线索在第 320 行；模拟模型通过 grep 与有界行读取定位，再读取源码、修复并重测。日志由独立验收器保护。
 - 预算约束与续跑：`dedupe`、`retry`、`summary`。每项模拟模型先因请求预算停止，保留已完成的失败检查和 skipped 编辑，再显式继续同一 task；成功后核对工具不重放与独立验收。代码本身仍是短任务，不能从这些模拟流程推断自然长任务成功率。
 
-正常用户权限 `pnpm check`（72 文件）、`pnpm test`（147/147，无跳过）、`pnpm fixtures:check`（初始 0/12、参考 12/12）及 `git diff --check` 通过；本轮远端 CI 待核验。没有使用付费模型。
+正常用户权限 `pnpm check`（72 文件）、`pnpm test`（147/147，无跳过）、`pnpm fixtures:check`（初始 0/12、参考 12/12）及 `git diff --check` 通过；精确 SHA 53e5aba 的 [CI 36657576782](https://github.com/BeforeLanding/mini-DSH/actions/runs/36657576782) Windows/Ubuntu × Node22/24 四组 success。没有使用付费模型。
