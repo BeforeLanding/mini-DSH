@@ -11,6 +11,16 @@ const fixtures = path.join(repository, 'test', 'fixtures', 'coding')
 const sources: Record<FixtureId, string[]> = {
   boundary: ['src/index.mjs'], options: ['src/join.mjs'], interface: ['src/pricing.mjs', 'src/receipt.mjs'], summary: ['src/summary.mjs'], inventory: ['src/order.mjs', 'src/receipt.mjs'], csv: ['src/csv.mjs'], merge: ['src/merge.mjs', 'src/value.mjs'], retry: ['src/retry.mjs'], query: ['src/query.mjs'], pagination: ['src/page.mjs'], dedupe: ['src/unique.mjs'], normalize: ['src/name.mjs'],
 }
+async function protectedFilesIn(directory: string, editable: readonly string[], prefix = ''): Promise<{ filename: string; content: Buffer }[]> {
+  const result: { filename: string; content: Buffer }[] = []
+  for (const entry of await fs.readdir(path.join(directory, prefix), { withFileTypes: true })) {
+    const filename = path.posix.join(prefix, entry.name)
+    if (entry.isDirectory()) result.push(...await protectedFilesIn(directory, editable, filename))
+    else if (entry.isFile() && !editable.includes(filename)) result.push({ filename, content: await fs.readFile(path.join(directory, filename)) })
+    else if (!entry.isFile()) throw new Error(`invalid fixture initial entry: ${filename}`)
+  }
+  return result
+}
 export interface Acceptance {
   passed: boolean; exitCode: number | null; output: string; protectedFilesChanged: string[]
 }
@@ -27,9 +37,7 @@ export async function createFixture(id: FixtureId) {
       oldText: await fs.readFile(path.join(source, 'initial', filename), 'utf8'),
       newText: await fs.readFile(path.join(source, 'reference', filename), 'utf8'),
     })))
-    const protectedFiles = await Promise.all(['package.json', 'check.mjs'].map(async filename => ({
-      filename, content: await fs.readFile(path.join(source, 'initial', filename)),
-    })))
+    const protectedFiles = await protectedFilesIn(path.join(source, 'initial'), sources[id])
     return {
       id, workspace, task, edits,
       async applyReference() {
@@ -41,7 +49,7 @@ export async function createFixture(id: FixtureId) {
         for (const { filename, content } of protectedFiles) {
           try {
             const candidate = path.join(workspace, filename)
-            if ((await fs.lstat(candidate)).isSymbolicLink() || !(await fs.readFile(candidate)).equals(content)) protectedFilesChanged.push(filename)
+            if (!(await fs.lstat(candidate)).isFile() || !(await fs.readFile(candidate)).equals(content)) protectedFilesChanged.push(filename)
           } catch { protectedFilesChanged.push(filename) }
         }
         const result = spawnSync(process.execPath, [path.join(source, 'verify.mjs'), workspace], {

@@ -118,6 +118,19 @@ test('merge fixture requires both entry point and helper migration', async () =>
   } finally { await fixture.close() }
 })
 
+test('independent acceptance protects nested diagnostic evidence', async () => {
+  const fixture = await createFixture('boundary')
+  try {
+    const diagnostic = path.join(fixture.workspace, 'diagnostics/context.txt')
+    await fixture.applyReference()
+    assert.equal((await fixture.evaluate()).passed, true)
+    await fs.writeFile(diagnostic, 'forged diagnostic\n')
+    const result = await fixture.evaluate()
+    assert.equal(result.passed, false)
+    assert.deepEqual(result.protectedFilesChanged, ['diagnostics/context.txt'])
+  } finally { await fixture.close() }
+})
+
 test('acceptance bounds hung code and output, rejects invalid limits and reports infrastructure failure', async () => {
   const fixture = await createFixture('boundary')
   try {
