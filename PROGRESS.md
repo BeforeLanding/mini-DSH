@@ -1,4 +1,10 @@
 # 开发进度
+### NX-05b 本地交付（2026-09-30）
+
+编程任务从 3 项扩为 12 项，每项有初始工作区、中文任务、公开检查、参考修改和工作区外独立验收；模拟模型通过真实文件/Bash 流程。小步提交：规划 56b3c8e；normalize a11f510；dedupe 4761987；pagination 2992fb8；query 7b97939；retry 4d35a39；merge a6db3d2；csv f60ea98；inventory b258056；summary 0c7511d；本步为最终说明。正常用户权限 `pnpm check`（72 文件）、`pnpm test`（141/141）、`pnpm fixtures:check`（初始 0/12、参考 12/12）与 `git diff --check` 通过。没有真实模型实验。此轮任务偏短小，大文件/日志及长任务/续跑的原路线分布尚未实现。
+
+`git push origin main` 被自动审批拒绝，理由是共享仓库推送缺少可核验的本次精确用户授权；本地开发和提交已继续完成，远端 CI 待授权推送后核验。
+
 ### NX-05b9 summary fixture（2026-09-30）
 
 新增 summary 编程任务，初始态失败、参考解通过；模拟模型经真实文件/Bash 工具完成。正常用户权限 `pnpm fixtures:check`：初始 0/12、参考 12/12；Cordis 回归 26/26。
