@@ -208,7 +208,7 @@ NX-01～NX-03、NX-05a 与 NX-12 已完成，以下其余功能均为 **todo**�
 
 ### M7：用编程任务验证效果
 
-- `NX-05b`（NX-05 子步骤，场景补齐中）：上一轮扩展到 12 项，初始 0/12、参考 12/12，141/141 本地测试及 [CI 36655224744](https://github.com/BeforeLanding/mini-DSH/actions/runs/36655224744) 四组合通过；但九个新增任务偏短小，未达到上文四类各三的分布。补齐计划、真实验收与历史证据见 [TASKS](context-budget/TASKS.md)；完成前不将分布标为 done。
+- `NX-05b`（NX-05 子步骤，四类各三本地完成）：12 项按单文件、多文件、大诊断日志定位、预算约束与续跑各三项实施；初始 0/12、参考 12/12，全量本地测试 147/147。大日志任务实际搜索/有界读取，续跑任务实际发生预算停止与同 task 继续；见 [任务说明](../test/fixtures/coding/README.md) 与 [TASKS](context-budget/TASKS.md)。旧 [CI 36655224744](https://github.com/BeforeLanding/mini-DSH/actions/runs/36655224744) 仅覆盖补齐前状态，本轮 CI 待核验。续跑场景以短代码任务受限分段模拟，不代表真实模型自然长任务成功率。
 - `NX-06`：请求 trace 和编程结果报告；关联 session/task/run、文件版本、命令证据、用量与停止原因。
 - `NX-08`：真实模型任务对照与估算误差实验；固定模型和配置，设置整批请求/token/金额上限，单次 run 预算不能替代整批上限。
 

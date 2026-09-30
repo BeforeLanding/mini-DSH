@@ -1,4 +1,8 @@
 # 开发进度
+### NX-05b 四类各三本地验收（2026-09-30）
+
+12 项现按主要场景分为单文件 boundary/options/normalize、多文件 interface/inventory/merge、大诊断日志定位 pagination/query/csv、预算约束与续跑 dedupe/retry/summary，各三项。merge 仅改一个模块不能通过；三份约 66 KiB 合成日志的线索在第 320 行，模拟模型实际使用 grep 与有界读取；三项续跑实际发生 max_steps、skipped 编辑和显式 continue，已完成工具不重放。独立验收器保护候选工作区中的诊断日志。正常用户权限 `pnpm check`（72 文件）、`pnpm test`（147/147，无失败或跳过）、`pnpm fixtures:check`（初始 0/12、参考 12/12）、`git diff --check` 通过；三份日志均被 Git 跟踪。本轮远端 CI 待核验，未调用付费模型；短代码任务经预算强制分段的模拟流程不能推断真实模型在自然长任务中的成功率。
+
 ### NX-05b12j summary 续跑（2026-09-30）
 
 分类汇总任务明确负数、零金额与输入保持；真实 Cordis 请求预算停止后续跑同一任务，保留既有失败检查，仅补做跳过的编辑并重测。`pnpm check` 72 文件、fixture 回归 32/32、初始 0/12、参考 12/12。四类各三项的具体场景已经具备；下一步做全量检查和文档收尾。

@@ -113,7 +113,7 @@ CLI 默认每段模型请求64次、工具128次、主动10分钟、累计2M tok
 
 报告分别显示 runStatus、checks 的 status（passed/failed/unknown/stale/unavailable）与 freshness（current/stale/unavailable）、文件工具变更及未覆盖文件。passed 表示命令成功且声明文件检查前后版本一致；之后声明的任一文件变化或文件工具再次应用修改（即使改回原字节）使证据过期。文件覆盖从同 task 全部已确认检查计算，报告仍保留失败历史；未覆盖列表只对应当前文件页，须检查所有页。记录跨续跑/重启保存，reset 隔离。
 
-报告的 acceptance 始终是 not_asserted：显式文件和命令证据不自动证明任务验收。未声明的依赖、目录新增、检查中修改后恢复、文件工具之外的修改归因及外部文件竞态均不在完整保证内；Bash/external 编辑不计入文件工具变更清单。无显式检查时明确未验证。未调用付费模型；87360a1 的 [CI 36653379987](https://github.com/BeforeLanding/mini-DSH/actions/runs/36653379987) Ubuntu/Windows × Node22/24 四组合通过，每组 check72/test123/123，无失败或跳过，这是 NX-15 历史证据。NX-05b 将 fixture 扩为 12 项，初始 0/12、参考 12/12、全量测试 141/141；[CI 36655224744](https://github.com/BeforeLanding/mini-DSH/actions/runs/36655224744) 四组合通过。完整验收与提交证据见 TASKS/PROGRESS。
+报告的 acceptance 始终是 not_asserted：显式文件和命令证据不自动证明任务验收。未声明的依赖、目录新增、检查中修改后恢复、文件工具之外的修改归因及外部文件竞态均不在完整保证内；Bash/external 编辑不计入文件工具变更清单。无显式检查时明确未验证。未调用付费模型；87360a1 的 [CI 36653379987](https://github.com/BeforeLanding/mini-DSH/actions/runs/36653379987) Ubuntu/Windows × Node22/24 四组合通过，每组 check72/test123/123，无失败或跳过，这是 NX-15 历史证据。NX-05b 将 fixture 扩为 12 项，初始 0/12、参考 12/12；补齐单文件、多文件、大日志定位与预算续跑各三项后，本地全量测试 147/147，本轮 CI 待核验。[任务集说明](test/fixtures/coding/README.md) 与 TASKS/PROGRESS 记录实际边界及提交证据。
 
 ## 有界读取、搜索与日志回读（NX-07）
 
