@@ -6,6 +6,7 @@ import type { AcceptanceDetail, RunOutcome } from './eval-runner.js'
 import { BudgetStop, emptyCounters } from '../src/core/budget.js'
 import type { BudgetPolicy } from '../src/core/budget.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
+import { JsonlStore } from '../src/core/event-store.js'
 import type { Adapter, ChatRequest, ChatResponse, ToolCall } from '../src/core/contracts.js'
 import * as sessions from '../src/plugins/session.js'
 import * as systemPrompt from '../src/plugins/system-prompt.js'
@@ -24,10 +25,14 @@ export interface FixtureAdapter { provider: string; model: string; chat: Adapter
 
 // 适配器在 fixture 建好之后才构造：模拟模型需要读取该 fixture 的参考改动来生成工具序列。
 // 真实适配器忽略入参即可，运行器因此不感知模型来源。
+// sessionDirectory 给出时把该次 run 的事件日志落盘（每个 run 一个子目录，因 session 是随机 id），
+// 让真实付费调用留下的证据不随进程退出消失；不给出时保持原有的纯内存行为，离线路径不受影响。
 export async function runFixtureTask(
-  id: FixtureId, makeAdapter: (fixture: Fixture) => FixtureAdapter, budget: Readonly<BudgetPolicy> = evalPolicy,
+  id: FixtureId, makeAdapter: (fixture: Fixture) => FixtureAdapter,
+  budget: Readonly<BudgetPolicy> = evalPolicy, sessionDirectory?: string,
 ): Promise<RunOutcome> {
   const fixture = await createFixture(id), root = new Context()
+  let store: JsonlStore | undefined
   try {
     for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
     await root.plugin(sandbox, { workspace: fixture.workspace, autoApprove: true })
@@ -35,6 +40,10 @@ export async function runFixtureTask(
     const adapter = makeAdapter(fixture)
     root.llm.register(adapter.provider, { models: [adapter.model], ...(adapter.capabilities ? { capabilities: adapter.capabilities } : {}), chat: adapter.chat })
     const session = root.sessions.create({ source: 'eval', fixtureId: id })
+    if (sessionDirectory) {
+      store = await JsonlStore.open(sessionDirectory, session.id)
+      root.sessions.attachStore(session.id, store)
+    }
     const agent = root.agents.create({ sessionId: session.id, model: `${adapter.provider}/${adapter.model}`, loop: root.agentLoop, budget })
     let error: string | undefined
     try {
@@ -53,6 +62,8 @@ export async function runFixtureTask(
     if (!state) return { status: 'error', counters: emptyCounters(), accepted: acceptance.passed, acceptance: detail, error: error ?? 'no run was recorded' }
     return { status: state.status, counters: state.counters, accepted: acceptance.passed, acceptance: detail, ...(error === undefined ? {} : { error }) }
   } finally {
+    // 先等写入队列排空再关存储：失败会抛出，使证据没落盘的 run 不以成功结论结束。
+    if (store) await root.sessions.close()
     await root.fiber.dispose()
     await fixture.close()
   }
