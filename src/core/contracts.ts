@@ -50,6 +50,8 @@ export interface PromptEntry { name: string; order?: number; text: string | ((co
 export interface ApprovalRequest { tool: string; summary: string; signal?: AbortSignal; approval?: <T>(work: () => Promise<T>) => Promise<T> }
 export interface SandboxConfig { workspace?: string; autoApprove?: boolean; allowHosts?: string[] }
 export interface EventData {
+  'verification/start': import('./task-verification.js').VerificationStart
+  'verification/result': import('./task-verification.js').VerificationResult
   'file/baseline': { path: string; snapshot: FileSnapshot }
   'file/observed': { path: string; hash: string }
   'file/change': { changeId: string; path: string; tool: 'edit_file' | 'write_file'; toolCallId?: string; before?: FileSnapshot; after?: FileSnapshot }

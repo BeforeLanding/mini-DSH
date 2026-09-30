@@ -91,6 +91,7 @@ export function parseLog(text: string, sessionId: string): SessionEvent[] {
   const runs = new Map<string, { taskId: string; ended: boolean }>()
   const requests = new Set<string>(), usages = new Set<string>(), ends = new Set<string>()
   const changes = new Map<string, { taskId: string; runId: string; planned: boolean }>(), results = new Set<string>()
+  const verifications = new Map<string, { taskId: string; runId: string; data: import('./task-verification.js').VerificationStart }>(), verificationResults = new Set<string>()
   for (const line of text.split('\n').slice(0, -1)) {
     let event: unknown
     try { event = JSON.parse(line) } catch (error) { throw new Error(`corrupt JSONL record ${events.length + 1}`, { cause: error }) }
@@ -98,6 +99,19 @@ export function parseLog(text: string, sessionId: string): SessionEvent[] {
     if ((event.taskId !== undefined && typeof event.taskId !== 'string') || (event.runId !== undefined && typeof event.runId !== 'string')) throw new Error('invalid event scope')
     validatePayload(event.type, event.data)
     const parsed = event as unknown as SessionEvent
+    if (parsed.type === 'verification/start' || parsed.type === 'verification/result') {
+      const run = parsed.runId ? runs.get(parsed.runId) : undefined
+      if (!run || run.taskId !== parsed.taskId) throw new Error('verification event scope mismatch')
+      const id = parsed.data.verificationId
+      if (parsed.type === 'verification/start') {
+        if (verifications.has(id) || run.ended) throw new Error('duplicate or late verification start')
+        verifications.set(id, { taskId: parsed.taskId!, runId: parsed.runId!, data: parsed.data })
+      } else {
+        const start = verifications.get(id)
+        if (!start || verificationResults.has(id) || start.taskId !== parsed.taskId || start.runId !== parsed.runId || start.data.command !== parsed.data.commandResult.command || start.data.cwd !== parsed.data.commandResult.cwd || JSON.stringify(start.data.files.map(f => f.path)) !== JSON.stringify(parsed.data.files.map(f => f.path))) throw new Error('missing/duplicate or mismatched verification result')
+        verificationResults.add(id)
+      }
+    }
     if (parsed.type.startsWith('file/')) {
       const run = parsed.runId ? runs.get(parsed.runId) : undefined
       // A cooperative tool may finish journaling after cancellation seals the run.

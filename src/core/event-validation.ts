@@ -24,6 +24,8 @@ export function validUsage(v: unknown): boolean {
 export function validatePayload(type: string, data: Record<string, unknown>) {
   let valid = false
   switch (type) {
+    case 'verification/start': valid = string(data.verificationId) && string(data.command) && !!data.command.trim() && string(data.cwd) && optionalString(data.toolCallId) && validVerificationFiles(data.files, false); break
+    case 'verification/result': valid = string(data.verificationId) && validCommand(data.commandResult) && validVerificationFiles(data.files, true); break
     case 'file/baseline': valid = filePath(data.path) && validSnapshot(data.snapshot); break
     case 'file/observed': valid = filePath(data.path) && typeof data.hash === 'string' && /^(?:missing|[a-f0-9]{64})$/.test(data.hash); break
     case 'file/change': valid = string(data.changeId) && filePath(data.path) && ['edit_file', 'write_file'].includes(String(data.tool)) && optionalString(data.toolCallId) && (data.before === undefined || validSnapshot(data.before)) && (data.after === undefined || validSnapshot(data.after)); break
@@ -48,4 +50,12 @@ export function validatePayload(type: string, data: Record<string, unknown>) {
     case 'tool/start': valid = string(data.taskId) && string(data.runId) && string(data.toolCallId) && string(data.name); break
   }
   if (!valid) throw new Error(`invalid event payload: ${type}`)
+}
+
+function validVerificationFiles(value: unknown, errors: boolean) {
+  return Array.isArray(value) && value.length > 0 && value.length <= 10000 && new Set(value.map(file => record(file) ? file.path : undefined)).size === value.length && value.every(file => record(file) && filePath(file.path) && optionalString(file.location) && (errors && typeof file.error === 'string' ? file.hash === undefined && file.location === undefined : file.error === undefined && typeof file.hash === 'string' && /^(?:missing|[a-f0-9]{64})$/.test(file.hash)))
+}
+function validCommand(value: unknown) {
+  const stream = (v: unknown) => record(v) && string(v.text) && integer(v.bytes) && typeof v.truncated === 'boolean'
+  return record(value) && value.version === 1 && value.type === 'command' && string(value.command) && string(value.cwd) && ['exited', 'spawn_error', 'timed_out', 'cancelled'].includes(String(value.status)) && (value.exitCode === null || (typeof value.exitCode === 'number' && Number.isSafeInteger(value.exitCode))) && (value.signal === null || string(value.signal)) && typeof value.durationMs === 'number' && Number.isFinite(value.durationMs) && value.durationMs >= 0 && typeof value.timedOut === 'boolean' && value.timedOut === (value.status === 'timed_out') && typeof value.cancelled === 'boolean' && value.cancelled === (value.status === 'cancelled') && stream(value.stdout) && stream(value.stderr) && optionalString(value.error)
 }
