@@ -3,11 +3,24 @@ import assert from 'node:assert/strict'
 import { runPhase, summarize, phaseCaps, batchCaps, singleRunBudget, evalPolicy, capKeys } from '../scripts/eval-runner.js'
 import type { RunOutcome } from '../scripts/eval-runner.js'
 import { runFixtureTask, scriptedAdapter } from '../scripts/eval-fixture.js'
+import { screeningIds } from '../scripts/coding-fixtures.js'
 import { CLI_BUDGET } from '../src/core/budget.js'
 import type { Counters } from '../src/core/budget.js'
+import type { ChatRequest } from '../src/core/contracts.js'
 
 const counters = (modelRequests: number, totalTokens: number): Counters =>
   ({ modelRequests, toolCalls: 0, inputTokens: 0, outputTokens: 0, totalTokens, activeDurationMs: 0, approvalDurationMs: 0 })
+// 逐字段独立求和，而不是复用 eval-fixture 的 sumCounters：用例要给出「应该是多少」，复用实现里的
+// 求和等于用结论证明结论。
+const sumStages = (all: readonly Counters[]): Counters => ({
+  modelRequests: all.reduce((total, stage) => total + stage.modelRequests, 0),
+  toolCalls: all.reduce((total, stage) => total + stage.toolCalls, 0),
+  inputTokens: all.reduce((total, stage) => total + stage.inputTokens, 0),
+  outputTokens: all.reduce((total, stage) => total + stage.outputTokens, 0),
+  totalTokens: all.reduce((total, stage) => total + stage.totalTokens, 0),
+  activeDurationMs: all.reduce((total, stage) => total + stage.activeDurationMs, 0),
+  approvalDurationMs: all.reduce((total, stage) => total + stage.approvalDurationMs, 0),
+})
 const done = (modelRequests = 5, totalTokens = 1000): RunOutcome => ({ status: 'completed', counters: counters(modelRequests, totalTokens), accepted: true })
 const tasks = (count: number) => Array.from({ length: count }, (_, index) => ({ id: index }))
 
@@ -110,6 +123,55 @@ test('a policy with a context target fails clearly when the adapter declares no 
   assert.equal(outcome.status, 'error')
   assert.match(outcome.error ?? '', /context capacity must be explicitly configured/)
   assert.deepEqual(outcome.counters, counters(0, 0))
+})
+
+// 多阶段路径的端到端覆盖。e0-2 当时只能把缺口写在文档里：没有声明 TASKS/ 布局的真实 fixture 走完
+// runFixtureTask，所以 tasks 明细、阶段 counters 求和与「基础设施失败中止后续阶段」都只有单元级与
+// Harness 级证据。这条用例把前两条钉在真实驱动上。
+test('the driver runs every stage of a sequence fixture and sums their counters', { timeout: 60_000 }, async () => {
+  const outcome = await runFixtureTask('pipeline', scriptedAdapter)
+  const stages = outcome.tasks ?? []
+  assert.equal(stages.length, 6)
+  // 每个阶段一次 send，各自拿到新的 taskId；先前结束的阶段因此才是可裁剪的旧任务。
+  assert.equal(new Set(stages.map(stage => stage.taskId)).size, 6)
+  assert.ok(stages.every(stage => stage.status === 'completed'))
+  assert.equal(outcome.status, stages.at(-1)?.status)
+  assert.equal(outcome.accepted, true)
+  assert.equal(outcome.acceptance?.output.trim(), 'acceptance passed: pipeline')
+  assert.equal(outcome.error, undefined)
+  assert.deepEqual(outcome.counters, sumStages(stages.map(stage => stage.counters)))
+  assert.ok(outcome.counters.modelRequests > stages.length, 'a sequence run costs more than one request per stage')
+})
+
+// 基础设施失败要么中止后续阶段，要么把同一个失败重复记成多份、而每一份都进入阶段累计用量——后者正是
+// 要避免的。所以除了 error 与阶段数，这里还断言第三个阶段的正文一次都没有被下发。
+test('an infrastructure failure stops the sequence instead of repeating it on every later stage', { timeout: 60_000 }, async () => {
+  const reached = new Set<number>()
+  const outcome = await runFixtureTask('pipeline', fixture => {
+    const { chat } = scriptedAdapter(fixture)
+    return {
+      provider: 'failing', model: 'fixture', capabilities: { fixture: { contextWindowTokens: 1_000_000 } },
+      chat: async (request: ChatRequest) => {
+        const current = (request.messages ?? []).filter(message => message.role === 'user').at(-1)?.content ?? ''
+        const at = fixture.tasks.indexOf(current)
+        if (at >= 0) reached.add(at)
+        if (at === 1) throw new Error('sandbox unavailable')
+        return chat(request)
+      },
+    }
+  })
+  assert.equal(outcome.error, 'sandbox unavailable')
+  assert.deepEqual(outcome.tasks?.map(stage => stage.status), ['completed', 'error'])
+  assert.deepEqual([...reached].sort(), [0, 1])
+  // accepted 是工作区终态判定，与这次 run 是否基础设施失败是两件事：模拟适配器在第一个阶段就应用了
+  // 全部参考改动，所以终态仍然通过。成功率口径把带 error 的 run 从分母排除，不接受它作为分子。
+  assert.equal(outcome.accepted, true)
+})
+
+// 新增 fixture 不该悄悄挤掉筛查批次：清单与上限必须同步，否则 phaseCaps.screening.runs 会在第 13 个
+// 计划任务之前中止阶段，12/12 的历史基线与旧上限就不再对应同一个任务集。
+test('the screening cap still covers exactly the frozen screening batch', () => {
+  assert.equal(phaseCaps.screening.runs, screeningIds.length)
 })
 
 // 成功率口径：分子只数通过验收的 run；不可行任务与基础设施失败都从分母排除并各自单列，不能静默丢弃。
