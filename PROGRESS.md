@@ -1,4 +1,8 @@
 # 开发进度
+### NX-05b1 normalize fixture（2026-09-30）
+
+新增姓名规整任务的初始工作区、公开检查、参考修改及独立验收，注册后既有模拟模型通过真实文件/Bash 工具完成。正常用户权限 `pnpm fixtures:check`：初始 0/4、参考 4/4；`node --test dist/test/coding-fixtures.test.js`：10/10。未使用付费模型；下一项 dedupe 单独提交。
+
 ### NX-15 远端验收完成（2026-09-30）
 用户明确授权推送至 GitHub 并继续核验 CI；0a6383f～87360a1 七个独立提交已推送 origin/main。精确 SHA 87360a1e48d241e1593ea772b274d3c76d87bf0c 的 [CI 36653379987](https://github.com/BeforeLanding/mini-DSH/actions/runs/36653379987) Ubuntu/Windows × Node22/24 四组均 success；实际日志每组 check72/test123/123、fail0/skipped0。先前待授权状态为历史阻塞，现已解除。
 本步仅同步 README、需求/计划/路线、TASKS 与真实远端证据，git diff --check 通过；不重复已通过的本地功能测试。独立提交并推送后核验最新 main 的 CI；不为追加自身验收记录无限生成提交。未调用付费模型、未手动触发部署。
