@@ -64,6 +64,7 @@ import * as agentLoop from '../src/plugins/agent-loop.js'
 import * as llm from '../src/plugins/llm.js'
 import * as toolResults from '../src/plugins/tool-results.js'
 import * as bash from '../src/tools/bash.js'
+import type { CommandResult } from '../src/core/command-runner.js'
 
 async function bootResults(workspace: string) {
   const root = new Context()
@@ -86,8 +87,11 @@ test('Cordis model reads a large Bash log via its persistent ref while events re
       if (request === 1) return { toolCalls: [{ id: 'log', name: 'bash', arguments: { command: `node -e 'process.stdout.write("x".repeat(40000)+"TAIL")'` } }] }
       if (request === 2) {
         const text = messages.at(-1)!.content!
-        assert.ok(Buffer.byteLength(text) < 1024)
-        reference = JSON.parse(text.match(/\[tool_result (\{.*\});/)![1]).ref
+        assert.ok(Buffer.byteLength(text) < 2000)
+        const command = JSON.parse(text) as CommandResult
+        assert.equal(command.exitCode, 0); assert.equal(command.status, 'exited')
+        assert.equal(command.stdout.bytes, 40004); assert.equal(command.stdout.previewTruncated, true)
+        reference = command.stdout.ref!
         return { toolCalls: [{ id: 'page', name: 'read_tool_result', arguments: { ref: reference, offset: 39000, maxBytes: 4096 } }] }
       }
       assert.ok(messages.at(-1)!.content!.includes('TAIL'))
@@ -105,7 +109,7 @@ test('Cordis model reads a large Bash log via its persistent ref while events re
     restarted = await bootResults(workspace)
     await restarted.plugin(toolResults)
     const page = await restarted.tools.execute('read_tool_result', { ref: reference, offset: 40000 }, { sessionId: session.id })
-    assert.equal(page.isError, false); assert.match((page.value as { content: string }).content, /TAIL/)
+    assert.equal(page.isError, false); assert.equal((page.value as { content: string }).content, 'TAIL')
     const denied = await restarted.tools.execute('read_tool_result', { ref: reference }, { sessionId: 'other' })
     assert.equal(denied.isError, true)
   } finally { await root.fiber.dispose(); await restarted?.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
@@ -143,13 +147,43 @@ test('Bash collection flags its cap and nonzero exit logs retain retrievable err
     await root.plugin(bash, { maxCaptureBytes: 128 })
     const success = await root.tools.execute('bash', { command: `node -e 'process.stdout.write("x".repeat(1000))'` }, { sessionId: 's' })
     assert.equal(success.isError, false)
-    const ref = (success.value as { ref: string }).ref
+    const ref = (success.value as CommandResult).stdout.ref!
     const page = await root.tools.execute('read_tool_result', { ref }, { sessionId: 's' })
-    assert.match(root.tools.renderResult(page), /truncated/)
+    assert.equal((page.value as { content: string }).content, 'x'.repeat(128))
+    assert.equal((success.value as CommandResult).stdout.truncated, true)
     const failure = await root.tools.execute('bash', { command: `node -e 'process.stderr.write("failure ".repeat(10));process.exit(7)'` }, { sessionId: 's' })
     assert.equal(failure.isError, true)
-    const errorPage = await root.tools.execute('read_tool_result', { ref: (failure.value as { ref: string }).ref }, { sessionId: 's' })
-    assert.match(root.tools.renderResult(errorPage), /exitCode/)
+    const errorPage = await root.tools.execute('read_tool_result', { ref: (failure.value as CommandResult).stderr.ref }, { sessionId: 's' })
+    assert.equal((failure.value as CommandResult).exitCode, 7)
     assert.match(root.tools.renderResult(errorPage), /failure/)
+  } finally { await root.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
+})
+
+test('command projection keeps stream refs separate and preserves exit metadata on storage failure', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'result-streams-'))
+  const root = await bootResults(workspace)
+  try {
+    const plugin = await root.plugin(toolResults, { maxPreviewBytes: 32, maxCaptureBytes: 40 })
+    await root.plugin(bash)
+    const result = await root.tools.execute('bash', { command: 'printf "stdout%.0s" {1..20}; printf "stderr%.0s" {1..20} >&2; exit 9' }, { sessionId: 's' })
+    const value = result.value as CommandResult
+    assert.equal(result.isError, true); assert.equal(value.exitCode, 9)
+    assert.notEqual(value.stdout.ref, value.stderr.ref)
+    for (const [stream, expected] of [[value.stdout, 'stdout'], [value.stderr, 'stderr']] as const) {
+      assert.equal(stream.storageTruncated, true); assert.equal(stream.truncated, false)
+      assert.equal(stream.previewTruncated, true); assert.equal(stream.bytes, 120)
+      const page = await root.tools.execute('read_tool_result', { ref: stream.ref }, { sessionId: 's' })
+      assert.ok((page.value as { content: string }).content.startsWith(expected))
+      assert.equal((page.value as { captureTruncated: boolean }).captureTruncated, true)
+    }
+    await plugin.dispose()
+    await fs.writeFile(path.join(workspace, 'blocked'), 'x')
+    await root.plugin(toolResults, { directory: 'blocked', maxPreviewBytes: 32 })
+    const failed = await root.tools.execute('bash', { command: 'printf "out%.0s" {1..20}; printf "err%.0s" {1..20} >&2; exit 7' }, { sessionId: 's' })
+    const error = failed.value as CommandResult
+    assert.equal(failed.isError, true); assert.equal(error.status, 'exited'); assert.equal(error.exitCode, 7)
+    assert.ok(error.stdout.storageError); assert.ok(error.stderr.storageError)
+    assert.equal(error.stdout.ref, undefined); assert.ok(error.stdout.text.length <= 16)
+    assert.equal(JSON.parse(root.tools.renderResult(failed)).exitCode, 7)
   } finally { await root.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
 })

@@ -1,4 +1,7 @@
 # 开发进度
+### NX-14d（2026-09-30）
+大 Bash 日志分别投影 stdout/stderr，每流保留 text 预览、bytes/采集截断、previewTruncated、ref/storedBytes/storageTruncated。命令、cwd、status、exitCode 等始终保留在事件/模型的 JSON 中。存储失败保留执行元信息并标 storageError/isError，不丢失非零退出证据。
+模拟模型真实 Bash 40KB 回读与重启隔离、两流分离、采集/存储截断和存储失败通过。正常用户权限 build、syntax（68 文件）、tool-results 6/6 与 git diff --check 通过；c 提交 3f05f34 已推送。
 ### NX-14c（2026-09-30）
 Bash 接入结构化核心，ToolDefinition.output.isError 可将非零/超时/取消标为工具错误而保留 value。cwd 默认工作区，允许现存子目录，审批展示真实目录并复核路径/链接；拒批和非法 cwd 不启动命令。迁移原 fixture 的文本错误断言为实际 exitCode/stdout；新增 Cordis 路径、链接换址、拒批和释放测试。
 正常用户权限等价命令 build、syntax（68 文件）、全量 111/111（无失败/跳过）与 git diff --check 通过。b 提交 8cec028 已推送。大结果暂沿用整体投影，下一步独立增加逐流引用与元信息保留。

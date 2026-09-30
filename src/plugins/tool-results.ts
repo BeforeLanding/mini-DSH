@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { ToolResultStore, utf8Prefix, type ResultStoreConfig } from '../core/tool-result-store.js'
 import { positiveLimit } from '../core/bounded-text.js'
+import type { CommandResult, CommandStream } from '../core/command-runner.js'
 
 export const name = 'mini-tool-results'
 export const inject = ['tools', 'sandbox']
@@ -12,6 +13,28 @@ export function apply(ctx: Context, config: ToolResultsConfig = {}) {
   const maxPreviewBytes = positiveLimit(config.maxPreviewBytes, 16 * 1024, 'maxPreviewBytes')
   ctx.effect(() => ctx.tools.setResultProjection(async (tool, result, execution) => {
     if (tool === 'read_tool_result' || !execution.sessionId) return result
+    if (tool === 'bash' && (result.value as CommandResult | null)?.type === 'command') {
+      const limit = Math.max(1, Math.floor(maxPreviewBytes / 2))
+      const project = async (stream: CommandStream): Promise<CommandStream> => {
+        const bytes = Buffer.from(stream.text)
+        if (bytes.length <= limit) return stream
+        const preview = utf8Prefix(bytes, limit).toString('utf8')
+        try {
+          ctx.sandbox.resolvePath(directory)
+          const saved = await store.save(execution.sessionId!, stream.text, execution.signal)
+          return { ...stream, text: preview, previewTruncated: true, ref: saved.ref,
+            storedBytes: saved.bytes, storageTruncated: saved.truncated }
+        } catch (error) {
+          return { ...stream, text: preview, previewTruncated: true,
+            storageError: error instanceof Error ? error.message : String(error) }
+        }
+      }
+      const value = result.value as CommandResult
+      const stdout = await project(value.stdout), stderr = await project(value.stderr)
+      const projected = { ...value, stdout, stderr }
+      return { value: projected, isError: result.isError || !!stdout.storageError || !!stderr.storageError,
+        content: [{ type: 'text', text: JSON.stringify(projected, null, 2) }] }
+    }
     const text = ctx.tools.renderResult(result), bytes = Buffer.from(text)
     if (bytes.length <= maxPreviewBytes) return result
     ctx.sandbox.resolvePath(directory)
