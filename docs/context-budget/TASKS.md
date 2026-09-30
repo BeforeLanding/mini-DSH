@@ -12,7 +12,7 @@
 - NX-05b7 / csv 同范围 / `pnpm fixtures:check` 初始 0/10、参考 10/10；Cordis 流程回归 22/22；`git diff --check` / done / f60ea98。
 - NX-05b8 / inventory 同范围 / `pnpm fixtures:check` 初始 0/11、参考 11/11；Cordis 流程回归 24/24；`git diff --check` / done / b258056。
 - NX-05b9 / summary 同范围 / `pnpm fixtures:check` 初始 0/12、参考 12/12；Cordis 流程回归 26/26；`git diff --check` / done / 0c7511d。
-- NX-05b10 / 12 项总体验收与使用说明 / `pnpm check`（72 文件）、`pnpm test`（141/141）、`pnpm fixtures:check`（初始 0/12、参考 12/12）、`git diff --check` / done / 本步提交后填号。
+- NX-05b10 / 12 项总体验收与使用说明 / `pnpm check`（72 文件）、`pnpm test`（141/141）、`pnpm fixtures:check`（初始 0/12、参考 12/12）、`git diff --check` / done / 73cf6e1。
 - 九项逐步覆盖字符串规整、去重、分页、查询编码、异步重试、深层合并、CSV 引号解析、跨文件库存计算与聚合统计。每项工作区仅含任务初始代码与公开检查；参考修改及独立验收留在工作区外。每项验证和提交后再开发下一项，不合并提交。
 - 原路线曾设想单文件、多文件、大文件/日志定位、长任务/续跑各三项。此轮 12 项主要覆盖短小确定性任务，后两类分布尚未实现；真实模型能力与这些场景的通过率均未测量。自动审批拒绝 `origin/main` 推送（缺少可核验的本次精确授权），本地提交保留，远端 CI 待授权。
 
