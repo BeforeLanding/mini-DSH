@@ -1,4 +1,8 @@
 # 开发进度
+### CI-05b CLI 集成测试时序修复（2026-09-30）
+
+Windows Node24 在 CI 36657375472 中唯一失败的 CLI 交付测试达到固定 5 秒输出等待；此次仅将该流程的等待上限设为 15 秒、外层测试上限设为 45 秒，其余 CLI 测试仍默认 5 秒。正常用户权限 `pnpm check` 72 文件、CLI 5/5、全量 `pnpm test` 147/147 与 `git diff --check` 通过；远端四组合待提交后核验。此为测试负载下的时序稳健性修复，不改变运行时行为。
+
 ### CI-05b 运行记录核对（2026-09-30）
 
 当前仓库含 `Deploy ECS` 工作流，CI push/main 成功后由 `workflow_run` 触发；最新 SHA 36cff60 的 Deploy ECS 36657984836 为 success，日志有 `Deployment verified`。最近 50 次 CI 中 success40、cancelled7、failure3；多次连续推送触发 `cancel-in-progress`，取消不等于测试失败。当前 NX-05b 补齐阶段有一次真正 failure：CI 36657375472 的 Windows Node24 作业在 CLI 集成测试等待 `[Check] passed version=current` 的 5 秒上限到期，其他三组通过；后续同代码全量 CI 成功。下一小步仅修复这个可复现的测试时序脆弱点。

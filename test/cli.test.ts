@@ -27,10 +27,10 @@ async function boot(workspace: string, directory: string, resumeSessionId?: stri
     chat: async () => ++models === 1 ? { toolCalls: [{ id: 'a', name: 'tick', arguments: {} }] } : { content: 'done' } })
   root.tools.register({ name: 'tick', execute: () => { executions++; return 'ok' } })
   await root.plugin(cli, { input, output, sessionDirectory: directory, resumeSessionId, maxChangeOutputBytes, ...(resumeSessionId ? {} : { budget: { maxModelRequests: 1 } }) })
-  async function waitFor(pattern: string) {
+  async function waitFor(pattern: string, timeoutMs = 5000) {
     if (text.includes(pattern)) return
     await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => { output.off('data', check); reject(new Error(`missing CLI output ${pattern}: ${text}`)) }, 5000)
+      const timer = setTimeout(() => { output.off('data', check); reject(new Error(`missing CLI output ${pattern}: ${text}`)) }, timeoutMs)
       const check = () => { if (text.includes(pattern)) { clearTimeout(timer); output.off('data', check); resolve() } }
       output.on('data', check)
     })
@@ -38,7 +38,7 @@ async function boot(workspace: string, directory: string, resumeSessionId?: stri
   return { root, input, output, waitFor, text: () => text, models: () => models, executions: () => executions }
 }
 
-test('CLI and scripted model deliver versioned verification, restore reports without replay and expose byte pagination', { timeout: 15000 }, async () => {
+test('CLI and scripted model deliver versioned verification, restore reports without replay and expose byte pagination', { timeout: 45000 }, async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'cli-report-')), directory = path.join(temp, 'logs')
   const app = await boot(temp, directory)
   let restored: Awaited<ReturnType<typeof boot>> | undefined
@@ -61,7 +61,7 @@ test('CLI and scripted model deliver versioned verification, restore reports wit
       return { toolCalls: [calls[step++]] }
     } })
     app.input.write('/model delivery/test\n/budget {"maxModelRequests":10}\n模拟验证任务\n')
-    await app.waitFor('[Check] passed version=current')
+    await app.waitFor('[Check] passed version=current', 15000)
     assert.match(app.text(), /\[Run completed\]/); assert.match(app.text(), /\[Check\] failed version=current/)
     assert.match(app.text(), /task acceptance not asserted/)
     const id = app.root.sessions.list()[0].id
