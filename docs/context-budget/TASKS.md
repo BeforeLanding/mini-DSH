@@ -1,5 +1,14 @@
 # 任务清单
 
+## NX-15 编程验证记录与交付报告
+- 状态：进行中（2026-09-30）；关联 R-18，依赖 NX-13/NX-14。
+- NX-15a / 需求、契约和提交边界 / git diff --check 通过 / done / 本步独立提交后报告编号。
+- NX-15b / 验证意图、结果、版本查询与 JSONL 校验恢复 / build、验证记录回归和全量测试 / pending / 核心、事件及直接测试独立提交。
+- NX-15c / Bash 显式 verification 文件范围、审批后快照和结果记录 / build、真实 Bash 与失败边界回归 / pending / 工具及直接测试独立提交。
+- NX-15d / task_report、CLI /report 和结束交付报告 / check、CLI/模型闭环及全量测试 / pending / 展示与集成独立提交。
+- NX-15e / 用户文档、实际提交与最终验收 / check、test、fixtures:check、diff 和远端 CI / pending / 独立收尾提交。
+- 每步验收、回填、提交并推送后才进入下一步；验证通过仅覆盖显式文件与命令，不自动证明任务验收。
+
 ## CD-02 修复服务器 GitHub 下载失败
 - 状态：传包修复已实测成功；原 19f4ec9 在 git clone 超时，修复提交 c9f452c 已实际发布，最终验收记录提交后核验最新 main。
 - CD-02a：离线 Git bundle 发布脚本，分 prepare/activate，构建失败或 SHA 不符不得切换；实现与本地验证完成，两个 Bash 脚本语法、真实 bundle 导入、错误 SHA/路径/REVISION 拒绝、pnpm check（65 文件）/test（107/107）和 git diff --check 通过。Windows 无 flock/原生 Linux 软链，本地锁用 fixture 替身，原子激活验收待 b 的 Linux runner 与服务器实际运行；独立提交。

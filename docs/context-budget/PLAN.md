@@ -3,6 +3,12 @@
 更新：2026-09-29。M0 至 M4 的功能已实现，验收证据见 TASKS/PROGRESS。需求见 [REQUIREMENTS](REQUIREMENTS.md)，执行状态见 [TASKS](TASKS.md) 和 [PROGRESS](../../PROGRESS.md)。本文件是技术决策和默认参数的唯一维护位置；初值可配置，已测量模拟 JSONL 追加成本；未经付费模型的真实任务质量实验。
 
 ## 当前实现
+## NX-15 决策
+- Bash 的可选 verification={files:[...]} 显式选择验证；文件路径相对工作区，默认最多 100 个、每个最多 1 MiB（可配置），复用 NX-13 有界 UTF-8 快照、missing 与 SHA-256 和真实路径。只保证声明范围，依赖/目录新增及检查中改后恢复等未观察变化不能自动证明。
+- 新增 verification/start 与 verification/result，保持事件 version=1 与已有 run 终态。start 包含 verificationId、command/cwd、可选 toolCallId、files 的 path/hash/location；落盘后才能启动命令。result 包含原始有界 CommandResult 和检查后 files；检查后快照错误记录为 unavailable，不能把零退出误报通过。取消或崩溃可以留下 unknown，不重放。
+- 结果与意图严格一一配对、task/run scope 校验；取消清理的迟到结果允许属于原 run。查询仅用 confirmedEvents，重新核验声明路径、hash/location，并标记后续文件工具修改（即使改回原字节）。已完成检查的退出状态与当前版本分开显示；同 task 所有失败保留。没有全部任务验收自动标记。
+- 报告分页验证记录并显示文件工具变更、未覆盖文件和 runStatus；模型与 CLI 均使用只读查询。文件范围和输出限额可配置；日志随验证结果持久化，Bash 工具结果继续提供 NX-14 引用。不增加后台执行或付费模型调用。
+
 ## NX-14 决策
 - 使用独立前台执行核心，Bash 插件仍负责输入、路径与审批。结果 version=1/type=command，状态为 exited / spawn_error / timed_out / cancelled；exitCode 与 signal 保留实际 close 值，时长从 spawn 前单调计时，不包含审批。
 - maxCaptureBytes 为两流共享字节额度；分别标注截断，UTF-8 边界不完整尾部舍弃，非 UTF-8 字节替换解码。timeoutMs 是插件配置，不由模型扩大。cwd 默认为 sandbox.workspace，可指定工作区内现存目录；真实路径在审批后复核，应用策略不承诺 OS 隔离或消除所有外部竞态。
