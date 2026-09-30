@@ -121,6 +121,8 @@ CLI 默认每段模型请求64次、工具128次、主动10分钟、累计2M tok
 
 `task_report` 在 NX-15 的文件 hash、检查版本和命令结果摘要之上，增加 session/currentRun、每个续跑段的模型、状态、停止原因、counters/usage，以及任务累计用量。running 只表示已确认事件中尚无终态；completed 仍不等于代码验收，acceptance 保持 not_asserted。trace、文件和验证分页都会重新读取当前事件/文件，不是固定快照；CLI 输出受 maxChangeOutputBytes 限制并支持 UTF-8 字节续读。
 
+NX-06 本地 `pnpm check`、150/150 回归及 12 项 fixture 基线通过；最终功能提交 08158b9 的 [CI 36661121345](https://github.com/BeforeLanding/mini-DSH/actions/runs/36661121345) 在 Ubuntu/Windows × Node22/24 四组均通过。测试均使用模拟模型，未调用付费 API。
+
 ## 有界读取、搜索与日志回读（NX-07）
 
 模型可调用 read_file({path:"src/index.ts",startLine:1,maxLines:100}) 获取带行号的片段，按 nextLine 继续。默认最多 200 行、正文 32 KiB、扫描 8 MiB；长行、非法 UTF-8 和二进制明确失败，扫描上限需通过插件配置调整。glob/grep 返回 matches、nextOffset、eof、reason 和 skipped；例如 grep({path:"src",query:"register",pattern:"**/*.ts",maxResults:50})，后续传 offset=nextOffset。分页会重新扫描，文件变化时不是快照；达到条目/深度/扫描上限时应缩小 path/pattern。默认忽略 .git/node_modules/dist/.mini-dsh，includeIgnored=true 可显式包含；软链不递归跟随。

@@ -1,4 +1,8 @@
 # 开发进度
+### NX-06 跨平台验收完成（2026-09-30）
+
+最终功能提交 08158b9cf1e11bf2fdddeab093946d7729198445 的 [CI 36661121345](https://github.com/BeforeLanding/mini-DSH/actions/runs/36661121345) 已完成且 success；Windows/Ubuntu × Node22/24 四组均通过类型检查、构建/产物语法和 150/150 测试。NX-06a～e 提交依次为 c5ebe81、b39e82a、513de75、04b4b57、08158b9，均已推送。此次仅回填真实 CI 证据；文档提交后不循环追加其自身 CI 记录。
+
 ### NX-06e CLI、文档与本地完整验收（2026-09-30）
 
 CLI 新增 `/trace [requestOffset] [byteOffset]`，展示请求/run、projection、usage、完成状态、工具结果和证据 ID；增强 `/report` 展示 session/currentRun、每段停止原因和任务累计用量。两者均按 maxChangeOutputBytes 做 UTF-8 字节续读，JSONL 恢复后只读查询不调用模型；README/需求/计划/路线同步实际边界。正常权限 `pnpm check`（74 文件）、`pnpm test`（150/150，fail0/skipped0）、`pnpm fixtures:check`（初始 0/12、参考 12/12）与 `git diff --check` 通过。全部模型为模拟，未调用付费 API；跨平台 CI 待本步功能提交后核验。

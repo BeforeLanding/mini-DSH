@@ -1,6 +1,6 @@
 # 上下文与执行预算管理：计划与设计
 
-更新：2026-09-30。M0 至 M4 的功能已实现，NX-15 已实现并通过本地/四组合 CI，NX-06 已实现并通过本地验收；证据见 TASKS/PROGRESS。需求见 [REQUIREMENTS](REQUIREMENTS.md)，执行状态见 [TASKS](TASKS.md) 和 [PROGRESS](../../PROGRESS.md)。本文件是技术决策和默认参数的唯一维护位置；初值可配置，已测量模拟 JSONL 追加成本；未经付费模型的真实任务质量实验。
+更新：2026-09-30。M0 至 M4 的功能已实现，NX-15 与 NX-06 已实现并通过本地/四组合 CI；证据见 TASKS/PROGRESS。需求见 [REQUIREMENTS](REQUIREMENTS.md)，执行状态见 [TASKS](TASKS.md) 和 [PROGRESS](../../PROGRESS.md)。本文件是技术决策和默认参数的唯一维护位置；初值可配置，已测量模拟 JSONL 追加成本；未经付费模型的真实任务质量实验。
 
 ## 当前实现
 ## NX-06 决策
