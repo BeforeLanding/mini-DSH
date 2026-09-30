@@ -1,4 +1,8 @@
 # 开发进度
+### NX-05b9 summary fixture（2026-09-30）
+
+新增 summary 编程任务，初始态失败、参考解通过；模拟模型经真实文件/Bash 工具完成。正常用户权限 `pnpm fixtures:check`：初始 0/12、参考 12/12；Cordis 回归 26/26。
+
 ### NX-05b8 inventory fixture（2026-09-30）
 
 新增 inventory 编程任务，初始态失败、参考解通过；模拟模型经真实文件/Bash 工具完成。正常用户权限 `pnpm fixtures:check`：初始 0/11、参考 11/11；Cordis 回归 24/24。
