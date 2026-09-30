@@ -482,6 +482,10 @@ test('Sandbox blocks dangerous commands and allows ordinary workspace commands',
     'ls -la; // done',
     'node -e "// comment"',
     'grep -n "//" src/index.ts',
+    'echo "https://docs.example.com/guide"',
+    'printf "%s\\n" "https://docs.example.com/guide"',
+    'echo "https://example.com" > notes.txt',
+    'echo "https://example.com" || echo fallback',
   ]
   for (const command of allow) {
     assert.equal(sandbox.inspectCommand(command).action, 'allow', command)
@@ -513,6 +517,8 @@ test('Sandbox blocks dangerous commands and allows ordinary workspace commands',
     'ls //etc': /system path is blocked|path escapes the workspace/,
     'cat //home/user/.ssh/id_rsa': /path escapes the workspace/,
     'cat //server/share/secret': /path escapes the workspace/,
+    'echo "http://evil.example" | xargs curl': /unauthorized outbound request/,
+    'echo "http://evil.example" | cat > f': /unauthorized outbound request/,
   }
   for (const [command, pattern] of Object.entries(deny)) {
     const result = sandbox.inspectCommand(command)

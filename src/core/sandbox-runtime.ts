@@ -2,6 +2,9 @@ import type { ApprovalRequest, SandboxConfig } from './contracts.js'
 import path from 'node:path'
 import { resolveInside } from '../utils/path.js'
 
+// 只写标准输出、无法发起网络请求的命令。它们参数里的 URL 是数据，不是请求目标。
+const stdoutOnlyCommands = new Set(['echo', 'printf'])
+
 export class SandboxRuntime {
   workspace: string
   autoApprove: boolean
@@ -51,19 +54,31 @@ export class SandboxRuntime {
     // 把注释和字符串碎片暴露成独立 token，闸门就会去检查 shell 根本看不到的“路径”。
     const tokens = [...expanded.matchAll(/"(?:[^"\\]|\\.)*"|'[^']*'|[^\s|;&<>]+/g)]
     let networkTool = false
+    let commandWord = ''
+    let pipedDownstream = false
     for (let index = 0; index < tokens.length; index++) {
-      const token = tokens[index][0].replace(/^["']|["']$/g, '')
-      let executable = index === 0 || /[|;&\n]\s*$/.test(expanded.slice(0, (tokens[index].index ?? 0)))
-      if (executable) networkTool = false
+      const raw = tokens[index][0]
+      const token = raw.replace(/^["']|["']$/g, '')
+      const start = tokens[index].index ?? 0
+      let executable = index === 0 || /[|;&\n]\s*$/.test(expanded.slice(0, start))
       const basename = path.posix.basename(token)
+      if (executable) {
+        networkTool = false
+        commandWord = basename
+        // 本段标准输出是否接到下游命令：下游可能真的取网，所以豁免只在纯输出时成立。
+        pipedDownstream = expanded.slice(start + raw.length).split(/[;&\n]/)[0].replace(/\|\|/g, '').includes('|')
+      }
       if (executable && ['curl', 'wget'].includes(basename)) networkTool = true
       const urlLike = /^https?:\/\//i.test(token)
       const hostLike = networkTool && !token.startsWith('-') && /^(?:localhost|\d+\.\d+\.\d+\.\d+|\[[^\]]+\]|[\w-]+\.[\w.-]+)(?::\d+)?(?:\/|$)/.test(token)
       if (urlLike || hostLike) {
-        try {
-          const host = new URL(urlLike ? token : `http://${token}`).hostname
-          if (!this.allowHosts.includes(host)) return deny('unauthorized outbound request')
-        } catch { return deny('unauthorized outbound request') }
+        // echo/printf 只能写标准输出，其参数里的 URL 不构成出网；但本段一旦接管道，下游就可能取网，仍按原规则拦截。
+        if (!(stdoutOnlyCommands.has(commandWord) && !pipedDownstream)) {
+          try {
+            const host = new URL(urlLike ? token : `http://${token}`).hostname
+            if (!this.allowHosts.includes(host)) return deny('unauthorized outbound request')
+          } catch { return deny('unauthorized outbound request') }
+        }
       } else if (/^(?:\/|[A-Za-z]:[\\/])/.test(token)) {
         const normalized = token.replace(/\\/g, '/')
         if (token === '/dev/null') { executable = false; continue }
