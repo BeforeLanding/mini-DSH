@@ -1,4 +1,7 @@
 # 开发进度
+### NX-14e2（2026-09-30）
+真实 Cordis 模拟模型执行退出 7 与挂起超时命令，模型收到两流引用及实际 timeout 信息；事件 isError=true，而模型结束后的 run 仍 completed，交付文本明确检查失败。JSONL 重启逐字恢复两个结果，回读原 stderr，已执行的追加文件只保留一次。
+正常权限 build、syntax（68 文件）、tool-results 7/7、git diff --check 通过。e1 提交 556f66a 已推送；下一步只同步使用说明、核验全量回归和最终 CI。
 ### NX-14e1（2026-09-30）
 独立增加真实超时/取消边界：两流部分日志保留，POSIX 核对实际 SIGKILL/SIGTERM，取消后等待超过子进程副作用定时器并确认没有写入。Windows 使用实际 taskkill /T /F；预取消不启动。正常权限 build、syntax（68 文件）、command-runner 4/4、git diff --check 通过。
 细化 e1（进程边界）→ e2（持久化恢复）→ e3（文档验收）提交。保留 Loop 的既有 unknown 语义：run 停止等待早于进程 close 时不冒称已收到结构化结果，恢复不重跑。d 提交 254008f 已推送。

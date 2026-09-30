@@ -65,6 +65,7 @@ import * as llm from '../src/plugins/llm.js'
 import * as toolResults from '../src/plugins/tool-results.js'
 import * as bash from '../src/tools/bash.js'
 import type { CommandResult } from '../src/core/command-runner.js'
+import { JsonlStore } from '../src/core/event-store.js'
 
 async function bootResults(workspace: string) {
   const root = new Context()
@@ -186,4 +187,49 @@ test('command projection keeps stream refs separate and preserves exit metadata 
     assert.equal(error.stdout.ref, undefined); assert.ok(error.stdout.text.length <= 16)
     assert.equal(JSON.parse(root.tools.renderResult(failed)).exitCode, 7)
   } finally { await root.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
+})
+
+test('structured failed and timed-out command events restore from JSONL without replaying side effects', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'command-journal-'))
+  const root = await bootResults(workspace)
+  let restarted: Context | undefined, store: JsonlStore | undefined, reopened: JsonlStore | undefined
+  try {
+    await root.plugin(toolResults, { maxPreviewBytes: 64 })
+    await root.plugin(bash, { timeoutMs: 1500 })
+    const session = root.sessions.create({ workspace: await fs.realpath(workspace) })
+    store = await JsonlStore.open(path.join(workspace, 'sessions'), session.id)
+    root.sessions.attachStore(session.id, store)
+    let requests = 0
+    root.llm.register('mock', { models: ['test'], async chat({ messages = [] }) {
+      if (++requests === 1) return { toolCalls: [
+        { id: 'failure', name: 'bash', arguments: { command: `printf x >> once; node -e 'process.stdout.write("out".repeat(1000));process.stderr.write("bad".repeat(1000));process.exit(7)'` } },
+        { id: 'timeout', name: 'bash', arguments: { command: `node -e 'process.stdout.write("waiting");process.stderr.write("pending");setInterval(()=>{},1000)'` } },
+      ] }
+      const results = messages.filter(message => message.role === 'tool').map(message => JSON.parse(message.content!) as CommandResult)
+      assert.equal(results[0].exitCode, 7); assert.ok(results[0].stdout.ref); assert.ok(results[0].stderr.ref)
+      assert.equal(results[1].status, 'timed_out'); assert.equal(results[1].timedOut, true)
+      assert.equal(results[1].stdout.text, 'waiting'); assert.equal(results[1].stderr.text, 'pending')
+      return { content: 'synthetic checks failed; task is not verified' }
+    } })
+    const agent = root.agents.create({ sessionId: session.id, model: 'mock/test', loop: root.agentLoop })
+    assert.equal(await agent.send('run synthetic failing checks'), 'synthetic checks failed; task is not verified')
+    assert.equal(root.sessions.latestRun(session.id)?.status, 'completed')
+    const before = session.events.filter(event => event.type === 'tool/result')
+    assert.equal(before.length, 2); assert.ok(before.every(event => event.data.isError))
+    await root.sessions.close(); await root.fiber.dispose()
+    restarted = await bootResults(workspace)
+    await restarted.plugin(toolResults)
+    reopened = await JsonlStore.open(path.join(workspace, 'sessions'), session.id)
+    await restarted.sessions.restore(reopened, await fs.realpath(workspace))
+    const after = restarted.sessions.get(session.id).events.filter(event => event.type === 'tool/result')
+    assert.deepEqual(after, before)
+    assert.equal(await fs.readFile(path.join(workspace, 'once'), 'utf8'), 'x')
+    const command = JSON.parse(after[0].data.content) as CommandResult
+    const page = await restarted.tools.execute('read_tool_result', { ref: command.stderr.ref }, { sessionId: session.id })
+    assert.equal(page.isError, false); assert.equal((page.value as { content: string }).content, 'bad'.repeat(1000))
+    await restarted.sessions.close()
+  } finally {
+    await root.fiber.dispose(); await restarted?.fiber.dispose(); await store?.close(); await reopened?.close()
+    await fs.rm(workspace, { recursive: true, force: true })
+  }
 })

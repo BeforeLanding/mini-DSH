@@ -21,7 +21,7 @@
 - NX-14c：Bash 结构化结果、错误分类与 cwd 审批/闸门；正常用户权限 node scripts/build.js、node scripts/check-syntax.js（68 文件）、node --test dist/test/*.test.js（111/111）、git diff --check；done；本步提交后报告编号。
 - NX-14d：逐流大日志引用与元信息保留；正常用户权限 node scripts/build.js、node scripts/check-syntax.js（68 文件）、node --test dist/test/tool-results.test.js（6/6）、git diff --check；done；本步提交后报告编号。
 - NX-14e1：取消/超时部分日志、终止信号和进程树清理；正常权限 build、syntax（68 文件）、command-runner 4/4、git diff --check；done；本步提交后报告编号。
-- NX-14e2：命令结果 JSONL 恢复、不重放与失败不等于 run 失败；真实 Cordis/持久化测试；pending；独立提交。
+- NX-14e2：命令结果 JSONL 恢复、不重放与失败不等于 run 失败；正常权限 build、syntax（68 文件）、tool-results 7/7、git diff --check；done；本步提交后报告编号。
 - NX-14e3：README/路线与实际提交收尾；check/test/fixtures、diff 和四组合 CI 核验；pending；独立文档提交，CI 按实际证据记录。
 
 ## NX-13 可靠编辑、冲突与变更交付
