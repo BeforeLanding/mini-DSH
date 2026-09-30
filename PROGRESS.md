@@ -4,6 +4,8 @@
 
 ## 当前状态
 
+- **NX-08d 筛查跑完成（2026-09-30，首次真实模型调用）**：模型 `deepseek/deepseek-v4-flash`（服务端回显 `deepseek-flash`，对应 `DeepSeek-V4.1-Flash`），12 个任务各 1 次，**原始分子/分母 12/12**，无拒绝、无不可行、无基础设施失败，因此本步没有失败案例可报告。81 请求（20.3% 上限）/ 412,176 token（5.2% 上限），81/81 usage 来自 provider，成本约 $0.15。12 次全部 `completed`，未触发任何裁剪或预算停止。证据在 `.eval-evidence/screening-full/`（不入库），[详细证据](docs/context-budget/CHANGES.md#nx-08d-筛查跑12-任务--1首次真实模型调用)。**该结果只说明模型能在这条链路上跑通并交付，不能推断长任务或大仓库场景下的表现**：任务集有天花板效应（公开 `check.mjs`、零依赖、改动数十行），且只有 1 次重复，测不出波动。
+- 筛查跑发现一处沙箱命令闸门误判（记为 NX-17）：`//` 作为独立 token 一律被判 `path escapes the workspace`（最小复现 `echo //`），模型因此白丢一次请求后自行绕过；`http(s)://` 出现在任何命令中即判未授权出网。两者都不影响本次验收结论。
 - 主分支基线：TypeScript / Cordis 本地 coding agent harness。本地 `pnpm check`（82 文件）、172/172 测试、12 项 fixture 基线（初始 0/12、参考 12/12）通过。`pnpm check`、`pnpm test`、`pnpm eval:offline`、`pnpm fixtures:check` 均不调用付费模型。
 - NX-08d0 完成：首次真实调用的设施补齐，3 个提交（`8fd78a9`、`9eb3769`、`4d10f2c`）已推送，三个 SHA 上 CI 四组 success、attempt=1（[4d10f2c](https://github.com/BeforeLanding/mini-DSH/actions/runs/36681430450)），同一批推送未触发 Deploy ECS。修复了评测路径上输入目标 65,536 与 1,000,000 窗口从未生效（投影不裁剪、`context_overflow` 不触发）的问题；补齐 run 结论分类与显式成功率口径；新增 `pnpm eval:screening` 真实适配器入口与逐 run 证据落盘。**自 2026-09-30 起开始调用付费模型**。
 - 真实调用烟测（2026-09-30，`merge` 两次）：均 completed 且通过独立验收，退出码 0。第一次 5 请求 / 24,677 token，第二次 9 请求 / 119,689 token（输入 104,691、输出 14,998，其中 reasoning 10,700）。差异来自 thinking 输出与工具次数导致的输入累积重发。协议探测记录：请求体写 `deepseek-v4-flash` 时服务端回显 `model=deepseek-flash`。完整证据在 `.eval-evidence/screening-merge/`（不入库），[详细证据](docs/context-budget/CHANGES.md#nx-08d0-3-真实适配器评测入口与逐-run-证据落盘)。
@@ -23,9 +25,10 @@
 
 ## 下一步
 
-1. **NX-08d 筛查跑（12 任务 × 1）**（下一主线，设施已就绪）。命令为 `pnpm eval:screening`；前置的协议探测、模型名与窗口显式化、证据落盘与成本打印已由 NX-08d0 完成。开跑后不得再单独调整某一臂或某次重复，整批上限与预注册参数见 [PLAN](docs/context-budget/PLAN.md#nx-08-评测批次上限预注册)。产出须报告原始分子/分母与失败案例；不可行任务如实标记、不计入成功率。按烟测用量（单任务 5～9 请求、2.5 万～12 万 token）预计整批在百万 token 量级，远低于 8,000,000 的整批上限。
-2. NX-09 / NX-10 最小演示不依赖 NX-08，可并行先行；真实模型结果一节须等 NX-08 完成后回填。
-3. T6 Biome 处置方案由用户选择：修到绿并设为门禁，或移除 Biome（诊断结论见“阻塞”）。
+1. **NX-08e／NX-08f 的前置：先解决任务集可行性**。筛查跑实测现有 12 个 fixture 在真实模型下最大估算输入仅 17,220 token，对 65,536 的输入目标有 3.8 倍余量，`removedTaskIds` 全为空——裁剪从未触发，两臂会完全等价。需要先设计或选出能产生超过输入目标历史的候选任务，否则对照 A／B 得不到任何结论。
+2. NX-17 沙箱命令闸门误判由用户决定是否修：`//` 独立 token 与命令中的 `http(s)://` 误判；放宽不得削弱 `..`、系统路径与真实出网拦截，需先补需求/设计决策。
+3. NX-09 / NX-10 最小演示不依赖 NX-08，可并行先行；真实模型结果一节须等 NX-08 完成后回填。
+4. T6 Biome 处置方案由用户选择：修到绿并设为门禁，或移除 Biome（诊断结论见“阻塞”）。
 
 ## 更新规则
 

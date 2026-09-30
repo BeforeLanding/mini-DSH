@@ -2,6 +2,35 @@
 
 更新：2026-09-30。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-08d 筛查跑（12 任务 × 1，首次真实模型调用）
+- 关联：M7；依赖 NX-08d0 的设施与预注册口径。状态：done（2026-09-30，本地实跑，**已调用付费模型**）。
+- 命令：`node dist/scripts/eval-screening.js`（即 `pnpm eval:screening`）。模型 `deepseek/deepseek-v4-flash`，服务端回显 `model=deepseek-flash`，官方依据页标注该名为 Flash 当前档位的旧标签，对应版本 `DeepSeek-V4.1-Flash`；端点 `https://api.deepseek.com`，窗口按 PLAN 保守配置 1,000,000。单次 run 预算 32 请求 / 64 工具 / 300,000ms / 2,000,000 token，整批上限 400 请求 / 8,000,000 token，均为预注册值，本步未调整任何一项。证据：`.eval-evidence/screening-full/`（会话日志、`runs.jsonl`、`report.json`，不入库）。
+- **原始分子/分母：12/12**。executed 12、notExecuted 0、aborted null、completed 12、stopped 0、errored 0、accepted 12、rejected 0、infeasible 0、rate { numerator 12, denominator 12, excludedInfeasible 0, excludedErrored 0 }。**失败案例：无**——没有拒绝、没有不可行、没有基础设施失败，因此本步没有可报告的失败样本，也没有任何一项需要按不可行口径排除。
+
+| fixture | 状态 | 验收 | 请求 | 工具 | 输入 | 输出 | 合计 | 主动(s) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| boundary | completed | true | 5 | 7 | 15,120 | 1,203 | 16,323 | 7.9 |
+| options | completed | true | 5 | 8 | 14,191 | 1,420 | 15,611 | 7.6 |
+| interface | completed | true | 4 | 8 | 11,932 | 1,383 | 13,315 | 6.6 |
+| normalize | completed | true | 5 | 5 | 12,235 | 911 | 13,146 | 6.4 |
+| dedupe | completed | true | 7 | 9 | 22,454 | 1,539 | 23,993 | 10.3 |
+| pagination | completed | true | 12 | 17 | 66,650 | 3,294 | 69,944 | 19.6 |
+| query | completed | true | 10 | 17 | 58,742 | 4,115 | 62,857 | 21.4 |
+| retry | completed | true | 5 | 8 | 16,018 | 2,257 | 18,275 | 11.1 |
+| merge | completed | true | 7 | 9 | 41,999 | 6,017 | 48,016 | 27.1 |
+| csv | completed | true | 10 | 13 | 77,546 | 7,117 | 84,663 | 35.9 |
+| inventory | completed | true | 5 | 9 | 19,141 | 2,299 | 21,440 | 11.2 |
+| summary | completed | true | 6 | 7 | 21,848 | 2,745 | 24,593 | 14.9 |
+| **合计** | 12 completed | 12 | **81** | 117 | **377,876** | **34,300** | **412,176** | **180.0** |
+
+- **用量核算**：81/400 请求（20.3%）、412,176/8,000,000 token（5.2%），整批上限未被逼近，无中止。输入占 91.7%。81 条 `model/usage` 全部为 `source: provider`，无一条回退到估算。主动时间合计 180.0s，最贵的 `csv` 35.9s；没有任何 run 触及 32 请求或 300,000ms。
+- **成本（信息性）**：按核验日期 2026-09-30 的官方价格页，`deepseek-flash` 峰值 input 未命中缓存 $0.30/M、output $1.20/M，本次批次运行于周三 07:00 UTC（峰值）。按输入全部未命中缓存、无缓存折扣估算：377,876 × $0.30/M + 34,300 × $1.20/M ≈ **$0.15**（off-peak 约 $0.08）。远低于 PLAN 按整批上限给出的 3～4 美元量级。适配器不保留 `prompt_cache_hit_tokens`，因此无法从证据里核出缓存命中，该估算对缓存收益是保守的。
+- **观察 1：上下文裁剪从未触发**。12 次 run 的 `removedTaskIds` 全为空，最大估算输入 17,220 token，对 65,536 的输入目标有 3.8 倍余量；12 次全部以 `completed` 结束，没有一次 `context_overflow`、`token_budget`、`max_steps`、`timeout` 或 `output_limit`。这印证了 PLAN 与 TASKS 中 NX-08e 的前置条件：**该任务集无法用于「全历史 vs 现有裁剪」的对照**，两臂会完全等价。
+- **观察 2：模型确实使用了验证路径**。12 次 run 共产生 20 条 `verification/start`，即模型按工具说明显式声明了 `verification.files`，而不是把退出码当成验收。
+- **观察 3：文件纪律**。12 次 run 的 `file/change` 与写工具调用完全一致，只落在各自 fixture 的可编辑文件上（`interface`／`inventory`／`merge` 各改两个文件），工作区没有游离文件，受保护文件无一被改动（验收的 `protectedFilesChanged` 全为空）。烟测那次曾留下一个 `src/__extra_check.mjs` 自测文件，整批没有出现。
+- **观察 4：沙箱命令闸门误判（已复现，记为待办）**。`merge` 的一次请求被 `ToolError: path escapes the workspace` 拒绝，而该命令中不含 `..`。最小复现：`echo //`、`node -e \"// comment\"`、`ls -la; // done` 均被拒。原因是命令分词把独立的 `//` 当作以 `/` 开头的绝对路径，交给 `resolveInside` 后判越界；内联脚本里被转义的引号会破坏 `"[^"]*"` 分组，使 JS 注释暴露成独立 token。模型自行改用其他命令后仍通过验收，损失限于一次请求。同一路径上还发现 `echo \"http://x.com\"` 被判 `unauthorized outbound request`——只要命令里出现 `http(s)://` 即拒绝，与是否真的取网无关。
+- **结论边界（不可宣称的部分）**：12/12 是这 12 个任务的通过率，不是真实编程任务的成功率。任务集本身有天花板效应——工作区提供公开的 `check.mjs`、任务说明直接给出命令、依赖为零、改动规模在数十行内；本批只有 1 次重复，测不出重复间波动；全程没有触发任何预算与裁剪边界。因此本结果证明的是「真实模型能在这条 Harness 链路上跑通并交付」，不能用于推断模型在长任务、大仓库或上下文压缩场景下的表现。
+
 ## NX-08d0-3 真实适配器评测入口与逐 run 证据落盘
 - 关联：M7；承接 d0-1 的预算口径与 d0-2 的结论分类。状态：done（2026-09-30，本地通过，含 2 次真实调用）。本次开始调用付费模型。
 - NX-08d0-3 / `scripts/eval-screening.ts`（`pnpm eval:screening`）把真实 DeepSeek 适配器接到既有运行器与 fixture 驱动上。四处关键行为：**协议探测**先发一次裸请求与一次走适配器的流式请求，记录服务端回显的 `model`、`finish_reason` 与原始 usage 字段，排在落盘检查之后，证据目录冲突时不会先花钱；**参数显式化**要求 `MINI_DSH_MODEL`／`MINI_DSH_EVAL_MODEL` 给出模型名，缺失即失败，不回退到适配器默认模型列表（首位 `deepseek-v4-pro`，价格约为 flash 的 4 倍），窗口能力官方端点取 1,000,000、自定义端点必须显式声明；**证据落盘**把每个 run 的事件日志写入 `.eval-evidence/<phase>-<scope>/sessions/<fixture>/<sessionId>/events.jsonl`，每跑完一个 run 立刻追加一行 `runs.jsonl`，结束时写 `report.json`，同一范围的记录已存在时拒绝开跑；**成本可见**逐个 run 打印状态、验收结论、请求/工具数与本批累计量。`runFixtureTask` 增加可选 `sessionDirectory`，在 `finally` 里先等写入队列排空再关存储，证据没落盘的 run 不以成功结论结束 / `pnpm check`（82 文件）、`pnpm test`（172/172，无失败/跳过）、`pnpm eval:offline`（12/12，退出码 0）、`pnpm eval:screening --probe-only` 与 `--tasks merge` 均退出码 0 通过 / done / 4d10f2c（本地及四组合 CI 通过）。
