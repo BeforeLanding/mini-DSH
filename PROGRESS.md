@@ -1,4 +1,8 @@
 # 开发进度
+### NX-06b 请求 trace 核心（2026-09-30）
+
+新增只读 requestTrace，按当前 reset epoch 和当前 task 的已确认 model/start 分页；关联相邻请求区间内的 projection、model/end/usage、回答/工具调用、结果状态及 changeId/verificationId。重复 toolCallId 按请求隔离；输出不包含提示词、推理、参数、结果正文或日志。JSONL 恢复结果一致，未确认事件不进入 trace，reset 隔离旧任务。正常权限 `pnpm check`（74 文件）、trace 回归 1/1 与 `git diff --check` 通过；沙箱读取既有依赖失败后按仓库规则在正常权限验证，未安装或修改依赖。
+
 ### NX-06a 请求追踪与结果报告契约（2026-09-30）
 
 开始 NX-06，新增 R-19，明确 requestId→run→session/task、上下文投影、usage、响应/工具结果及 file change/verification 证据 ID 的关联；trace 不复制提示词、推理、工具参数、结果正文或日志。task_report 将在既有文件版本/命令证据上增加全部 run、累计用量和停止原因。拆为 a 契约、b 核心 trace、c 模型工具、d 报告扩展、e CLI/文档五个独立提交边界；当前仅文档，功能尚未实现。
