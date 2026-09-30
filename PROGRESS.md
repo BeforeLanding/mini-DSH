@@ -8,8 +8,8 @@
 - T1 已完成：Deploy ECS 仅由 `vMAJOR.MINOR.PATCH` tag push 或带明确 ref 的 `workflow_dispatch` 触发，普通 main/PR 不部署；目标提交必须属于 main 历史。
 - T1 提交：`2ac85bd`（工作流）与 `92507d4`（纯文档探针）。[CI 36662206000](https://github.com/BeforeLanding/mini-DSH/actions/runs/36662206000) 四组成功；[CI 36662393361](https://github.com/BeforeLanding/mini-DSH/actions/runs/36662393361) 的 Windows Node22 首次因 fixture 子进程超时失败，失败作业重跑后成功。两个 SHA 均无 Deploy ECS run。
 - T2 已实现：main push 忽略 `docs/**`、`PROGRESS.md`、`README.md`、`AGENTS.md` 与 `docs/history/**`；pull_request、Ubuntu/Windows × Node22/24 matrix 和 concurrency 未变。
-- T2 提交：`263d439`；[CI 36662938984](https://github.com/BeforeLanding/mini-DSH/actions/runs/36662938984) 四组成功。当前 T3 纯文档提交将验证路径过滤不会创建 push CI。
-- T3 进行中：本文件已从 500 行历史日志改为当前状态页；原文按移动归档，未删除历史。
+- T2 提交：`263d439`；[CI 36662938984](https://github.com/BeforeLanding/mini-DSH/actions/runs/36662938984) 四组成功。纯文档提交 `ef46988` 的 workflow run 与 check run 均为 0，路径过滤已远端验收。
+- T3 已完成：本文件从 500 行历史日志改为 31 行当前状态页，原文移动归档；TASKS 从 336 行降为 39 行，详细证据迁入 CHANGES，证据集合与链接检查通过。
 
 ## 阻塞
 
@@ -19,10 +19,9 @@
 
 ## 下一步
 
-1. 推送本次 PROGRESS 归档提交，确认纯文档 main push 不创建 CI，完成 T2 远端验收。
-2. 精简 `docs/context-budget/TASKS.md`，将详细证据迁入 `docs/context-budget/CHANGES.md` 并逐项核对链接、提交和验收结论。
-3. 按新文档结构修订 AGENTS 提交粒度规则。
-4. 完成版本标签与回滚规范，再运行 Biome 只读诊断并等待用户决策。
+1. 按新文档结构修订 AGENTS 提交粒度规则。
+2. 完成版本标签与回滚规范。
+3. 运行 Biome 只读诊断并等待用户选择修复或移除。
 
 ## 更新规则
 
