@@ -33,6 +33,11 @@ const sumStages = (all: readonly Counters[]): Counters => ({
 })
 const done = (modelRequests = 5, totalTokens = 1000): RunOutcome => ({ status: 'completed', counters: counters(modelRequests, totalTokens), accepted: true })
 const tasks = (count: number) => Array.from({ length: count }, (_, index) => ({ id: index }))
+// 模拟适配器一次性发出「2 × 可编辑文件数 + 2」条命令（每个文件一次 read、一次 edit，外加两次 check），
+// 因此命令数随 fixture 的可编辑文件数增长——NX-08e2-4 把 pipeline 扩到 14 阶段后是 15 个文件、正好 32 条，
+// 撞上预注册的每 run 32 请求，第一批阶段会被 max_steps 掐断。但这些用例验证的是驱动接线，不该同时受
+// 那条约束：32 是对照 A 两臂「拿到相同工作量」的口径，与「阶段能不能跑完」无关，这里放开它。
+const driverBudget = { ...evalPolicy, maxModelRequests: 128 }
 
 test('pre-registered caps match PLAN and the phase caps sum to the whole-batch caps', async () => {
   assert.deepEqual(singleRunBudget, { maxModelRequests: 32, maxToolCalls: 64, maxActiveDurationMs: 300_000, maxTotalTokens: 2_000_000 })
@@ -43,8 +48,8 @@ test('pre-registered caps match PLAN and the phase caps sum to the whole-batch c
     armA: { runs: 3, requests: 600, tokens: 15_000_000 },
     armB: { runs: 3, requests: 600, tokens: 15_000_000 },
     // 诊断烟测：单条序列，取逐阶段预算的理论上界（阶段数 × 32 请求 / 阶段数 × 2,000,000 token）。
-    // NX-08e2-4 把序列从 6 阶段扩到 10 阶段，上限跟着走。
-    sequence: { runs: 1, requests: 320, tokens: 20_000_000 },
+    // NX-08e2-4 把序列从 6 阶段扩到 10 阶段、再扩到 14 阶段，上限跟着走。
+    sequence: { runs: 1, requests: 448, tokens: 28_000_000 },
   })
   // 整批只归约预注册的三个对照阶段。把诊断阶段算进去会改变这个数字的含义，因此按值钉死而不是只断言
   // 求和：以前改 armA 只会静默改变和值，现在会直接撞上预注册数字。
@@ -171,7 +176,7 @@ test('a policy with a context target fails clearly when the adapter declares no 
 // runFixtureTask，所以 tasks 明细、阶段 counters 求和与「基础设施失败中止后续阶段」都只有单元级与
 // Harness 级证据。这条用例把前两条钉在真实驱动上。
 test('the driver runs every stage of a sequence fixture and sums their counters', { timeout: 60_000 }, async () => {
-  const outcome = await runFixtureTask('pipeline', scriptedAdapter)
+  const outcome = await runFixtureTask('pipeline', scriptedAdapter, driverBudget)
   const stages = outcome.tasks ?? []
   // 阶段数从 fixture 自己取，不写死：NX-08e2-4 按实测把序列从 6 段扩到 10 段，字面量会让每次调阶段数
   // 都要回来改这条本来与阶段数无关的用例。它真正要钉的是「每个阶段各跑一次且各拿一个新 taskId」。
@@ -189,8 +194,9 @@ test('the driver runs every stage of a sequence fixture and sums their counters'
   assert.equal(outcome.error, undefined)
   assert.deepEqual(outcome.counters, sumStages(stages.map(stage => stage.counters)))
   assert.ok(outcome.counters.modelRequests > stages.length, 'a sequence run costs more than one request per stage')
-  // 逐阶段投影观测：模拟适配器在第一个阶段就应用了全部参考改动，全序列估算输入峰值只有 13,614，因此
-  // 「未裁剪」在这里是确定性事实而不只是没被观察到——这让零计数也有断言。
+  // 逐阶段投影观测：模拟适配器在第一个阶段就应用了全部参考改动，全序列估算输入峰值只有 29,307（14 阶段，
+  // 6 阶段时是 13,614），远低于输入目标 65,536，因此「未裁剪」在这里是确定性事实而不只是没被观察到——
+  // 这让零计数也有断言。注意这个读数随 fixture 的可编辑文件数增长，扩阶段时要跟着更新。
   assert.ok(stages.every(stage => stage.projections > 0))
   assert.ok(stages.every(stage => (stage.maxEstimatedInputTokens ?? 0) >= (stage.estimatedInputTokens ?? 0)))
   assert.ok(stages.every(stage => stage.firstPrunedProjection === null && stage.removedTaskIds.length === 0 && stage.unsentProjections === 0))
@@ -261,7 +267,7 @@ test('an infrastructure failure stops the sequence instead of repeating it on ev
         return chat(request)
       },
     }
-  })
+  }, driverBudget)
   assert.equal(outcome.error, 'sandbox unavailable')
   assert.deepEqual(outcome.tasks?.map(stage => stage.status), ['completed', 'error'])
   assert.deepEqual([...reached].sort(), [0, 1])

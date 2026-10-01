@@ -110,6 +110,10 @@ cycles: 0
 | `src/plan-merge.mjs` | `mergePlans(texts, options)` → `string` |
 | `src/blocked.mjs` | `blockReasons(records, cycles)` → `{ name, reason }[]` |
 | `src/audit.mjs` | `renderAudit(plan)` → `string` |
+| `src/parse-audit.mjs` | `parseAudit(text)` → `{ blocked, cycles }` |
+| `src/closure.mjs` | `closure(records, names)` → `string[]` |
+| `src/sub-plan.mjs` | `subPlan(plan, names)` → 第 3 节的对象 |
+| `src/audit-delta.mjs` | `auditDelta(previousAuditText, plan)` → `{ newlyBlocked, unblocked }` |
 | `src/pipeline.mjs` | `planPipeline(text)` → 第 3 节的对象 |
 
 `topoOrder` 的 `excluded` 是「不参与排序的模块名」：它们被当作不存在，依赖它们的模块也因此排不出来。
@@ -174,5 +178,49 @@ cycles: 2
 - 阻塞条目写成 `名字 (原因)`；环条目沿用第 4 节的 `, ` 连接。
 - 空段落只留段落头，不写条目行（例如没有阻塞时只有 `blocked: 0` 一行）。
 - 整个字符串以**一个换行符**结尾。
+
+## 11. 审计反向解析
+
+`parseAudit(text)` 把第 10 节渲染出来的文本解析回：
+
+```js
+{ blocked: [{ name: 'alpha', reason: 'cycle' }], cycles: [['alpha', 'beta', 'delta']] }
+```
+
+- 两个段落必须齐全，并按 `blocked` → `cycles` 的顺序出现。
+- 阻塞条目是 `名字 (原因)`；原因只允许第 9 节的 `cycle` 与 `depends-on-cycle` 两种，出现别的算不合法。
+- 条目编号必须从 `1` 开始、每次加 `1`、不跳号；段落头的数字必须与条目实际数量一致。
+- 只有序号没有内容的条目不合法；`blocked` 段里出现重复模块名同样不合法。
+- 段外还有非空内容时不合法。
+- 以上任何一条不成立时抛 `Error`，消息里带出错的行号（从 1 开始）。
+
+## 12. 传递依赖闭包
+
+`closure(records, names)` 返回从 `names` 出发、沿**本文件内声明过的**依赖可达的全部模块名：
+
+- 结果**含 `names` 自身**，按模块首次出现顺序，去重。
+- 外部名不是模块：走不到它，也不出现在结果里。`names` 里不是模块的名字直接忽略。
+- 只有本文件内声明过的依赖构成边；外部名不构成边。
+
+## 13. 子计划
+
+`subPlan(plan, names)` 返回一个与第 3 节同形状的计划对象，只保留 `names` 与其传递依赖（第 12 节的闭包）：
+
+- 闭包对依赖向下封闭，因此留下的每个模块的依赖也都在结果里，环也整条保留。
+- `cycles`、`order`、`batches`、`blocked` 都是在留下的 `records` 上按第 2～4、9 节**重算**的结果，不是对原数组的过滤——过滤出来的批次会跳号。
+- `external` 只保留被留下的模块实际引用到的那些，按首次出现顺序。
+- `names` 里一个模块都没有时返回空计划（各字段都是空数组），不抛错。
+
+## 14. 审计增量
+
+`auditDelta(previousAuditText, plan)` 比较上一版审计文本与当前计划：
+
+```js
+{ newlyBlocked: ['tool'], unblocked: ['legacy'] }
+```
+
+- `newlyBlocked`：本版阻塞、上版不阻塞的模块，按本版 `blocked` 的顺序。
+- `unblocked`：上版阻塞、本版不阻塞的模块，按上版 `blocked` 的顺序。
+- 只比较集合，顺序各自跟随自己那一侧，与第 5 节的 `diffPlan` 同形。
 
 公开检查是 `node check.mjs <阶段号>`，跑第 1 到该阶段的全部断言；不带参数则跑全部。`data/app.deps` 与 `data/previous.plan` 是示例输入，不要修改。

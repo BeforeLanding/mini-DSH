@@ -13,6 +13,14 @@ const { toBatches } = await load('batches.mjs')
 const { renderPlan } = await load('report.mjs')
 const { diffPlan } = await load('delta.mjs')
 const { planPipeline } = await load('pipeline.mjs')
+const { parsePlan } = await load('plan-parse.mjs')
+const { mergePlans } = await load('plan-merge.mjs')
+const { blockReasons } = await load('blocked.mjs')
+const { renderAudit } = await load('audit.mjs')
+const { parseAudit } = await load('parse-audit.mjs')
+const { closure } = await load('closure.mjs')
+const { subPlan } = await load('sub-plan.mjs')
+const { auditDelta } = await load('audit-delta.mjs')
 
 // 覆盖：重复声明合并、自环、三元环、外部依赖、批量并列、环成员的间接依赖者。
 const spec = [
@@ -94,5 +102,40 @@ const rejectsWithLineNumber = text => {
 }
 rejectsWithLineNumber('order: 1\n')
 rejectsWithLineNumber('totally wrong\n')
+
+// 第 7～14 阶段：反向解析、阻塞原因、审计、闭包、子计划、审计增量。
+assert.deepEqual(parsePlan(rendered), {
+  source: 'private.deps', order: ['gamma', 'util', 'tool'], batches: [['gamma', 'util'], ['tool']],
+  external: ['ghost'], cycles: [['alpha', 'beta', 'delta'], ['solo']],
+})
+// 合并：同一模块出现在两份输入里的不同批次时取最大值，因此不会排到自己在某一份里的位置之前。
+assert.equal(mergePlans([rendered, rendered], { source: 'private.deps' }), rendered)
+assert.deepEqual(plan.blocked, [
+  { name: 'alpha', reason: 'cycle' }, { name: 'beta', reason: 'cycle' },
+  { name: 'delta', reason: 'cycle' }, { name: 'solo', reason: 'cycle' },
+])
+assert.deepEqual(blockReasons(plan.records, plan.cycles), plan.blocked)
+assert.equal(renderAudit(plan),
+  'blocked: 4\n  1: alpha (cycle)\n  2: beta (cycle)\n  3: delta (cycle)\n  4: solo (cycle)\ncycles: 2\n  1: alpha, beta, delta\n  2: solo\n')
+// 审计文本与计划对象互为往返：第 10 节渲染出来的东西必须能被第 11 节原样读回来。
+assert.deepEqual(parseAudit(renderAudit(plan)), { blocked: plan.blocked, cycles: plan.cycles })
+
+// 闭包含 names 自身、按首次出现顺序；外部名 ghost 不构成边、也不进结果。
+assert.deepEqual(closure(plan.records, ['tool']), ['util', 'tool'])
+assert.deepEqual(closure(plan.records, ['alpha']), ['alpha', 'beta', 'gamma', 'delta'])
+assert.deepEqual(closure(plan.records, ['ghost']), [])
+
+// 子计划按留下的 records 重算：tool 只带出 util，批号重新从 1 起连续。
+const sub = subPlan(plan, ['tool'])
+assert.deepEqual(sub.records, [{ name: 'util', deps: [] }, { name: 'tool', deps: ['util', 'ghost'] }])
+assert.deepEqual(sub.external, ['ghost'])
+assert.deepEqual(sub.order, ['util', 'tool'])
+assert.deepEqual(sub.batches, [['util'], ['tool']])
+assert.deepEqual(sub.cycles, [])
+assert.deepEqual(sub.blocked, [])
+
+// 审计增量：计划缩到只剩 gamma 时，四个阻塞模块全部解除。
+assert.deepEqual(auditDelta(renderAudit(plan), planPipeline('gamma:\n')),
+  { newlyBlocked: [], unblocked: ['alpha', 'beta', 'delta', 'solo'] })
 
 console.log('acceptance passed: pipeline')

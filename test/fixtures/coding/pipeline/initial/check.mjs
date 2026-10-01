@@ -10,6 +10,10 @@ import { parsePlan } from './src/plan-parse.mjs'
 import { mergePlans } from './src/plan-merge.mjs'
 import { blockReasons } from './src/blocked.mjs'
 import { renderAudit } from './src/audit.mjs'
+import { parseAudit } from './src/parse-audit.mjs'
+import { closure } from './src/closure.mjs'
+import { subPlan } from './src/sub-plan.mjs'
+import { auditDelta } from './src/audit-delta.mjs'
 import { planPipeline } from './src/pipeline.mjs'
 
 // 公开检查按阶段累积：`node check.mjs 4` 会重跑第 1 到第 4 阶段的全部断言，后面的阶段还没实现也能跑。
@@ -115,6 +119,55 @@ const stages = [
       'blocked: 4\n  1: a (cycle)\n  2: b (cycle)\n  3: e (depends-on-cycle)\n  4: solo (cycle)\ncycles: 2\n  1: a, b\n  2: solo\n')
     // 空段落只留段落头：这与第 4 节 external 段写 (none) 的处理不同。
     assert.equal(renderAudit(planPipeline('c: d\nd:\n')), 'blocked: 0\ncycles: 0\n')
+  },
+  () => {
+    const plan = planPipeline('a: b\nb: a\ne: a\nc: d\nd:\nsolo: solo\n')
+    assert.deepEqual(parseAudit(renderAudit(plan)), {
+      blocked: [{ name: 'a', reason: 'cycle' }, { name: 'b', reason: 'cycle' }, { name: 'e', reason: 'depends-on-cycle' }, { name: 'solo', reason: 'cycle' }],
+      cycles: [['a', 'b'], ['solo']],
+    })
+    assert.deepEqual(parseAudit('blocked: 0\ncycles: 0\n'), { blocked: [], cycles: [] })
+    assert.throws(() => parseAudit('cycles: 0\n'), /line \d+/)
+    // 原因只允许第 9 节那两种：不认识的原因要报错，不能默默收下。
+    assert.throws(() => parseAudit('blocked: 1\n  1: a (nonsense)\ncycles: 0\n'), /line \d+/)
+    assert.throws(() => parseAudit('blocked: 2\n  1: a (cycle)\ncycles: 0\n'), /line \d+/)
+  },
+  () => {
+    const records = planPipeline('a: b c\nb: c\nc:\nd: a\n').records
+    assert.deepEqual(closure(records, ['a']), ['a', 'b', 'c'])
+    assert.deepEqual(closure(records, ['c']), ['c'])
+    assert.deepEqual(closure(records, ['d']), ['a', 'b', 'c', 'd'])
+    // 外部名走不到、也不进结果；names 里不是模块的名字直接忽略。
+    assert.deepEqual(closure(planPipeline('k: m ghost\nm:\n').records, ['k']), ['k', 'm'])
+    assert.deepEqual(closure(records, ['ghost']), [])
+  },
+  () => {
+    const plan = planPipeline('a: b\nb: ghost\nc: a\nd: e\ne: d\n')
+    const sub = subPlan(plan, ['c'])
+    assert.deepEqual(sub.records, [
+      { name: 'a', deps: ['b'] },
+      { name: 'b', deps: ['ghost'] },
+      { name: 'c', deps: ['a'] },
+    ])
+    assert.deepEqual(sub.external, ['ghost'])
+    assert.deepEqual(sub.order, ['b', 'a', 'c'])
+    assert.deepEqual(sub.batches, [['b'], ['a'], ['c']])
+    assert.deepEqual(sub.blocked, [])
+    // 环整条保留：闭包把 e 与 d 一起带进来，因此它们仍然构成一个环而不是各自消失。
+    const loop = subPlan(plan, ['d'])
+    assert.deepEqual(loop.records.map(record => record.name), ['d', 'e'])
+    assert.deepEqual(loop.cycles, [['d', 'e']])
+    assert.deepEqual(loop.order, [])
+    assert.deepEqual(loop.blocked, [{ name: 'd', reason: 'cycle' }, { name: 'e', reason: 'cycle' }])
+    // 一个模块都不是时不报错，给空计划。
+    assert.deepEqual(subPlan(plan, ['ghost']), { records: [], external: [], cycles: [], order: [], batches: [], blocked: [] })
+  },
+  () => {
+    const before = renderAudit(planPipeline('a: b\nb: a\nc:\n'))
+    const after = planPipeline('a: b\nb: a\nc:\nd: a\n')
+    assert.deepEqual(auditDelta(before, after), { newlyBlocked: ['d'], unblocked: [] })
+    // 上版有 d，本版没有；顺序各自跟随自己那一侧。
+    assert.deepEqual(auditDelta(renderAudit(after), planPipeline('c:\n')), { newlyBlocked: [], unblocked: ['a', 'b', 'd'] })
   },
 ]
 
