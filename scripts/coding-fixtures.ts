@@ -12,7 +12,12 @@ export const sequenceIds = ['pipeline'] as const
 // 对照 B 的仪器：单任务 fixture，靠一条会产生大量 stdout 的受保护命令把「工具输出是否有界」变成可观察量。
 // 它不进筛查批次（那 12 个单任务 fixture 已冻结）也不进阶段序列（要的是单任务会话），因此单独一份注册表。
 export const boundedIds = ['audit'] as const
-export const fixtureIds = [...screeningIds, ...sequenceIds, ...boundedIds] as const
+// NX-10 的演示夹具：唯一一个**带项目规则**（`AGENTS.md`）的 fixture，供 `pnpm demo:*` 展示
+// 「项目规则 → 定位 → 修改 → 失败测试 → 再修复 → diff 与证据」。它不进筛查批次（那 12 个已冻结、
+// 且加入会让 `phaseCaps.screening.runs` 与 12/12 的历史基线不再对应），也不进阶段序列与对照 B 仪器
+// （两者的契约都是「单任务」或「多阶段」，与演示无关），因此单独一份注册表。
+export const demoIds = ['repair'] as const
+export const fixtureIds = [...screeningIds, ...sequenceIds, ...boundedIds, ...demoIds] as const
 export type FixtureId = typeof fixtureIds[number]
 const repository = fileURLToPath(new URL('../../', import.meta.url))
 const fixtures = path.join(repository, 'test', 'fixtures', 'coding')
@@ -26,6 +31,9 @@ const sources: Record<FixtureId, string[]> = {
   boundary: ['src/index.mjs'], options: ['src/join.mjs'], interface: ['src/pricing.mjs', 'src/receipt.mjs'], summary: ['src/summary.mjs'], inventory: ['src/order.mjs', 'src/receipt.mjs'], csv: ['src/csv.mjs'], merge: ['src/merge.mjs', 'src/value.mjs'], retry: ['src/retry.mjs'], query: ['src/query.mjs'], pagination: ['src/page.mjs'], dedupe: ['src/unique.mjs'], normalize: ['src/name.mjs'],
   pipeline: ['src/parse.mjs', 'src/order.mjs', 'src/cycles.mjs', 'src/batches.mjs', 'src/report.mjs', 'src/delta.mjs', 'src/plan-parse.mjs', 'src/plan-merge.mjs', 'src/blocked.mjs', 'src/audit.mjs', 'src/parse-audit.mjs', 'src/closure.mjs', 'src/sub-plan.mjs', 'src/audit-delta.mjs', 'src/pipeline.mjs'],
   audit: ['src/normalize.mjs', 'src/audit.mjs'],
+  // repair 是演示夹具里唯一可改的文件；两份 AGENTS.md、check.mjs、package.json、src/legacy/ 与
+  // src/pricing.mjs 都不在这里，因而全部进受保护集合。
+  repair: ['src/cart.mjs'],
 }
 async function exists(target: string): Promise<boolean> { return fs.stat(target).then(() => true, () => false) }
 // 一个 fixture 要么是单个任务（TASK.md），要么是同一会话内按序下发的多个阶段（TASKS/*.md，按文件名
