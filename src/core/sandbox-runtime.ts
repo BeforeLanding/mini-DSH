@@ -234,19 +234,44 @@ function unquoteShellArgument(raw: string) {
 // 环境变量引用。用 sticky 标志在指定位置尝试匹配，避免对整串反复扫描。
 const envReference = /\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)/y
 
-// 环境展开按 shell 的**转义**语义进行：`\` 与其后的一个字符**整对**原样复制，不参与展开。
-// 于是 `\$HOME` 是字面量（bash 不展开它，此前被展开是误拒），而 `\\$HOME` 里的 `$` 仍会被展开
-// ——`\\` 已作为一对被吃掉，剩下的是裸 `$`。这一步不做引号状态，引号语义见下一步。
+// 环境展开按 shell 的**引号与转义**语义进行，而不是对整串做一次全局 replace（那是此前误拒的根因：
+// `echo '$HOME'` 与 `X=1; echo $X` 都被展开后误判）。三条规则：
+//   ① 单引号内一切都是字面量——不展开 `$`，`\` 也不是转义（bash 如此）。
+//   ② `\` 与其后的一个字符**整对**原样复制、不参与展开：`\$HOME` 是字面量，而 `\\$HOME` 里的 `$`
+//      仍会被展开——`\\` 已被整对吃掉，剩下的是裸 `$`。
+//   ③ 双引号内**仍展开**（`cat "$HOME/.ssh/id_rsa"` 必须继续被拒，展开是特性不是 bug），
+//      但双引号内的 `'` 是**字面量**、不得开启单引号区间——否则 `node -e "show('a: b$ad')"` 里的
+//      `$ad` 会被当成惰性文本漏检，而 bash 在双引号内确实会展开它（未定义即变空串，静默改坏程序）。
 // 不替换的字符逐字复制（含反斜杠与引号）：下游的 token 偏移、`..` 整串正则与片段抽取都建立在
 // 这条串的原样形状上，改动它的形状等于同时改这三处的判据。
 function expandEnvironment(command: string) {
   let out = ''
   let index = 0
+  let single = false
+  let double = false
   while (index < command.length) {
     const char = command[index]
+    if (single) {
+      if (char === "'") single = false
+      out += char
+      index += 1
+      continue
+    }
     if (char === '\\') {
       out += command.slice(index, index + 2)
       index += 2
+      continue
+    }
+    if (char === '"') {
+      double = !double
+      out += char
+      index += 1
+      continue
+    }
+    if (char === "'") {
+      if (!double) single = true
+      out += char
+      index += 1
       continue
     }
     if (char === '$') {

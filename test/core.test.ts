@@ -773,6 +773,37 @@ test('Sandbox does not expand a variable whose dollar sign is backslash-escaped'
   assert.match(unset.reason ?? '', /unset environment variable/)
 })
 
+// NX-24-2：展开此前不看引号，于是单引号内的 `$NAME` 也被展开、报 unset 或越界。真实 shell 在
+// 单引号内不展开。实测依据：782 次真实模型 bash 调用里 1 条（`node --input-type=module -e '… $c …'`）
+// 因此被误拒。反过来，双引号内**必须继续展开**——那是一条既有契约，不是 bug。
+test('Sandbox expands variables by shell quoting rules, not by a quote-blind sweep', async () => {
+  const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
+  const sandbox = new SandboxRuntime({ workspace: process.cwd(), autoApprove: true })
+
+  assert.equal(sandbox.inspectCommand("echo '$HOME'").action, 'allow')
+  assert.equal(
+    sandbox.inspectCommand(`node --input-type=module -e 'const s = "a: b$c"'`).action,
+    'allow',
+  )
+  assert.equal(sandbox.inspectCommand("sed -n 's/$/x/p' docs/SPEC.md").action, 'allow')
+
+  // 双引号内的 `'` 是字面量、**不得**开启单引号区间。这两条是本次最容易写错的一处：
+  // bash 在双引号内确实会展开 `$ad`／`$c`（未定义即空串），静默改坏模型写的程序，所以必须继续拒绝。
+  const innerQuote = sandbox.inspectCommand(`node -e "show('a: b$ad')"`)
+  assert.equal(innerQuote.action, 'deny')
+  assert.match(innerQuote.reason ?? '', /unset environment variable/)
+  const innerQuote2 = sandbox.inspectCommand(`node -e "['a: b $c', /line 1/]"`)
+  assert.equal(innerQuote2.action, 'deny')
+  assert.match(innerQuote2.reason ?? '', /unset environment variable/)
+
+  // 双引号内照旧展开：这是既有契约（`$HOME` 展开后才看得见它指向工作区之外）。
+  assert.equal(sandbox.inspectCommand('cat $MINI_DSH_UNSET_VAR/file').action, 'deny')
+  if (process.env.HOME) {
+    const homeSandbox = new SandboxRuntime({ workspace: `${process.env.HOME}/mini-dsh-workspace`, autoApprove: true })
+    assert.equal(homeSandbox.inspectCommand('cat "$HOME/.ssh/id_rsa"').action, 'deny')
+  }
+})
+
 test('allowHosts uses the provided whitelist and does not hardcode localhost', async () => {
   const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
   const locked = new SandboxRuntime({
