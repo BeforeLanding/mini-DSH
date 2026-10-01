@@ -72,7 +72,7 @@
   - `test/eval-runner.test.ts` 新增用例钉住 `toolOutputPolicy`（只有 `smoke` 非空）；`phaseCaps` 与 `batchCaps` 的逐值断言同步；`test/eval-cli.test.ts` 的 phases 循环与「unknown phase」错误串加入 `smoke`（错误串顺序敏感）。
 - **回归**：`pnpm test` **200/200**（原 199，新增 1 条）；`pnpm check` 84 文件语法通过。未调用付费模型。
 
-### NX-08f-4b 真实模型烟测 — done（2026-10-01，付费约 $0.03）— **结果：未观测到处理生效**
+### NX-08f-4b 真实模型烟测 — done（2026-10-01，付费约 $0.02）— **结果：未观测到处理生效**
 
 - **命令与规模**：`pnpm eval:screening --phase smoke`，1 次运行，`deepseek/deepseek-v4-flash`（服务端回显 `deepseek-flash`），无界工具输出。证据在 `.eval-evidence/smoke-full/`（不入库）。
 - **结果**：`completed`、`accepted=true`、**7 请求 / 12 工具 / 138,931 token**（输入 134,678、输出 4,253）、主动 21.9 秒、审批 0；7 条 usage **全部来自 provider**、估算回退 0 次。逐阶段峰值估算输入 **33,507**，是输入目标 65,536 的 **51%**——**没有越过，`unsentProjections` 为 0，一次裁剪都没有**。
@@ -106,7 +106,7 @@
 - **用例同步**：`test/coding-fixtures.test.ts` 的余量断言由「> 4 倍」改为「> 3 倍」并写明理由——余量要买的是「一条不截断的结果就足以把当前 task 顶过输入目标」，不是尽量大。
 - **回归**：`pnpm test` **200/200**；`pnpm fixtures:check` 14 项仍「初始失败、参考通过」；`pnpm check` 84 文件语法通过。未调用付费模型。
 
-### NX-08f-4c 重跑烟测 — done（2026-10-01，付费约 $0.04）— **结果：仍未观测到处理生效**
+### NX-08f-4c 重跑烟测 — done（2026-10-01，付费约 $0.03）— **结果：仍未观测到处理生效**
 
 - **命令**：`MINI_DSH_EVAL_EVIDENCE_DIR=.eval-evidence/smoke2-full pnpm eval:screening --phase smoke`（换目录是为了保留第一次的证据，`ensureWritable` 本就拒绝覆写同一目录）。1 次运行，`deepseek/deepseek-v4-flash`，无界工具输出。
 - **结果**：`completed`、`accepted=true`、**13 请求 / 23 工具 / 165,626 token**（输入 155,344、输出 10,282）、主动 57.4 秒；逐阶段峰值估算输入 **26,791**，是输入目标的 **41%**（比第一次的 51% 还低）；**零裁剪、零未发出投影**；13/13 usage 来自 provider。
@@ -133,11 +133,13 @@
 | NX-08f-4 | 接好诊断阶段 `smoke`，使付费烟测可被 `--phase`/`--plan-only` 调度 | 否 | **done** |
 | NX-08f-4b | 真实模型烟测：模型是否**真的**产生大输出 | **是**（需单独授权） | **done — 未观测到处理生效** |
 | NX-08f-4c | 修掉报告源码里的散文规则，重跑烟测 | **是**（重跑另授权） | **done — 仍未观测到处理生效** |
-| NX-08f-5 | 按实测预注册 `armC`/`armD` 的 `phaseCaps` 与 `batchCaps` | 否 | todo |
-| NX-08f-6 | 正式批次（1 fixture × 6 次重复 × 2 臂） | **是** | todo |
-| NX-08f-7 | 报告回填（NX-08-REPORT / CHANGES / TASKS / PROGRESS） | 否 | todo |
+| NX-08f-5 | 按实测预注册 `armC`/`armD` 的 `phaseCaps` 与 `batchCaps` | 否 | **不开跑**（仪器未成立） |
+| NX-08f-6 | 正式批次（1 fixture × 6 次重复 × 2 臂） | **是** | **不开跑** |
+| NX-08f-7 | 报告回填（NX-08-REPORT / CHANGES / TASKS / PROGRESS） | 否 | **done** |
 
 顺序不可调换：先离线证明**开关**有效（f-3），再花钱测量**模型**是否产生差异（f-4b），最后才按实测预注册（f-5）。这正是 NX-08e2 的反面——那次先用 n=1 外推定案，再被 n=6 否证。
+
+**收尾（2026-10-01）**：f-4b 与 f-4c 两次烟测都得到「未观测到处理生效」，且第二次给出了可检验的机制解释（agent 用自写探针把大数据在工具进程里降维）。**f-5/f-6 因此不开跑**——对照 B 的自变量从未被触发，预注册没有实测可依。**继续改 fixture 直到出现预期的分叉就是按结果挑仪器**，与 NX-08e2「外推值被实测推翻」的教训同源；是否换一类「无法被脚本降维」的任务重建仪器由人决定，不属于本步。结论已并入 [NX-08-REPORT 的 NX-08f 一节](NX-08-REPORT.md#nx-08f-对照-b仪器未成立)。
 
 ## NX-08g 评测报告与结论
 
