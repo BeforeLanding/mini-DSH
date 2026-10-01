@@ -4,7 +4,7 @@
 
 ## 待办
 
-**NX-08 与 NX-09 两支均已收尾**：NX-08 的对照 A 完成（NX-08e）、对照 B 以「仪器未成立」的负面结果归档（NX-08f），结论合并进 [NX-08-REPORT](NX-08-REPORT.md)；NX-09 的 M9 交付件七步全部落地（子步骤见下方 [NX-09 一节](#nx-09-readme-定位原创增量架构图与零密钥运行入口)）。**NX-10（M9 演示）已完成**（2026-10-01，零付费，子步骤见下方 [NX-10 一节](#nx-10-固定代码修复演示三幕零付费)）——它是 NX-09 收尾后按用户指示从「其他待办」里选定的。**NX-11（整理设计取舍）已完成**（2026-10-01，零付费，子步骤见下方 [NX-11 一节](#nx-11-整理设计取舍五节零付费)）——M9 三块（NX-09／NX-10／NX-11）到此全部收尾。**当前没有进行中的主线**；其余待办仍未排期。下面 NX-08 各节保留为执行记录；整批上限、各臂一致的单次 run 预算与预注册口径见 [PLAN 的评测批次上限](PLAN.md#nx-08-评测批次上限预注册)，预注册参数在开跑后不得再单独调整某一臂或某次重复。
+**NX-08 与 NX-09 两支均已收尾**：NX-08 的对照 A 完成（NX-08e）、对照 B 以「仪器未成立」的负面结果归档（NX-08f），结论合并进 [NX-08-REPORT](NX-08-REPORT.md)；NX-09 的 M9 交付件七步全部落地（子步骤见下方 [NX-09 一节](#nx-09-readme-定位原创增量架构图与零密钥运行入口)）。**NX-10（M9 演示）已完成**（2026-10-01，零付费，子步骤见下方 [NX-10 一节](#nx-10-固定代码修复演示三幕零付费)）——它是 NX-09 收尾后按用户指示从「其他待办」里选定的。**NX-11（整理设计取舍）已完成**（2026-10-01，零付费，子步骤见下方 [NX-11 一节](#nx-11-整理设计取舍五节零付费)）——M9 三块（NX-09／NX-10／NX-11）到此全部收尾。**NX-08h（打破任务集天花板，方案 2）进行中**（2026-10-01，子步骤见下方 [NX-08h 一节](#nx-08h-打破任务集天花板方案-2无公开检查变体)）——它是「其他待办」里由用户选定的下一项，离线部分零付费，付费烟测单独授权；其余待办仍未排期。下面 NX-08 各节保留为执行记录；整批上限、各臂一致的单次 run 预算与预注册口径见 [PLAN 的评测批次上限](PLAN.md#nx-08-评测批次上限预注册)，预注册参数在开跑后不得再单独调整某一臂或某次重复。
 
 NX-08e 开跑前必须先解决其前置条件（2026-09-30 修正）：裁剪要求会话中存在**已结束且可裁剪的旧任务**，单任务会话无论多大都不会触发——当前 task 与 `/continue` 的续跑段恒受保护（依据见 [PLAN 的对照有效性条件](PLAN.md#nx-08 评测批次上限预注册)）。现有驱动每个 fixture 只发一次 `send`，因此筛查跑的 `removedTaskIds` 全为空属结构性必然。
 
@@ -138,9 +138,37 @@ NX-09 给的是「怎么跑起来」，NX-10 给的是「跑起来能看见什�
 
 NX-11-2…NX-11-5 这四步的验收**弱于** NX-11-6：那时锚点回归测试还不存在，只能逐条 `grep` 人工核对。这一点照实写进 CHANGES，不假装每步都有同等强度的验收。
 
+### NX-08h 打破任务集天花板（方案 2，无公开检查变体）
+
+**进行中（2026-10-01，用户选定「只做方案 2」）。** 承接 [NX-08g0](CHANGES.md#nx-08g0-任务集天花板效应定性边界与补救排序) 的**方案 2**：「增设**无公开检查**变体：工作区不含 `check.mjs`，只能按 SPEC 自验」。NX-08g0 判定的天花板效应是——两处独立测量都取满值（NX-08d 筛查 12/12、NX-08e 对照 A 6/6），**方差为零**，以 `accepted` 为分子的通过率统计量**没有分辨力**。机制之一是**公开且受保护的 `check.mjs` 就在工作区里、十四个阶段的说明全都给出 `node check.mjs N` 这个命令**，模型不必一次写对，只需能收敛到绿。
+
+**它测的是另一件事。** 现有 fixture 测「有完整、即时、廉价 oracle 时能否收敛」；去掉 oracle 之后测的是「能否按 SPEC 独立产出正确实现」。
+
+**实现方式：新建 fixture `blind`。** 从 `pipeline` 机械复制十四阶段，**只改三处**：删掉 `initial/check.mjs`、十四份阶段说明的末句改为按 `docs/SPEC.md` 自验、`docs/SPEC.md` 里两处提到 `check.mjs` 的句子改为只提独立验收。模型、prompt、初始工作区、验收器、单次 run 预算与输入目标 65,536 都与 NX-08e 的 `armB` 一致，**唯一差异是没有公开 oracle**——因此与既有读数可比。
+
+**为什么不给 `runFixtureTask` 加「隐藏 check.mjs」开关**：`protectedFiles` 在 `createFixture` 时按 `initial/` 快照，删掉受保护的 `check.mjs` 会让 `passed` 恒为 false，除非再去特判验收器——那正是在改独立验收口径来配合隐藏文件。新建 fixture 让处理在 fixture 树里可见可评审，且对 `.eval-evidence` 里六个历史目录零扰动。
+
+**为什么不并入 `sequenceIds`**：`repeatCount(1, 2)` 会抛 `cannot be split evenly across 2 fixtures`（`eval-cli.ts:83-88`），且 `phaseRegistry('armA') === ['pipeline']` 的既有断言会红。因此新增第五份注册表 `blindIds`。新阶段 `blind` 是**诊断烟测**，与 `smoke` 同口径：不进 `batchPhases`、`batchCaps` 保持 `{18, 3_200, 88_000_000}` 不变。
+
+**约束**：`src/` 一行不动；**不得沿用本轮的 `phaseCaps` 数字**——`blind` 的 cap 取逐阶段预算的理论上界（14 × 32 / 14 × 2,000,000），是机械推导而非实测预注册；`blind` 上的正式对照批次留到烟测之后另行授权。**反 p-hacking 条款**：无论烟测结果如何都不再改 fixture，继续调直到出现预期分叉即按结果挑仪器（红线沿用 NX-08f-4c）。
+
+| 子步骤 | 内容 | 验收 | 提交边界 |
+| --- | --- | --- | --- |
+| NX-08h-0 | TASKS 立项与 PLAN 预注册节（**done**） | `grep -cE '^\| NX-08h-' docs/context-budget/TASKS.md` = 9；每行「验收」列至少含一个反引号命令或可判定的 `grep`/退出码判据；PLAN 新节写死规模、可比性、三条判据（打破／因其它原因被拒／未被打破）与「无论结果如何不改 fixture」；`git diff --stat` 只含两份 `docs/context-budget/` 文件 | 1 次 |
+| NX-08h-1 | 建 `blind` fixture 骨架与注册表 | `test/fixtures/coding/blind/` 存在且 `initial/` 下**无** `check.mjs`；`blind/verify.mjs` 与 `pipeline/verify.mjs` **仅 marker 一行不同**（`diff` 输出恰为该行）；`grep -c blindIds scripts/coding-fixtures.ts` ≥ 2；`sources.blind` 与 `sources.pipeline` 逐字相同；`pnpm check` 通过 | 1 次 |
+| NX-08h-2 | 改写阶段说明与 SPEC | `grep -rln 'check\.mjs' test/fixtures/coding/blind/initial test/fixtures/coding/blind/TASKS` **输出为空**；`grep -c '^\| NX-08h-' docs/context-budget/TASKS.md` 不变；十四份 `TASKS/*.md` 与 `pipeline` 对应文件的差异**只在末段**（`diff` 逐份核对记入 CHANGES）；文本不含「变体」等元信息 | 1 次 |
+| NX-08h-3 | 阶段枚举与上限 | `pnpm test` 中 `pre-registered caps match PLAN…` 用例绿且 `batchCaps` 仍为 `{18, 3_200, 88_000_000}`；`grep -n "'blind'" scripts/eval-runner.ts scripts/eval-cli.ts` 各至少命中 `PhaseName`／`phaseCaps`／`phaseNames`／`phaseRegistry` 四处；无 default 的 switch 经 `pnpm check` 证明穷尽 | 1 次 |
+| NX-08h-4 | `blind` 契约与机制证明用例 | `pnpm test` 新增用例全绿，其中机制证明断言：`blind/initial/` 无 `check.mjs`、`initial/` 与 `TASKS/` 文本不含 `check.mjs`、两份 `verify.mjs` 仅 marker 一行差、十四份阶段说明与 `pipeline` 只差末段；注册表五份数组两两互斥；`phaseRegistry('blind')` 逐字等于 `['blind']` | 1 次 |
+| NX-08h-5 | 离线机制证明（零付费） | `pnpm fixtures:check` **16 项、初始 0/16、参考 16/16**；`pnpm test` 全绿；`pnpm check` 90 文件；`pnpm eval:offline` 仍 12/12；三条 `demo:*` 退出 0；**反例实跑**：`blind/verify.mjs` 的 marker 改回 `pipeline` 后 `pnpm fixtures:check` 必须红，改回必须绿（命令与输出记入 CHANGES） | 1 次 |
+| NX-08h-6 | 文档回填（离线收尾） | CHANGES 增 NX-08h 节且命令与实际输出逐字一致；各行置 `done` 并记提交号；README／`test/fixtures/coding/README.md`／PROGRESS 的 `15→16` 项计数与实跑一致，`syntax ok: 90 files` 不变；带日期的历史证据逐字未动 | 1 次 |
+| NX-08h-7 | 付费烟测（**需单独授权**） | `pnpm eval:screening --phase blind --plan-only` 输出含 `1 个任务 × 1 次重复 = 1 次运行：blind`、`448 请求 / 28000000 token`、末行 `只做计划预演，未建立目录、未发出请求`；随后 `MINI_DSH_EVAL_EVIDENCE_DIR=.eval-evidence/blind-full pnpm eval:screening --phase blind` 退出码与逐阶段读数落盘 | 1 次 |
+| NX-08h-8 | 报告回填 | CHANGES 结果节含 `acceptance.output` 原文、逐阶段 `status`、`protectedFilesChanged`、是否出现 `max_steps`；结论按 PLAN 预注册的三条判据分类，n=1 只作存在性证据，不含任何比例或提升措辞（`grep -nE '提升\|提高\|优于\|更好\|显著\|效率\|收益\|成功率\|%'` 在新增报告节内输出为空） | 1 次 |
+
+NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，**验收只在事后核对差异范围**，不像 NX-11-6 那样有回归测试在写的时候挡住漂移——这一点照实写进 CHANGES。
+
 其他待办，按依赖排序：
 
-- **NX-08h 打破任务集天花板 — todo（NX-08g0 立项，2026-10-01）**：承接 NX-08g0 的方案 2／3——增设「工作区不含公开 `check.mjs`、只能按 SPEC 自验」的变体，或提高阶段难度。**它改的是 fixture 契约，因而需要新的独立验收口径与预注册，不得沿用本轮的 `phaseCaps` 数字**；离线可以改好，但「是否真的产生失败」只能靠一次付费跑回答，开跑前须单独授权。优先级低于 NX-08f（对照 B）。
+
 - **NX-18 `..` 族误判 — todo（NX-17 期间发现）**：`..` 规则是整串正则，会命中引号内的惰性文本——`echo "see ../docs for details"`、`grep -n ".." src/index.ts`、`git log --grep "../ fixes"` 全部被判 `.. path escape is blocked`。该规则是用户「放宽不得削弱 `..`」条款点名保护的对象，NX-17 因此没有动它。收紧需要把判定从整串正则改为 token 级的路径操作数判定，且必须保持 `echo ../secret`、`cat ../secret`、`cp ../a b` 仍被拒；修改前先补需求/设计决策。
 - **NX-19 出网拦截的真实缺口 — todo（NX-17 期间发现）**：`bash -c "curl http://example.com"`、`sh -c "wget …"`、`echo "$(curl …)"`、`nc example.com 80`、`ssh user@example.com`、反斜杠 UNC（`cat \\server\share\secret`）当前全部放行；其中反斜杠 UNC 与 NX-17 无关，是既有缺口。出网规则只覆盖「整个 token 是一个 URL 且位于命令词可识别的段内」，命令替换、内联脚本与未被识别的取网工具都在覆盖范围之外。收口属于「加强」而非「放宽」，需要单独设计与验收，不得顺手塞进 NX-17 的提交。
 - **NX-16 持久化结构化编程任务状态与可选 compaction — todo（条件阶段，依赖 NX-08）**：只有评测确认当前 task 膨胀仍是主要失败源后才实现 compaction；实施前必须修订 R-03/D-02 的“当前 task 所有 run 原文进入请求”契约，不能作为小优化塞入。范围见[路线图 M8](../INTERNSHIP_ROADMAP.md)。
