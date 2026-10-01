@@ -91,3 +91,39 @@
 
 - 一批工具在额度将尽时是「执行到额度用尽、其余标 `skipped`」，不是「整批一起拒绝」。顺序执行会留下一个中间态，只能靠 `skipped` 结果把它解释清楚——这一条在 R-04 里是被明确接受的。
 - 受保护的组永远不裁剪。于是一个在途调用始终没被配对的旧任务会一直占着上下文位置。这是有意的取舍：宁可多占，也不裁掉无法解释的那一段。
+
+---
+
+### 3. 可靠编辑
+
+**选择。** 编辑走「读—验—改—提交」四步的乐观并发控制：读取时留下完整字节的 SHA-256 与真实路径；修改时按**唯一字面替换**产生新内容；提交前再复核一次目标路径与指纹，然后借同目录临时文件 `sync` 之后 `rename` 替换。规范条目见 [PLAN 的 NX-13 决策节](PLAN.md#nx-13-编辑与交付决策)与 REQUIREMENTS 的 R-16。
+
+**替代方案及其具体失效。**
+
+- 直接覆盖写（`fs.writeFile` 打到目标上）：写入本身不是原子的，进程在写一半时死掉会留下一个被截断的文件。这比失败更糟——它看起来像成功了。【决策时记录】
+- 按行号或正则替换：行号会在模型两次编辑之间漂移；正则则可能匹配上多处，然后静默地改错地方。【决策时记录】
+- 只在审批**前**检查一次版本：审批等待单独限 5 分钟，用户完全来得及在这期间自己改文件，那次编辑就会把用户的改动覆盖掉。【决策时记录】
+- 承诺跨文件事务或文件系统级比较交换：单文件 `rename` 是原子的，跨文件不是。承诺了就只能靠回滚假装，而回滚自己也会失败。【决策时记录】
+- 拿「读到的文本」当版本凭证（比较内容是否相等）：内容相同的两个版本无法区分，用户改回原样时检测不出来。【事后重构】
+- 写回时把 CRLF 统一成 LF：字节级差异会污染 diff，「保留用户原有修改」这句话也就失去了意义。【事后重构】
+
+#### 锚点
+
+| 类型 | 锚点 | 它钉住什么 |
+| --- | --- | --- |
+| 代码 | `src/core/file-edit.ts:21` | `snapshot` 一次读齐真实位置、字节指纹与权限位，解码用 `ignoreBOM` 保持字节精确 |
+| 代码 | `src/core/file-edit.ts:48` | `checkHash` 先校验 `expectedHash` 的形状，再比对内容是否冲突 |
+| 代码 | `src/core/file-edit.ts:53` | `replaceUnique` 对「找不到」与「不唯一」分别拒绝，不做模糊匹配 |
+| 代码 | `src/core/file-edit.ts:91` | 同目录临时文件 → 写入 sync → 复核路径 → `rename` 替换 |
+| 代码 | `src/core/file-edit.ts:109` | `rename` 成功之后的清理失败不会把一次已提交的编辑倒置成失败 |
+| 代码 | `src/tools/files.ts:78` | 审批通过之后才提交；提交后出错报的是「已提交但结果不确定」，不是「编辑失败」 |
+| 测试 | `test/file-edit.test.ts` · `file editing preserves exact Unicode/BOM/CRLF bytes and rejects ambiguous or unsupported text` | BOM 与 CRLF 逐字节往返；歧义与找不到的 `oldText` 被拒 |
+| 测试 | `test/file-edit.test.ts` · `atomic editing detects changed and newly created targets and cleans failed/cancelled temporary files` | 目标被改动时报冲突；失败或取消之后目录里不残留临时文件 |
+| 测试 | `test/file-edit.test.ts` · `atomic edits preserve permissions and internal symlinks, refusing approval-time retargeting` | 提交后权限位不变；审批期间软链改指向被拒 |
+| 测试 | `test/task-changes.test.ts` · `task journal preserves dirty baseline, rejects stale reads, and resumes across JSONL restart without attributing user edits` | 用户已有改动进入基线；陈旧读取被拒；恢复不重放，也不把用户改动归因给 Agent |
+
+#### 代价
+
+- **最后一次复核到 `rename` 之间仍有外部进程竞态。** 第 101–102 行核验通过之后、`rename` 之前，别的进程仍可能改动目标。这是应用层乐观检测，不是操作系统级保证——PLAN 的 NX-13 决策节把它写死为「属于应用层乐观检测」。
+- **落盘不确定时要人来判。** 文件可能已经改好而结果事件没写成，所以报的是「已提交但结果不确定」，须核验后才能继续，而不是简单重试。这与第 5 节的 `unknown` 是同一个设计取向。
+- **快照要占地方。** 每个被跟踪文件都要留一份内容快照，`maxEditBytes` 默认 1 MiB、每 task 默认 100 个文件；超过限额的文件仍可有界读取，但不能编辑。
