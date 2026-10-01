@@ -114,7 +114,7 @@
 | 代码 | `src/core/file-edit.ts:21` | `snapshot` 一次读齐真实位置、字节指纹与权限位，解码用 `ignoreBOM` 保持字节精确 |
 | 代码 | `src/core/file-edit.ts:48` | `checkHash` 先校验 `expectedHash` 的形状，再比对内容是否冲突 |
 | 代码 | `src/core/file-edit.ts:53` | `replaceUnique` 对「找不到」与「不唯一」分别拒绝，不做模糊匹配 |
-| 代码 | `src/core/file-edit.ts:91` | 同目录临时文件 → 写入 sync → 复核路径 → `rename` 替换 |
+| 代码 | `src/core/file-edit.ts:91` | 先落同目录的 `temporary` 文件，写入并 sync 之后复核路径，最后 `rename` 替换 |
 | 代码 | `src/core/file-edit.ts:109` | `rename` 成功之后的清理失败不会把一次已提交的编辑倒置成失败 |
 | 代码 | `src/tools/files.ts:78` | 审批通过之后才提交；提交后出错报的是「已提交但结果不确定」，不是「编辑失败」 |
 | 测试 | `test/file-edit.test.ts` · `file editing preserves exact Unicode/BOM/CRLF bytes and rejects ambiguous or unsupported text` | BOM 与 CRLF 逐字节往返；歧义与找不到的 `oldText` 被拒 |
@@ -148,7 +148,7 @@
 | 类型 | 锚点 | 它钉住什么 |
 | --- | --- | --- |
 | 代码 | `src/core/task-verification.ts:15` | 声明文件的版本快照；`tolerateErrors` 只在检查**后**那次读取上打开 |
-| 代码 | `src/tools/bash.ts:49` | `verification/start`（含检查前版本）先落盘，落盘之后才执行命令 |
+| 代码 | `src/tools/bash.ts:49` | `journal` 把检查意图（含检查前版本）先落盘，落盘之后才执行命令 |
 | 代码 | `src/core/task-verification.ts:63` | 状态由检查前后版本是否一致推出，`unavailable` 与 `unknown` 各自有独立分支 |
 | 代码 | `src/core/task-verification.ts:65` | freshness 拿**当前**文件重算，并叠加此后的 `file/change` |
 | 代码 | `src/core/task-verification.ts:70` | 查询自带范围说明：只覆盖声明的文件与命令 |
@@ -183,7 +183,7 @@
 
 | 类型 | 锚点 | 它钉住什么 |
 | --- | --- | --- |
-| 代码 | `src/core/session-runtime.ts:48` | 恢复时逐个在途调用补一条结果，由有没有 `tool/start` 决定 `unknown` 还是 `skipped` |
+| 代码 | `src/core/session-runtime.ts:48` | 恢复时用 `pendingTools` 逐个找出在途调用并补一条结果，由有没有 `tool/start` 决定 `unknown` 还是 `skipped` |
 | 代码 | `src/core/session-runtime.ts:62` | 崩溃窗口里还停在 running 的 run 被封成 `error`，不留在半途 |
 | 代码 | `src/core/session-runtime.ts:129` | 同 task 只要存在一条 `unknown` 结果，自动续跑就被拒并说明原因 |
 | 代码 | `src/core/task-changes.ts:39` | 文件编辑意图没有配对结果时同样抛错，不让新任务在不知道结果的情况下开工 |

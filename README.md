@@ -55,8 +55,8 @@ git log --oneline --reverse | sed -n '12p'                # 43e3829：分界之�
 
 ```powershell
 pnpm install --frozen-lockfile
-pnpm check            # syntax ok: 89 files
-pnpm test             # tests 202 / pass 202 / fail 0 / skipped 0
+pnpm check            # syntax ok: 90 files
+pnpm test             # tests 203 / pass 203 / fail 0 / skipped 0
 pnpm fixtures:check   # 15 项：初始全部失败、参考解全部通过
 pnpm eval:offline     # planned 12 / executed 12 / accepted 12
 pnpm demo:fix         # 退出码 0：项目规则 → 定位 → 修改 → 失败测试 → 再修复 → diff 与证据
@@ -141,7 +141,7 @@ pnpm check
 pnpm test
 ```
 
-当前 202 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读、可靠编辑/任务变更、结构化命令、验证报告与请求 trace 测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
+当前 203 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读、可靠编辑/任务变更、结构化命令、验证报告与请求 trace 测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
 
 NX-05a 起提供可重复的 [编程任务 fixture](test/fixtures/coding/README.md)，NX-05b 扩展到 12 项，覆盖边界修复、功能扩展、跨文件接口修改、去重、分页、查询重试、合并、CSV、库存与汇总等；此后又加入多阶段序列 `pipeline`、单任务 `audit` 与演示夹具 `repair`，**当前注册表共 15 项 = 筛查 12 项（上列，冻结）+ 这 3 项**。运行 `pnpm fixtures:check` 核验全部 15 项的初始失败/参考通过基线；`pnpm test` 还覆盖模拟模型经真实文件/Bash 工具完成失败→修改→重跑的流程。每次使用新临时工作区，独立验收器保留在工作区外；模拟结果不代表真实模型编程成功率。
 
