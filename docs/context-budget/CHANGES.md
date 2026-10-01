@@ -71,6 +71,31 @@
   - `test/eval-runner.test.ts` 新增用例钉住 `toolOutputPolicy`（只有 `smoke` 非空）；`phaseCaps` 与 `batchCaps` 的逐值断言同步；`test/eval-cli.test.ts` 的 phases 循环与「unknown phase」错误串加入 `smoke`（错误串顺序敏感）。
 - **回归**：`pnpm test` **200/200**（原 199，新增 1 条）；`pnpm check` 84 文件语法通过。未调用付费模型。
 
+### NX-08f-4b 真实模型烟测 — done（2026-10-01，付费约 $0.03）— **结果：未观测到处理生效**
+
+- **命令与规模**：`pnpm eval:screening --phase smoke`，1 次运行，`deepseek/deepseek-v4-flash`（服务端回显 `deepseek-flash`），无界工具输出。证据在 `.eval-evidence/smoke-full/`（不入库）。
+- **结果**：`completed`、`accepted=true`、**7 请求 / 12 工具 / 138,931 token**（输入 134,678、输出 4,253）、主动 21.9 秒、审批 0；7 条 usage **全部来自 provider**、估算回退 0 次。逐阶段峰值估算输入 **33,507**，是输入目标 65,536 的 **51%**——**没有越过，`unsentProjections` 为 0，一次裁剪都没有**。
+- **模型实际做的 12 次调用**（从 `assistant/tool_calls` 逐条读出）：
+
+  | # | 调用 | 结果字节 |
+  | --- | --- | --- |
+  | 1 | `bash 'find . -type f … \| head -50 && echo "---" && ls -la'` | 1,004 |
+  | 2–4 | `read_file` `check.mjs` / `src/normalize.mjs` / `src/audit.mjs` | 938 / 554 / 1,021 |
+  | 5 | **`read_file report.mjs`** | 1,620 |
+  | 6 | `read_file data/records.jsonl` | **32,832**（撞上 tool 的 32 KiB 上限） |
+  | 7 | `read_file package.json` | 145 |
+  | 8 | `read_file data/records.jsonl startLine=173` | **32,770** |
+  | 9–10 | `write_file src/normalize.mjs` / `edit_file src/audit.mjs` | 951 / 383 |
+  | 11 | `bash 'node check.mjs'`（带 verification） | 470 |
+  | 12 | **`bash 'node report.mjs \| tail -5'` + 自写探针** | 1,888 |
+
+- **两处泄露，都是本 fixture 自己造的**，模型因此**从未在破损状态下跑过 `report.mjs`**：
+  1. **`report.mjs` 的源码里有 `RULES` 映射**（1,404 字节的文件，把三条规范形式写成了可读文本）。我当初把规则放进生成器源码，是为了让报告「自解释」；代价是**读源码 = 读报告的全部信息量**，而源码只有 1.4 KB。模型的总结里直接写着「Canonical rule **(from `report.mjs`)**」。
+  2. **数据集每行自带 `expected`，`TASK.md` 又明说「带一份期望的规范值」**。模型只读了 2 块（32,832 + 32,770 = 65.6 KB，占数据集 297.7 KB 的 **22%**）就覆盖了三条规则——因为无论怎么抽样，raw/expected 对照都在前两块里。
+- **它确实在收窄**：唯一一次跑 `report.mjs` 是在**修好之后**，而且写的是 `node report.mjs | tail -5`——那时输出已经只剩 `SUMMARY 0`。整批**没有任何一条 bash 结果超过 2 KB**，最大的两条是 `read_file` 撞上 32 KiB 上限的那两块。
+- **可以写什么、不可以写什么**：本批次**未观测到处理生效**——真实模型没有产生大输出，对照 B 在这个 fixture 上**没有分辨力**。**不得**外推成「有界工具输出无影响」，也不得用 n=1 断言「模型总是收窄」；能说的只有这一条轨迹上模型的行为。这是 PLAN 风险表第 ① 行的情形，处置按 NX-08e2 的教训：如实记录，不修改已跑的预注册数字。
+- **成本**：约 **$0.03**（139k token，按价格页 off-peak 口径、无缓存命中；算法与 NX-08g 报告一致）。这是 NX-08f 目前为止唯一的付费项。
+
 ### 子步骤与提交边界
 
 | 子步 | 内容 | 付费 | 状态 |
@@ -79,7 +104,7 @@
 | NX-08f-2 | 新增单任务 fixture `audit`（大输出仪器） | 否 | **done** |
 | NX-08f-3 | 离线机制证明（同 fixture 下无界臂溢出、有界臂完成）+ 诊断探针 | 否 | **done** |
 | NX-08f-4 | 接好诊断阶段 `smoke`，使付费烟测可被 `--phase`/`--plan-only` 调度 | 否 | **done** |
-| NX-08f-4b | 真实模型烟测：模型是否**真的**产生大输出 | **是**（需单独授权） | todo |
+| NX-08f-4b | 真实模型烟测：模型是否**真的**产生大输出 | **是**（需单独授权） | **done — 未观测到处理生效** |
 | NX-08f-5 | 按实测预注册 `armC`/`armD` 的 `phaseCaps` 与 `batchCaps` | 否 | todo |
 | NX-08f-6 | 正式批次（1 fixture × 6 次重复 × 2 臂） | **是** | todo |
 | NX-08f-7 | 报告回填（NX-08-REPORT / CHANGES / TASKS / PROGRESS） | 否 | todo |
