@@ -27,7 +27,7 @@
 | 提交范围 | `0a95a7f`～`c5fc9c4`（共 11 个） | `43e3829` 起 |
 | 语言 | 纯 JavaScript | TypeScript（tsc strict / NodeNext），Node 执行 `dist` 产物 |
 | 工具 | 6 个：`bash` + `read_file`／`write_file`／`edit_file`／`glob`／`grep` | 11 个：`tools/` 的 9 个（上列 6 个再加 `task_changes`／`request_trace`／`task_report`）与插件提供的 2 个（`project_context`／`read_tool_result`） |
-| 测试 | 22 条（`core.test.js` 20 + `integration.test.js` 2） | 216 条；另有 16 项编程 fixture 基线、离线评测入口与三条演示 |
+| 测试 | 22 条（`core.test.js` 20 + `integration.test.js` 2） | 204 条；另有 16 项编程 fixture 基线、离线评测入口与三条演示 |
 | 已有能力 | 基础配置、Session Event Log、Tool Runtime、System Prompt + LLM Adapter、Agent Loop、DeepSeek 适配器、runtime-context、外部插件与 MCP、沙箱与路径闸门、Bash/文件工具 | 上下文投影与裁剪、四维执行预算、JSONL 持久化与崩溃恢复、预算停止后的 `/continue`、有界读取/搜索与大结果回读、可靠编辑与任务变更清单、结构化前台命令、验证记录与交付报告、请求 trace、项目上下文、编程任务 fixture、真实模型评测 |
 
 上表每一行都能在仓库根目录复现（全部离线，不联网）：
@@ -132,7 +132,7 @@ flowchart LR
 
 Loop 通过服务契约工作，不依赖具体模型或工具，底层未注入预算时没有固定次数上限；CLI 默认使用有限预算。每个已记录的 tool_call 都保证有配对结果（真实完成、`skipped` 或 `unknown`）。
 
-路径闸门检查词法路径、真实路径及尚未创建文件的父目录，拒绝软链越界。命令策略用于防止误操作，审批负责确认执行；这是应用层策略，不是操作系统隔离。命令策略按 shell 语义分词后检查越界路径、系统路径、危险删除与出网目标，并把 shell **真正会执行**的嵌套文本一并检查——单引号之外的 `$(...)` 与反引号、`sh`/`bash`/`zsh`/`dash`/`ksh` 的 `-c` 参数（含 `env`/`nice`/`xargs` 包装）、`eval` 的参数，都按独立片段递归检查；取网工具集含 `curl`/`wget`/`nc`/`ssh`/`scp`/`rsync`/`ping`/`dig` 等。惰性参数不拦（注释形状的 `//` 与 `awk`/`sed` 的程序正文、`echo`/`printf` 参数里的 URL、单引号内的 `$(...)`）。环境变量按 shell 的引号与转义规则展开：单引号内与 `\$` 之后不展开，双引号内仍展开；同一条命令里由 `for` 或 `NAME=` 绑定的 shell 变量优先于环境变量（未绑定的未知名字仍拒绝）。命令段起点的判定认 shell 的保留字（`if`/`elif`/`while`/`until`/`do`/`then`/`else`）与算子——子 shell `(` 与分组 `{` 之后那一个词同样按命令词处理。它是形状启发式而不是完备解析：`node -e`/`python -c` 的程序字符串、脚本文件内容、base64 解码后进 shell、here-doc 正文、`case` 臂体、包装命令（`env`/`timeout`/`nice`/`xargs`）后面的命令与未列入清单的工具都不在覆盖内，详细契约与边界见[需求 R-20](docs/context-budget/REQUIREMENTS.md)。
+路径闸门检查词法路径、真实路径及尚未创建文件的父目录，拒绝软链越界。命令策略用于防止误操作，审批负责确认执行；这是应用层策略，不是操作系统隔离。**命令策略只做粗粒度形状检查**：按 shell 语义分词后拦下 `sudo`/`su` 与递归删除、`curl`/`wget` 管道进 shell、`..` 逃逸、越界路径、系统路径、UNC 形状，以及**段首为取网工具**的命令段（`curl`/`wget`/`nc`/`ssh`/`scp`/`rsync`/`ping`/`dig` 等，按工具名拦而不解析目标）。惰性参数不拦（注释形状的 `//` 与 `awk`/`sed` 的程序正文、`echo`/`printf` 参数里的 URL）。它是形状启发式而不是完备解析：嵌套执行（`bash -c`/`eval`/`$(...)`/反引号）、变量间接、保留字与子 shell 之后的命令位、`case` 臂体、包装命令（`env`/`timeout`/`nice`/`xargs`）后面的命令、非段首的 URL 操作数、`node -e`/`python -c` 的程序字符串、脚本文件内容、base64 解码后进 shell 与 here-doc 正文都不在覆盖内——逐行清单见[需求 R-20](docs/context-budget/REQUIREMENTS.md) 与诊断矩阵 `docs/context-budget/nx17-gate-probes.mjs` 的 `known gap` 组。**它也不宣称完整**：本地回环同样被拦（`curl http://localhost:8080/health` 一律拒绝），此后不再为它开新工作项。
 
 ## 验证
 
@@ -141,7 +141,7 @@ pnpm check
 pnpm test
 ```
 
-当前 216 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读、可靠编辑/任务变更、结构化命令、验证报告与请求 trace 测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
+当前 204 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读、可靠编辑/任务变更、结构化命令、验证报告与请求 trace 测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
 
 NX-05a 起提供可重复的 [编程任务 fixture](test/fixtures/coding/README.md)，NX-05b 扩展到 12 项，覆盖边界修复、功能扩展、跨文件接口修改、去重、分页、查询重试、合并、CSV、库存与汇总等；此后又加入多阶段序列 `pipeline`、单任务 `audit`、演示夹具 `repair`，以及 `pipeline` 的无公开检查变体 `blind`，**当前注册表共 16 项 = 筛查 12 项（上列，冻结）+ 这 4 项**（`blind` 与 `pipeline` 是同一套任务，只差工作区里有没有公开 `check.mjs`）。运行 `pnpm fixtures:check` 核验全部 16 项的初始失败/参考通过基线；`pnpm test` 还覆盖模拟模型经真实文件/Bash 工具完成失败→修改→重跑的流程。每次使用新临时工作区，独立验收器保留在工作区外；模拟结果不代表真实模型编程成功率。
 

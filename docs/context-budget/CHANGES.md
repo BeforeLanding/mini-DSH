@@ -2,6 +2,74 @@
 
 更新：2026-10-01。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-32 命令闸门的有意收缩与取消窗口
+
+### 现象与根因
+
+不是缺陷修复，是**有意的能力撤回**。触发点是两件实测事实：① `docs/INTERNSHIP_ROADMAP.md` 的 NX 编号全集只到 NX-16，整条闸门收紧线（NX-17／19／24／26／30／31）**不在路线图内**，而路线图写明「M5～M7 加最小 M9 演示即可形成投递版本」——那条线其实早已走完；② `src/core/sandbox-runtime.ts` 因此长成 `src/` 里最大的单文件（576 行，占全部源码 3954 行的 14.6%，第二名 271 行），而它**在唯一没有审批兜底的 `autoApprove` 模式里也拦不住**——`test/coding-fixtures.test.ts:62,377` 就是 `autoApprove: true`，而文档早已写明 `node -e`／`python -c` 的程序字符串不在覆盖内，NX-08f 又实测到模型自写 `node -e` 探针（armA 21 次、armB 75 次）。
+
+判据本身也没有终点：它是「这段文本会不会被 shell 执行」，用启发式词法逼近一个上下文相关的语法，每修一处必露下一处——实测序列就是 NX-26（保留字）→ NX-30（算子）→ NX-31（包装命令）。
+
+### 设计决策
+
+从「这段文本会不会被 shell 执行」改为「**粗形状防误操作**」，只留四条判据：四个整串正则；token 上的 UNC／盘符绝对路径／系统路径与 `resolveInside`；**按段首工具名**的出网拦；引号感知的分词。细节与代价见 [PLAN D-16](PLAN.md#d-16-命令闸门的有意收缩nx-32)。
+
+**两个必须做对的点，各配一条反例。**
+
+1. **段首谓词必须保留，且不能按文本切分。** 它既服务于出网按工具名的判定，也是 `/bin`／`/usr/bin` 命令词豁免的兜底。段界取 token 之间的**空隙**里有没有分隔符——契约里的 `awk '/stage(7|7)|phase 7/{f=1} f'` 的 `|` 在被引号吃掉的 token 内部，按文本切会凭空切出一段。
+2. **`previousEnd` 必须在所有 `continue` 之前更新**——这是 NX-26 的教训（那次的旗标不能挪到循环末尾，因为有四处 `continue`）。
+
+### 净放宽与净收紧清单
+
+| 方向 | 项 | 说明 |
+| --- | --- | --- |
+| 收紧 | 本地回环不再豁免 | `curl http://localhost:8080/health` 由默认白名单放行变**拒绝**，且没有审批逃生门（闸门 deny 发生在 `approve` 之前） |
+| 收紧 | 纯本地操作数被一并拒绝 | `scp report.pdf backup.pdf`、`rsync -avz src/ dest/`、`nc -l 8080`、`ping 127.0.0.1`——判据不看目标，**记录在案的过拒** |
+| 放宽 | NX-23 闭合 | 裸 URL 规则随操作数模型删除，`git log --grep "https://github.com/x"` 放行 |
+| 放宽 | 环境展开撤销的连带 | `cat $MINI_DSH_UNSET_VAR/file`、`node -e "show('a: b$ad')"` 等由拒绝变放行——**不是修好了，是判据没了**，已登记为 `known gap NX-24 reopened` |
+
+**新登记的欠拦（NX-32 两条）**：非段首的 URL 操作数（`git clone https://example.com/x.git`、`echo "http://evil.example" | xargs curl`）、变量间接（`X=..; cat $X/secret`、`Y=/etc; cat $Y/passwd`）。
+
+### 验证
+
+```
+pnpm check                                        # syntax ok: 90 files
+pnpm test                                         # tests 204 / pass 204 / fail 0（收缩前 216）
+pnpm build && node docs/context-budget/nx17-gate-probes.mjs   # no contract drift; 32 known gap(s) still open
+node docs/context-budget/nx24-replay-probe.mjs    # 退出 0；782 次调用 7 条拒绝全部有归属（收缩前 9 条）
+pnpm eval:estimate                                # 退出 0（语料 digest 未动）
+pnpm fixtures:check                               # 退出 0
+pnpm eval:offline                                 # planned 12 / accepted 12 / completed 12
+```
+
+**语料 digest 的地雷已排除**：`corpusDigest`（`scripts/estimation-corpus.ts:54`）只对 corpus 目录里的 40 个样本取 SHA-256，**从不与 `src/` 比对**——删 `SandboxConfig.allowHosts` 不会让 `eval:estimate` 变红。`core-contracts.txt` 自本项起与 `contracts.ts` 不再逐字相同，按「冻结快照」对待（其 README 本来就授权这一点）。
+
+### 反例实跑
+
+| 关掉的东西 | 实测到的红 |
+| --- | --- |
+| 段首守卫 `atSegmentStart &&`（`:531` 白名单那条） | `cp foo /usr/bin/evil` → `allow`（应为 deny，理由 path escapes the workspace） |
+| 段首判定改为读全部前文（而非 token 空隙） | `echo "x\|y" /usr/bin/ls` → `allow`（应为 deny） |
+| 出网裁决提前到路径检查之前 | `wget -O /etc/passwd http://localhost/x` → 理由变成出网，T1 的 `/system path is blocked\|path escapes the workspace/` 断言红，`actual: 'network tool is not covered…'` |
+| 出网赋值挪到段首白名单的 `continue` 之后 | `/usr/bin/curl example.com` → `actual: 'allow'` / `expected: 'deny'` |
+
+### 取消窗口（NX-32-2）
+
+`src/core/command-runner.ts` 的 `kill()` 原本是 fire-and-forget：Windows 上发出 `taskkill /T /F` 就不管，`stop()` 设完 status 立刻返回，`close` 一到就 resolve——结构上存在「已返回 `cancelled` 而进程树还没拆完」的窗口。POSIX 没有这个问题（`kill(-pgid, SIGKILL)` 系统调用层面同步且不可捕获）。
+
+改为：`kill()` 返回永不 reject 的 `Promise<void>`（Windows 分支包成 Promise ＋ 2 秒 `treeKillDeadlineMs`；POSIX 同步杀完即 resolve），`stop()` 存进 `terminating`，`close` 只在它存在时多等一步。正常退出路径一行未变，仍然只在 `close` 上 resolve。
+
+**本机实测：观测不到新旧差别。**
+```
+durationMs（4 次中位）：新 418ms ／ 老 457ms
+返回时孙进程存活：      新 0/5 ／ 老 0/5
+```
+老实现的 `close` 本来就要等 taskkill 把子进程杀掉才触发，所以这次等待在**常见路径上是空操作**，只在 taskkill 慢于子进程死亡那个病态分支上起作用——而那正是本地复现不出来的分支。因此**没有**加「`durationMs` 不得短于一次 taskkill 往返」的断言：实测两边都过，那样的断言声称能区分实现却不区分。CI run 36837866707 那次 windows/Node 24 的红与它的关系是**推断**（该次重跑即绿，已确认为竞态），不是实测。
+
+### 未覆盖、已登记
+
+按 D-16 的处置规则：**此后不再为闸门开新工作项**。当前 32 行已知缺口全部在矩阵的 `known gap` 组里可见：NX-18（`..` 惰性文本误拒）、NX-25（here-doc 正文）、NX-19 重开（嵌套执行）、NX-24 重开（变量间接）、NX-26 重开（保留字后的命令位）、NX-30 重开 ＋ arm body、NX-31（包装命令）、NX-32（非段首 URL 操作数、变量间接）。真正的边界是 `utils/path.ts` 的 `resolveInside`（本项一行未动）与人工审批，两者都不是操作系统隔离。
+
 ## NX-30 子 shell 与分组的命令段起点
 
 - 关联：与 NX-26 同族——NX-26 补了「保留字之后的命令位」，本轮补**引入命令位置的另一半：算子**（矩阵的 `known gap NX-30` 组）。不依赖其他任务，可独立验收。状态：**done**（2026-10-01，零付费）。**方向是收紧**：`executable`（命令段起点的定义）此前连算子都不认，于是子 shell 与分组里的 `curl` 既不重置段状态、也不开启取网工具的操作数模型。机制与取舍见 [PLAN 的 D-15](PLAN.md#d-15-命令段起点的算子支)，子步骤与提交边界见 [TASKS 的 NX-30 一节](TASKS.md#nx-30-子-shell-与分组的命令段起点)。
