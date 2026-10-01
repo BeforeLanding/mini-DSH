@@ -2,7 +2,123 @@
 
 更新：2026-10-01。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-09 README 定位、原创增量、架构图与零密钥运行入口
+
+- 关联：路线图 M9 的入口件，解锁条件是路线图 §6 的「完成 M7 后，再用真实实验数字补充」——M7 出口（NX-08 的两次对照与 [NX-08-REPORT](NX-08-REPORT.md)）已满足。状态：**done**（2026-10-01，零付费）。子步骤与提交边界见 [TASKS 的 NX-09 一节](TASKS.md#nx-09-readme-定位原创增量架构图与零密钥运行入口)。
+- **本次零代码改动**：`src/**` 一行未动，全部是文档。
+
+### 动因（开工前实测，不是估读）
+
+| 问题 | 位置 | 实测 |
+| --- | --- | --- |
+| 测试数陈旧 | README「验证」节 | 写「当前 190 条测试」，`pnpm test` 实测 200/200 |
+| 工具清单陈旧 | README「结构」节 | 写「Bash、五个文件工具和 task_changes」共 7 个，实际 `src/tools/` 注册 9 个（漏 NX-06 的 `request_trace`、`task_report`） |
+| 基线数字陈旧 | PROGRESS「主分支基线」条 | 写 195/195 测试、13 项 fixture，实测 200/200、14 项 |
+| 表述过时 | README 开篇 | 「结构化验证记录仍是后续规划」——该能力已由 NX-15 交付，且本文 NX-15 一节已在描述它 |
+| 读者向内容缺失 | 全篇 | 无定位/范围/非目标、无教程基线与独立扩展分界、无架构图、无零密钥上手路径、无实验报告入口 |
+
+路线图 §6 明确要求「应明确教程基线与独立扩展的边界」；M9 出口要求「陌生读者能按说明运行并检查最终文件/测试；项目介绍清楚区分教程基线、独立扩展、真实模型结果与模拟回归」。
+
+### NX-09-0 立项 — done
+
+把 TASKS 里的 NX-09 待办提升为七行子步骤表（格式对齐 NX-08 的表）。`AGENTS.md` 要求「**开发前**须在 TASKS 中列出子步骤、各自验收和预计提交边界」，因此本步先于 README 的任何改动落地。同时把「下一步主线」从 NX-08 改为 NX-09。
+
+验收：`grep -c '^| NX-09-' docs/context-budget/TASKS.md` = 7；`git diff --stat` 只含 `docs/context-budget/TASKS.md`。提交 `f315ab9`。
+
+### NX-09-1 README 开篇：定位与范围/非目标 — done
+
+补三段：是什么、范围（单 Agent／单本地工作区／CLI；核心依赖服务契约）、**明确不做**五项（多 Agent 调度与托管平台、向量记忆与长期记忆、操作系统级隔离、费用硬上限、任意执行位置的精确恢复）。每项都能在 `PLAN.md` 的 D-01 或路线图 §4.7 找到依据。
+
+措辞上刻意**不照抄**路线图 §6 的禁语列表，避免把「生产级」「严格成本上限」「任意断点恢复」「任务成功率显著提高」这些词写进 README。MCP 写成「只按可选外部插件接入」（README 已记录可选 Context7 MCP），**不写成「不支持 MCP」**——那会与本节自相矛盾。
+
+同时删掉「结构化验证记录仍是后续规划」。该句就在本步重写的段落里，若挪到 NX-09-3 会造成两个提交改同一句、互不可单独 revert。
+
+验收：`grep -c '结构化验证记录仍是后续规划' README.md` = 0；`grep -c '不支持 MCP' README.md` = 0。提交 `74d7995`。
+
+### NX-09-2 教程基线与独立扩展分界 — done
+
+新增「基线与本项目的分界」一节，分界点为提交 `c5fc9c4`：它及之前是教程主线，`43e3829`（M0 文档基线）起是本项目自己的开发。按提交范围／语言／工具／测试／已有能力五行对照。
+
+八条 git 命令逐条实跑核对：
+
+```
+git rev-list --count c5fc9c4                              # 11：教程主线提交数（含端点）
+git ls-tree -r --name-only c5fc9c4 | grep -c '\.ts$'      # 0：基线没有 TypeScript
+git ls-tree -r --name-only c5fc9c4 src/ | wc -l           # 22：基线源文件数
+git show c5fc9c4:src/tools/files.js | grep -o "name: '[a-z_]*'"   # 5 个文件工具
+git show c5fc9c4:src/tools/bash.js  | grep -o "name: '[a-z_]*'"   # bash
+git show c5fc9c4:test/core.test.js        | grep -c '^test('      # 20
+git show c5fc9c4:test/integration.test.js | grep -c '^test('      # 2
+git log --oneline --reverse | sed -n '12p'                # 43e3829：分界之后的第一个提交
+```
+
+另注明本仓库**不存在**「教程第 N 天 ↔ 某个 CB 编号」的映射——仓库里没有这个数据，只有一句对教程本身的引用。
+
+验收：八条命令输出与 README 记的值逐个一致；`grep -cE '第 ?[0-9]+ ?天.*CB-|CB-[0-9]+.*第 ?[0-9]+ ?天' README.md` = 0。提交 `fc1788f`。
+
+### NX-09-3 陈旧数字与过时表述订正 — done
+
+改三处（README 测试数 190 → 200、README 的 `tools/` 清单 7 → 9、PROGRESS 主分支基线 195/13 → 200/14）。
+
+**fixture 计数不做整体替换**：README 里「NX-05b 扩展到 12 项」与 `eval:offline`／`eval:screening` 两处的「12 个 fixture」**都是对的**——筛查批次确实冻结在 12 个。改法是在前者后面补一句「当前注册表共 14 项 = 筛查 12 项 + `pipeline` + `audit`」。盲目 12→14 会把后两处改错。
+
+**历史证据逐字不动**：README 的 SHA 锚定历史（`147/147`、`check72/test123`、`53e5aba`）与 PROGRESS 中带日期的历史条（`198/198` 等）。依据是 `PROGRESS.md` 自己的更新规则——只改当前状态，不改历史证据。
+
+验收：`grep -nE '当前 [0-9]+ 条测试' README.md` 只有一处且为 200；`grep -c '190' README.md` = 0；`grep -ho "name: '[a-z_]*'" src/tools/*.ts | sort -u | wc -l` = 9，加插件提供的 2 个共 11，与 README 一致；`147/147` 与 `198/198` 的计数改动前后相同。提交 `72e263a`。
+
+### NX-09-4 Mermaid 架构图 — done
+
+在「结构」节加一张 `flowchart LR`，只表达三件事：请求路径（CLI → `agent.send` → Agent Loop → 投影／预算／模型适配器／工具注册表）；**事件日志是唯一事实来源，请求投影是由它派生的视图**（虚线），因此裁剪只作用于投影、不删原始事件；**工具在两处注册**——`tools/` 9 个与插件 2 个，分列以免与同节的工具清单冲突。
+
+原来那句「请求经过 CLI → agent.send → Agent Loop → Session Event Log → LLM」与图重复，改为只留图不表达的两点（Loop 通过服务契约工作；每个已记录的 tool_call 都保证有配对结果）。
+
+验收：mermaid 围栏恰好 1 个；`grep -c '^```' README.md` = 8（偶数，围栏配对）；图内工具名集合与 `grep -ho "name: '[a-z_]*'" src/tools/*.ts src/plugins/*.ts | sort -u` 的 11 个逐个一致。**不安装新依赖做渲染校验**（与本仓库不引入新依赖一致），渲染由 GitHub 承担，语法保持最基础的 `flowchart` 子集。提交 `fcd2b14`。
+
+### NX-09-5 零密钥上手路径 — done
+
+原「运行」节第一段就是 `Copy-Item .env.example .env` + `pnpm start`，读者要看得见任何东西都必须先申请密钥。拆成两小节：「零密钥跑通」与「接真实模型」。
+
+「零密钥跑通」的五条命令，行尾注释是实测输出：
+
+```
+pnpm install --frozen-lockfile
+pnpm check            # syntax ok: 84 files
+pnpm test             # tests 200 / pass 200 / fail 0 / skipped 0
+pnpm fixtures:check   # 14 项：初始全部失败、参考解全部通过
+pnpm eval:offline     # planned 12 / executed 12 / accepted 12
+```
+
+`pnpm eval:offline` 自己会打印 `note: 模拟模型驱动，用于验证运行器与整批上限；通过率不作为模型能力证据`，README 引用这行而不是另做断言。五条命令在本机逐条实跑，退出码均为 0。
+
+**不写「5 分钟内跑完」**这类无命令可验的墙钟承诺——任务名里的「5 分钟」指的是零密钥与可复现。验收：`grep -nE '[0-9]+ ?分钟内|分钟跑完' README.md` 输出为空；零密钥小节内不出现 `pnpm start`。提交 `8f08de9`。
+
+### NX-09-6 真实模型实验一节与回填 — done
+
+新增「真实模型实验」一节，链 `NX-08-REPORT.md`，按 M9 出口分列四类（教程基线／独立扩展在 NX-09-1、2 两节，真实模型结果在本节，模拟回归在「验证」节与本节末段）。摘要三批实验的规模与结果，并写明三条边界：链路可用但能力结论不写（两处通过率测量方差为零）、对照 A 的处理确实生效但它省下的是上下文规模、**对照 B 的仪器没有成立且这不等于处理无效**。「结局饱和」与「样本量小」作为**两条独立限制**分列。
+
+**硬红线（grep 可判）**：该节内 `grep -nE '提升|提高|优于|更好|最好|显著|效率|收益|成功率|%'` 输出为空。这条**故意严格**——连「token 少 45.4%（非效率提升）」这种带免责的写法也不写，直接链报告、不复述数字；因此节内也不出现任何百分号，对照 B 的两个峰值改写成「都不到输入目标的一半」。**不声称 CI 通过**——本次没有对应的 CI run，只写本地实测（仓库惯例是任何 CI 结论都附 run 链接）。
+
+回填：TASKS 的七行子步骤全部置 done、`## 已完成` 增 NX-09 条并记 7 个提交号；PROGRESS 的「下一步」改写；另立项 **NX-20**（路线图状态段整体陈旧，见下）。
+
+### 顺带立项：NX-20 路线图状态段整体陈旧
+
+`docs/INTERNSHIP_ROADMAP.md` 是**带日期的记录**，line 3 已把源码基线评估定为「历史证据保留」。已核实陈旧点至少四处：顶部注记与 line 215 的「真实模型实验额度尚未在本次任务中设定或使用」（已被 NX-08 的约 $4.96 推翻）、line 194 的 M5 出口「旧 57 条回归」（现为 200 条）、line 213/215 的 M7 出口、line 233-239 §6 的「当前可以写…完成 57 条回归及 Windows/Linux × Node 22/24 CI」（且「Linux」与 README 实际使用的「Ubuntu/Windows」不一致）。
+
+**NX-09 不改它**：只改 §6 会让全文自相矛盾，且违反该文件自己的修订注记惯例。按 NX-17 的先例（改前发现的相邻缺陷另立待办，不塞进当前提交）立项 NX-20，须整体处理。
+
+### 验证（全部零付费）
+
+```
+pnpm check            # syntax ok: 84 files
+pnpm test             # tests 200 / pass 200 / fail 0 / skipped 0
+pnpm fixtures:check   # 14 项，初始 0/14、参考 14/14
+pnpm eval:offline     # planned 12 / executed 12 / accepted 12
+```
+
+外加各步的 grep 判据（见上）。五条命令均不读 `.env`、不出网、不调用付费模型。
+
 ## NX-08f 对照 B：现有裁剪 vs 裁剪加有界工具输出
+
 
 - 关联：NX-08 的第二条对照，也是 `armA`/`armB` 明确归属对照 A 之后空出来的那一支。状态：**in_progress**。整批上限与阶段尚未预注册（见 PLAN 的「对照 B 因此不再有对应的阶段与上限」），本节按子步骤累积证据。
 
