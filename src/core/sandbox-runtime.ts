@@ -100,6 +100,77 @@ function hostnameOrNull(url: string) {
   try { return new URL(url).hostname } catch { return null }
 }
 
+// 递归检查的上限。片段必是父串的真子串，终止性不靠上限；上限挡的是宽度与工作量。
+// 超限即拒绝：若耗尽放行，`$(a$(b$(c$(curl x))))` 就成了一个明文可复制的绕过构造。
+const maxInspectionDepth = 3
+const maxExecutedFragments = 32
+
+// 配平 `$(...)` 的括号。引号内的括号不计数（`$(echo ")")`）；找不到配对的 `)` 时返回 -1，
+// 该形状交给分词器按原样处理。`$((1+2))` 也走这里——内容 `(1+2)` 会被当成片段再检查一次，
+// 无害，且其中的 `$(...)` 照旧被抓到。
+function matchClosingParen(command: string, open: number) {
+  let depth = 0
+  let index = open
+  while (index < command.length) {
+    const char = command[index]
+    if (char === '\\') { index += 2; continue }
+    if (char === "'") {
+      const end = command.indexOf("'", index + 1)
+      index = end === -1 ? command.length : end + 1
+      continue
+    }
+    if (char === '"') {
+      index += 1
+      while (index < command.length && command[index] !== '"') index += command[index] === '\\' ? 2 : 1
+      index += 1
+      continue
+    }
+    if (char === '(') depth += 1
+    else if (char === ')') { depth -= 1; if (depth === 0) return index }
+    index += 1
+  }
+  return -1
+}
+
+// shell 里**真的会被执行**的嵌套文本：单引号之外、未被反斜杠转义的 `$(...)` 与反引号。
+// 引号语义与分词器同源——NX-17 的头号根因就是闸门的分词与 shell 不一致：单引号内一切原样、
+// 双引号内 `\X` 转义而 `$(...)` 与反引号仍会展开、引号外 `\X` 转义。
+// 双引号内照常扫描，所以这里不维护双引号状态：每次跳过 `\X` 已经足够表达「$ 未被转义」。
+function extractExecutedFragments(command: string) {
+  const fragments: { text: string; origin: string }[] = []
+  let index = 0
+  while (index < command.length) {
+    const char = command[index]
+    if (char === '\\') { index += 2; continue }
+    if (char === "'") {
+      const end = command.indexOf("'", index + 1)
+      index = end === -1 ? command.length : end + 1
+      continue
+    }
+    if (char === '`') {
+      let cursor = index + 1
+      let text = ''
+      while (cursor < command.length && command[cursor] !== '`') {
+        if (command[cursor] === '\\' && cursor + 1 < command.length) { text += command[cursor + 1]; cursor += 2; continue }
+        text += command[cursor]
+        cursor += 1
+      }
+      fragments.push({ text, origin: 'in backtick substitution: ' })
+      index = cursor + 1
+      continue
+    }
+    if (char === '$' && command[index + 1] === '(') {
+      const close = matchClosingParen(command, index + 1)
+      if (close === -1) { index += 2; continue }
+      fragments.push({ text: command.slice(index + 2, close), origin: 'in command substitution: ' })
+      index = close + 1
+      continue
+    }
+    index += 1
+  }
+  return fragments
+}
+
 // 该 token 是不是「取值不是网络目标」的旗标，且它的取值是**下一个** token。
 // 长旗标带 `=` 时取值内联（`--output=x`），不需要跳过下一个。短旗标允许合并（`-sS`、`-so`）：
 // 只有合并串的**最后一个**字母取下一个 token 作值，`-os x` 的 s 是 o 的内联取值。
@@ -137,8 +208,11 @@ export class SandboxRuntime {
     return { approved: true, source: 'user' }
   }
   inspectCommand(command: unknown) {
-    const deny = (reason: string) => ({ action: 'deny', reason })
-    if (typeof command !== 'string' || !command.trim()) return deny('command is required')
+    if (typeof command !== 'string' || !command.trim()) return { action: 'deny' as const, reason: 'command is required' }
+    return this.#inspect(command, 0)
+  }
+  #inspect(command: string, depth: number): { action: 'allow' | 'deny'; reason: string | undefined } {
+    const deny = (reason: string): { action: 'deny'; reason: string } => ({ action: 'deny', reason })
     let expanded
     try {
       expanded = command.replace(/\$\{([A-Za-z_][\w]*)\}|\$([A-Za-z_][\w]*)/g, (_, braced, bare) => {
@@ -156,6 +230,15 @@ export class SandboxRuntime {
     if (/\brm\s+(?:(?:-[A-Za-z]*r[A-Za-z]*|--recursive)\b|[^;&|\n]*\s(?:-[A-Za-z]*r[A-Za-z]*|--recursive)\b)/i.test(expanded)) return deny('recursive delete is blocked')
     if (/\b(?:curl|wget)\b[^\n]*\|\s*(?:\S*\/)?(?:sh|bash|zsh)\b/.test(expanded)) return deny('piping curl/wget into a shell is blocked')
     if (/(?:^|[\s"'=])(?:[^\s"']*[\\/])?\.\.(?:[\\/]|[\s"']|$)/.test(expanded)) return deny('.. path escape is blocked')
+    // `$(...)` 与反引号里的文本会被 shell 真正执行，顶层分词看不见它们，所以先抽出来逐段检查。
+    // 递归保留 allowHosts 等全部语义：片段走的是同一个 #inspect，不是「见到取网工具就拒」。
+    const fragments = extractExecutedFragments(expanded)
+    if (fragments.length > maxExecutedFragments) return deny('too many command substitutions to inspect')
+    if (fragments.length && depth >= maxInspectionDepth) return deny('nested command substitution is too deep to inspect')
+    for (const fragment of fragments) {
+      const result = this.#inspect(fragment.text, depth + 1)
+      if (result.action === 'deny') return deny(`${fragment.origin}${result.reason}`)
+    }
     // 双引号按 shell 语义识别 \"：否则内联脚本（node -e "…"）里的转义引号会提前闭合引号，
     // 把注释和字符串碎片暴露成独立 token，闸门就会去检查 shell 根本看不到的“路径”。
     const tokens = [...expanded.matchAll(/"(?:[^"\\]|\\.)*"|'[^']*'|[^\s|;&<>]+/g)]

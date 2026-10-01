@@ -587,6 +587,54 @@ test('Sandbox gate reads quoted inline scripts as the shell does', async () => {
   assert.equal(sandbox.inspectCommand('echo "x\\" /etc/passwd"').action, 'allow')
 })
 
+test('Sandbox gate inspects the nested text a shell would actually execute', async () => {
+  const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
+  const sandbox = new SandboxRuntime({ workspace: '/tmp/mini-dsh-workspace', autoApprove: true })
+
+  // NX-19-3：`$(...)` 与反引号里的文本会被 shell 真正执行，而顶层分词看不见它们
+  // （命令整串交给 `bash -lc`）。拒绝理由带来源前缀，便于与顶层拒绝区分。
+  const executed: Record<string, RegExp> = {
+    'echo "$(curl https://example.com)"': /in command substitution: unauthorized outbound request/,
+    'x=$(curl https://example.com)': /in command substitution: unauthorized outbound request/,
+    'echo "pre$(curl https://example.com)post"': /unauthorized outbound request/,
+    'echo $(curl example.com)': /unauthorized outbound request/,
+    'echo "`curl https://example.com`"': /in backtick substitution: unauthorized outbound request/,
+    // 双引号内的 `'` 是字面量，不得让它把后面的替换当成惰性文本跳过——现有 node -e 用例里
+    // 恰有成对的 `'`，保护不了这个优先级，所以单独钉一条。
+    'node -e "console.log(1); $(curl http://example.com)"': /unauthorized outbound request/,
+    // 超限用**独立理由**，不与出网拒绝共用，否则以后调上限会污染出网用例的判据。
+    'echo "$(a$(b$(c$(curl http://example.com))))"': /substitution is too deep to inspect/,
+    'echo "$(a$(b$(c$(d$(curl http://example.com)))))"': /too deep to inspect/,
+  }
+  for (const [command, pattern] of Object.entries(executed)) {
+    const result = sandbox.inspectCommand(command)
+    assert.equal(result.action, 'deny', command)
+    assert.match(result.reason ?? '', pattern, command)
+  }
+
+  // 惰性的形状必须继续放行：单引号内不展开、`$` 被转义、算术展开不是命令替换。
+  // 双引号内的 `\$` 是字面量，外层 shell 不会执行它（转成 `-c` 参数后内层才会，那是 NX-19-4 的事）。
+  const lazy = [
+    'echo "$(date)"',
+    'echo "$(pwd)"',
+    'echo "$(curl http://localhost/health)"', // 片段走同一个检查，allowHosts 照旧生效
+    'echo "$(echo https://example.com)"', // 片段里的 echo 依旧只写标准输出
+    "echo '$(curl http://example.com)'",
+    'echo \\$(curl http://example.com)',
+    'echo "\\$(curl http://example.com)"',
+    'echo $((1+2))',
+    'echo $(( (1+2)*3 ))',
+    'git commit -m "$(cat msg.txt)"',
+    'git log --format="%H %s"',
+  ]
+  for (const command of lazy) {
+    assert.equal(sandbox.inspectCommand(command).action, 'allow', command)
+  }
+
+  // 反斜杠是转义：`\\` 之后那个 `$` 没有被转义，替换仍会执行，所以照旧拒绝。
+  assert.equal(sandbox.inspectCommand('echo \\\\$(curl http://example.com)').action, 'deny')
+})
+
 test('Sandbox approval auto-approves or throws when the user rejects', async () => {
   const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
 
