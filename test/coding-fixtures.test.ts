@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { Context } from '@deepseek-ai/cordis'
-import { createFixture, screeningIds, sequenceIds, boundedIds, fixtureProcessTimeoutMs, readTaskSequence } from '../scripts/coding-fixtures.js'
+import { createFixture, screeningIds, sequenceIds, boundedIds, demoIds, fixtureProcessTimeoutMs, readTaskSequence, readFixtureFile } from '../scripts/coding-fixtures.js'
 import type { FixtureId } from '../scripts/coding-fixtures.js'
 import { evalPolicy } from '../scripts/eval-runner.js'
 import type { ToolCall } from '../src/core/contracts.js'
@@ -376,5 +376,52 @@ test('acceptance bounds hung code and output, rejects invalid limits and reports
     assert.equal(noisy.passed, false)
     assert.match(noisy.output, /ENOBUFS/)
     assert.ok(Buffer.byteLength(noisy.output) <= 1024)
+  } finally { await fixture.close() }
+})
+
+// 演示夹具。它比其他 14 个多一份 `partial/` ——「只修好第一条规则」的已知中间态，供 NX-10-3 展示
+// 「失败测试 → 再修复」。那一步成立的前提是这份中间态**真的**过不了公开检查、且失败输出改点名第二条
+// 规则，因此把它钉在这里，而不是让演示脚本自述。
+// 它必须不属于另外三批：进筛查批次会动 NX-08d 的 12/12 与 phaseCaps.screening.runs，进阶段序列会被
+// 当成多阶段 fixture，进对照 B 仪器则会让那台仪器的「单任务」契约不再唯一。
+test('the repair fixture keeps a partial fix that still fails the public check', { timeout: 30_000 }, async () => {
+  assert.deepEqual([...demoIds], ['repair'])
+  const otherBatches: readonly string[] = [...screeningIds, ...sequenceIds, ...boundedIds]
+  for (const id of demoIds) assert.ok(!otherBatches.includes(id), `${id} must stay out of the other three batches`)
+  const fixture = await createFixture('repair')
+  try {
+    assert.equal(fixture.tasks.length, 1, 'the demo fixture works in a single task')
+    // 规则分布在两个作用域，公开检查的失败消息各自点名被违反的那一条——演示因此可归因而非笼统报错。
+    const runCheck = () => spawnSync(process.execPath, ['check.mjs'], { cwd: fixture.workspace, encoding: 'utf8', timeout: fixtureProcessTimeoutMs, windowsHide: true })
+
+    const initial = runCheck()
+    assert.equal(initial.status, 1)
+    assert.match(initial.stderr, /单项折扣应按行金额在求和前应用/)
+
+    // 中间态：第一条规则修好、第二条没修。检查仍失败，且失败消息换成第二条——两条规则互不遮蔽。
+    await fs.writeFile(path.join(fixture.workspace, 'src/cart.mjs'), await readFixtureFile('repair', 'partial/src/cart.mjs'))
+    const partial = runCheck()
+    assert.equal(partial.status, 1)
+    assert.match(partial.stderr, /percentOff 是整数百分数/)
+    assert.doesNotMatch(partial.stderr, /单项折扣应按行金额在求和前应用/)
+    assert.equal((await fixture.evaluate()).passed, false)
+
+    // 只有完整参考解通过。上一步已经动过工作区，这里直接在同一个工作区上覆盖。
+    await fixture.applyReference()
+    assert.equal((await fixture.evaluate()).passed, true)
+
+    // 受保护边界：两份 AGENTS.md、公开检查与旧副本都不在 sources.repair 内。逐个改写并确认被判成变更，
+    // 同时确认「有一条受保护文件被改」本身就足以让验收不通过。
+    for (const relative of ['AGENTS.md', 'src/AGENTS.md', 'check.mjs', 'src/legacy/cart.mjs']) {
+      const original = await fs.readFile(path.join(fixture.workspace, relative))
+      await fs.writeFile(path.join(fixture.workspace, relative), 'tampered\n')
+      const tampered = await fixture.evaluate()
+      assert.equal(tampered.passed, false, `${relative} must not be editable`)
+      assert.deepEqual(tampered.protectedFilesChanged, [relative])
+      await fs.writeFile(path.join(fixture.workspace, relative), original)
+    }
+
+    // 越界读取被拒：readFixtureFile 只服务 fixture 目录内部。
+    await assert.rejects(readFixtureFile('repair', '../boundary/initial/check.mjs'), /escapes the fixture directory/)
   } finally { await fixture.close() }
 })

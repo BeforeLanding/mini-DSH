@@ -108,3 +108,12 @@ export async function createFixture(id: FixtureId) {
     throw error
   }
 }
+// fixture 目录里非 `initial/` / `reference/` 部位（目前只有 repair 的 `partial/` 中间态）的读取入口。
+// 与 createFixture 一样从仓库根解析，调用方不必各自推算相对路径——演示脚本与用例走的是同一个坐标。
+// 路径必须落在该 fixture 目录内：越界（绝对路径或 `..`）直接报错，而不是静默读到别处。
+export async function readFixtureFile(id: FixtureId, relative: string): Promise<string> {
+  if (!fixtureIds.includes(id)) throw new Error('unknown coding fixture')
+  const base = path.join(fixtures, id), target = path.resolve(base, relative)
+  if (!target.startsWith(base + path.sep)) throw new Error('fixture path escapes the fixture directory')
+  return fs.readFile(target, 'utf8')
+}

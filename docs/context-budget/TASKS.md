@@ -99,8 +99,8 @@ M9 出口要求「陌生读者能按说明运行并检查最终文件/测试；�
 | 子步骤 | 内容 | 验收 | 提交边界 |
 | --- | --- | --- | --- |
 | NX-10-0 | TASKS 立项：NX-10 子步骤表（**done**） | `grep -cE '^\| NX-10-' docs/context-budget/TASKS.md` = 9；每行「验收」列至少含一个反引号命令或可判定的退出码/`grep` 判据；`git diff --stat` 只含 `docs/context-budget/TASKS.md` | 1 次 |
-| NX-10-1 | 演示 fixture `repair` 与 `demoIds` 注册表 | `pnpm fixtures:check` 输出 15 行且 `expected` 全为真；`repair` 初始态退出码**恰为 1**（`check-coding-fixtures.ts:10` 的判据）；两份 `AGENTS.md`、`check.mjs`、`src/legacy/cart.mjs` 均不在 `sources.repair` 内因而进受保护集合；`test/eval-runner.test.ts:398` 的筛查/序列上限断言不受影响 | 1 次 |
-| NX-10-2 | `repair` 三态基线用例 | `pnpm test` 201/201（新增 1 条）：初始失败（退出 1）、只应用 `partial/` 仍失败、应用 `reference/` 通过；改写任一受保护文件后该验收不通过 | 1 次 |
+| NX-10-1 | 演示 fixture `repair` 与 `demoIds` 注册表（**done**；本行标记随 NX-10-2 补记——该步是提交 `92b64ef` 本身，当时没有可回填的行状态） | `pnpm fixtures:check` 输出 15 行且 `expected` 全为真；`repair` 初始态退出码**恰为 1**（`check-coding-fixtures.ts:10` 的判据）；两份 `AGENTS.md`、`check.mjs`、`src/legacy/cart.mjs` 均不在 `sources.repair` 内因而进受保护集合；`test/eval-runner.test.ts:398` 的筛查/序列上限断言不受影响 | 1 次 |
+| NX-10-2 | `repair` 三态基线用例（**done**） | `pnpm test` 201/201（新增 1 条）：初始失败（退出 1）、只应用 `partial/` 仍失败、应用 `reference/` 通过；改写任一受保护文件后该验收不通过 | 1 次 |
 | NX-10-3 | 第一幕 `pnpm demo:fix` | `pnpm demo:fix` 退出 0，且输出含系统提示四个 section 与顺序、`project_context` 返回的**作用域**规则、失败检查的原始输出、`task_changes` 的非空确认 diff、`task_report` 的 `[Run]`/`[File]`/`[Check]` 行、独立验收 `acceptance passed: repair`；任一不成立则退出 1 并点名 | 1 次 |
 | NX-10-4 | 第二幕 `pnpm demo:resume` | `pnpm demo:resume` 退出 0，且输出含 `max_steps`、在途工具的 `status:'skipped'`、`continuations === 1`、逐 `toolCallId` 无重复执行、两段 run 的 `previous=` 关系、最终独立验收 | 1 次 |
 | NX-10-5 | 第三幕 `pnpm demo:unknown` | `pnpm demo:unknown` 退出 0，且：子进程被 `taskkill /T /F` 异常终止；`JsonlStore.open` 先以 `/session writer lock exists/` 失败；显式 `unlink` 后重开成功；`restore` 合成恰好一条 `status:'unknown'`；`events.jsonl` 行数因此增加（证明合成落盘）；`.demo-side-effect` 仍在；`agent.continue()` 以 `/unknown tool outcome/` 被拒；连跑两次均退出 0 | 1 次 |
