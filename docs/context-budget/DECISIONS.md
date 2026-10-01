@@ -127,3 +127,39 @@
 - **最后一次复核到 `rename` 之间仍有外部进程竞态。** 第 101–102 行核验通过之后、`rename` 之前，别的进程仍可能改动目标。这是应用层乐观检测，不是操作系统级保证——PLAN 的 NX-13 决策节把它写死为「属于应用层乐观检测」。
 - **落盘不确定时要人来判。** 文件可能已经改好而结果事件没写成，所以报的是「已提交但结果不确定」，须核验后才能继续，而不是简单重试。这与第 5 节的 `unknown` 是同一个设计取向。
 - **快照要占地方。** 每个被跟踪文件都要留一份内容快照，`maxEditBytes` 默认 1 MiB、每 task 默认 100 个文件；超过限额的文件仍可有界读取，但不能编辑。
+
+---
+
+### 4. 验证时效
+
+**选择。** 显式声明的检查被记成一条**与文件版本绑定**的证据：命令执行前记下声明文件的 SHA-256 与真实位置，执行后再记一次，两次不一致就不是 `passed`；此后任何一次编辑都会让这条证据变成 `stale`。而无论证据多完整，交付报告的 `acceptance` 恒为 `not_asserted`。规范条目见 [PLAN 的 NX-15 决策节](PLAN.md#nx-15-决策)与 REQUIREMENTS 的 R-18。
+
+**替代方案及其具体失效。**
+
+- 把「命令退出 0」直接当作检查通过：退出 0 只说明这条命令没报错，既不说明它跑的是当前版本，也不说明它覆盖了改动。【决策时记录】
+- 把普通 Bash 自动识别成验证：只有模型显式声明文件范围才算数，否则「我跑过测试了」这句话无从核对到底跑了什么，也没有范围可查。【决策时记录】
+- 成功后丢掉旧的失败记录：一份只留最新一次通过的清单，会把「先前失败过、改了之后才过」这段掩盖掉。所以每次检查独立保留。【决策时记录】
+- 把 `passed` 当成任务验收：显式声明的文件与命令只是一个**有界**样本，证明不了未声明的依赖、目录新增或别处的改动。【决策时记录】
+- 用修改时间判断文件有没有变：改回原字节会让时间变而内容不变；反过来也有保持时间却改了内容的操作。用内容哈希加真实位置才是可判定的。【事后重构】
+- 只在查询时按需检查、不落盘检查前版本：那就永远答不出「这条证据当时基于哪个版本」，也分不开「检查**中**被改过」与「检查**后**被改过」。【事后重构】
+
+#### 锚点
+
+| 类型 | 锚点 | 它钉住什么 |
+| --- | --- | --- |
+| 代码 | `src/core/task-verification.ts:15` | 声明文件的版本快照；`tolerateErrors` 只在检查**后**那次读取上打开 |
+| 代码 | `src/tools/bash.ts:49` | `verification/start`（含检查前版本）先落盘，落盘之后才执行命令 |
+| 代码 | `src/core/task-verification.ts:63` | 状态由检查前后版本是否一致推出，`unavailable` 与 `unknown` 各自有独立分支 |
+| 代码 | `src/core/task-verification.ts:65` | freshness 拿**当前**文件重算，并叠加此后的 `file/change` |
+| 代码 | `src/core/task-verification.ts:70` | 查询自带范围说明：只覆盖声明的文件与命令 |
+| 代码 | `src/core/task-verification.ts:148` | 交付报告的 `acceptance` 恒为 `not_asserted`，不随证据变多变强而改变 |
+| 代码 | `src/tools/bash.ts:56` | 取消之后不绕过 signal 去读新版本，检查后版本记 `unavailable` |
+| 测试 | `test/bash-verification.test.ts` · `Bash explicitly records approved checks, preserves failure, detects check mutation and leaves ordinary commands unverified` | 状态序列含 `passed`/`failed`/`stale`；之后的编辑把 freshness 推成 `stale`；普通命令不生成任何验证记录 |
+| 测试 | `test/task-verification.test.ts` · `verification retains failure, detects changed versions, and restores unknown without execution across continuation/reset` | 失败记录不被后来的成功抹掉；文件变了即 `stale`；恢复不重放命令 |
+| 测试 | `test/task-report.test.ts` · `delivery report separates completed run, current coverage, unverified edits and all failed checks with independent pages` | `acceptance` 恒为 `not_asserted`；过期证据与未覆盖文件分别列出 |
+
+#### 代价
+
+- **检查开销按声明文件数走。** 默认最多 100 个文件、每个最多 1 MiB，声明得越多越慢。模型得自己权衡「覆盖够不够」与「读一遍要多久」。
+- **过期判定宁可保守。** 文件被文件工具改动过就算 `stale`，即使它最终被改回了原字节。代价是偶尔会把仍然有效的证据标成过期——这个方向的错误比反过来安全。
+- **证据只覆盖声明范围。** 未声明的依赖、目录新增、检查过程中被改又改回的文件，以及 Bash 之外途径的修改，都不在保证内。R-18 与 PLAN 的 NX-15 决策节都写明了这一条。
