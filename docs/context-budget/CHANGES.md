@@ -2,6 +2,86 @@
 
 更新：2026-10-01。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-10 固定代码修复演示（三幕）
+
+- 关联：路线图 M9 的演示件（`docs/INTERNSHIP_ROADMAP.md:226`：「固定代码修复演示，展示项目规则→定位→修改→失败测试→再修复→diff 与证据；另展示预算停止/恢复和 unknown」）。状态：**done**（2026-10-01，零付费）。子步骤与提交边界见 [TASKS 的 NX-10 一节](TASKS.md#nx-10-固定代码修复演示三幕零付费)。
+- **本次零代码改动**：`src/**` 一行未动。三条演示只向本地注册 `scripted/demo` 适配器，从不 import `src/index.ts`，因此不读 `.env`、不出网、不调用付费 API。
+- 提交：`ce7dc6f`（NX-10-0 立项）、`92b64ef`（NX-10-1 fixture）、`333ab2c`（NX-10-2 三态基线）、`89405c8`（NX-10-3 第一幕）、`3439388`（NX-10-4 第二幕）、`82dc7bd`（NX-10-5 第三幕）、`1577b38`（NX-10-6 陈旧锁用例）、`a310a34`（NX-10-7 文档与计数）、本提交（NX-10-8 回填 + NX-21 立项）。
+
+### 动因（开工前核实）
+
+| 缺口 | 依据 |
+| --- | --- |
+| `scripts/` 下没有读者面向的入口 | 12 个脚本全是 eval／fixture／构建／部署设施 |
+| **「项目规则」这一段在演示路径上根本不存在** | 规则源只有 `AGENTS.md`（`src/core/project-context-runtime.ts:122`），14 个 fixture 的 `initial/` 里一个都没有；`scripts/eval-fixture.ts:96-101` 的 `runFixtureTask` 不装载 `runtime-context` 与 `project-context` |
+| 三块能力各自有测试，但没被串成叙事 | 预算停止／恢复见 `coding-fixtures.test.ts:295`，unknown 见 `store.test.ts:44`，diff 与证据只在 `task-*.test.ts` 与 CLI 测试里，`coding-fixtures.test.ts` 从不调用它们 |
+
+**为什么不把两个 context 插件补进 `runFixtureTask`**：那会改掉 `eval:offline`／`eval:screening` 与对照 A 两臂的系统提示，让已记录的基线数字与预注册上限不再对应同一件事。演示自带一套装配（`scripts/demo-context.ts`），评测路径一字未动。
+
+### NX-10-1 演示 fixture `repair` — done
+
+15 个 fixture 里唯一带项目规则的：`initial/AGENTS.md`（根作用域：`percentOff` 是整数百分数、总额四舍五入到 2 位小数、`src/legacy/` 与 `src/pricing.mjs` 是历史遗留且不被导入、受保护文件清单）与 `initial/src/AGENTS.md`（`src` 作用域：单项 `discount` 是项行金额的比例、在求和前逐项应用、未声明按 0 处理）。模型必须先查 `src` 才拿得到第二条。
+
+两处缺陷各被公开检查的一条断言钉住、互不遮蔽：`subtotal` 忽略 `item.discount`（断言 1 失败），`discount` 把整百分数当比例且不取整（断言 2、3 失败）。`check.mjs` 的三条断言各自带说明文本，失败输出直接点名违反的是哪条规则。`verify.mjs` 用与公开检查**不相交**的取值域（含空车、单项折扣为 0 与 1 的边界、以及一条公开检查没覆盖的取整用例），期望值全部选在二进制可精确表示或取整后精确的位置，避免浮点尾差把正确实现判成失败。
+
+注册表新增 `demoIds` 并并入 `fixtureIds`；不进 `screeningIds`（那 12 个已冻结，且会让 `phaseCaps.screening.runs` 与 12/12 的历史基线不再对应），也不进 `sequenceIds`／`boundedIds`。`sources.repair` 只列 `src/cart.mjs`，因此两份 `AGENTS.md`、`check.mjs`、`package.json`、`src/legacy/` 与 `src/pricing.mjs` 全部进受保护集合。
+
+验收：`pnpm fixtures:check` 输出 15 行、`expected` 全为真（`repair` 初始退出 1，参考解 `acceptance passed: repair`）。
+
+### NX-10-2 中间态三态基线 — done
+
+`partial/src/cart.mjs` 是「只修好第一条规则」的已知中间态。用例钉住：初始失败（退出 1，失败点名第一条规则）→ 只应用 `partial/` 仍失败（退出 1，失败**改点名第二条**，第一条的消息消失）→ 应用 `reference/` 通过；逐个改写两份 `AGENTS.md`、`check.mjs`、`src/legacy/cart.mjs` 后确认 `protectedFilesChanged` 恰为该项且验收因此不通过。`readFixtureFile` 只服务 fixture 目录内部，越界读取直接报错。
+
+验收：`pnpm test` 201/201（原 200，新增 1 条）。
+
+### NX-10-3 第一幕 `pnpm demo:fix` — done
+
+九步全部经真实工具：`project_context{src}` → `grep` → `read_file` → `edit_file`（只修第一条规则）→ `bash node check.mjs`（**失败，退出码 1，stderr 点名未修的那条规则**）→ `edit_file`（补齐）→ `bash` 带 `verification.files`（退出 0 并落成验证记录）→ `task_changes` → `task_report`。每一步的结果按模型当时看到的原文打印，超长才截断且写出截断标记；交付报告因为绝大部分是逐次 usage 明细而按自己的字段重排，不改任何数值。
+
+装配打印系统提示的四个条目与顺序（`agent:identity` 10 / `sandbox:policy` 15 / `runtime:environment` 100 / `project:context` 110）。判定三条：run `completed`、`task_changes` 有非空确认 diff、工作区之外独立验收通过且未改受保护文件。同时写明 `task_report` 的 `acceptance` 恒为 `not_asserted`，并指出**第 5 步那次失败的 bash 没有声明 `verification.files`，所以不进检查记录**——普通命令不构成检查。
+
+运行证据落在 `.demo-runs/`，与 `.eval-evidence/`（真实模型证据）分开，两者都不入库。
+
+### NX-10-4 第二幕 `pnpm demo:resume` — done
+
+首段预算 `maxModelRequests: 4`：第 4 次请求本身发得出去，但它带回的那条编辑在**派发之前**被拦下，所以前三条命令真的执行了、第四条一次都没跑（无 `tool/start`）。随后 `agent.continue()` 在同一 task 上开新的一段 run 把它补做。拦它的不是固定轮数上限，而是可配置的请求预算。
+
+七条判定：首段确实因 `max_steps` 停止；被跳过的编辑在首段没有 `tool/start`；它在恢复后真的执行了一次；`continuations=1`；没有工具被执行两次；两段 run 的前后关系被记录；最终 run `completed` 且独立验收通过。
+
+**两处只有真跑才会暴露的坑**（第一次跑时都踩到了，都已修并留在注释里）：① 适配器必须按「哪几步真的被回答了」推进，而不是按请求次数推进——按次数推进时那条被跳过的编辑会被当成已消费，恢复后凭空消失，工作区永远停在中间态（独立验收报 `-192 !== 6`）；② 判断「已回答」要取**最后一条**同名工具结果——取第一条命中的是停止那一段留下的 `skipped`，于是同一条命令被无休止重发，8 次请求预算全部烧光仍是旧结论。
+
+### NX-10-5 第三幕 `pnpm demo:unknown` — done
+
+崩溃是真的：子进程执行 `echo started > .demo-side-effect; sleep 300`，父进程轮询到副作用文件出现后按进程树杀掉它（win32 `taskkill /PID <pid> /T /F`，POSIX `process.kill(-pid,'SIGKILL')`）。父进程等的是**副作用文件**而不是 `tool/start`——后者在 bash 启动之前就已落盘，只有前者能证明命令真的在执行中，杀戮因此不会与「命令已跑完」抢时间。留在磁盘上的残局：日志停在 `tool/start`，目录里一把没人释放的 `writer.lock`。
+
+**这一步暴露了一个目前没有对应入口的操作**：`JsonlStore.open` 对任何已存在的锁一律拒绝（`src/core/event-store.ts:40`，「session writer lock exists; verify stale locks explicitly」），而 `quarantineTail` 也要先抢同一把锁（`:17-20`），所以恢复的唯一路径是由人确认 pid 已死、再显式删掉那把锁；`src/plugins/cli.ts:36-40` 的启动恢复撞上崩溃过的会话直接抛错，也没有 `/recover`。演示照实做这一步并说明它属于操作者的判断，据此立项 **NX-21**，本次不修。
+
+六条判定：重开先被陈旧锁拒绝；副作用文件仍在；恰好一条 `unknown` 结果且正是那次 bash；被中断的 run 封为 `error`；补出的记录落盘（日志行数 9 → 11）；自动续跑被拒（`unknown tool outcome; verify side effects before starting a new task; automatic continuation is blocked`）。平台相关的杀进程那半不写进 `pnpm test`。
+
+### NX-10-6 陈旧会话锁的显式恢复路径用例 — done
+
+残局构造与演示一致（日志停在 `tool/start`，目录里放着崩溃时形状的 `writer.lock`），钉住：`open` 拒绝；`quarantineTail` 也因同一把锁报 `EEXIST`——销锁是唯一路径而不是可选优化；销锁后重开成功；`restore` 补出恰好一条 `unknown` 而非 `skipped`（这条调用有过 `tool/start`）；被中断的 run 封为 `error`；补出的记录真的追加到日志上；副作用文件未被触碰；`beginRun(..., true)` 同步抛出 `unknown tool outcome`（挡住续跑的判定发生在派发任何请求之前）。
+
+验收：`pnpm test` 202/202（原 201，新增 1 条）。
+
+### NX-10-7 演示一节与计数订正 — done
+
+README 新增「演示」一节（放在「运行」之后）：三条命令各展示什么、退出码的含义、fixture `repair` 的用法、`.demo-runs/` 与 `.eval-evidence/` 的分工，以及 `demo:unknown` 暴露的那个没有入口的步骤。三处计数按实跑订正：89 文件（原 84）、202 条测试（原 200）、15 项 fixture（原 14）；零密钥块由五条命令扩到八条，新增三条的行尾注释就是各自的退出码含义。**带日期的历史证据逐字未动**（README 的 SHA 锚定行、`PROGRESS.md` 里 NX-08f 那条的「14 项／198/198」、NX-09 各行、CHANGES 各处）。
+
+### 验证（全部零付费）
+
+```
+pnpm check            # syntax ok: 89 files（原 84，新增 5 个演示脚本）
+pnpm test             # tests 202 / pass 202 / fail 0 / skipped 0（原 200，新增 2 条）
+pnpm fixtures:check   # 15 项 expected 全为真（原 14，新增 repair）
+pnpm eval:offline     # planned 12 / executed 12 / accepted 12（screeningIds 未动）
+pnpm demo:fix         # 退出码 0；连跑两次均 0
+pnpm demo:resume      # 退出码 0；连跑两次均 0
+pnpm demo:unknown     # 退出码 0；连跑三次均 0（脚本自清理 .demo-runs）
+```
+
+**已知边界，不写成已覆盖**：POSIX 的 `process.kill(-pid)` 分支在本机（Windows）无法实跑，只能标注为未验证；第三幕的杀进程在 CI 上不跑，只跑它之后的确定性断言（NX-10-6）。
+
 ## NX-09 README 定位、原创增量、架构图与零密钥运行入口
 
 - 关联：路线图 M9 的入口件，解锁条件是路线图 §6 的「完成 M7 后，再用真实实验数字补充」——M7 出口（NX-08 的两次对照与 [NX-08-REPORT](NX-08-REPORT.md)）已满足。状态：**done**（2026-10-01，零付费）。子步骤与提交边界见 [TASKS 的 NX-09 一节](TASKS.md#nx-09-readme-定位原创增量架构图与零密钥运行入口)。
