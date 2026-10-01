@@ -47,7 +47,7 @@ test('both comparison arms plan the same sequence task set', () => {
 // 的机制（runPhase 遍历的是 registry 那 1 个 fixture），于是「每臂 3 次运行」的预注册一条命令只兑现 1 次；
 // --plan-only 还把上限当计划打印，让它在花钱之前看不出破绽。这条断言把两者钉死在一起，是当时缺的那一环。
 test('every phase schedules exactly as many runs as its cap pre-registers', () => {
-  const phases: readonly PhaseName[] = ['screening', 'armA', 'armB', 'sequence', 'smoke']
+  const phases: readonly PhaseName[] = ['screening', 'armA', 'armB', 'sequence', 'smoke', 'blind']
   for (const phase of phases) assert.equal(resolveRuns(phase).length, phaseCaps[phase].runs, phase)
   // 两臂的差异只能来自上下文策略，不能来自跑了几次或跑了哪些任务，因此执行清单必须逐字相同。
   assert.deepEqual(resolveRuns('armA'), resolveRuns('armB'))
@@ -57,6 +57,8 @@ test('every phase schedules exactly as many runs as its cap pre-registers', () =
     { id: 'pipeline', repeat: 2 },
   ])
   assert.deepEqual(resolveRuns('sequence'), [{ id: 'pipeline', repeat: 0 }])
+  // blind 是单 fixture 的诊断烟测：一次运行，且不借用 pipeline 的清单。
+  assert.deepEqual(resolveRuns('blind'), [{ id: 'blind', repeat: 0 }])
 })
 
 // 重复数从整份 registry 推，不从 --tasks 的子集推：从子集推会把「只跑 2 个 fixture」放大成「每个跑 6 遍」，
@@ -80,7 +82,7 @@ test('arguments are parsed into one options object with screening as the default
   assert.deepEqual(parseEvalArguments([]), { phase: 'screening', probeOnly: false, planOnly: false })
   assert.deepEqual(parseEvalArguments(['--phase', 'sequence', '--plan-only']), { phase: 'sequence', probeOnly: false, planOnly: true })
   assert.deepEqual(parseEvalArguments(['--phase=sequence', '--tasks=pipeline']), { phase: 'sequence', tasks: 'pipeline', probeOnly: false, planOnly: false })
-  assert.throws(() => parseEvalArguments(['--phase', 'bogus']), /unknown phase: bogus; expected one of screening, armA, armB, sequence, smoke/)
+  assert.throws(() => parseEvalArguments(['--phase', 'bogus']), /unknown phase: bogus; expected one of screening, armA, armB, sequence, smoke, blind/)
   assert.throws(() => parseEvalArguments(['--phase']), /--phase needs a value/)
   assert.throws(() => parseEvalArguments(['--plan-only=yes']), /--plan-only takes no value/)
   assert.throws(() => parseEvalArguments(['--unknown']), /unknown option: --unknown/)

@@ -16,7 +16,7 @@ export interface BatchCaps { runs: number; requests: number; tokens: number }
 // 全部」：诊断烟测会随开发增减，让它混进预注册算术会让那个数字不再对应同一件事。
 export const batchPhases = ['screening', 'armA', 'armB'] as const
 export type BatchPhase = typeof batchPhases[number]
-export type PhaseName = BatchPhase | 'sequence' | 'smoke'
+export type PhaseName = BatchPhase | 'sequence' | 'smoke' | 'blind'
 export const phaseCaps: Readonly<Record<PhaseName, BatchCaps>> = Object.freeze({
   screening: { runs: 12, requests: 400, tokens: 8_000_000 },
   // 对照 A 的两臂各 3 次运行（NX-08e2-6 按实测重预注册，NX-08e2-4 之后随序列扩到十四阶段再重算一次；
@@ -51,6 +51,18 @@ export const phaseCaps: Readonly<Record<PhaseName, BatchCaps>> = Object.freeze({
   // 跑完的烟测变成带 aborted 的退出码 1，拦不住任何花费。烟测真正的闸门是 singleRunBudget。
   // 它不进 batchPhases：对照 B 正式的两臂（armC/armD）与它们的上限留到 NX-08f-5 按实测预注册。
   smoke: { runs: 1, requests: 32, tokens: 2_000_000 },
+  // blind 是 NX-08h 的诊断烟测（多阶段 fixture blind，工作区里没有公开 check.mjs），回答「没有 oracle
+  // 之后模型的产出还过得去吗」——也就是 NX-08g0 判定的天花板是否真的来自那条机制。与 sequence 同口径
+  // 取**逐阶段预算的理论上界**（14 阶段 × 32 请求 = 448；14 阶段 × 2,000,000 token = 28,000,000）：
+  // 该阶段的计划里只有 1 个 fixture，而 runPhase 只在两次 fixture 之间检查累计值，整批上限对它本来
+  // 就不构成中途制动——取更紧的值只会把一次跑完的烟测变成带 aborted 的退出码 1，拦不住任何花费。
+  // 上限必须跟着阶段数走，理由同 sequence（留在旧值上会把正常烟测记成 aborted）。
+  // **这不是 NX-08h 的正式预注册数字**：NX-08g0 要求「不得沿用本轮的 phaseCaps 数字」，指的是不得把
+  // NX-08e 那套对照 A 的上限搬过来。这里是机械推导，`blind` 上的正式对照批次尚未预注册，其上限要等
+  // 这次烟测的实测之后另行确定与授权（NX-08e2 的教训：按外推定的 token 上限被实测推翻过 64%）。
+  // 它也不进 batchPhases：诊断烟测会随开发增减，混进预注册算术会让 {18, 3_200, 88_000_000} 不再
+  // 对应同一件事。
+  blind: { runs: 1, requests: 448, tokens: 28_000_000 },
 })
 export const batchCaps: Readonly<BatchCaps> = Object.freeze(batchPhases.reduce((totals, name) => ({
   runs: totals.runs + phaseCaps[name].runs,

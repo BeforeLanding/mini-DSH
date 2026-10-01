@@ -59,6 +59,9 @@ test('pre-registered caps match PLAN and the phase caps sum to the whole-batch c
     // NX-08f 的诊断烟测：单任务 fixture audit（无界工具输出），取单次 run 预算的理论上界。它也不进
     // batchCaps——对照 B 正式两臂（armC/armD）的上限留到 NX-08f-5 按实测预注册。
     smoke: { runs: 1, requests: 32, tokens: 2_000_000 },
+    // NX-08h 的诊断烟测：十四阶段 fixture blind（工作区无公开 check.mjs），与 sequence 同口径取
+    // 逐阶段预算的理论上界。它同样不进 batchCaps；正式对照批次的上限要等实测之后另行预注册。
+    blind: { runs: 1, requests: 448, tokens: 28_000_000 },
   })
   // 整批只归约预注册的三个对照阶段。把诊断阶段算进去会改变这个数字的含义，因此按值钉死而不是只断言
   // 求和：以前改 armA 只会静默改变和值，现在会直接撞上预注册数字。
@@ -77,6 +80,14 @@ test('pre-registered caps match PLAN and the phase caps sum to the whole-batch c
   // 结束——那是把上限的陈旧读成模型或仪器的毛病。
   assert.equal(phaseCaps.sequence.requests, stages * (singleRunBudget.maxModelRequests ?? 0))
   assert.equal(phaseCaps.sequence.tokens, stages * (singleRunBudget.maxTotalTokens ?? 0))
+  // blind 与 pipeline 的阶段数必须一致：这两个 fixture 的差别只有「工作区里有没有公开 check.mjs」，
+  // 阶段数一旦漂开，两次烟测的读数就不能再并排比。上限同样按 blind 自己的阶段数取，不借用 pipeline 的。
+  const blind = await createFixture('blind')
+  const blindStages = blind.tasks.length
+  await blind.close()
+  assert.equal(blindStages, stages, 'blind must ship the same number of stages as pipeline')
+  assert.equal(phaseCaps.blind.requests, blindStages * (singleRunBudget.maxModelRequests ?? 0))
+  assert.equal(phaseCaps.blind.tokens, blindStages * (singleRunBudget.maxTotalTokens ?? 0))
 })
 
 // 预注册只固定四项；上下文目标与窗口必须由文档默认值补上，否则投影不裁剪、context_overflow 不再触发，
