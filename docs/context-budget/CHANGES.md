@@ -2,6 +2,62 @@
 
 更新：2026-10-01。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-30 子 shell 与分组的命令段起点
+
+- 关联：与 NX-26 同族——NX-26 补了「保留字之后的命令位」，本轮补**引入命令位置的另一半：算子**（矩阵的 `known gap NX-30` 组）。不依赖其他任务，可独立验收。状态：**进行中**（2026-10-01，零付费）。**方向是收紧**：`executable`（命令段起点的定义）此前连算子都不认，于是子 shell 与分组里的 `curl` 既不重置段状态、也不开启取网工具的操作数模型。机制与取舍见 [PLAN 的 D-15](PLAN.md#d-15-命令段起点的算子支)，子步骤与提交边界见 [TASKS 的 NX-30 一节](TASKS.md#nx-30-子-shell-与分组的命令段起点)。
+- 提交：`（NX-30-0 立项与契约订正）`，后续子提交见本节末尾。
+
+### 现象与根因
+
+**证据是跑出来的。** 矩阵当前读数（`pnpm build && node docs/context-budget/nx17-gate-probes.mjs`），尾部为 `no contract drift; 7 known gap(s) still open`：
+
+```
+known gap NX-30
+open   allow (want deny ) "(curl example.com)"
+open   allow (want deny ) "{ curl example.com; }"
+```
+
+直接问闸门，这一族全是 allow：
+
+```
+allow:  "(curl example.com)"          allow:  "{ curl example.com; }"
+allow:  "( curl example.com )"        allow:  "(bash -c 'curl http://x')"
+```
+
+**根因只有一条**：`executable`（`src/core/sandbox-runtime.ts:446`）是命令段起点的**定义**——它为真才重置每段状态（`:452-464`）、才开启取网工具的操作数模型（`:481` 的 `model && !executable` 守卫）。而它只认「首 token」与「紧邻 `|`／`;`／`&`／换行」，**不认识子 shell 与分组的括符**。更深一层的成因是**词体类把括符粘进了 token**：`"(?:[^"\\]|\\.)*"|'[^']*'|[^\s|;&<>]+`（`:432`）不含 `(`／`)`／`{`／`}`，于是 `(curl example.com)` 分成 `(curl` 与 `example.com)` 两个 token，`basename('(curl')` 不是 `curl`，`networkTools` 与 `shellWords` 双双落空。同一原因让 `(bash -c 'curl http://x')` 连 `-c` 片段抽取都不启动——`basename('(bash')` 不在 `shellWords` 里。
+
+**这是一条独立于 NX-26 的既有放行**，与 NX-26 修的那条并列：NX-26 之前 `for f in a; do curl example.com; done` 是 allow，是因为保留字没被认；本条是算子没被认，**算子从未被认过**。
+
+### 设计决策
+
+**核心取舍是「规范 token，不动分词器」。** 最自然的方案——把四个字符从词体类里拿掉、当成算子——实测是错的，三条理由都留了读数：
+
+1. **它不产出 token，只是静默跳过。** `matchAll` 没有以这四个字符开头的分支，字符被丢掉；于是「opener 是一个 token、按 token 判定」那半个设计是**死代码**，而 `( curl example.com )`（带空格的真形状）**反而修不好**。它之所以看起来能修 `(curl example.com)`，靠的是「把 `(` 删掉、让 `curl` 落到 index 0」——碰巧，不是机制。
+2. **它会凭空造出裸 `/` 开头的 token。** `mkdir -p src/{a,b}/x` 被切成 `src/`、`a,b`、`/x`，最后那个是**根路径操作数** → `path escapes the workspace`；`echo {a,b}/c` 同理。这是对**普通合法命令**的误伤，语料里就有这一族。
+3. **改用把 `(` 加进分隔符类**（`[|;&\n(){}]`）会引入另一处误拒：`$()` 里的 token 变可执行、`commandWord` 被重置成 `date`，于是 `echo $(date) https://example.com` 由 allow 变 deny——顶层 `echo` 的惰性 URL 豁免失效。
+
+三条合起来是一个判据：**分词器与 `expanded` 的下标对齐是下游的承重墙**。`pipedDownstream`（`:459` 用 `start + raw.length`）、`eval` 参数切片（`:538-542` 按 token 下标过滤）、`-c` 片段抽取三处全都建立在它上面。所以宁可**规范 token**，也不改分词。
+
+**采用的机制**：分词器、分隔符正则 `[|;&\n]`、`findShellCommandFlag`（`:188`）的分隔符守卫、`bindingWord`（`:251`）**一行都不动**（`:250` 那句「与 #inspect 的分词器同源」的注释因此一字不改）。改为在去引号之后把 token 首尾**未被引用**的 `(`／`{` 与 `)`／`}` 剥掉——含 `$(` 的词跳过（`$(pwd)/file.txt` 的 `)` 是词内结构，不是子 shell 收尾），空结果保留原样（免得孤立的 `)` 变成空 token）。再把 `(`／`{` 接进**与保留字同一支**的 `pendingCommandPosition` 前视：opener **自身**处于命令段起点、且未被引用也未被规范化时，令紧随的一个 token 也算段起点。`)`／`}` 只收尾，不引入命令位。
+
+`raw === token` 的含义在此自然扩展为「未被引用**且未被规范化**」：`(curl` 规范化后 `raw !== token`，故**不**设旗标——它自己就是命令；孤立的 `(`／`{` 保持 `raw === token`，设旗标，与保留字行为完全对称。
+
+### 净放宽清单
+
+（NX-30-1 落地后回填：四条，各配顶层对照。）
+
+### 验证
+
+（NX-30-2 回填。）
+
+### 反例实跑
+
+（NX-30-2 回填。）
+
+### 未覆盖、已登记为独立待办
+
+（NX-30-2 回填。）
+
 ## NX-26 保留字之后的命令段起点
 
 - 关联：NX-24 期间登记的相邻缺陷（`nx17-gate-probes.mjs` 的 `known gap NX-26` 组）。不依赖其他任务，可独立验收。状态：**done**（2026-10-01，零付费）。**方向是收紧**——与 NX-24 相反，本轮修的是**闸门漏掉了一段真正会执行的命令**：`executable`（命令段起点的定义）不认识 shell 保留字，于是保留字后面的命令词既不重置段状态、也不开启取网工具的操作数模型。机制与取舍见 [PLAN 的 D-14](PLAN.md#d-14-命令段起点的词法判定)，子步骤与提交边界见 [TASKS 的 NX-26 一节](TASKS.md#nx-26-保留字之后的命令段起点)。
