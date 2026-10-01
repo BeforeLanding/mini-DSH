@@ -1,0 +1,12 @@
+# 示例应用：分层服务的依赖声明
+core: util log
+util:
+log: util
+
+# 同一模块可以再次声明，依赖列表按出现顺序合并
+core: config
+
+api: core util
+cli: api
+store: util
+worker: api store missing-lib

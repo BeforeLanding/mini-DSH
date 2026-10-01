@@ -17,7 +17,14 @@ export const boundedIds = ['audit'] as const
 // 且加入会让 `phaseCaps.screening.runs` 与 12/12 的历史基线不再对应），也不进阶段序列与对照 B 仪器
 // （两者的契约都是「单任务」或「多阶段」，与演示无关），因此单独一份注册表。
 export const demoIds = ['repair'] as const
-export const fixtureIds = [...screeningIds, ...sequenceIds, ...boundedIds, ...demoIds] as const
+// NX-08h 的仪器：`pipeline` 十四阶段的复制，但工作区里**没有公开的 `check.mjs`**——任务说明不再给出
+// 这个命令，只能按 `docs/SPEC.md` 自验。它测的是「能否按规格独立产出正确实现」，而 `pipeline` 测的是
+// 「有完整、即时、廉价 oracle 时能否收敛」；NX-08g0 判定的天花板效应正来自后者的 oracle。
+// 它不进 sequenceIds：`phaseCaps.sequence.runs = 1` 而 registry 会有 2 项，`repeatCount(1, 2)` 直接抛
+// 「cannot be split evenly」；即便整除，也会让对照 A 的两臂拿到不同的任务集，把「上下文策略」换成
+// 「任务难度」。因此单独一份注册表。
+export const blindIds = ['blind'] as const
+export const fixtureIds = [...screeningIds, ...sequenceIds, ...boundedIds, ...demoIds, ...blindIds] as const
 export type FixtureId = typeof fixtureIds[number]
 const repository = fileURLToPath(new URL('../../', import.meta.url))
 const fixtures = path.join(repository, 'test', 'fixtures', 'coding')
@@ -34,6 +41,9 @@ const sources: Record<FixtureId, string[]> = {
   // repair 是演示夹具里唯一可改的文件；两份 AGENTS.md、check.mjs、package.json、src/legacy/ 与
   // src/pricing.mjs 都不在这里，因而全部进受保护集合。
   repair: ['src/cart.mjs'],
+  // blind 与 pipeline 的可改文件逐字相同：唯一的差异是 initial/ 下没有 check.mjs，因此 docs/SPEC.md 与
+  // data/ 成了工作区里唯一的规范载体，也更有动机被改动——它们照旧落在受保护集合里。
+  blind: ['src/parse.mjs', 'src/order.mjs', 'src/cycles.mjs', 'src/batches.mjs', 'src/report.mjs', 'src/delta.mjs', 'src/plan-parse.mjs', 'src/plan-merge.mjs', 'src/blocked.mjs', 'src/audit.mjs', 'src/parse-audit.mjs', 'src/closure.mjs', 'src/sub-plan.mjs', 'src/audit-delta.mjs', 'src/pipeline.mjs'],
 }
 async function exists(target: string): Promise<boolean> { return fs.stat(target).then(() => true, () => false) }
 // 一个 fixture 要么是单个任务（TASK.md），要么是同一会话内按序下发的多个阶段（TASKS/*.md，按文件名
