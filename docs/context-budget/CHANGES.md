@@ -26,12 +26,28 @@
 - **一处易错点（已写进用例）**：`tool/result` 的内容是 `CommandResult` 的 JSON，**命令原文也在里面**，末尾哨兵因此在 `command` 字段出现一次。判断「结果有没有被截断」必须看 `stdout.text` 而不是整段 JSON——第一版断言整段 JSON 时被这条绊住。
 - **回归**：`pnpm check` 84 文件语法通过；`pnpm test` **196/196**（原 195，新增 1 条）。未调用付费模型。
 
+### NX-08f-2 单任务 fixture `audit` — done（2026-10-01，零付费）
+
+- **为什么必须新建**：现有 12 个单任务 fixture 没有一个能自然越过输入目标。实测最大的是三份 66.7 KiB / 350 行的 `diagnostics/trace.log`（`pagination` / `query` / `csv`），但它们的任务只要求 grep 定位、不要求遍历，读遍整个工作区也只有约 20.2k token。`pipeline` 单阶段更小（约 6.7k），越线靠的是跨阶段累积——那是对照 A 的路径。
+- **形态**：单任务。数据集 `data/records.jsonl` 是「原始字段 + 数据集给出的期望规范值」的金标数据；`src/normalize.mjs` 把原始字段规整后必须逐条等于 `expected`；`src/audit.mjs` 的 `auditRecords` 报出不一致项；受保护的 `report.mjs` 把每一条不一致连同**原始值、规整结果、期望值与该字段的规范形式**一起打印出来。
+- **为什么模型会真的跑报告**：公开的 `check.mjs` 只有一条断言，失败输出是一行 `AssertionError`（实测 `1863 !== 0`），指不出是哪条记录、哪个字段；`TASK.md` 指向 `report.mjs`。用例里把这条性质钉死了——断言公开检查的输出**不含** `field=`，否则模型可以直接读 `check.mjs` 反推规则、报告就不会被跑，「无界」那一臂也就不会产生大输出。
+- **规模（实测）**：数据集 1600 条、297,726 字节；完整报告 **909,266 字节 ≈ 276,994 估算 token**，是输入目标 65,536 的 **4.23 倍**。用例用项目自己的估算器量而不是字节数——CJK 与 ASCII 的 token 单价不同，字节数会给出错误的余量。违规 1863 条，三条轴各有：`KIND name 534`、`KIND email 458`、`KIND amount 871`（用例逐条断言三轴都非零，防止改生成器时塌成单轴）。
+- **三条缺陷轴，每条一个真实缺陷、分布在两个文件里**：
+  1. `normalizeName` 只 `trim`，不折叠内部连续空白（约 1/3 的记录带缺陷）；
+  2. `normalizeEmail` 只 `trim`，不小写化（约 2/7）；
+  3. `normalizeAmount` 用 `String(Number(value))`，吃掉规范形式末尾的 0（约 1/2，只有金额本身以 0 结尾的记录才违规，因此是子集轴而不是恒违规）；
+  4. 另有 `audit.mjs` 的复制粘贴缺陷——email 字段用的是 `normalizeName`，因此**即使把 `normalizeEmail` 修对，email 违规也不会消失**。只改一个文件解决不了，这是「跨文件修改」的落点。`normalizeEmail` 被 import 却未被使用，模型读源码时能看到这条线索。
+- **数据集可复现**：`generate.mjs` 用确定性 LCG 而不用 `Math.random`，记录数、取值池、缺陷比例与种子都在那个文件里，重跑同一条命令得到逐字节相同的 `records.jsonl`。这比现有 `trace.log` 那种无生成器的二进制式产物更可核对。
+- **独立验收的两个方向**（`verify.mjs`）：规范记录必须一条都不报（第 x1 条三个字段各需要一条不同规则，因此同时钉住三条规则与「email 用的是 email 的规整器」）；反过来，结构上不规范的记录必须报到**正确的字段**上。缺了反向那一半，「让 `auditRecords` 恒返回空数组」就能通过。取值域与工作区数据集有意错开（`quinn` / `frost` / `vertex.example`），防止针对 shipped 数据特判。
+- **公开检查也堵了同一个洞**：`check.mjs` 在断言之外多一条反向断言 `auditRecords([{ id: 'probe' }]).length >= 1`。它只用 `TASK.md` 已经写死的「三个字段缺一不可」，不泄露 name / email / amount 各自的规范形式。
+- **回归**：`pnpm fixtures:check` **14 项**全部「初始失败、参考通过」（`audit` 初始退出 1、参考 `acceptance passed: audit`）；`pnpm test` **198/198**（原 196，新增 2 条：仪器规模与三轴、数据集与报告生成器受保护）；`pnpm eval:offline` 仍 **12/12**（`screeningIds` 未动）；`pnpm check` 84 文件语法通过。未调用付费模型。
+
 ### 子步骤与提交边界
 
 | 子步 | 内容 | 付费 | 状态 |
 | --- | --- | --- | --- |
 | NX-08f-1 | 工具输出开关与两臂装配（`runFixtureTask` 第 5 参 + 单测） | 否 | **done** |
-| NX-08f-2 | 新增单任务 fixture `audit`（大输出仪器） | 否 | todo |
+| NX-08f-2 | 新增单任务 fixture `audit`（大输出仪器） | 否 | **done** |
 | NX-08f-3 | 离线机制证明（同 fixture 下无界臂溢出、有界臂完成）+ 诊断探针 | 否 | todo |
 | NX-08f-4 | 接好诊断阶段 `smoke`，使付费烟测可被 `--phase`/`--plan-only` 调度 | 否 | todo |
 | NX-08f-4b | 真实模型烟测：模型是否**真的**产生大输出 | **是**（需单独授权） | todo |

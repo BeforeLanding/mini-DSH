@@ -5,10 +5,12 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { Context } from '@deepseek-ai/cordis'
-import { createFixture, screeningIds, sequenceIds, fixtureProcessTimeoutMs, readTaskSequence } from '../scripts/coding-fixtures.js'
+import { createFixture, screeningIds, sequenceIds, boundedIds, fixtureProcessTimeoutMs, readTaskSequence } from '../scripts/coding-fixtures.js'
 import type { FixtureId } from '../scripts/coding-fixtures.js'
+import { evalPolicy } from '../scripts/eval-runner.js'
 import type { ToolCall } from '../src/core/contracts.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
+import { estimateText } from '../src/core/token-estimator.js'
 import * as sessions from '../src/plugins/session.js'
 import * as systemPrompt from '../src/plugins/system-prompt.js'
 import * as tools from '../src/plugins/tools.js'
@@ -187,6 +189,59 @@ test('the screening batch is still twelve single-task fixtures', async () => {
     const fixture = await createFixture(id)
     try { assert.equal(fixture.tasks.length, 1) } finally { await fixture.close() }
   }
+})
+
+// 对照 B 的仪器。它必须是单任务（有界工具输出改变的是当前 task 内部的历史规模，多阶段会把可裁剪的旧
+// 任务引进来，那是对照 A 的自变量），且必须不属于另外两批——进了筛查批次会动 NX-08d 的 12/12 与它的
+// 上限，进了阶段序列会被当成多阶段 fixture。
+test('the bounded-tool-output fixture is a single task whose report dwarfs the input target', { timeout: 60_000 }, async () => {
+  assert.deepEqual([...boundedIds], ['audit'])
+  const otherBatches: readonly string[] = [...screeningIds, ...sequenceIds]
+  for (const id of boundedIds) assert.ok(!otherBatches.includes(id), `${id} must stay out of the other two batches`)
+  const fixture = await createFixture('audit')
+  try {
+    assert.equal(fixture.tasks.length, 1, 'the tool-output instrument must be a single task')
+
+    // 公开检查只有一条断言：它失败时指不出是哪条记录、哪个字段，因此模型必须去跑 report.mjs。少了这条
+    // 性质，模型可以直接读 check.mjs 反推出全部规则，报告就不会被跑，「无界」那一臂也就不会产生大输出。
+    const check = spawnSync(process.execPath, ['check.mjs'], { cwd: fixture.workspace, encoding: 'utf8', timeout: fixtureProcessTimeoutMs, windowsHide: true })
+    assert.equal(check.status, 1)
+    assert.match(check.stderr, /AssertionError/)
+    assert.doesNotMatch(check.stderr + check.stdout, /field=/, 'the public check must not point at a field')
+
+    // 报告输出是这台仪器的作用量：它必须远大于输入目标，否则无界臂不会溢出、对照没有分辨力。用项目自己的
+    // 估算器量而不是字节数——CJK 与 ASCII 的 token 单价不同，字节数会给出错误的余量。
+    const report = spawnSync(process.execPath, ['report.mjs'], { cwd: fixture.workspace, encoding: 'utf8', timeout: fixtureProcessTimeoutMs, maxBuffer: 16 * 1024 * 1024, windowsHide: true })
+    assert.equal(report.status, 0, report.stderr)
+    assert.ok(Buffer.byteLength(report.stdout) > 512 * 1024, `report was ${Buffer.byteLength(report.stdout)} bytes`)
+    assert.ok(estimateText(report.stdout) > 4 * (evalPolicy.inputTargetTokens ?? 0), `report was ${estimateText(report.stdout)} tokens`)
+    // 三条缺陷轴各自都要有违规：只有一条轴时「报告里同时存在多种线索」就成了偶然，改生成器时这条会挡一下。
+    assert.match(report.stdout, /^SUMMARY \d+$/m)
+    for (const field of ['name', 'email', 'amount']) assert.match(report.stdout, new RegExp(`^KIND ${field} [1-9]\\d*$`, 'm'))
+
+    const initial = await fixture.evaluate()
+    assert.equal(initial.passed, false)
+    await fixture.applyReference()
+    assert.equal((await fixture.evaluate()).passed, true)
+  } finally { await fixture.close() }
+})
+
+test('the audit dataset and report generator are protected against rewriting', async () => {
+  const fixture = await createFixture('audit')
+  try {
+    await fixture.applyReference()
+    assert.equal((await fixture.evaluate()).passed, true)
+    // 数据与报告生成器都在工作区里，模型改掉任一个都能让公开检查变成自己写的空断言。独立验收必须守住它们。
+    for (const filename of ['data/records.jsonl', 'report.mjs', 'check.mjs']) {
+      const original = await fs.readFile(path.join(fixture.workspace, filename))
+      await fs.writeFile(path.join(fixture.workspace, filename), filename === 'data/records.jsonl' ? '' : "console.log('public checks passed')\n")
+      const tampered = await fixture.evaluate()
+      assert.equal(tampered.passed, false, `${filename} rewrite must be rejected`)
+      assert.deepEqual(tampered.protectedFilesChanged, [filename])
+      await fs.writeFile(path.join(fixture.workspace, filename), original)
+    }
+    assert.equal((await fixture.evaluate()).passed, true)
+  } finally { await fixture.close() }
 })
 
 test('the sequence fixture declares its stages in file-name order and passes acceptance only as a whole', async () => {
