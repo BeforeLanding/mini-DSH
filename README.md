@@ -53,7 +53,7 @@ NX-05a 起提供可重复的 [编程任务 fixture](test/fixtures/coding/README.
 
 `pnpm eval:offline` 用模拟模型把 12 个 fixture 跑成一次筛查阶段，用于验证评测运行器与整批上限核算（单次 run 预算与按阶段计数的整批上限见 [PLAN](docs/context-budget/PLAN.md#nx-08-评测批次上限预注册)）。该命令同样不使用真实模型，通过率不作为模型能力证据。
 
-`pnpm eval:screening` 与 `pnpm eval:sequence` 是**会真实计费**的评测入口：前者跑筛查批次的 12 个单任务 fixture，后者跑多阶段 fixture `pipeline` 的诊断烟测（同一会话内按序下发的六个阶段，用于测量上下文裁剪在哪个阶段被触发）。两者都需要 `.env` 里的 `DEEPSEEK_API_KEY`，按 `--phase` 选择批次；先加 `--plan-only` 可以在不建目录、不出网、不需要密钥的情况下核对「这次要跑什么、上限多少、证据落在哪」。`--tasks` 只能取当前阶段清单内的子集。三个与评测相关的环境变量见 [.env.example](.env.example)。
+`pnpm eval:screening` 与 `pnpm eval:sequence` 是**会真实计费**的评测入口：前者跑筛查批次的 12 个单任务 fixture，后者跑多阶段 fixture `pipeline` 的诊断烟测（同一会话内按序下发的十四个阶段，用于测量上下文裁剪在哪个阶段被触发）。两者都需要 `.env` 里的 `DEEPSEEK_API_KEY`，按 `--phase` 选择批次；先加 `--plan-only` 可以在不建目录、不出网、不需要密钥的情况下核对「这次要跑什么、上限多少、证据落在哪」。`--tasks` 只能取当前阶段清单内的子集。三个与评测相关的环境变量见 [.env.example](.env.example)。
 
 `pnpm eval:estimate` 打印输入估算器与 DeepSeek 官方离线 tokenizer 的偏差分布（语料与固定参考值见 [test/fixtures/estimation](test/fixtures/estimation/README.md)）。结论：对中文、英文一致高估；对代码与 JSON 不是一致安全，实测有样本低估超过 10% 的容量余量。估算器或语料变化时该命令以非零退出码提示重新测量，不静默沿用旧结论。
 

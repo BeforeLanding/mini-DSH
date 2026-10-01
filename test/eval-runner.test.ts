@@ -43,17 +43,18 @@ test('pre-registered caps match PLAN and the phase caps sum to the whole-batch c
   assert.deepEqual(singleRunBudget, { maxModelRequests: 32, maxToolCalls: 64, maxActiveDurationMs: 300_000, maxTotalTokens: 2_000_000 })
   assert.deepEqual(phaseCaps, {
     screening: { runs: 12, requests: 400, tokens: 8_000_000 },
-    // 对照 A 的两臂各 3 次运行（NX-08e2-6 按实测重预注册）。这里的一次运行是整条六阶段序列，
-    // 单次烟测实测 53 请求 / 2,188,159 token。
-    armA: { runs: 3, requests: 600, tokens: 15_000_000 },
-    armB: { runs: 3, requests: 600, tokens: 15_000_000 },
+    // 对照 A 的两臂各 3 次运行（NX-08e2-6 按实测重预注册，NX-08e2-4 随序列扩到十四阶段再重算一次）。
+    // 这里的一次运行是整条**十四阶段**序列：请求取理论上界（3 × 14 × 32 = 1344→1400），token 取
+    // 「3 × 单条 × 2 倍余量」而单条是外推值（10 阶段实测 2,639,688 + 4 个受裁剪阶段 → 3,884,608）。
+    armA: { runs: 3, requests: 1_400, tokens: 24_000_000 },
+    armB: { runs: 3, requests: 1_400, tokens: 24_000_000 },
     // 诊断烟测：单条序列，取逐阶段预算的理论上界（阶段数 × 32 请求 / 阶段数 × 2,000,000 token）。
     // NX-08e2-4 把序列从 6 阶段扩到 10 阶段、再扩到 14 阶段，上限跟着走。
     sequence: { runs: 1, requests: 448, tokens: 28_000_000 },
   })
   // 整批只归约预注册的三个对照阶段。把诊断阶段算进去会改变这个数字的含义，因此按值钉死而不是只断言
   // 求和：以前改 armA 只会静默改变和值，现在会直接撞上预注册数字。
-  assert.deepEqual(batchCaps, { runs: 18, requests: 1_600, tokens: 38_000_000 })
+  assert.deepEqual(batchCaps, { runs: 18, requests: 3_200, tokens: 56_000_000 })
   for (const cap of capKeys) assert.equal(batchCaps[cap], batchPhases.reduce((total, name) => total + phaseCaps[name][cap], 0), cap)
   // 单次预算不能替代整批上限：每个 run 都用满单次 token 预算时总量远超整批上限，正是 PLAN 要求独立整批
   // 上限的理由。对照臂的一次运行是整条序列，因此每 run 的上界是「阶段数 × 单次预算」；阶段数从 fixture

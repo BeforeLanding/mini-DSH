@@ -12,22 +12,30 @@ export const singleRunBudget: Readonly<BudgetPolicy> = Object.freeze({
 // context_overflow 全部失效，A/B 两臂的上下文差异也随之归零。
 export const evalPolicy: Readonly<BudgetPolicy> = Object.freeze({ ...CLI_BUDGET, ...singleRunBudget })
 export interface BatchCaps { runs: number; requests: number; tokens: number }
-// batchCaps 是「整批 156 次运行」这条预注册结论的载体，因此它的成员被单独列出来，而不是「PhaseName 的
+// batchCaps 是「整批 18 次运行」这条预注册结论的载体，因此它的成员被单独列出来，而不是「PhaseName 的
 // 全部」：诊断烟测会随开发增减，让它混进预注册算术会让那个数字不再对应同一件事。
 export const batchPhases = ['screening', 'armA', 'armB'] as const
 export type BatchPhase = typeof batchPhases[number]
 export type PhaseName = BatchPhase | 'sequence'
 export const phaseCaps: Readonly<Record<PhaseName, BatchCaps>> = Object.freeze({
   screening: { runs: 12, requests: 400, tokens: 8_000_000 },
-  // 对照 A 的两臂各 3 次运行（NX-08e2-6 按实测重预注册；旧算式「12 任务 × 2 臂 × 3 次」随 fixture 变成
-  // 多阶段序列而作废）。这里的「一次运行」是整条六阶段序列：单次烟测实测 53 请求 / 2,188,159 token。
-  // requests 取理论上界（3 × 6 阶段 × 32 请求 = 576，进位到 600），tokens 取实测的两倍余量
-  // （3 × 2 × 2,188,159 ≈ 13,128,954，进位到 15,000,000）。单次 run 预算仍是每阶段一份，是每次运行的硬闸门。
+  // 对照 A 的两臂各 3 次运行（NX-08e2-6 按实测重预注册，NX-08e2-4 之后随序列扩到十四阶段再重算一次；
+  // 旧算式「12 任务 × 2 臂 × 3 次」随 fixture 变成多阶段序列而作废）。这里的「一次运行」是整条**十四阶段**序列。
+  // requests 取理论上界（3 × 14 阶段 × 32 请求 = 1344，进位到 1400）——与筛查同口径。取上界而不是实测是
+  // 刻意的：请求数 32 是「两臂获得相同工作量」的约束，上限若比它更紧就会在批次中途掐断某一臂，让被比较的
+  // 东西从上下文策略变成预算；6 阶段批次两臂实际只用掉 100 / 125 请求，离上界很远正是它该有的样子。
+  // tokens 取「3 × 实测单条 × 2 倍余量」，但这一次的单条数值是**外推**而非新测：NX-08e2-4 的 10 阶段诊断
+  // 实测 2,639,688 token，其中裁剪开始后的 5 个阶段平均 311,230/阶段；再加 4 个同量级的受裁剪阶段得
+  // 2,639,688 + 4 × 311,230 = 3,884,608，乘 6 得 23,307,648，进位到 24,000,000。14 阶段的补充诊断被中断且
+  // 无产出（见 CHANGES 的 NX-08e2-4 条），所以这个单条读数比 6 阶段那次的直接实测弱一档，余量的松紧因此
+  // 更值得复核——6 阶段批次的实际用量恰好可以复核：上限 15,000,000，两臂实际用掉 3,910,735 / 4,277,915，
+  // 约为主张值的 26%，说明两倍余量在这套 fixture 上偏保守。
+  // 单次 run 预算仍是每阶段一份，是每次运行的硬闸门。
   // runs 是**该阶段一共要跑几次**，不只是中止阈值：registry 只有 1 个 fixture，因此它是「每个 fixture
   // 重复 3 次」，由 eval-cli 的 repeatCount/resolveRuns 展开成真正的执行清单。NX-08e 之前的实现只把它
   // 当中止阈值用，一条命令实际只跑 1 次——`test/eval-cli.test.ts` 现在把「上限」和「计划长度」钉在一起。
-  armA: { runs: 3, requests: 600, tokens: 15_000_000 },
-  armB: { runs: 3, requests: 600, tokens: 15_000_000 },
+  armA: { runs: 3, requests: 1_400, tokens: 24_000_000 },
+  armB: { runs: 3, requests: 1_400, tokens: 24_000_000 },
   // sequence 是 NX-08e2 的诊断烟测（多阶段 fixture pipeline），不是预注册对照批次的一部分。
   // 数值取逐阶段预算的理论上界：该阶段的计划里只有 1 个 fixture，而 runPhase 只在两次 fixture 之间
   // 检查累计值，整批上限对它本来就不构成中途制动——取更紧的值只会把一次跑完的烟测变成带 aborted 的
