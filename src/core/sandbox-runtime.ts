@@ -10,6 +10,12 @@ const stdoutOnlyCommands = new Set(['echo', 'printf'])
 // `esac`）之后没有新命令，`case` 后面的词是主语不是命令，`in`／`!`／`time` 不引入命令位置。
 const commandIntroducers = new Set(['if', 'elif', 'while', 'until', 'do', 'then', 'else'])
 
+// 引入命令位置的**算子**那一半：子 shell `(` 与分组 `{`。它们与保留字走**同一支**判据——自身处于
+// 命令段起点时，令紧随其后的一个 token 也算段起点。`)`／`}` 只收尾、不引入命令位——`(a); curl x`
+// 里的命令位由 `;` 给。分组要求 `{` 单独成词，`src/{a,b}/x` 那种词内花括号不算——这由 token
+// 规范化之后的 `raw === token` 一起保证。
+const commandPositionOpeners = new Set(['(', '{'])
+
 // 取网命令里「取值不是网络目标」的旗标。这些旗标后面的 token 只是取值，不做主机判定——
 // 否则 `curl -o out.txt http://localhost/x` 会把输出文件名 out.txt 当成主机而误拒
 // （`wget -O page.html`、`curl -sS -o out.json` 同理）。
@@ -441,8 +447,20 @@ export class SandboxRuntime {
     const scriptFragments: { text: string; origin: string }[] = []
     for (let index = 0; index < tokens.length; index++) {
       const raw = tokens[index][0]
-      const token = raw.replace(/^["']|["']$/g, '')
+      let token = raw.replace(/^["']|["']$/g, '')
       const start = tokens[index].index ?? 0
+      // 括符是 shell 的算子，但词体类 `[^\s|;&<>]+` 会把它们粘进 token（`(curl`、`example.com)`），
+      // 于是 `networkTools[basename]` 与 `shellWords.has(basename)` 双双落空。这里只做**首尾规范化**，
+      // 分词器一行不动——把 `(`／`)` 从词体类里拿掉会让 `src/{a,b}/x`、`$(pwd)/x` 被切成裸 `/x`
+      // （前者误拒、后者变成根路径操作数），而把 `(` 加进分隔符类会让 `$()` 内的 `commandWord`
+      // 被重置，`echo $(date) https://example.com` 由放行变拒绝。分词器与 `expanded` 的下标对齐是
+      // 下游三处（`pipedDownstream`、`eval` 参数切片、`-c` 片段抽取）的承重墙。
+      // 含 `$(` 的词跳过：`$(pwd)/file.txt` 的 `)` 是词内结构，不是子 shell 收尾；空结果保留原样，
+      // 免得一个孤立的 `)` 变成空 token。
+      if (token === raw && !token.includes('$(')) {
+        const normalized = token.replace(/^[({]+/, '').replace(/[)}]+$/, '')
+        if (normalized) token = normalized
+      }
       let executable = index === 0 || /[|;&\n]\s*$/.test(expanded.slice(0, start)) || pendingCommandPosition
       // 只在本次迭代内有效，不跨词存活——这样「保留字之后的词」与「把同一个词写在首 token 位置」判定
       // 完全一致（跨词存活会把 `do echo curl example.com` 的实参 `curl` 当成命令词）。清零必须在这里、
@@ -457,10 +475,12 @@ export class SandboxRuntime {
         commandWord = basename
         // 本段标准输出是否接到下游命令：下游可能真的取网，所以豁免只在纯输出时成立。
         pipedDownstream = expanded.slice(start + raw.length).split(/[;&\n]/)[0].replace(/\|\|/g, '').includes('|')
-        // 保留字只在**自身处于命令段起点**时才算数（`echo do curl x` 里的 `do` 只是实参），且必须是
-        // **原样未被引用、不含路径分隔符**的字面词——shell 的保留字识别发生在展开与去引号之前，
-        // 被引用的 `"do"` 与带路径的 `./do` 都不是保留字。用 token 而非 basename 正是为了这一条。
-        if (raw === token && commandIntroducers.has(token)) pendingCommandPosition = true
+        // 保留字与 opener 只在**自身处于命令段起点**时才算数（`echo do curl x`、`echo (curl x)`
+        // 里那个词只是实参），且必须是**原样未被引用、不含路径分隔符、也未被规范化**的字面词——
+        // shell 的保留字识别发生在展开与去引号之前，被引用的 `"do"` 与带路径的 `./do` 都不是保留字；
+        // 而 `(curl` 经规范化后 `raw !== token`，故不设旗标——它自己就是命令。用 token 而非 basename
+        // 正是为了这一条。
+        if (raw === token && (commandIntroducers.has(token) || commandPositionOpeners.has(token))) pendingCommandPosition = true
       }
       if (executable && networkTools[basename]) {
         networkTool = true

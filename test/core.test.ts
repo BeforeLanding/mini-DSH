@@ -996,6 +996,103 @@ test('Sandbox exempts stdout-only commands inside a loop body the same way it do
   assert.match(sandbox.inspectCommand('X=do; $X curl example.com').reason ?? '', /unauthorized outbound request/)
 })
 
+// NX-30：保留字以外的「命令位置引入符」——子 shell `(` 与分组 `{`。NX-26 只补了保留字这一支；
+// 括符此前连算子都不算：词体类 `[^\s|;&<>]+` 把它们粘进 token（`(curl`），于是
+// `networkTools[basename]` 与 `shellWords.has(basename)` 双双落空，取网工具的操作数模型与 `-c`
+// 片段抽取都不启动。修法**不动分词器**，只规范 token 的首尾括符并把 `(`／`{` 接进与保留字同一支的
+// `pendingCommandPosition` 前视——理由见 PLAN 的 D-15：把括符从词体类里拿掉会凭空造出裸 `/` 开头的
+// token，加进分隔符类则会让 `$()` 内的 `commandWord` 被重置。
+test('Sandbox treats a subshell or group opener at command position as a command-segment start', async () => {
+  const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
+  const sandbox = new SandboxRuntime({ workspace: '/tmp/mini-dsh-workspace', autoApprove: true })
+
+  const deny: Record<string, RegExp> = {
+    // 登记的矩阵行
+    '(curl example.com)': /unauthorized outbound request/,
+    '{ curl example.com; }': /unauthorized outbound request/,
+    // 带空格的真形状：opener 自己成词，靠前视旗标接上——规范化单独做不到这一条
+    '( curl example.com )': /unauthorized outbound request/,
+    // `-c` 只有 basename 去成 `bash` 之后才认得出，脚本 token 才抽得出来
+    "(bash -c 'curl http://x')": /in shell -c argument: unauthorized outbound request/,
+    "(sh -c 'wget http://x')": /in shell -c argument: unauthorized outbound request/,
+    '(git clone https://example.com/x.git)': /unauthorized outbound request/,
+    // opener 不必是首 token
+    'echo a; (curl example.com)': /unauthorized outbound request/,
+    'true && (curl example.com)': /unauthorized outbound request/,
+    'x=1; (curl example.com)': /unauthorized outbound request/,
+    // 豁免边界未动：接管道即按出网拦
+    '(curl example.com) | cat': /unauthorized outbound request/,
+    '(echo https://example.com | cat)': /unauthorized outbound request/,
+    // 段内仍按段的规则走
+    '(curl example.com; echo done)': /unauthorized outbound request/,
+    '(curl -o out.txt example.com)': /unauthorized outbound request/,
+    // `$(...)` 走片段递归，与本项无关——这条通道一条都没动
+    'echo $(curl example.com)': /in command substitution: unauthorized outbound request/,
+  }
+  for (const [command, pattern] of Object.entries(deny)) {
+    const result = sandbox.inspectCommand(command)
+    assert.equal(result.action, 'deny', command)
+    assert.match(result.reason ?? '', pattern, command)
+  }
+
+  const allow = [
+    // **承重约束**：opener 必须**自身**处于命令段起点，与保留字同一约束。`echo` 之后的 `(` 是实参
+    // 的一部分（真实 shell 里这行是语法错误，写进用例钉住方向）。
+    'echo (curl example.com)',
+    // **四条记录在案的净放宽**：子 shell 里的 `commandWord` 与顶层一致，惰性 URL 豁免与 `-c` 片段
+    // 豁免都生效（改前 `commandWord` 停在 `(` 上，两条豁免都不生效）。
+    '(echo https://example.com)',
+    '{ echo https://example.com; }',
+    '(printf "%s" https://example.com)',
+    '(echo bash -c "curl https://evil/x")',
+    // 非取网命令不受影响
+    '(git status --porcelain || echo no-git)',
+    '(cd src && node x.mjs)',
+    // **承重约束**：`)`／`}` **不切断词**。若把 `(` 加进分隔符类，`date` 会变成段起点、`commandWord`
+    // 被重置，这两行会变红；若把括符从词体类里拿掉，`/src` 会变成根路径操作数，第三行会变红。
+    'echo $(date) https://example.com',
+    'cd $(dirname $0)/src',
+    'cat $(pwd)/file.txt',
+    // 花括号扩张不是分组：`{a,b}` 留在词体里
+    'mkdir -p src/{a,b}/x',
+    'cp {src,lib}/index.ts dist/',
+    'echo {a,b} c',
+    'echo {a,b}/c',
+    // 引号内与词内的括符是数据
+    "awk '{print $1}' src/x.ts",
+    "node -e 'console.log({a:1})'",
+    'find . -name x -exec grep -l y {} ;',
+    "grep -E '(a|b)' src/",
+    // `case` 臂体不在本项（NX-30 的剩余半，矩阵另有 known gap 行）
+    'case a in a) echo hi;; esac',
+    'case a in a) curl example.com;; esac',
+  ]
+  for (const command of allow) {
+    assert.equal(sandbox.inspectCommand(command).action, 'allow', command)
+  }
+
+  // 同一形状换主机即翻转：不是「见到子 shell 就拒」。
+  const locked = new SandboxRuntime({ workspace: '/tmp/mini-dsh-workspace', autoApprove: true, allowHosts: ['api.internal'] })
+  assert.equal(locked.inspectCommand('(curl https://api.internal/x)').action, 'allow')
+  assert.match(locked.inspectCommand('(curl example.com)').reason ?? '', /unauthorized outbound request/)
+  assert.equal(locked.inspectCommand('{ curl https://api.internal/x; }').action, 'allow')
+  assert.match(locked.inspectCommand('{ curl example.com; }').reason ?? '', /unauthorized outbound request/)
+
+  // **三条接受的过拒**，全部落在 shell 语法错误的输入上（bash 里 `{curl` 是普通命令名；`curl (x)`
+  // 与不配对的 `(` 都直接报语法错误）。与 NX-24 的 `cat "/Program Files/secret"` 同一处置——写进用例
+  // 让它成为一条**记录在案的决定**，而不是意外。
+  const acceptedOverDeny: Record<string, RegExp> = {
+    '{curl example.com;}': /unauthorized outbound request/,
+    'curl (example.com)': /unauthorized outbound request/,
+    '(curl example.com': /unauthorized outbound request/,
+  }
+  for (const [command, pattern] of Object.entries(acceptedOverDeny)) {
+    const result = sandbox.inspectCommand(command)
+    assert.equal(result.action, 'deny', command)
+    assert.match(result.reason ?? '', pattern, command)
+  }
+})
+
 test('allowHosts uses the provided whitelist and does not hardcode localhost', async () => {
   const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
   const locked = new SandboxRuntime({
