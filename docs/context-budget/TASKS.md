@@ -170,6 +170,28 @@ NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，
 
 **结论（2026-10-01，付费约 $1.43）**：单次运行 `accepted`、退出码 0、输出逐字 `acceptance passed: blind`、受保护文件零改动、**零 `max_steps`**——按预注册字面命中**「未被打破」**，只可写「这一次没有失败」。222 请求 / 256 工具 / 8,710,662 token / 约 21.4 分钟，usage 全部来自 provider。**两处必须照实写的事实**：① **4/14 个阶段以 `context_overflow` 结束**（第 6、7、13、14），触发点是**输入目标** 65,536 而非窗口，且发生在裁剪到底之后——**预注册的判据只防了 `max_steps`，这是它的缺口**，判据正文逐字未改，缺口记在 CHANGES 与 PLAN 的追记里；② 模型**自建了检查脚本**（`tmp-verify-06.mjs`／`tmp-verify-07.mjs`，第 10 阶段还回头复用了一次），117 次 bash 里 31 次是 `node` 内联脚本，而提到 `check.mjs` 的**是 0 次**。**不得**写成「无公开检查不影响结果」，**不得**与 `armB` 并排读（本次是诊断烟测，与 `armB` 的比较不在预注册内），**不得**据此改 `blind` 或重跑。
 
+### NX-19 出网拦截的真实缺口收口
+
+**todo（NX-17 期间发现）。方向是「加强」而非「放宽」**：NX-17 把误拒的惰性形状放行，本轮把**能真正取网、而闸门当前放行**的形状判为拒绝。诊断矩阵 `docs/context-budget/nx17-gate-probes.mjs:43-46` 已登记其中四条（`known gap NX-19`），本轮把它们搬进约定组。**NX-17 记为「未放宽」的规则本次一行不动**——`..` 整串正则、系统路径、工作区外路径、递归删除、`sudo` 与「惰性输出接进管道」的处理全部保持。
+
+**为什么不是「见到 `$(` 就拒」**：`src/tools/bash.ts:53` 把模型给的整串命令交给 `bash -lc`（`src/core/command-runner.ts:51` 是 `spawn(exe, ['-lc', command])`），所以 `$(...)`、反引号与 shell 的 `-c` 参数是**真的会被执行**的文本，而顶层分词恰恰看不见它们。判据取「这段文本会不会被执行」，把这类片段抽出来**递归检查**；按出现位置拒绝会误伤 `echo "$(date)"`。递归保留 allowHosts 语义——`bash -c "curl http://localhost/health"` 必须放行。
+
+**本次唯一的净放宽**：`curl -o out.txt http://localhost/x` 这类今日被误拒（既有「裸主机名操作数」规则把 `-o` 的**取值**当成了主机；实测 `wget -O page.html`、`curl -sS -o out.json` 同样）。它违背 `CHANGES.md:855` 已记录的意图，且不先修就会把同类误报复制到 `ssh -i`／`scp`／`rsync`，因此**独立成一步、排在清单扩展之前**。
+
+**不承诺闭合**：取网工具集是尽力而为的清单，形状启发式不是完备解析。`node -e`／`python -c` 的程序字符串、脚本文件内容、base64 解码后进 shell、here-doc 正文与未列入的工具都不在覆盖内，逐条写进 R-20 的边界句。
+
+| 子步骤 | 内容 | 验收 | 提交边界 |
+| --- | --- | --- | --- |
+| NX-19-0 | 立项、PLAN 决策与边界句订正（**done**） | `grep -cE '^\| NX-19-' docs/context-budget/TASKS.md` = 7；每行「验收」列至少含一个反引号命令或可判定的 `grep`/退出码判据；PLAN 新增 `D-12` 且写明上限（深度 3／片段 32）与「清单只减少漏报、不承诺闭合」；R-20 的边界句不再声称出网规则「只覆盖可识别命令段内」的 URL 形态；`git diff --stat` 只含 `docs/context-budget/` 三份文件 | 1 次 |
+| NX-19-1 | 取网工具的非目标取值旗标（**todo**） | `curl -o out.txt http://localhost/x`、`wget -O page.html http://localhost/`、`curl -sS -o out.json http://localhost/api` 由 deny 变 allow；`curl --url example.com`、`curl -s example.com`（默认仍检查）、`curl -o /etc/cron http://localhost/x`（路径检查保留）仍 deny；`pnpm test` 全绿 | 1 次 |
+| NX-19-2 | 工具集扩展与主机操作数形态（**todo**） | `nc example.com 80`、`ssh user@example.com`、`scp report.pdf user@example.com:/tmp/`、`rsync -avz src/ example.com:/dest/`、`ping example.com` 由 allow 变 deny；`ssh -i key.pem localhost`、`nc -l 8080`、`ping 127.0.0.1`、`curl http://localhost:8080/health` 仍 allow | 1 次 |
+| NX-19-3 | 嵌套文本递归检查：`$(...)` 与反引号（**todo**） | `echo "$(curl https://example.com)"`、反引号形式、`x=$(curl https://example.com)`、`node -e "…; $(curl http://example.com)"` 由 allow 变 deny 且理由带 `in command substitution:` 前缀；`echo '$(curl …)'`、`echo \$(curl …)`、`echo $((1+2))`、`echo "$(curl http://localhost/health)"` 仍 allow；超深／超量按上限理由拒绝且**与出网理由不同串**；引号区间一致性用例绿 | 1 次 |
+| NX-19-4 | shell `-c` 与 `eval` 的脚本参数抽取（**todo**） | `bash -c 'curl http://example.com'`（单引号形式）、`bash -lc "curl …"`、`bash -c -- "curl …"`、`env bash -c '…'`、`xargs bash -c '…'`、`eval "curl http://example.com"` 由 allow 变 deny；`bash -c "echo hi"`、`bash -c 'echo hi' example.com`（只取一个 token）、`echo bash -c "curl x"` 仍 allow | 1 次（复用 NX-19-3 的递归底座） |
+| NX-19-5 | 反斜杠 UNC（**todo**） | `cat \\server\share\secret`、`cat "\\server\share"`、`cat \\?\C:\Windows\win.ini` 由 allow 变 deny 且理由为 `UNC path is blocked`；`printf '\\n'` 仍 allow | 1 次 |
+| NX-19-6 | 契约、矩阵与回填（**todo**） | 4 条 `known gap NX-19` 行**先跑到 `met` 留证**再搬进约定组，重跑**无 `drift`** 且新组全 `ok`；R-20 正文与验收补新条目、边界句逐条列出不可闭合的旁路；CHANGES 增 NX-19 节且命令与输出逐字一致；NX-23／NX-24 在 TASKS／PROGRESS 均出现；`pnpm check` 90 文件、`pnpm test` 全绿、`pnpm fixtures:check` 16 项、`pnpm eval:offline` 12/12 | 1 次 |
+
+**提交**：NX-19-0 起逐子步骤一次，NX-19-6 为回填。详细证据见 [CHANGES 的 NX-19 节](CHANGES.md#nx-19-出网拦截的真实缺口收口)。
+
 其他待办，按依赖排序：
 
 
