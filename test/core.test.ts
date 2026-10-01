@@ -886,6 +886,66 @@ test('Sandbox treats a quoted program body starting with a slash as data, not a 
   assert.equal(sandbox.inspectCommand('node -e "//comment"').action, 'deny')
 })
 
+// NX-26-1：`executable` 是**命令段起点的定义**（`:439`）——它为真才重置每段状态、才开启取网工具的
+// 操作数模型（`:466` 的 `model && !executable` 守卫）。判据此前只认「首 token」与「紧邻 `|`／`;`／
+// `&`／换行」，所以**保留字后面那个 token 一切判定都不跑**：`for f in a; do curl example.com; done`
+// 今日就是 allow（矩阵的 `known gap NX-26`）。修法是**单 token 前视**——保留字**自身**处于命令段
+// 起点时，令紧随其后的一个 token 也算段起点。
+test('Sandbox treats the word after do/then/else as a command-segment start', async () => {
+  const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
+  const sandbox = new SandboxRuntime({ workspace: '/tmp/mini-dsh-workspace', autoApprove: true })
+
+  // 断言理由而不只是 action：`do` 那条曾出现过「命令确实被拒、但理由变成 system path blocked」的
+  // 静默失效（NX-24-4 的教训），只有理由断言拦得住。
+  const deny = {
+    // 登记的那条，也是矩阵行
+    'for f in a b; do curl example.com; echo $f; done': /unauthorized outbound request/,
+    'for f in a; do curl example.com; done': /unauthorized outbound request/,
+    'do wget example.com': /unauthorized outbound request/,
+    'do ssh example.com': /unauthorized outbound request/,
+    'do ping example.com': /unauthorized outbound request/,
+    'echo a | for f in b; do curl example.com; done': /unauthorized outbound request/,
+    // `-o` 的取值不是目标，`-o` 之后那个裸主机才是
+    'for f in a; do curl -o out.txt example.com; done': /unauthorized outbound request/,
+    // 首词即保留字。真实 shell 里这是语法错误，拒绝可接受——写进用例把行为钉住
+    'do curl example.com': /unauthorized outbound request/,
+  }
+  for (const [command, pattern] of Object.entries(deny)) {
+    const result = sandbox.inspectCommand(command)
+    assert.equal(result.action, 'deny', command)
+    assert.match(result.reason ?? '', pattern, command)
+  }
+
+  const allow = [
+    // **承重约束 2**：保留字只在**自身处于命令段起点**时才算数。这里的 `do` 是 `echo` 的实参，
+    // 不是命令段起点，因此不引入命令位置——若把旗标赋值行挪出 `if (executable)` 块，这一行会变红。
+    'echo do curl example.com',
+    'printf do curl example.com',
+    'echo "do curl example.com"',
+    // **承重约束 3**：保留字必须是原样未被引用、不含路径分隔符的字面词。shell 的保留字识别发生在
+    // 展开与去引号之前，`"do"` 与 `./do` 都不是保留字——若改用 basename，这两行会变红。
+    '"do" curl example.com',
+    './do curl example.com',
+    '/usr/bin/do curl example.com',
+    // 本项不覆盖的形状：`env` 包装在顶层同样不算段起点，本项不改变该取舍（NX-30 相关）
+    'for f in a; do env curl example.com; done',
+    // `case` 后面的词是主语、不是命令，明确不在闭集内
+    'case a in a) echo hi;; esac',
+  ]
+  for (const command of allow) {
+    assert.equal(sandbox.inspectCommand(command).action, 'allow', command)
+  }
+
+  // 递归与 allowHosts 语义保留：同一形状换主机即翻转，不是「见到循环体里取网就拒」。
+  const locked = new SandboxRuntime({
+    workspace: '/tmp/mini-dsh-workspace',
+    autoApprove: true,
+    allowHosts: ['api.internal'],
+  })
+  assert.equal(locked.inspectCommand('for f in a; do curl api.internal; done').action, 'allow')
+  assert.match(locked.inspectCommand('for f in a; do curl example.com; done').reason ?? '', /unauthorized outbound request/)
+})
+
 test('allowHosts uses the provided whitelist and does not hardcode localhost', async () => {
   const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
   const locked = new SandboxRuntime({

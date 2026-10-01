@@ -5,6 +5,10 @@ import { resolveInside } from '../utils/path.js'
 // 只写标准输出、无法发起网络请求的命令。它们参数里的 URL 是数据，不是请求目标。
 const stdoutOnlyCommands = new Set(['echo', 'printf'])
 
+// 引入命令位置的 shell 保留字：它们自己不是命令，**紧随其后的一个 token** 才是命令词的起点
+// （`for f in a; do curl example.com; done` 里的 `curl`）。
+const commandIntroducers = new Set(['do', 'then', 'else'])
+
 // 取网命令里「取值不是网络目标」的旗标。这些旗标后面的 token 只是取值，不做主机判定——
 // 否则 `curl -o out.txt http://localhost/x` 会把输出文件名 out.txt 当成主机而误拒
 // （`wget -O page.html`、`curl -sS -o out.json` 同理）。
@@ -431,12 +435,18 @@ export class SandboxRuntime {
     let hostOperandSeen = false
     let commandWord = ''
     let pipedDownstream = false
+    // 上一个 token 是引入命令位置的保留字：本 token 按命令段起点处理。
+    let pendingCommandPosition = false
     const scriptFragments: { text: string; origin: string }[] = []
     for (let index = 0; index < tokens.length; index++) {
       const raw = tokens[index][0]
       const token = raw.replace(/^["']|["']$/g, '')
       const start = tokens[index].index ?? 0
-      let executable = index === 0 || /[|;&\n]\s*$/.test(expanded.slice(0, start))
+      let executable = index === 0 || /[|;&\n]\s*$/.test(expanded.slice(0, start)) || pendingCommandPosition
+      // 只在本次迭代内有效，不跨词存活——这样「保留字之后的词」与「把同一个词写在首 token 位置」判定
+      // 完全一致（跨词存活会把 `do echo curl example.com` 的实参 `curl` 当成命令词）。清零必须在这里、
+      // 而不是循环末尾：下面几处 `continue` 会跳过末尾的清零，让旗标多活一个 token。
+      pendingCommandPosition = false
       const basename = path.posix.basename(token)
       if (executable) {
         networkTool = false
@@ -446,6 +456,10 @@ export class SandboxRuntime {
         commandWord = basename
         // 本段标准输出是否接到下游命令：下游可能真的取网，所以豁免只在纯输出时成立。
         pipedDownstream = expanded.slice(start + raw.length).split(/[;&\n]/)[0].replace(/\|\|/g, '').includes('|')
+        // 保留字只在**自身处于命令段起点**时才算数（`echo do curl x` 里的 `do` 只是实参），且必须是
+        // **原样未被引用、不含路径分隔符**的字面词——shell 的保留字识别发生在展开与去引号之前，
+        // 被引用的 `"do"` 与带路径的 `./do` 都不是保留字。用 token 而非 basename 正是为了这一条。
+        if (raw === token && commandIntroducers.has(token)) pendingCommandPosition = true
       }
       if (executable && networkTools[basename]) {
         networkTool = true
