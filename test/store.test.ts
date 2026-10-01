@@ -178,3 +178,48 @@ test('projection replay respects reset and preserves a completed terminal snapsh
   assert.equal(restored.latestRun(session.id)?.runId, run.runId)
   assert.equal(restored.get(session.id).events.filter(e => e.type === 'context/projection').length, 2)
 })
+// NX-10 第三幕（demo:unknown）里确定性的那一半。演示中的崩溃是子进程被真杀掉，杀进程本身平台相关，
+// 因此不进用例；但崩溃之后要走的每一步都是确定的，在这里钉住。
+// 残局与演示一致：日志停在 tool/start（工具已经开始、结果没落盘），目录里留着 writer.lock（进程死时
+// 没人释放；锁体就是 open 当时写下的形状，这里由用例直接放上）。
+test('a stale writer lock blocks recovery until it is removed explicitly, then restore marks the interrupted tool unknown', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-stale-lock-'))
+  const sessions = new SessionRuntime(), session = sessions.create({ workspace: root })
+  const store = await JsonlStore.open(root, session.id)
+  try {
+    sessions.attachStore(session.id, store)
+    const run = sessions.beginRun(session.id, {}, 'mock/demo')
+    sessions.append(session.id, 'user/message', { content: 'mock task' }, run)
+    sessions.append(session.id, 'assistant/tool_calls', { toolCalls: [{ id: 'wedged', name: 'bash', arguments: {} }] }, run)
+    sessions.append(session.id, 'tool/start', { taskId: run.taskId, runId: run.runId, toolCallId: 'wedged', name: 'bash' }, run)
+    // 工具真的已经跑过：它写下的副作用在恢复之后仍然在。
+    await fs.writeFile(path.join(root, 'side-effect.txt'), 'already executed')
+    await sessions.flush(session.id); await store.close()
+
+    const lockPath = path.join(root, session.id, 'writer.lock')
+    await fs.writeFile(lockPath, JSON.stringify({ token: 'stale-token', pid: 1 }))
+    // Harness 不会替人判断锁是否陈旧，它只拒绝。
+    await assert.rejects(JsonlStore.open(root, session.id), /session writer lock exists/)
+    // 隔离尾部也要先抢同一把锁，所以它同样开不动——销掉锁是唯一路径，不是可选优化。
+    await assert.rejects(JsonlStore.quarantineTail(root, session.id), /EEXIST/)
+
+    await fs.unlink(lockPath)
+    const reopened = await JsonlStore.open(root, session.id), restored = new SessionRuntime()
+    const before = await reopened.read()
+    await restored.restore(reopened, root)
+    await restored.flush(session.id)
+    const after = await reopened.read()
+
+    assert.equal(await fs.readFile(path.join(root, 'side-effect.txt'), 'utf8'), 'already executed')
+    assert.equal(restored.latestRun(session.id)?.status, 'error')
+    // 恰好一条配对结果，且它是 unknown 而不是 skipped：这条调用有过 tool/start。
+    assert.deepEqual(after.filter(e => e.type === 'tool/result').map(e => e.type === 'tool/result' ? [e.data.toolCallId, e.data.status] : []), [['wedged', 'unknown']])
+    // 补出来的记录是真的追加到日志上的，不是内存里的重演。
+    assert.ok(after.length > before.length)
+    assert.ok(after.some(e => e.type === 'run/finish' && e.data.state.status === 'error'))
+    // 副作用已经发生过，因此自动续跑必须被挡住——重试可能把它做第二遍。
+    // beginRun 是同步抛出的：挡住续跑的判定发生在派发任何请求之前。
+    assert.throws(() => restored.beginRun(session.id, {}, 'mock/demo', true), /unknown tool outcome/)
+    await reopened.close()
+  } finally { await store.close(); assert.equal(path.dirname(root), path.resolve(os.tmpdir())); await fs.rm(root, { recursive: true, force: true }) }
+})
