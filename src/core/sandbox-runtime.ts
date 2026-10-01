@@ -497,9 +497,12 @@ export class SandboxRuntime {
         if (/^\/(?:etc|dev|proc|sys|root|boot)(?:\/|$)/.test(normalized)) return deny('system path is blocked')
         // 纯分隔符串（//、///）不含路径分量，解析到的是根而非可读内容；单个 / 仍是真实的根目录操作数。
         if (/^\/{2,}$/.test(token)) { executable = false; continue }
-        // 双斜杠开头且首个路径分量含空白的 token 不是可寻址的根级路径：真实的根级目录名不会以空白开头，
-        // 这个形状来自 JS 注释或内联脚本正文被引号成词。系统路径与出网检查已在上面执行，不受影响。
-        if (/^\/{2,}/.test(token) && /\s/.test(token.replace(/^\/+/, '').split('/')[0])) { executable = false; continue }
+        // 任意条前导斜杠、但首个路径分量含空白的 token 不是可寻址的根级路径：真实的根级目录名不会
+        // 以空白开头。这个形状来自被引号成词的**正文**——JS 注释（`// helper`）与 awk／sed 的程序
+        // 正文（`/^## 11/,/^## 12/`）同形，此前只认双斜杠，于是单斜杠的 awk／sed 正文被当成绝对路径
+        // 误拒（实测 782 次真实 bash 调用里 5 条）。系统路径与出网检查已在上面执行，不受影响；
+        // 单个 `/`（首个分量为空）与 `//etc`、`//home/…`（首个分量干净）不在此列，仍走 resolvePath。
+        if (/^\/+/.test(token) && /\s/.test(token.replace(/^\/+/, '').split('/')[0])) { executable = false; continue }
         try { this.resolvePath(token) } catch (error) { return deny(error instanceof Error ? error.message : String(error)) }
       }
       if (networkTool && takesValueFromNextToken(token, networkToolWord)) pendingValueToken = true

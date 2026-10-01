@@ -861,6 +861,31 @@ test('Sandbox resolves names bound inside the command instead of calling them un
   assert.match(sandbox.inspectCommand('curl -d name=x example.com').reason ?? '', /unauthorized outbound request/)
 })
 
+// NX-24-5：被引号成词的**正文**以 `/` 开头时会被当成绝对路径。既有规则已经认「双斜杠 + 首分量
+// 含空白」这个形状（JS 注释），但只认双斜杠，于是 awk／sed 的程序正文被误拒——实测 782 次
+// 真实模型 bash 调用里 5 条是这个形状。改成任意条前导斜杠，判据本身不动。
+test('Sandbox treats a quoted program body starting with a slash as data, not a path', async () => {
+  const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
+  const sandbox = new SandboxRuntime({ workspace: '/tmp/mini-dsh-workspace', autoApprove: true })
+
+  assert.equal(sandbox.inspectCommand(`awk '/^## 11/,/^## 12/' docs/SPEC.md`).action, 'allow')
+  assert.equal(sandbox.inspectCommand(`sed -n '/^## *9/,/^## *10/p' docs/SPEC.md`).action, 'allow')
+  assert.equal(sandbox.inspectCommand(`awk '/stage(7|7)|phase 7/{f=1} f' check.mjs`).action, 'allow')
+  // **接受的连带**：首分量含空白的 POSIX 根路径不再算路径操作数。这与既有 `//` 形态是同一取舍
+  // （`//Program Files/…` 今天就已经被跳过），只是把拼法从两条斜杠放宽到任意条。写进用例是为了
+  // 让它成为一条**记录在案的决定**，而不是静默放宽。
+  assert.equal(sandbox.inspectCommand('cat "/Program Files/secret"').action, 'allow')
+
+  // 判据没动：首个分量为空或干净的，仍走 resolvePath。
+  assert.match(sandbox.inspectCommand('ls /').reason ?? '', /path escapes the workspace/)
+  assert.match(sandbox.inspectCommand('ls //etc').reason ?? '', /system path is blocked|path escapes the workspace/)
+  assert.match(sandbox.inspectCommand('cat //home/user/.ssh/id_rsa').reason ?? '', /path escapes the workspace/)
+  assert.match(sandbox.inspectCommand('cat //server/share/secret').reason ?? '', /path escapes the workspace/)
+  assert.match(sandbox.inspectCommand('cat /etc/passwd').reason ?? '', /system path is blocked/)
+  assert.equal(sandbox.inspectCommand('node -e "// comment"').action, 'allow')
+  assert.equal(sandbox.inspectCommand('node -e "//comment"').action, 'deny')
+})
+
 test('allowHosts uses the provided whitelist and does not hardcode localhost', async () => {
   const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
   const locked = new SandboxRuntime({
