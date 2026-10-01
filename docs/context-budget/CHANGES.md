@@ -13,7 +13,20 @@
 - **两臂的差异压缩到一个参数**：新增 `armPolicy(phase, contextWindowTokens)`（`scripts/eval-runner.ts`）。`armB` 返回 `evalPolicy` 本身（文档默认输入目标 65,536，历史超出就移除最旧的完整任务）；`armA` 把输入目标抬到模型窗口，让「输入 ≤ 目标」恒成立，历史只受窗口容量约束。称它「全历史」的边界被写进注释：**不是无限**，输入 + 输出预留 + 容量余量仍须落在窗口内，越过是 `context_overflow` 而不是静默截断。窗口不高于 armB 的目标时 `armPolicy` 直接抛错——否则两臂会被悄悄对调成「armA 裁得更多」，而报告看不出来。输出预留只由 `maxTotalTokens`/`maxOutputTokens` 决定、与输入目标无关（`src/core/run-budget-runtime.ts:38-45`），所以差异确实只在裁剪上。
 - **入口跟随阶段**：`scripts/eval-screening.ts` 按阶段选策略（`armA`/`armB` 用 `armPolicy`，其余用 `evalPolicy`），`--plan-only` 把输入目标打出来——臂的差异在花钱之前就看得见；`summary` 也记 `inputTargetTokens`，让证据自带「这是哪条臂」。
 - **任务集**：`phaseRegistry` 对 `armA`/`armB` 打开为 `sequenceIds`。两臂用**同一份**任务集是刻意的——对照 A 比较的是上下文策略，不是任务难度。
-- 验证：`pnpm test`（192/192，新增 1 条臂差异用例、改写 2 条），`pnpm check`（84 文件）、`pnpm fixtures:check`（13 项、`expected` 全为真，退出码 0）、`pnpm eval:offline`（planned 12、accepted 12，退出码 0）在本机通过。四个阶段的 `--plan-only` 实测：`screening` → 12 项 / 400 请求 / 8M；`sequence` → 1 项 / 192 / 12M / 输入目标 65,536；`armA` → 1 项 / 600 / 15M / **输入目标 1,000,000**；`armB` → 1 项 / 600 / 15M / **输入目标 65,536**。四条都不建目录、不出网、未产生付费请求（`.eval-evidence/` 内容不变）。
+- 验证：`pnpm test`（192/192，新增 1 条臂差异用例、改写 2 条），`pnpm check`（84 文件）、`pnpm fixtures:check`（13 项、`expected` 全为真，退出码 0）、`pnpm eval:offline`（planned 12、accepted 12，退出码 0）在本机通过。四个阶段的 `--plan-only` 实测：`screening` → 12 项 / 400 请求 / 8M；`sequence` → 1 项 / 192 / 12M / 输入目标 65,536；`armA` → 1 项 / 600 / 15M / **输入目标 1,000,000**；`armB` → 1 项 / 600 / 15M / **输入目标 65,536**。四条都不建目录、不出网、未产生付费请求（`.eval-evidence/` 内容不变）。提交 `f239774`。
+
+### NX-08e2 本批提交的跨平台证据（2026-10-01）
+
+| 提交 | 内容 | CI |
+| --- | --- | --- |
+| `6978f63` | NX-08e2-1 逐阶段投影观测 | [36798536341](https://github.com/BeforeLanding/mini-DSH/actions/runs/36798536341) 四组 success |
+| `c84c5a1` | NX-08e2-2 入口按阶段参数化 | [36798753257](https://github.com/BeforeLanding/mini-DSH/actions/runs/36798753257) 四组 success |
+| `1b7d5c9` | NX-08e2-5 验收放宽 | **无独立 run**，见下 |
+| `2f20cff` | NX-08e2-3 烟测结论回填（文档） | [36799815136](https://github.com/BeforeLanding/mini-DSH/actions/runs/36799815136) 四组 success |
+| `f239774` | NX-08e2-6 重预注册与两臂策略 | [36800057508](https://github.com/BeforeLanding/mini-DSH/actions/runs/36800057508) 四组 success |
+
+- 四组指 Ubuntu / Windows × Node.js 22 / 24，均为 success、无重跑。**今天这批推送均未触发 Deploy ECS**（最近一次 Deploy ECS 仍是 2026-09-30 的 `36661471055`），与 OPS-01 的「部署改为 tag 触发」一致。
+- **`1b7d5c9` 没有逐提交的独立 run**：它与 `2f20cff` 在同一次推送里到达 origin，CI 只挂在 tip `2f20cff` 上。该 run 证明这批内容整体通过，**不构成 `1b7d5c9` 自身在 Windows 上的独立证据**。这是 NX-08e1-3 已经记过一次的同一类缺口（攒到最后一起推），本次仍然发生——两步都只在本机验证过 Windows 行为（`pnpm fixtures:check` 与 `pnpm test` 含真实的 Node 子进程验收）。
 
 ## NX-08e2-5 验收放宽到 SPEC 的实际要求
 - 关联：NX-08e2 烟测暴露的夹具缺陷。状态：done（2026-10-01，本地通过）。本次不调用真实模型。
@@ -22,7 +35,7 @@
 - **参考解随之自洽**：原参考解抛的 `missing batches section` **不带行号**，与它自己那份 SPEC 的那句话相抵触。现在改为指向最后一行有内容的行（`line ${lastLine}: missing batches section`）——文本就是在那里结束、而没有出现 `batches` 段的。
 - **防止放宽变成空断言**：新增用例 `the sequence acceptance requires a line number instead of one exact error wording`（`test/coding-fixtures.test.ts`）同时钉两个方向——把参考解的消息替换成**烟测里模型抛的那条**（措辞完全不同、带行号）后验收仍通过；替换成**不带行号**的消息后验收必须失败并给出「expected a line number」。只用前者会退化成「只要抛点东西就算过」。
 - **不影响既有读数**：裁剪触发点与验收措辞无关，NX-08e2-3 的逐阶段投影读数不需要重测，也**不需要重跑付费烟测**。
-- 验证：`pnpm test`（191/191，新增 1 条，无失败/跳过）、`pnpm fixtures:check`（13 项、初始 13/13 以退出码 1 失败、参考 13/13 通过、`expected` 全为真，退出码 0）、`pnpm eval:offline`（planned 12、accepted 12，退出码 0）、`pnpm check`（84 文件）在本机通过。未产生付费请求。
+- 验证：`pnpm test`（191/191，新增 1 条，无失败/跳过）、`pnpm fixtures:check`（13 项、初始 13/13 以退出码 1 失败、参考 13/13 通过、`expected` 全为真，退出码 0）、`pnpm eval:offline`（planned 12、accepted 12，退出码 0）、`pnpm check`（84 文件）在本机通过。未产生付费请求。提交 `1b7d5c9`。
 
 ## NX-08e2-3 `pipeline` 的真实模型烟测与结论
 - 关联：NX-08e2 的核心测量——6 个阶段是否足以触发上下文裁剪。状态：done（2026-10-01）。**首次为 e2 调用付费模型**：`deepseek/deepseek-v4-flash`（服务端回显 `deepseek-flash`），1 次序列运行，成本约 **$1**（input 2,125,115 + output 63,044，按 PLAN 的 flash 峰值口径估算）。
@@ -43,7 +56,7 @@
 - **没有被 `max_steps` 截断的阶段**：最高 15 次请求、77 万 token，都远低于每阶段 32 请求 / 2,000,000 token 的 `singleRunBudget`。因此这些历史规模是模型自然走出来的，不是预算截断的产物——e0-3 提示的那个伪信号没有出现。
 - **一处口径必须写清**：`estimatedInputTokens` 是裁剪**后**的值，所以阶段 5/6 的「最后一次投影」反而比峰值小（62,699 / 52,025）。真正说明「这一阶段自己长了多少」的是 `maxEstimatedInputTokens` 与相邻阶段的增长，而不是最后一个读数。
 - **验收结论 `accepted=false`（退出码 1，受保护文件未改动），但失败点不是功能**：`verify.mjs` 断言 `diffPlan('order: 1\n', plan)` 的消息匹配 `/missing batches section/`，模型抛的是 `line 1: expected "source:" section, found "order:"`。该短语 SPEC 第 5 节没写、`TASKS/06-delta.md` 没写、模型可见的 `check.mjs` 也没有；第 75 行之前的断言**全部通过**（含 `diffPlan(rendered, plan)` 与 `diffPlan(previous, plan)` 两条功能性比较），第 75 行之后没有执行。所以这是一条验收比任务说明更严的失败，处置见 NX-08e2-5。
-- 验证：`pnpm eval:sequence`（planned 1、executed 1、`aborted=null`，退出码 0——未通过验收是评测数据而非脚本失败）。逐阶段读数取自 `runs.jsonl` 的 `tasks[]`。
+- 验证：`pnpm eval:sequence`（planned 1、executed 1、`aborted=null`，退出码 0——未通过验收是评测数据而非脚本失败）。逐阶段读数取自 `runs.jsonl` 的 `tasks[]`。文档提交 `2f20cff`。
 
 ## NX-08e2-2 真实适配器入口按阶段参数化
 - 关联：NX-08e2 的第二步，让 `pipeline` 有真实入口且上限口径在开跑前固定。状态：done（2026-10-01，本地通过）。本次不调用真实模型。
@@ -55,7 +68,7 @@
 - **对照臂拒绝出计划**：`armA`/`armB` 的任务集在 fixture 变成多阶段序列后已经不成立（PLAN 的旧算式 12 任务 × 2 臂 × 3 次作废），要等烟测结论重算。在此之前 `phaseRegistry('armA')` 直接抛错并指向 PLAN，好过悄悄沿用一份已经不成立的任务集。
 - **上限建模**：新增 `batchPhases = ['screening','armA','armB']`，`PhaseName = BatchPhase | 'sequence'`，`batchCaps` 改为对 `batchPhases` 归约——**诊断阶段不并入「整批 156 次运行」**，那个数字的含义因此不被烟测的增减污染。`phaseCaps.sequence` 预注册为 **runs 1 / requests 192 / tokens 12,000,000**，取逐阶段预算的理论上界（理由见 PLAN：该阶段只有 1 个 fixture，整批上限对它本就不构成中途制动，取更紧的值只会把一次跑完的烟测变成带 `aborted` 的退出码 1）。测试里 `batchCaps` 由「求和」升级为**按值钉死** `{ runs: 156, requests: 5_200, tokens: 98_000_000 }`。
 - **一份口径随之写进 PLAN**：单次 run 预算是**每阶段一份**（每个阶段一次 `agent.send()` → `beginRun` 新建 `RunState`、counters 归零），整条六阶段序列的上界即 192 请求 / 12,000,000 token。某阶段用满 32 次请求会以 `max_steps` 停止并被如实记录，后续阶段仍拿到全新的 32 次额度——**被截断的阶段不能用来判断「需要几个阶段才越过 65,536」**，报告必须单列。
-- 验证：`pnpm check`（82 文件）、`pnpm test`（190/190，新增 7 条 `eval-cli` 用例，无失败/跳过）、`pnpm eval:offline`（planned 12、executed 12、accepted 12、rate 12/12，退出码 0）、`pnpm fixtures:check`（13 项、`expected` 全为真，退出码 0）在本机通过；三条 `--plan-only`/拒绝路径见上，均不落盘、不出网、未产生付费请求。
+- 验证：`pnpm check`（82 文件）、`pnpm test`（190/190，新增 7 条 `eval-cli` 用例，无失败/跳过）、`pnpm eval:offline`（planned 12、executed 12、accepted 12、rate 12/12，退出码 0）、`pnpm fixtures:check`（13 项、`expected` 全为真，退出码 0）在本机通过；三条 `--plan-only`/拒绝路径见上，均不落盘、不出网、未产生付费请求。提交 `c84c5a1`。
 
 ## NX-08e2-1 逐阶段投影观测进入 `RunOutcome.tasks`
 - 关联：NX-08e2 的第一步，为烟测准备读数。状态：done（2026-10-01，本地通过）。本次不调用真实模型。
@@ -66,7 +79,7 @@
   - **不复用 `requestTrace`**：它按「当前 task」过滤，同一会话里的更早阶段不在它的作用域内，拿不到这次要的东西；但它对「已发出投影但没有 model/start」的判定方式被照抄过来。
 - **一处口径必须写清**：`estimatedInputTokens` 是**裁剪后**的值（`context-runtime.ts` 的 `measure()` 每次基于已裁剪的 `selected` 重算）。裁剪一旦开始，它就钉在输入目标附近，看不出该阶段自身长了多少；「首次裁剪那一次的真实规模」没有落盘，只能由相邻阶段的投影外推。最大值与首次裁剪序号正是为区分这两件事而记的。
 - **测试**（`test/eval-runner.test.ts`，新增 3 条）：`summarizeStage` 的三个边界——未裁剪不编造证据、首次裁剪定位与并集去重、既不被别的 run 吸收也不隐藏未发出的投影（含空事件数组不产出 `estimatedInputTokens` 键）。全部用合成日志构造，不起子进程、不碰文件系统。既有的 `pipeline` 序列用例补了 4 条断言：每阶段 `projections > 0`、`max >= 最后一次`、`firstPrunedProjection === null && removedTaskIds.length === 0 && unsentProjections === 0`、`usageSources.estimated === counters.modelRequests`。模拟适配器全序列峰值 13,614，**「未裁剪」在这里是确定性事实**，所以零计数也有断言，而不只是「没被观察到」。
-- 验证：`pnpm check`（82 文件）、`pnpm test`（183/183，新增 3 条，无失败/跳过）、`pnpm eval:offline`（planned 12、executed 12、accepted 12、rate 12/12，66 请求，退出码 0）、`pnpm fixtures:check`（13 项、初始 13/13 以退出码 1 失败、参考 13/13 通过、`expected` 全为真，退出码 0）在本机通过。未产生付费请求。
+- 验证：`pnpm check`（82 文件）、`pnpm test`（183/183，新增 3 条，无失败/跳过）、`pnpm eval:offline`（planned 12、executed 12、accepted 12、rate 12/12，66 请求，退出码 0）、`pnpm fixtures:check`（13 项、初始 13/13 以退出码 1 失败、参考 13/13 通过、`expected` 全为真，退出码 0）在本机通过。未产生付费请求。提交 `6978f63`。
 
 ## NX-08e1-3 fixture 契约与基线回填
 - 关联：NX-08e1 的收束。状态：done（2026-09-30）。纯文档，不触碰代码。
