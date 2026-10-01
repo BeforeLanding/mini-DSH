@@ -13,4 +13,4 @@
 - `external` 与 `cycles` 取并集；成员集合相同的环只留最先出现的那一份，成员顺序沿用那一份。
 - `texts` 为空数组时抛 `Error`。
 
-完成后运行 `node check.mjs 8`。
+完成后按 `docs/SPEC.md` 第 8 节自验。
