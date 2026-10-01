@@ -13,20 +13,25 @@
 // 数字会凭空翻倍，且翻倍的那一半与闸门无关。
 //
 // 基线：NX-24 动手前（提交 76ebadc）为 782 次调用 / 32 条拒绝（23 条 `unset environment variable`、
-// 9 条 `path escapes the workspace`）。NX-24 之后为 9 条，且这 9 条逐条有归属（见下表）。
-// `.eval-evidence/` 不入库，所以这个探针只在有历史证据的工作区里可跑。
+// 9 条 `path escapes the workspace`）。NX-24 之后为 9 条，NX-32 收缩后为 7 条（见下表）——
+// 减少的两条是环境展开撤销的连带，不是修好了。`.eval-evidence/` 不入库，所以这个探针只在有历史
+// 证据的工作区里可跑。
+//
+// 它现在是闸门的**过拒回归闸**：收缩只会让拒绝变少，所以任何新增拒绝都值得单独看一眼。
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { SandboxRuntime } from '../../dist/src/core/sandbox-runtime.js'
 
-// NX-24 收口后仍被拒的 9 条，逐条标了归属。**断言集合而不是断言计数**——以后修 NX-25/27/28/29
+// 仍被拒的条目，逐条标了归属。**断言集合而不是断言计数**——以后修 NX-25/27/28/29
 // 时这些条目会从这里消失，那时应当把条目删掉，而不是把断言放宽成一个数字。
+//
+// NX-32（2026-10-01）：闸门收缩撤销了环境展开，两条「双引号内未转义的 `$ad`／`$c`」真阳性
+// 因此不再被拒，条目按上面的规则删除——它们降级为闸门矩阵里的 `known gap NX-24 reopened`，
+// 由 `nx17-gate-probes.mjs` 盯着，不在这里留一个宽松的断言。
 const expected = new Map([
   ['7d13fdc54a', 'NX-27 写 /tmp（Git Bash 的 /tmp 与 node:path 不一致）'],
   ['c7475a2f5e', 'NX-28 here-doc 正文里形如 a:\\tb\\tc 的字面量被判为盘符路径'],
-  ['d7ecbb0360', '真阳性：双引号内未转义的 $ad，bash 确实会展开'],
-  ['259cab65d6', '真阳性：双引号内未转义的 $c，bash 确实会展开'],
   ['96a488b3e0', 'NX-29 正则字面量 `/missing` 与绝对根路径 `/missing` 形状完全相同'],
   ['062d867579', 'NX-18 `cat ../package.json` 的 `..` 整串正则（从 src 上一级仍在工作区内）'],
   ['52e783f9c4', 'NX-27 写 /tmp'],

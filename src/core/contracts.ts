@@ -48,7 +48,7 @@ export interface ToolDefinition {
 export interface PromptContext { agent?: Agent; sessionId?: string; step?: number }
 export interface PromptEntry { name: string; order?: number; text: string | ((context: PromptContext) => string | Promise<string>) }
 export interface ApprovalRequest { tool: string; summary: string; signal?: AbortSignal; approval?: <T>(work: () => Promise<T>) => Promise<T> }
-export interface SandboxConfig { workspace?: string; autoApprove?: boolean; allowHosts?: string[] }
+export interface SandboxConfig { workspace?: string; autoApprove?: boolean }
 export interface EventData {
   'verification/start': import('./task-verification.js').VerificationStart
   'verification/result': import('./task-verification.js').VerificationResult
