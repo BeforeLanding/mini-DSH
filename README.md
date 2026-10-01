@@ -47,12 +47,27 @@ git log --oneline --reverse | sed -n '12p'                # 43e3829：分界之�
 
 ## 运行
 
-已配置阿里云服务器的启动、自动发布和回滚操作见 [ECS 部署说明](docs/ECS_DEPLOYMENT.md)。
+需要 Node.js >= 20.18.1 和 pnpm 11.22.0。Windows 的 Bash 工具优先使用 Git for Windows 自带的 Bash；其他平台使用 PATH 中的 `bash`。已配置阿里云服务器的启动、自动发布和回滚操作见 [ECS 部署说明](docs/ECS_DEPLOYMENT.md)。
 
-需要 Node.js >= 20.18.1 和 pnpm 11.22.0。Windows 的 Bash 工具优先使用 Git for Windows 自带的 Bash；其他平台使用 PATH 中的 `bash`。
+### 零密钥跑通
+
+下面五条命令**不需要 `.env`、不需要任何密钥、不发出模型请求**，用来确认装配、回归、任务集与评测运行器在本机成立。行尾注释是各命令的实际输出：
 
 ```powershell
 pnpm install --frozen-lockfile
+pnpm check            # syntax ok: 84 files
+pnpm test             # tests 200 / pass 200 / fail 0 / skipped 0
+pnpm fixtures:check   # 14 项：初始全部失败、参考解全部通过
+pnpm eval:offline     # planned 12 / executed 12 / accepted 12
+```
+
+各条的覆盖面不同：`pnpm check` 只做类型、构建与产物语法；`pnpm test` **使用模拟模型驱动 Loop，但真实执行 Bash 与文件工具**；`pnpm fixtures:check` 逐项跑独立验收器并核对受保护文件未被改动；`pnpm eval:offline` 验证评测运行器与整批上限核算，它会自己打印一行 `note: 模拟模型驱动，用于验证运行器与整批上限；通过率不作为模型能力证据`。
+
+这些命令的绿色**只说明 Harness 在本机成立，不代表真实模型的编程能力**——真实模型的结论见 [NX-08 评测报告](docs/context-budget/NX-08-REPORT.md)，且那里的结论受样本量与任务集天花板效应限制。
+
+### 接真实模型
+
+```powershell
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 pnpm start
 ```
