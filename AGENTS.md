@@ -8,6 +8,7 @@
 - [README](README.md)：启动、CLI 和现有架构。
 - [需求](docs/context-budget/REQUIREMENTS.md)：目标、范围和验收。
 - [计划](docs/context-budget/PLAN.md)：当前源码基线、里程碑、技术取舍、默认参数和官方依据。
+- [设计取舍](docs/context-budget/DECISIONS.md)：五条关键选择的替代方案、代码锚点与测试锚点。**非规范性说明**——决策与数值仍以计划为准，改决策请改计划。
 - [任务清单](docs/context-budget/TASKS.md)：行为、验证、状态和证据。
 - [进度](PROGRESS.md)：已完成、验证、阻塞和下一步。
 

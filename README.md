@@ -185,6 +185,8 @@ GitHub Actions 在推送到 `main`、提交 Pull Request 或手动触发时运�
 
 围绕 mini coding agent harness 的 [完成度评估与开发路线](docs/INTERNSHIP_ROADMAP.md) 包含三个已复现边界、仓库上下文、可靠编辑、执行验证、编程评测和求职展示；具体完成状态以 TASKS/PROGRESS 为准。
 
+**「事件与投影分离、协议完整性、可靠编辑、验证时效、未知副作用恢复」这五条选择的替代方案、代码锚点与测试锚点**整理在 [设计取舍](docs/context-budget/DECISIONS.md)——每节回答「替代方案会怎么坏、这件事在哪几行代码上成立、哪个测试在它被改回去时会红」。它是 [PLAN](docs/context-budget/PLAN.md) 的非规范性说明：决策编号与全部数值仍以 PLAN 为准。
+
 ## 可靠编辑与任务 diff
 
 read_file 在编辑限额内返回完整字节 SHA-256；edit_file/write_file 可传 expectedHash，新建用 missing。编辑保持 Unicode/BOM/CRLF，拒绝重复 oldText、二进制、非法编码和超限；审批展示范围、指纹和有界 diff。审批期间变更或软链重新指向会拒绝，文件通过同目录临时写入、sync 和 rename 替换并保留原权限。最终核验至 rename 仍存在外部进程竞态，这是乐观冲突检测，逐文件提交，不承诺跨文件事务。
