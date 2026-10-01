@@ -2,6 +2,102 @@
 
 更新：2026-10-01。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-19 出网拦截的真实缺口收口
+
+- 关联：NX-17 期间登记的相邻缺陷（`CHANGES.md` 的 NX-17 节末「未覆盖待办」与 `nx17-gate-probes.mjs` 的 `known gap NX-19` 组）。不依赖其他任务，可独立验收。状态：**done**（2026-10-01，零付费）。方向是**加强**，不是放宽。子步骤与提交边界见 [TASKS 的 NX-19 一节](TASKS.md#nx-19-出网拦截的真实缺口收口)，覆盖模型见 [PLAN 的 D-12](PLAN.md#d-12-沙箱命令策略的覆盖模型)。
+- 提交：`8ad5765`（NX-19-0 立项与契约订正）、`371eec9`（NX-19-1 取值旗标）、`fc23fcb`（NX-19-2 工具集与操作数模型）、`d2a045f`（NX-19-3 `$(...)`／反引号递归）、`5e1f99c`（NX-19-4 `-c`／`eval`）、`8aacdf0`（NX-19-5 反斜杠 UNC）、本提交（NX-19-6 回填）。
+
+### 现象与根因
+
+四个形状在 NX-17 后就已登记，**当前全部放行**（`nx17-gate-probes.mjs` 的 `known gap NX-19` 组，实测）：
+
+```
+allow  bash -c "curl http://example.com"
+allow  echo "$(curl https://example.com)"
+allow  nc example.com 80
+allow  cat \\server\share\secret
+```
+
+根因有三条，互相独立：
+
+1. **顶层分词看不见真正执行的那段文本。** 模型的整串命令交给 `bash -lc`（`src/tools/bash.ts:53` 的 `args: ['-lc', command]`、`src/core/command-runner.ts:51` 的 `spawn`），由 bash 用完整 shell 语法重新解析。`$(...)`、反引号与 `-c` 的参数都是**会被执行**的文本，而 `inspectCommand` 只在顶层做词法与形状检查。这与 NX-17 修的「闸门的分词与 shell 不一致」是同源缺陷的不同面。
+2. **取网工具集只有 `curl`/`wget`。** `networkTool` 仅由这两个 basename 触发（`sandbox-runtime.ts:71` 原文），所以 `nc`／`ssh`／`scp`／`rsync`／`ping`／`dig` 的主机操作数从不进入判定。
+3. **反斜杠 UNC 整段跳过检查。** 路径分支的入口是 `/^(?:\/|[A-Za-z]:[\\/])/`，`\\server\share` 既不以 `/` 开头也不是盘符，两个条件都不匹配。
+
+另有一处**相反方向的既有缺陷**（本次一并修，见下）：`curl -o out.txt http://localhost/x` 被误拒。
+
+### 设计决策
+
+**判据取「这段文本会不会被执行」，不取出现位置。** 把这类片段抽出来递归走同一个 `inspectCommand`，而不是「见到 `$(` 就拒」——后者会误伤 `echo "$(date)"`、`git commit -m "$(cat msg.txt)"`。这条沿用 NX-17 已定的判据方向。
+
+**递归保留全部语义，不是「见到取网工具就拒」。** `echo "$(curl http://localhost/health)"`、`bash -c "curl http://localhost/x"` 必须放行；allowHosts 在片段里照旧生效——矩阵里用现成的 `locked` 实例（`allowHosts: ['api.internal']`）双向固定：同一形状默认库放行、locked 库被拒，换成白名单主机又放行。这是最容易写成一刀切的地方。
+
+**echo/printf 豁免分两种。** 对 `-c`／`eval` 的**抽取**生效（`echo bash -c "curl x"` 里的 `-c` 只是文本），对 `$()`／反引号的**扫描不生效**（`echo "$(curl x)"` 里的替换真的会执行）。落地是复用 `sandbox-runtime.ts` 原有的 `commandWord`/`pipedDownstream`。
+
+**取网工具按操作数模型取目标，不是一张「见到就拒」的名字表。** 三种模型：`url-or-host`（`curl`/`wget`，位置参数可能是本地文件，只看形状像目标的）、`operand`（`ssh`/`sftp`/`nc`/`telnet`/`ping`/`dig`/`nslookup`/`host`，**第一个非旗标位置参数就是目标**，其后的位置参数是远端命令）、`remote-spec`（`scp`/`rsync`，只认 `[user@]host:path`，裸文件名即便含点也不是目标）。工具词自身不是位置参数——首版把 `ping`／`ssh`／`nc` 当成第一个操作数去比对 allowHosts，于是 `ping 127.0.0.1` 一律被拒，这个坑只有实测才会暴露。
+
+**与 NX-17「不采用网络工具清单」的记录正面交代。** NX-17 的决策记录写着「清单天然不完整，未列入的工具会从「拒绝」变成「允许」，属于真实的出网拦截削弱」。那次否决的是**用清单替换通用 URL 规则**——方向是削弱。本次是**叠加到拒绝侧**：未列入的工具不变，列入的由放行变拒绝。清单不完整的残险相同，影响方向相反，故接受，并把「只减少漏报、不承诺闭合」写进 R-20 的边界句与 PLAN 的 D-12。
+
+**「取值不是网络目标」的旗标表逐工具登记，且默认仍是检查。** `curl -o`／`wget -O`／`ssh -i` 等旗标之后的 token 不做主机判定（但仍做路径判定，`curl -o /etc/cron http://localhost/x` 照旧被拒）；`--url`、`-x/--proxy`、`--resolve` 刻意不入表，因为它们的值就是目标。不能用「flag 之后一律跳过」——那会让 `curl -s example.com` 把 URL 当 `-s` 的取值而漏检。短旗标按工具分开登记：curl 的 `-O` 是布尔量，wget 的 `-O` 取文件名。
+
+**上限：深度 3、单次命令片段数 32，超限即拒绝并用独立理由串。** 片段必是父串的真子串，终止性本来不靠上限；上限挡的是宽度与工作量。耗尽若放行，`$(a$(b$(c$(curl x))))` 就成了一个明文可复制的绕过构造。理由串与出网、UNC 三者**互不共用**，否则以后调上限会污染出网用例的判据。上限取模块常量而不进 `SandboxConfig`——`test/fixtures/estimation/corpus/code/core-contracts.txt` 是 `contracts.ts` 的逐字副本且被 digest 钉住，改配置契约会让副本悄悄漂移。
+
+**反斜杠 UNC 用收紧的正则，不用 `^\\\\` 一刀切**，否则 `printf '\\n'` 这类正当写法会中招（有用例固定）。也不能只靠路径分支兜底：POSIX 上 `path.resolve` 会把 `\\server\share` 当成工作区内的相对名而放行。
+
+**唯一一处净放宽（NX-19-1）。** `curl -o out.txt http://localhost/x` 此前被拒：既有「裸主机名操作数」规则把 `-o` 的**取值**当成了主机（`out.txt` 是 host-shaped，而 `networkTool` 在段内粘滞）。这不是策略选择而是实现缺陷——NX-17 记录的豁免对象是「裸主机名操作数」，而输出文件名不是主机名操作数。它必须先修：清单扩展会把同类误报复制到 `ssh -i`／`scp`／`rsync`（`wget -O page.html`、`curl -sS -o out.json` 当时同样被拒）。因此它独立成一步、排在清单扩展之前，且在提交信息里写明性质。
+
+### 未放宽的部分
+
+NX-17 记为「未放宽」的规则**本次一行未动**：`..` 逃逸（整串正则，含引号内的惰性文本误判，属 NX-18）、系统路径（`/etc`、`/dev`、`/proc`、`/sys`、`/root`、`/boot`）、工作区外相对与绝对路径、归一化后仍越界的双斜杠路径（`//etc/passwd`、`//home/user/.ssh/id_rsa`）、递归删除与 `sudo`、以及「惰性输出接进管道」（`echo "…" | xargs curl`）。`test/core.test.ts` 里这些行逐条仍在。
+
+### 验证
+
+基线（动手前，`pnpm build && node docs/context-budget/nx17-gate-probes.mjs`）：`no contract drift; 6 known gap(s) still open`——24 条约定行全 `ok`，6 条缺口行全 `open`。
+
+四条缺口行的达标留证（NX-19-5 之后、搬移之前）：
+
+```
+met    deny  (want deny ) "bash -c \"curl http://example.com\""
+       reason: in shell -c argument: unauthorized outbound request
+met    deny  (want deny ) "echo \"$(curl https://example.com)\""
+       reason: in command substitution: unauthorized outbound request
+met    deny  (want deny ) "nc example.com 80"
+       reason: unauthorized outbound request
+met    deny  (want deny ) "cat \\\\server\\share\\secret"
+       reason: UNC path is blocked
+```
+
+搬移进约定组后：`no contract drift; 7 known gap(s) still open`，新组 `closed: NX-19 outbound closure` 全部 `ok`，剩余 7 条是本次**不修**的 NX-18（2）、NX-23（2）、NX-24（3）。
+
+```
+pnpm check            # syntax ok: 90 files
+pnpm test             # tests 207 / pass 207 / fail 0 / skipped 0（原 205，新增 2 条用例）
+pnpm fixtures:check   # 退出码 0：16 项，初始 passed:false ×16、参考 passed:true ×16
+pnpm eval:offline     # 12 条 status=completed、accepted=true（筛查批次未被扰动）
+node docs/context-budget/nx17-gate-probes.mjs   # 见上
+```
+
+### 反例实跑（每条新分支都要能证明用例会咬）
+
+| 关掉的东西 | `node --test dist/test/core.test.js` 的输出 | 还原后 |
+| --- | --- | --- |
+| `!skipHostCheck`（NX-19-1） | `AssertionError [ERR_ASSERTION]: curl -o out.txt http://localhost/x` | 复绿 |
+| 工具集退回 `['curl','wget']`（NX-19-2） | `AssertionError [ERR_ASSERTION]: nc example.com 80` | 复绿 |
+| 短路片段抽取（NX-19-3） | `AssertionError [ERR_ASSERTION]: echo "$(curl https://example.com)"` | 复绿 |
+| 短路脚本片段检查（NX-19-4） | `AssertionError [ERR_ASSERTION]: bash -c "curl http://example.com"` | 复绿 |
+| UNC 分支改永不匹配（NX-19-5） | `AssertionError [ERR_ASSERTION]: cat \\server\share\secret` | 复绿 |
+
+四处**只有实测才会暴露**的坑，已修并留在代码注释与提交信息里：① 工具词自身被当成第一个位置参数（`ping 127.0.0.1` 一律被拒）；② `-c` 之后只有**一个** token 是脚本（取全部会误伤 `bash -c 'echo hi' example.com`）；③ 片段必须走真正的 shell 去引号（`bash -c "echo \$(curl x)"` 的外层 `\$` 会变成 `$`，内层 bash 真的执行它，保留反斜杠就漏检）；④ 双引号内的 `\$` 是字面量、外层不执行，与 ③ 并不矛盾——用例把两侧都钉住了。另外 NX-19-5 的一次临时改动把 `\\` 写成了字面 NUL，落地前由 `NUL: false` 检查拦下并修正。
+
+### 未覆盖、已登记为独立待办
+
+改前发现的相邻缺陷，按 NX-17 的先例只登记不修（都已实测并进 `nx17-gate-probes.mjs` 的 `known gap` 组，读作 `open`）：
+
+- **NX-23「URL 是数据还是请求目标」**：`git log --grep "https://github.com/x"`、`npm install --registry https://registry.npmjs.org`、`git remote add origin https://…` 与 `curl https://…` 同判为拒绝。它是 NX-17 `CHANGES.md` 已点名的残留，属**放宽**方向；且修它要引入「哪些位置算 URL 消费位置」的子命令知识，与仓库「判据取形状与能力、不取出现位置」正面冲突。直接证据：`git log --grep=<url>` 放行而 `git log --grep <url>` 拒绝，同一条语义两种结果。
+- **NX-24「闸门词法仍与 shell 有系统偏差」**：三处同源、机制各不相同——单引号内的 `$HOME` 仍被环境展开后判越界（`echo '$HOME'` → `path escapes the workspace`，而真实 shell 不展开）；shell 变量被当未定义环境变量（`kind=local; echo $kind` → `unset environment variable in command`，这条**完全没有出网**，纯属误拒）；here-doc 正文被当命令词（`cat <<'EOF'` 的引号定界符正文在 shell 里是纯文本，却报 `unauthorized outbound request`）。本轮只修了执行路径上的检查，没有返工引号盲的环境展开。
+
+**本次不宣称「出网已闭合」。** 以下结构性不在覆盖内，逐条写进 R-20 的边界句：`node -e`／`python -c` 的程序字符串、脚本文件内容（`bash script.sh`）、管道解码后再执行（`echo <base64> | base64 -d | sh`）、here-doc 正文、未列入清单的取网程序。这是应用层形状启发式，不是操作系统隔离——`src/plugins/sandbox.ts` 的系统提示文案未改。
+
 ## NX-08h 打破任务集天花板（方案 2，无公开检查变体）
 
 - 关联：[NX-08g0](CHANGES.md#nx-08g0-任务集天花板效应定性边界与补救排序) 的**方案 2**（「增设**无公开检查**变体：工作区不含 `check.mjs`，只能按 SPEC 自验」）。状态：**离线部分 done**（2026-10-01，零付费）；付费烟测与结果回填另计。子步骤与提交边界见 [TASKS 的 NX-08h 一节](TASKS.md#nx-08h-打破任务集天花板方案-2无公开检查变体)，仪器与预注册见 [PLAN 的 NX-08h 一节](PLAN.md#nx-08h-无公开检查变体blind)。
