@@ -2,9 +2,21 @@
 
 [![CI](https://github.com/BeforeLanding/mini-DSH/actions/workflows/ci.yml/badge.svg)](https://github.com/BeforeLanding/mini-DSH/actions/workflows/ci.yml)
 
-仿 DeepSeek Harness 的 **mini coding agent harness**，使用 TypeScript / Cordis 构建本地编程 Agent 运行环境。按照 [从零手写 mini-dsh 学习指南](https://github.com/huangjunsen0406/mini-dsh/blob/main/LEARNING.zh-CN.md) 完成第 0～7 天主线及补充篇，每个阶段分别提交，随后扩展上下文、预算与持久化恢复。
+仿 DeepSeek Harness 的 **mini coding agent harness**：用 TypeScript / Cordis 构建的本地编程 Agent 运行环境。开发主线是让模型在真实代码仓库里走完「理解项目规则 → 定位代码 → 修改文件 → 运行检查 → 根据失败修复 → 交付 diff 与验证证据」这条链路；上下文管理、执行预算、权限闸门与持久化恢复贯穿其中。
 
-开发主线是让模型在代码仓库中完成“理解项目规则 → 定位代码 → 修改文件 → 运行检查 → 根据失败修复 → 交付 diff 与验证证据”。当前已具备有界文件/Bash 工具、大结果回读、运行时底座、仓库规则/检查入口上下文、可靠编辑和可恢复的任务变更清单/diff；结构化验证记录仍是后续规划。首版聚焦单 Agent、单本地工作区与 CLI。
+**范围**：单 Agent、单本地工作区、CLI 交互。核心依赖服务契约，不绑定具体模型或工具；DeepSeek 是首个模型适配器，MCP 只按可选外部插件接入。
+
+**明确不做**——列在这里是为了不把应用层策略读成强保证：
+
+- 多 Agent 调度与托管平台；
+- 向量记忆与长期记忆；
+- 操作系统级隔离。路径与命令闸门是应用层策略，不承诺消除外部竞态；
+- 费用硬上限。货币预算不在范围内，[PLAN](docs/context-budget/PLAN.md) 里出现的金额只是实验规模的信息性上界，不是计费承诺；
+- 任意执行位置的精确恢复。恢复是事件重建，不恢复文件系统快照。
+
+按照 [从零手写 mini-dsh 学习指南](https://github.com/huangjunsen0406/mini-dsh/blob/main/LEARNING.zh-CN.md) 完成第 0～7 天主线及补充篇，每个阶段分别提交，随后扩展上下文、预算与持久化恢复。
+
+当前已具备有界文件/Bash 工具与大结果回读、仓库规则与检查入口上下文、可靠编辑与可恢复的任务变更清单/diff、结构化验证与交付报告，以及可重跑的真实模型评测入口。完成状态以 [TASKS](docs/context-budget/TASKS.md) 与 [PROGRESS](PROGRESS.md) 为准。
 
 ## 运行
 
