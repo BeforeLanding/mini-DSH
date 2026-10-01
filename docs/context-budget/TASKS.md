@@ -192,12 +192,50 @@ NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，
 
 **提交**：`8ad5765`（NX-19-0）、`371eec9`（NX-19-1）、`fc23fcb`（NX-19-2）、`d2a045f`（NX-19-3）、`5e1f99c`（NX-19-4）、`8aacdf0`（NX-19-5），以及本提交（NX-19-6 回填）。详细证据见 [CHANGES 的 NX-19 节](CHANGES.md#nx-19-出网拦截的真实缺口收口)。
 
+### NX-24 闸门词法偏差的误拒收口
+
+**todo（2026-10-01 立项，零付费）**。NX-19 修的是「真正会执行的文本被顶层分词漏掉」（方向是**加强**）；本项修反面——**闸门自己的词法与真实 shell 不一致，把数据当成了路径或变量**（方向是**放宽**）。NX-17／NX-19 记为「未放宽」的那批规则（`..` 整串正则、系统路径、工作区外路径、软链、递归删除、`sudo`、UNC、出网与 allowHosts）本项**一行不动**。
+
+**证据是实测的，不是推断。** 把 `.eval-evidence/` 下 33 份 `events.jsonl` 里 **782 次真实模型 bash 调用**逐条取出，按**各会话自己的 workspace**（从 `tool/result` 的 `cwd` 读回）重放到 `dist`：**32 条被拒**（`pnpm build && node docs/context-budget/nx24-replay-probe.mjs`）。
+
+> **方法学陷阱（本次实测踩过）**：改用 `process.cwd()` 当 workspace 重放会得到 **64** 条，其中 32 条是**重放自身的伪影**——模型在评测里 `cd "C:\…\mini-dsh-fixture-*/workspace"`，而闸门的 workspace 就是那个临时目录。必须按会话读回 `cwd`，否则结论凭空翻倍。
+
+逐条归因（每条都用 bisect 定位过触发点）：
+
+| 族 | 条数 | 形状（原文） | 判定 |
+| --- | --- | --- | --- |
+| ① `for` 绑定变量 | **18** | `for f in src/*.mjs; do echo "=== $f ==="; cat "$f"; done`；`for n in 07 08 09 10; do node tmp-verify-$n.mjs > r$n.log 2>&1; echo "$n exit=$?"; done`；`for f in delta plan-parse plan-merge; do cat "src/$f.mjs"; done` | 误拒 |
+| ② 反斜杠转义 | **2** | `node -e "…Array.from({length:2000},(_,i)=>\`n\${i}: n\${(i+1)%2000}\`).join('\n')…"`；`sed -n "$(grep -n '^## 11' docs/SPEC.md \| cut -d: -f1),\$p" docs/SPEC.md` | 误拒：`\$` 已转义，bash 不展开 |
+| ③ 单引号内的 `$NAME` | **1** | `node --input-type=module -e '…throws("a: b$c\n", …)…'` | 误拒：单引号内 bash 不展开 |
+| ④ 被引号成词的正文以 `/` 开头 | **5** | `awk '/^## 11/,/^## 12/' docs/SPEC.md`；`sed -n '/^## *9/,/^## *10/p' docs/SPEC.md`；`grep … \| awk '/stage\(7\|7\)\|phase 7/{f=1} f' check.mjs` | 误拒：awk／sed 程序正文被当成绝对路径 |
+| ⑤ **必须继续拒绝（真阳性）** | **2** | `node -e "… show('a: b$ad'); …"`；`node -e "… ['a: b $c', /line 1[\s\S]*/] …"` | **拦对了**：`$ad`／`$c` 在**双引号内且未转义**，bash 真的会展开成空串、静默改坏模型写的程序 |
+| 残留（另立项，本项不修） | 4 | `/tmp/…` ×2；`node --input-type=module <<'EOF'` ×1；一条触发点待定位 ×1 | 见 NX-25／NX-27／NX-28 |
+
+**它改变了模型的行为**（原始事件里模型的自述，非推断）：`"Hmm, the bash tool rejects $f? Let me just cat each file."` 与 `"the tool reports \"unset environment variable in command\" … Let me write a temp test script file instead."`
+
+**根因是一条，不是四条**：`:290` 的环境展开是**引号盲、反斜杠盲**的全局 `String.replace`（对**本串内刚绑定过的**名字也一无所知）；`:386` 的路径形态判据只认「两条以上前导斜杠 ＋ 首分量含空白」。所以修法是**一趟引号与转义感知的扫描**替换前者，再把后者的「前导斜杠条数」这一维去掉。
+
+| 子步骤 | 内容 | 验收 | 提交边界 |
+| --- | --- | --- | --- |
+| NX-24-0 | 立项与契约订正（**done**；本行标记随本提交补记——该步就是本表本身） | `grep -cE '^\| NX-24-' docs/context-budget/TASKS.md` = 7；每行「验收」列至少含一个反引号命令或可判定的 `grep`/退出码判据；PLAN 新增 `D-13`；R-20 的边界句不再声称「单引号内的 `$NAME` 仍被环境展开、shell 变量被当未定义环境变量」，「双斜杠形态」改为「任意前导斜杠形态」；NX-25／NX-26／NX-27／NX-28 在 TASKS 均出现；`git diff --stat` 只含 `docs/context-budget/` 三份文件 | 1 次 |
+| NX-24-1 | 反斜杠转义：`\X` 整对复制（族②） | `echo \$HOME`、`echo "\$HOME"`、`sed -n "…,\$p" …` 由 deny 变 allow；`echo \$(curl http://example.com)` 仍 allow、`echo \\$(curl http://example.com)` 仍 deny；**反例**：把 `\X` 整对复制改成单字符前进后对应用例变红 | 1 次 |
+| NX-24-2 | 引号感知：单引号内不展开（族③） | `echo '$HOME'`、`node --input-type=module -e '… $c …'` 由 deny 变 allow；`cat "$HOME/.ssh/id_rsa"` 仍 deny、`cat "$HOME/mini-dsh-workspace/file"` 仍 allow、`cat $MINI_DSH_TEST_ROOT/../etc/passwd` 仍 deny；**两条真阳性**（`show('a: b$ad')`、`['a: b $c', …]`）仍 deny 且理由为 `unset environment variable`；**反例**：关掉单引号分支后 `echo '$HOME'` 变红 | 1 次 |
+| NX-24-3 | 波浪号折进同一趟扫描 | `echo '~'` 由 deny 变 allow；`rm -rf ~`、`cat ~/.ssh/id_rsa` 仍 deny；CHANGES 写明**此前无任何测试或证据覆盖 `~`**，故独立成提交以便单独 revert | 1 次 |
+| NX-24-4 | 命令内绑定：`for NAME in …` 与 `NAME=<字面量>`（族①） | 18 条 `for` 形状与 `kind=local; echo $kind` 由 deny 变 allow；`for f in a /etc/passwd; do cat $f; done` 仍 deny **且理由匹配 `/unsafe for loop value/`**（不是 `unset environment variable`）；`cat $MINI_DSH_UNSET_VAR/file` 与 `read x; echo $x` 仍 deny；`for f in $(ls); do echo hi; done` 判定与今日逐字相同；**反例**：删 `for` 分支后 loop 用例变红，`isSafeLoopWord` 恒真后**理由断言**变红 | 1 次 |
+| NX-24-5 | 被引号成词的正文以 `/` 开头（族④） | 三条 awk／sed 用例由 deny 变 allow，`cat "/Program Files/secret"` 作为**接受的连带**写成 allow 行；`ls /`、`ls //etc`、`cat //home/user/.ssh/id_rsa`、`cat //server/share/secret`、`node -e "//comment"` 仍 deny；`node -e "// comment"`、`grep -n "//" src/index.ts`、`cat "${sandbox.workspace}/file"` 仍 allow；**反例**：还原 `/^\/{2,}/` 后 awk 用例变红 | 1 次 |
+| NX-24-6 | 契约、矩阵、回放探针与回填 | 矩阵两条 `known gap NX-24` 行**先跑到 `met` 留证**再搬进新契约组，重跑 `no contract drift` 且新组全 `ok`；第 83 行改登 `known gap NX-25`、新增 `known gap NX-26` 行；新建 `nx24-replay-probe.mjs` 且**逐条定位四条残留的触发点并归类**（不写未验证的断言）；R-20／CHANGES／README／PROGRESS 回填；`pnpm check` 90 文件、`pnpm test` 全绿、`pnpm fixtures:check` 16 项、`pnpm eval:offline` 12/12、三条 `pnpm demo:*` 退出 0 | 1 次 |
+
+**提交**：`TBD`（NX-24-0）＋后续各步单独提交。详细证据见 [CHANGES 的 NX-24 节](CHANGES.md#nx-24-闸门词法偏差的误拒收口)。
+
 其他待办，按依赖排序：
 
 
 - **NX-18 `..` 族误判 — todo（NX-17 期间发现）**：`..` 规则是整串正则，会命中引号内的惰性文本——`echo "see ../docs for details"`、`grep -n ".." src/index.ts`、`git log --grep "../ fixes"` 全部被判 `.. path escape is blocked`。该规则是用户「放宽不得削弱 `..`」条款点名保护的对象，NX-17 因此没有动它。收紧需要把判定从整串正则改为 token 级的路径操作数判定，且必须保持 `echo ../secret`、`cat ../secret`、`cp ../a b` 仍被拒；修改前先补需求/设计决策。
 - **NX-23 URL 当请求目标，不分它是数据还是目标 — todo（NX-19 期间发现）**：出网规则对「整 token 恰为 URL」的形态**与命令段无关**，于是 `git log --grep "https://github.com/x"`、`npm install --registry https://registry.npmjs.org`、`git remote add origin https://…` 与 `curl https://…` 同判为 `unauthorized outbound request`。这是 NX-17 的 CHANGES 已点名的残留（当时用 `echo`/`printf` 能力判据只修掉了惰性输出那一半）。**属「放宽」方向**，且修它必须引入「哪些位置算 URL 消费位置」这类子命令知识——与仓库「判据取形状与能力，不取出现位置」正面冲突，所以不塞进 NX-19。直接证据是形状判定的不对称：`git log --grep=<url>` 放行而 `git log --grep <url>` 拒绝，同一条语义两种结果。改前先补需求/设计决策。
-- **NX-24 闸门词法仍与真实 shell 有系统偏差 — todo（NX-19 期间发现）**：三处同源、机制各不相同；NX-19 只修了**执行路径**上的检查（`$(...)`／反引号／`-c`／`eval`），没有返工引号盲的环境展开。① 单引号内的 `$NAME` 仍被展开——`echo '$HOME'`、`cat '$HOME/file'` 报 `path escapes the workspace`，而真实 shell 在单引号内不展开（环境展开发生在分词之前，且完全按引号无关处理）。② shell 变量被当未定义环境变量——`kind=local; echo $kind` 报 `unset environment variable in command`，这条**完全没有出网**，纯属误拒（`for f in a b; do echo $f; done` 同）。③ here-doc 正文被当命令词——`cat <<'EOF'` 的引号定界符正文在 shell 里是纯文本，却报 `unauthorized outbound request`。①③ 需把环境展开与分词合成一趟引号感知的扫描；NX-19 已引入一个引号感知扫描器可复用，但那会动到全部 24 条约定行的地基，须先补设计决策。
+- **NX-25 here-doc 正文被当命令词 — todo（NX-24 期间从 NX-24-③ 拆出）**：`cat <<'EOF'` 的引号定界符正文在 shell 里是纯文本，闸门却把它当命令词——登记的 `known gap NX-24` 第 83 行 `cat <<'EOF'\ncurl https://example.com\nEOF` 期望 allow、实际 deny（`unauthorized outbound request`）。782 次真实 bash 调用里只有 **5 次**用到 `<<`（0.6%），其中 2 次 `node --input-type=module <<'EOF'` 被判 `path escapes the workspace`。**拆出来的理由是它有一处三族没有的真难点**：正文是数据还是脚本取决于**消费它的命令**——`cat <<'EOF'` 是数据，`bash <<'EOF'` 会被真正执行（当前它靠「正文里的 URL 被当命令词」误打误撞地拦下，改法必须显式分流而不是删掉检查）。修法：识别 `<<[-]?WORD`／`<<"WORD"`，正文按消费命令是 shell 与否决定「递归检查」或「整段跳过」，需新增宽度上限。
+- **NX-26 `do`／`then`／`else` 之后不是命令段起点，取网工具的操作数模型不生效 — todo（NX-24 期间发现）**：`executable` 判定只有「index 0」与「紧邻 `|`／`;`／`&`／换行」两种（`src/core/sandbox-runtime.ts:323`），因此 **`for f in a; do curl example.com; done` 今日就是 allow**（已实测；`curl` 不是命令段起点，操作数模型整段不跑）。这是一条**独立于 NX-24 的既有放行**，不是本次改出来的；但 NX-24 绑定 `for` 变量后会有**更多命令走到这里**（例如 `for f in a; do curl example.com; echo $f; done` 今日是误拒，改后变放行）。补 `do|then|else` 是**收紧**方向且会引入新的误拒（把字面量 `do` 后面的主机形状词当目标），要先补设计决策。矩阵已加一行 `known gap NX-26` 让这处暴露不被静默。
+- **NX-27 Git Bash 的 `/tmp` 与 `node:path` 不一致 — todo（NX-24 期间回放实测）**：win32 上 `path.resolve('/tmp/out.txt')` 得到 `D:\tmp\out.txt`，而 Git Bash 的 `/tmp` 是真实的可写临时目录，于是 **任何 `/tmp/...` 都被判 `path escapes the workspace`**（实测 `echo x > /tmp/out.txt`、`cat /tmp/out.txt`、`node tmp.mjs > /tmp/r.log` 全拒；782 次调用里 2 条因此被拒）。机制与词法无关，是「闸门的路径语义」与「执行它的 shell 的挂载表」不一致，须先定是把 bash 的挂载点映射进闸门、还是把 `/tmp` 显式列入允许的可写位置。
+- **NX-28 引号成词的正文以 `<字母>:\` 开头被判为盘符路径 — todo（NX-24 期间 bisect 定位）**：`:377` 的 `^(?:/|[A-Za-z]:[\\/])` 认盘符，于是被单引号成词的一段 JS 测试数据 `'a:\tb\tc\n'`（写在 `node --input-type=module <<'EOF'` 正文里的 `parseDeps('a:\tb\tc\n')`）被当成 `a:\` 盘符路径、经 `resolvePath` 判越界。与族④（前导斜杠）同属「引号成词的正文被当成路径」，但触发的是盘符那条臂，加「首分量含空白」判据**盖不住它**（首分量 `tb` 不含空白）。它在本次证据里只出现于 here-doc 正文，故随 NX-25 一并核实。
 - **NX-16 持久化结构化编程任务状态与可选 compaction — todo（条件阶段，依赖 NX-08）**：只有评测确认当前 task 膨胀仍是主要失败源后才实现 compaction；实施前必须修订 R-03/D-02 的“当前 task 所有 run 原文进入请求”契约，不能作为小优化塞入。范围见[路线图 M8](../INTERNSHIP_ROADMAP.md)。
 - **NX-20 路线图状态段整体陈旧 — todo（NX-09 期间发现）**：`docs/INTERNSHIP_ROADMAP.md` 是**带日期的记录**，line 3 已把源码基线评估定为「历史证据保留」，因此不能只改其中一处而让全文自相矛盾。已核实陈旧点至少四处：顶部注记与 line 215 的「真实模型实验额度尚未在本次任务中设定或使用」（已被 NX-08 的约 $4.96 推翻）、line 194 的 M5 出口「旧 57 条回归」（现为 200 条）、line 213/215 的 M7 出口、line 233-239 §6 的「当前可以写…完成 57 条回归及 Windows/Linux × Node 22/24 CI」（且「Linux」与 README 实际使用的「Ubuntu/Windows」不一致）。处置须**按该文件自己的惯例加一条带日期的修订注记**，不静默改写正文历史。按 NX-17 的先例（改前发现的相邻缺陷另立待办，不塞进当前提交），NX-09 只立项、不修。
 - **NX-21 会话锁的陈旧判定与操作者入口 — todo（NX-10-5 期间发现）**：`JsonlStore.open` 对任何已存在的 `writer.lock` 一律拒绝（`src/core/event-store.ts:40`），提示语要求「verify stale locks explicitly」，但仓库里**没有任何可脚本化的核验入口**——`quarantineTail` 要先抢同一把锁（`:17-20`），`src/plugins/cli.ts:36-40` 的启动恢复撞上崩溃过的会话直接抛错，也没有 `/recover`；锁体里写了 `{token, pid}`，但 pid 从不被读回用于存活判断。于是崩溃之后唯一的恢复路径是由人手工删掉那把锁，NX-10 的第三幕照实演示了这一步。**本次不修**（`src/` 一行未动，动它等于动既有锁语义）。设计前要先定方向：加 pid 存活判定（须处理 pid 复用与跨平台差异），还是只补一个显式的人工核验入口（CLI 子命令或写清的步骤）。
