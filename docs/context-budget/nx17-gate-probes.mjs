@@ -11,10 +11,12 @@ const locked = new SandboxRuntime({ workspace, autoApprove: true, allowHosts: ['
 // [group, expected, command, runtime] — expected is the target contract, so a "known gap" row is one the
 // gate does not meet yet. Every open gap here is over-blocking, not under-blocking: NX-18 rows are lazy
 // `..` text the gate still denies, NX-23 rows are URLs used as data, NX-25 is a here-doc body treated as
-// a command word, NX-26 is `do`/`then`/`else` not counting as a command-segment start.
-// Two groups were gap groups until their work landed, and their rows read `met` first:
-// `closed: NX-19 outbound closure` (2026-10-01) and the two `fixed: quote-blind expansion` rows
-// moved out of `known gap NX-24` (2026-10-01, NX-24).
+// a command word, NX-30 is a command position introduced by an untracked operator (`(`/`)`/`{`/`}`,
+// a `case` arm body) rather than by a reserved word.
+// Three groups were gap groups until their work landed, and their rows read `met` first:
+// `closed: NX-19 outbound closure` (2026-10-01), the two `fixed: quote-blind expansion` rows
+// moved out of `known gap NX-24` (2026-10-01, NX-24), and `closed: NX-26 reserved-word command
+// position` (2026-10-01, NX-26) — the last one is the only gap that was *under*-blocking.
 // NX-24's third row did **not** close and was re-registered as `known gap NX-25` (here-doc): it was
 // split out because its mechanism is different — whether a here-doc body is data or a script depends
 // on the command consuming it (`cat <<'EOF'` is data, `bash <<'EOF'` is executed).
@@ -107,6 +109,24 @@ const cases = [
   ['closed: NX-19 outbound closure', 'deny', 'bash -c "curl http://localhost/x"', locked],
   ['closed: NX-19 outbound closure', 'allow', 'bash -c "curl https://api.internal/health"', locked],
 
+  // NX-26（2026-10-01）：保留字之后的命令词按命令段起点处理。行从 `known gap NX-26` 搬来（先读到
+  // met 再搬），保留字只在**自身处于命令段起点**、且是**原样未被引用、不含路径分隔符**的字面词时
+  // 才算数；前视只作用于紧随的一个 token，所以 `<保留字> <rest>` 与顶层 `<rest>` 判定完全一致。
+  ['closed: NX-26 reserved-word command position', 'deny', 'for f in a b; do curl example.com; echo $f; done'],
+  ['closed: NX-26 reserved-word command position', 'deny', 'if curl example.com; then echo ok; fi'],
+  ['closed: NX-26 reserved-word command position', 'deny', 'while curl example.com; do echo x; done'],
+  ['closed: NX-26 reserved-word command position', 'deny', 'do curl example.com'],
+  ['closed: NX-26 reserved-word command position', 'deny', 'for f in a; do curl example.com; done', locked],
+  ['closed: NX-26 reserved-word command position', 'allow', 'for f in a; do curl https://api.internal/x; done', locked],
+  // 两条记录在案的净放宽：`commandWord` 从此是 `echo`，与顶层同形状判定一致。
+  ['closed: NX-26 reserved-word command position', 'allow', 'for f in a; do echo https://example.com; done'],
+  ['closed: NX-26 reserved-word command position', 'allow', 'for f in a; do echo bash -c "curl https://evil/x"; done'],
+  // 保留字自身必须在命令段起点（`do` 只是 `echo` 的实参），且必须是原样字面词（`"do"` 不是）。
+  ['closed: NX-26 reserved-word command position', 'allow', 'echo do curl example.com'],
+  ['closed: NX-26 reserved-word command position', 'allow', '"do" curl example.com'],
+  // `case` 后面的词是主语不是命令：本项不覆盖 case 臂体（NX-30）。
+  ['closed: NX-26 reserved-word command position', 'allow', 'case a in a) echo hi;; esac'],
+
   ['known gap NX-18', 'allow', 'echo "see ../docs for details"'],
   ['known gap NX-18', 'allow', 'grep -n ".." src/index.ts'],
   // NX-23：URL 是数据还是请求目标，当前只看「整 token 恰为 URL」的形状。同一条语义两种写法
@@ -116,10 +136,11 @@ const cases = [
   // NX-25：here-doc 正文被当命令词（NX-24 期间从 NX-24-③ 拆出，机制不同——正文是数据还是脚本
   // 取决于消费它的命令）。实测 782 次调用里只有 5 次用 `<<`。
   ['known gap NX-25', 'allow', "cat <<'EOF'\ncurl https://example.com\nEOF"],
-  // NX-26：`do`／`then`／`else` 之后不算命令段起点，取网工具的操作数模型在那里不生效。这是**今日
-  // 就已存在**的放行（与 NX-24 无关），但 NX-24 绑定 `for` 变量后会有更多命令走到这里，所以登记
-  // 让这处暴露不被静默。
-  ['known gap NX-26', 'deny', 'for f in a b; do curl example.com; echo $f; done'],
+  // NX-30：保留字以外的「命令位置引入符」——NX-26 只补了保留字这一支。`(`／`)`／`{`／`}` 在现有
+  // 分词里归进 token 体（`[^\s|;&<>]+`），要先把算子集扩进去才谈得上判定；`case … in X)` 的臂体
+  // 同理。方向与 NX-26 相同（收紧），但属「未跟踪算子」这一独立机制。
+  ['known gap NX-30', 'deny', '(curl example.com)'],
+  ['known gap NX-30', 'deny', '{ curl example.com; }'],
 ]
 
 // A contract row that misses its target is a regression to investigate; a gap row that meets it means the

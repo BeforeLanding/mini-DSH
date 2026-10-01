@@ -4,8 +4,8 @@
 
 ## NX-26 保留字之后的命令段起点
 
-- 关联：NX-24 期间登记的相邻缺陷（`nx17-gate-probes.mjs` 的 `known gap NX-26` 组）。不依赖其他任务，可独立验收。状态：**in_progress**（2026-10-01，零付费）。**方向是收紧**——与 NX-24 相反，本轮修的是**闸门漏掉了一段真正会执行的命令**：`executable`（命令段起点的定义）不认识 shell 保留字，于是保留字后面的命令词既不重置段状态、也不开启取网工具的操作数模型。机制与取舍见 [PLAN 的 D-14](PLAN.md#d-14-命令段起点的词法判定)，子步骤与提交边界见 [TASKS 的 NX-26 一节](TASKS.md#nx-26-保留字之后的命令段起点)。
-- 提交：待回填（NX-26-0 立项与契约订正）。
+- 关联：NX-24 期间登记的相邻缺陷（`nx17-gate-probes.mjs` 的 `known gap NX-26` 组）。不依赖其他任务，可独立验收。状态：**done**（2026-10-01，零付费）。**方向是收紧**——与 NX-24 相反，本轮修的是**闸门漏掉了一段真正会执行的命令**：`executable`（命令段起点的定义）不认识 shell 保留字，于是保留字后面的命令词既不重置段状态、也不开启取网工具的操作数模型。机制与取舍见 [PLAN 的 D-14](PLAN.md#d-14-命令段起点的词法判定)，子步骤与提交边界见 [TASKS 的 NX-26 一节](TASKS.md#nx-26-保留字之后的命令段起点)。
+- 提交：`784eb4a`（NX-26-0 立项与契约订正）、`4e7afd2`（NX-26-1 机制与 `do`／`then`／`else`）、`5c96ce0`（NX-26-2 条件引导词），本提交（NX-26-3 回填）。
 
 ### 现象与根因
 
@@ -28,27 +28,93 @@ let executable = index === 0 || /[|;&\n]\s*$/.test(expanded.slice(0, start))
 
 ### 设计决策
 
-（NX-26-1／NX-26-2 落地后回填：单 token 前视旗标、为什么只活一个 token、为什么必须是原样字面词、清零点必须在循环开头，三条各自的反例。）
+**判据不新增，只把「谁会开启一个命令位」补全。** 判据仍是 D-12 的「这段文本会不会被 shell 执行」，不取出现位置。
+
+**机制是单 token 前视旗标。** token 为真时，若它本身处在命令段起点、且是**原样未被引用、不含路径分隔符的字面词**、且属于闭集 `if`／`elif`／`while`／`until`／`do`／`then`／`else`，就令**紧随其后的一个 token** 也算段起点。
+
+```ts
+let executable = index === 0 || /[|;&\n]\s*$/.test(expanded.slice(0, start)) || pendingCommandPosition
+pendingCommandPosition = false
+…
+if (raw === token && commandIntroducers.has(token)) pendingCommandPosition = true
+```
+
+**闭集取七个词**，是 shell 里引入命令位的完整集合。明确排除：终结符 `fi`／`done`／`esac` 之后没有新命令；`case` 后面的词是主语不是命令；`in`／`!`／`time` 不引入命令位。
+
+**为什么只活一个 token。** 单 token 前视使 `<保留字> <rest>` 与把 `<rest>` 写在首 token 位置**判定完全一致**——保留字在判据里是**透明的**，本项不引入比顶层更强的检查。跨词存活会把 `do echo curl example.com` 的实参 `curl` 当成命令词。
+
+替代：见到保留字即拒——那是位置判据，会误伤 `echo do curl example.com`；只把 `do`／`then`／`else` 计入——`if curl example.com; then echo ok; fi` 与 `while curl example.com; do …; done` 仍放行（同一机制、同一行判据，留一个洞只等于把问题推后）。
 
 ### 净放宽清单
 
-（NX-26-2 落地后回填。）
+两条，都与**顶层同形状的既有判定对齐**，不是新语义——顶层 `echo https://example.com` 与 `echo bash -c "curl https://evil/x"` 今日就已放行；循环／条件体里此前被拒，只是因为 `commandWord` 还停在保留字（`for`／`if`）上，`stdoutOnlyCommands` 豁免与 `-c` 片段豁免都不生效。
+
+| 命令 | 改前 | 改后 | 通道 |
+| --- | --- | --- | --- |
+| `for f in a; do echo https://example.com; done` | deny | allow | `commandWord` 从此是 `echo`，惰性 URL 豁免生效 |
+| `for f in a; do echo bash -c "curl https://evil/x"; done` | deny | allow | `bash` 是 `echo` 的实参，`-c` 片段豁免同样生效 |
+
+配对的顶层对照（今日即 allow）写进了用例，证明这是**同一语义终于生效**，而不是新语义。
 
 ### 未放宽的部分
 
-（NX-26-3 回填。）
+豁免的边界一条未动：`for f in a; do echo https://example.com | cat; done`（管道仍关掉豁免）、`for f in a; do echo $(curl https://evil/x); done`（`in command substitution:`）、`for f in a; do bash -c "curl https://evil/x"; done` 与 `do bash -c "curl http://x"`（`in shell -c argument:`，改前改后同判——`:512` 的抽取本就不以 `executable` 为前提）。`..` 整串正则、系统路径、工作区外路径、软链、递归删除、`sudo`、UNC、allowHosts 全部照旧。循环体内的 allowHosts 语义与顶层一致，由 `locked` 实例双向固定。
+
+### 代价与残险
+
+**一处新过拒**：`X=do; $X curl example.com` 变拒绝——环境展开先于分词，由**本串内刚绑定**的字面量展开出来的保留字被当成保留字，而 bash 不会在展开后重新识别保留字。方向是过拒，与 NX-24 的 `cat "/Program Files/secret"` 同一处置，写进用例让它成为一条**记录在案的决定**。
 
 ### 验证
 
-（NX-26-3 回填。）
+**爆炸半径是实测的，不是推断的。** 用闸门自己的分词正则与分隔符正则，把 `.eval-evidence/**/events.jsonl` 里 **782 次真实模型 bash 调用**重放（`node docs/context-budget/nx24-replay-probe.mjs`）：
+
+```
+bash 调用 782 次，其中 9 次被拒
+no unexpected deny: 9 条全部有归属
+```
+
+**与 NX-24 收口时逐字相同**——本项在真实语料上既不新增拒绝、也不丢失拒绝。另一项直接测量：关键字处在命令位的共 24 处，后随 token 全是 `echo`／`printf`／`node`／`od`，**零个是取网工具**（这次测量是临时的，**复现的守卫是 `nx24-replay-probe.mjs` 的集合断言**——它对同一批调用断言 9 条具名结果，任何未登记的新拒绝都会让它变红。刻意**不**新建第四个探针文件：计数型探针违反仓库「断言集合而不是计数」的做法）。
+
+矩阵两次读数（**先读到 `met` 留证，再搬行**）：
+
+```
+（NX-26-1 之后）
+known gap NX-26
+met    deny  (want deny ) "for f in a b; do curl example.com; echo $f; done"
+no contract drift; 5 known gap(s) still open, 1 gap row(s) now meet the target
+
+（NX-26-3 搬行之后）
+no contract drift; 7 known gap(s) still open
+```
+
+```
+pnpm check            # syntax ok: 90 files
+pnpm test             # tests 215 / pass 215 / fail 0 / skipped 0（原 212，新增 3 条用例）
+pnpm fixtures:check   # 退出码 0，16 项
+pnpm eval:offline     # 12 条 status=completed、accepted=true
+node docs/context-budget/nx24-replay-probe.mjs   # 退出码 0：782 次调用 / 9 条拒绝 / no unexpected deny
+pnpm demo:fix / demo:resume / demo:unknown       # 均退出 0
+```
+
+顺带订正：README 的测试计数此前停在 **207**（NX-24 落地时漏改，当时已是 212），本步一并改为 **215**——它本来就要随本项改动。README 的门禁段落另补一句命令段起点认保留字。
 
 ### 反例实跑
 
-（NX-26-3 回填。）
+三条承重约束各有一条反例，每条都证明**该分支确实在咬**（`pnpm build && node --test dist/test/core.test.js`）：
+
+| 关掉的东西 | 实跑的读数 | 还原后 |
+| --- | --- | --- |
+| 删掉旗标赋值行 | 用例变红（`deny` 行变 `allow`），矩阵 NX-26 行**退回 `open`** | 复绿 |
+| 把赋值行挪出 `if (executable)` 块 | **allow 行** `echo do curl example.com` 变红：`actual: 'deny'`、`expected: 'allow'` | 复绿 |
+| `raw === token` 换成 `basename` | **allow 行** `"do" curl example.com` 变红：`actual: 'deny'`、`expected: 'allow'` | 复绿 |
+| 关键字集缩回 `do`／`then`／`else` | `if curl example.com; then echo ok; fi` 变红：`actual: 'allow'` | 复绿 |
+
+第二条最要紧：它证明「保留字必须**自身**处于命令段起点」不是装饰——去掉这一条，一个普通 `echo` 的实参就会让整条命令被拒。第三条在 782 次语料上**不改变任何判定**（防御性，非语料驱动），照实写明。
 
 ### 未覆盖、已登记为独立待办
 
-（NX-26-3 回填 NX-30。）
+- **NX-30 保留字以外的「命令位置引入符」**：子 shell 与分组 `( curl example.com )`、`{ curl example.com; }` 今日仍是 allow（矩阵新增两行 `known gap NX-30` 让这处暴露不被静默）——`(`／`)`／`{`／`}` 在现有分词里归进 token 体（`[^\s|;&<>]+`），要先把算子集扩进去才谈得上判定；`case … in X)` 的臂体同理；`exec` 与赋值／重定向前缀（`do exec curl x`、`do VAR=1 curl x`、`do >out curl x`）则是那个单 token 前视被赋值／重定向／`exec` 这个 token 自己吃掉。**方向与本项相同（收紧）**，但前两类属「未跟踪算子」这一独立机制（会引入新的误拒：字面量 `(`／`{` 后面的主机形状词），第三类是 `exec` 是否该进闭集的取舍。
+- **本项不宣称命令闸门已闭合**：`env` 包装（`do env curl example.com` 仍放行）、`exec`、子 shell 与分组、`case` 臂体都照旧不在覆盖内。本项只把「命令段起点」的判定补到与 shell 保留字一致，代价是展开先于分词带来的一处过拒。
 
 ## NX-24 闸门词法偏差的误拒收口
 

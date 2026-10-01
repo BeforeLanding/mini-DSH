@@ -237,12 +237,12 @@ NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，
 
 | 子步骤 | 内容 | 验收 | 提交边界 |
 | --- | --- | --- | --- |
-| NX-26-0 | 立项与契约订正（**done**；本行标记随本提交补记——该步就是本表本身） | `grep -cE '^\| NX-26-' docs/context-budget/TASKS.md` = 4；每行「验收」列至少含一个反引号命令或可判定的 `grep`/退出码判据；PLAN 新增 `D-14` 且 D-13 尾句改成「2026-10-01 由 D-14 闭合」（痕迹不删）；R-20 标题加 `NX-26`、新增段落、验收追加 NX-26 行、边界句把 NX-26 换成 NX-30 登记；NX-30 在 TASKS 出现；矩阵此刻仍读 `open`（**留证**）；`git diff --stat` 只含 `docs/context-budget/` 四份文件 | 1 次 |
+| NX-26-0 | 立项与契约订正（**done**；四行的编目与状态在本提交一次性写下，随后每步各自提交） | `grep -cE '^\| NX-26-' docs/context-budget/TASKS.md` = 4；每行「验收」列至少含一个反引号命令或可判定的 `grep`/退出码判据；PLAN 新增 `D-14` 且 D-13 尾句改成「2026-10-01 由 D-14 闭合」（痕迹不删）；R-20 标题加 `NX-26`、新增段落、验收追加 NX-26 行、边界句把 NX-26 换成 NX-30 登记；NX-30 在 TASKS 出现；矩阵此刻仍读 `open`（**留证**）；`git diff --stat` 只含 `docs/context-budget/` 四份文件 | 1 次 |
 | NX-26-1 | 机制 ＋ `do`／`then`／`else`（**done**） | 四处改动：模块级 `commandIntroducers`、循环状态 `pendingCommandPosition`、`:439` 改两行、`:448` 后插一行；`for f in a; do curl example.com; done` 等由 allow 变 deny（理由 `/unauthorized outbound request/`）；`echo do curl example.com`、`printf do curl example.com`、`"do" curl example.com`、`./do curl example.com` 仍 allow；矩阵 NX-26 行读到 **`met`** 并留证；**反例三条**：删旗标赋值行→deny 行变 allow，把赋值行挪出 `if (executable)` 块→`echo do …` 变 deny，`raw === token` 换成 `basename`→`./do …` 变 deny | 1 次 |
 | NX-26-2 | 扩到条件引导词 `if`／`elif`／`while`／`until`（**done**） | 集合加四个词后 `if curl example.com; then echo ok; fi`、`while curl …; do …; done`、`until …`、`elif …` 由 allow 变 deny；`if true; then echo a; else curl …; fi` 由 allow 变 deny；两条净放宽（`do echo <url>`、`do echo bash -c "curl …"`）与 `locked` 实例的 allowHosts 双向用例落地；**反例**：对集合那一行重跑反例 1；矩阵其余行不动 | 1 次 |
 | NX-26-3 | 矩阵搬移、NX-30 登记与回填（**done**） | 矩阵 NX-26 行**先跑到 `met` 留证**再搬进新契约组 `closed: NX-26 reserved-word command position`，重跑 `no contract drift` 且新组全 `ok`；新增 `known gap NX-30` 组（`(curl example.com)`、`{ curl example.com; }`）；头部注释订正；`node docs/context-budget/nx24-replay-probe.mjs` 退出码 0 且**仍是那 9 条集合断言**；CHANGES／REQUIREMENTS／PLAN／PROGRESS 回填，README 的 207 → 214（NX-24 遗留漂移，顺带订正）；`pnpm check` 90 文件、`pnpm test` 214/214、`pnpm fixtures:check` 16 项、`pnpm eval:offline` 12/12、三条 `pnpm demo:*` 退出 0 | 1 次 |
 
-**提交**：见 [CHANGES 的 NX-26 节](CHANGES.md#nx-26-保留字之后的命令段起点)。
+**提交**：`784eb4a`（NX-26-0）、`4e7afd2`（NX-26-1）、`5c96ce0`（NX-26-2），以及本提交（NX-26-3 回填）。详细证据见 [CHANGES 的 NX-26 节](CHANGES.md#nx-26-保留字之后的命令段起点)。
 
 其他待办，按依赖排序：
 
