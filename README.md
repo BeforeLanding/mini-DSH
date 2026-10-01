@@ -27,7 +27,7 @@
 | 提交范围 | `0a95a7f`～`c5fc9c4`（共 11 个） | `43e3829` 起 |
 | 语言 | 纯 JavaScript | TypeScript（tsc strict / NodeNext），Node 执行 `dist` 产物 |
 | 工具 | 6 个：`bash` + `read_file`／`write_file`／`edit_file`／`glob`／`grep` | 11 个：`tools/` 的 9 个（上列 6 个再加 `task_changes`／`request_trace`／`task_report`）与插件提供的 2 个（`project_context`／`read_tool_result`） |
-| 测试 | 22 条（`core.test.js` 20 + `integration.test.js` 2） | 200 条；另有 14 项编程 fixture 基线与离线评测入口 |
+| 测试 | 22 条（`core.test.js` 20 + `integration.test.js` 2） | 202 条；另有 15 项编程 fixture 基线、离线评测入口与三条演示 |
 | 已有能力 | 基础配置、Session Event Log、Tool Runtime、System Prompt + LLM Adapter、Agent Loop、DeepSeek 适配器、runtime-context、外部插件与 MCP、沙箱与路径闸门、Bash/文件工具 | 上下文投影与裁剪、四维执行预算、JSONL 持久化与崩溃恢复、预算停止后的 `/continue`、有界读取/搜索与大结果回读、可靠编辑与任务变更清单、结构化前台命令、验证记录与交付报告、请求 trace、项目上下文、编程任务 fixture、真实模型评测 |
 
 上表每一行都能在仓库根目录复现（全部离线，不联网）：
@@ -51,14 +51,17 @@ git log --oneline --reverse | sed -n '12p'                # 43e3829：分界之�
 
 ### 零密钥跑通
 
-下面五条命令**不需要 `.env`、不需要任何密钥、不发出模型请求**，用来确认装配、回归、任务集与评测运行器在本机成立。行尾注释是各命令的实际输出：
+下面八条命令**不需要 `.env`、不需要任何密钥、不发出模型请求**，用来确认装配、回归、任务集、评测运行器与三条演示在本机成立。行尾注释是各命令的实际输出：
 
 ```powershell
 pnpm install --frozen-lockfile
-pnpm check            # syntax ok: 84 files
-pnpm test             # tests 200 / pass 200 / fail 0 / skipped 0
-pnpm fixtures:check   # 14 项：初始全部失败、参考解全部通过
+pnpm check            # syntax ok: 89 files
+pnpm test             # tests 202 / pass 202 / fail 0 / skipped 0
+pnpm fixtures:check   # 15 项：初始全部失败、参考解全部通过
 pnpm eval:offline     # planned 12 / executed 12 / accepted 12
+pnpm demo:fix         # 退出码 0：项目规则 → 定位 → 修改 → 失败测试 → 再修复 → diff 与证据
+pnpm demo:resume      # 退出码 0：预算停止与同 task 恢复
+pnpm demo:unknown     # 退出码 0：崩溃恢复里的 unknown 与陈旧锁
 ```
 
 各条的覆盖面不同：`pnpm check` 只做类型、构建与产物语法；`pnpm test` **使用模拟模型驱动 Loop，但真实执行 Bash 与文件工具**；`pnpm fixtures:check` 逐项跑独立验收器并核对受保护文件未被改动；`pnpm eval:offline` 验证评测运行器与整批上限核算，它会自己打印一行 `note: 模拟模型驱动，用于验证运行器与整批上限；通过率不作为模型能力证据`。
@@ -85,6 +88,24 @@ coding 模式从 `MINI_DSH_WORKSPACE` 至初始项目目录加载祖先链上的
 项目配置选择最近的 package.json，展示包管理器、Node 要求及显式 test/check/typecheck/lint/build 入口；Git、TS、锁文件和 README 只发现路径标记。发现命令不会执行或安装，运行仍需 Bash 策略和审批；项目内容不能扩大 Harness 权限，run completed 也不代表检查通过。非 Git/缺失配置可继续，错误配置有来源和退化说明，不冒用父配置。
 
 project-context 插件可通过 `limits` 配置 `maxFileBytes`（默认 16 KiB）、`maxContentBytes`（32 KiB）和 `maxDirectories`（16，包含工作区和目标）；均须为正安全整数。规则原文与元数据 JSON 共用内容字节预算，超预算元数据仅返回退化诊断；路径/诊断/提示词包装还会进入完整请求的 token 估算。规则超限、无效 UTF-8、非文件或越界明确失败，不注入残缺规则；完整 system 装不下时沿用 context_overflow 停止。
+
+## 演示
+
+三条零付费入口把 M9 要求的演示做成可直接运行的脚本，配合带 `AGENTS.md` 的 fixture `repair`（15 个 fixture 里唯一带项目规则的一个）。它们只用预设的脚本化模型（`scripted/demo`），不读 `.env`、不出网、不调用付费 API，因此逐字可复现；退出码 0 表示该幕的全部判定成立，任一判定不成立就退出 1 并点名。**绿色只说明 Harness 的行为符合预期，不代表任何模型能力。**
+
+| 命令 | 展示什么 |
+| --- | --- |
+| `pnpm demo:fix` | 项目规则 → 定位 → 修改 → 失败测试 → 再修复 → diff 与证据 |
+| `pnpm demo:resume` | 预算停止与同 task 恢复：被跳过的调用不会凭空消失，已完成的工具不会重放 |
+| `pnpm demo:unknown` | 真崩溃之后的 unknown：工具已写、结果未落盘 |
+
+`demo:fix` 的两条项目规则分居根目录与 `src/` 两个作用域，模型必须先查 `src` 才拿得到第二条；第一次只修好其中一条，公开检查因此仍然失败并把失败点名到另一条规则，第二次才通过。收尾打印 `task_changes` 的真实 diff 与 `task_report` 的覆盖/检查记录，并明确指出 `task_report` 的 `acceptance` 恒为 `not_asserted`——判定来自工作区之外、模型与 Harness 都看不到用例的独立验收。
+
+`demo:resume` 的第一段把请求预算压到 4 次，第 4 次请求带回的那条编辑在**派发之前**被拦下，恢复后补做；判定逐条核对首段确实停止、被跳过的调用没有 `tool/start`、恢复后真的执行了一次、`continuations` 为 1、没有任何工具被执行两次。
+
+`demo:unknown` 起一个子进程执行一条写下真实副作用文件后阻塞的命令，等文件出现后按进程树杀掉它，因此留在磁盘上的残局是真的。它同时暴露一个目前**没有**对应入口的步骤：崩溃留下的 `writer.lock` 会让 `JsonlStore.open` 直接拒绝（`session writer lock exists; verify stale locks explicitly`），而 `quarantineTail` 也要先抢同一把锁，所以恢复的唯一路径是由人确认 pid 已死、再显式删掉这把锁——CLI 也没有 `/recover`。演示照实做这一步并说明它属于操作者的判断，该缺口已立项 NX-21，本次未修。
+
+三条演示的事件日志落在 `.demo-runs/`，与 `.eval-evidence/`（真实模型证据）分开存放，两者都不入库。
 
 ## 结构
 
@@ -120,9 +141,9 @@ pnpm check
 pnpm test
 ```
 
-当前 200 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读、可靠编辑/任务变更、结构化命令、验证报告与请求 trace 测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
+当前 202 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读、可靠编辑/任务变更、结构化命令、验证报告与请求 trace 测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
 
-NX-05a 起提供可重复的 [编程任务 fixture](test/fixtures/coding/README.md)，NX-05b 扩展到 12 项，覆盖边界修复、功能扩展、跨文件接口修改、去重、分页、查询重试、合并、CSV、库存与汇总等；此后又加入多阶段序列 `pipeline` 与单任务 `audit`，**当前注册表共 14 项 = 筛查 12 项（上列，冻结）+ 这 2 项**。运行 `pnpm fixtures:check` 核验全部 14 项的初始失败/参考通过基线；`pnpm test` 还覆盖模拟模型经真实文件/Bash 工具完成失败→修改→重跑的流程。每次使用新临时工作区，独立验收器保留在工作区外；模拟结果不代表真实模型编程成功率。
+NX-05a 起提供可重复的 [编程任务 fixture](test/fixtures/coding/README.md)，NX-05b 扩展到 12 项，覆盖边界修复、功能扩展、跨文件接口修改、去重、分页、查询重试、合并、CSV、库存与汇总等；此后又加入多阶段序列 `pipeline`、单任务 `audit` 与演示夹具 `repair`，**当前注册表共 15 项 = 筛查 12 项（上列，冻结）+ 这 3 项**。运行 `pnpm fixtures:check` 核验全部 15 项的初始失败/参考通过基线；`pnpm test` 还覆盖模拟模型经真实文件/Bash 工具完成失败→修改→重跑的流程。每次使用新临时工作区，独立验收器保留在工作区外；模拟结果不代表真实模型编程成功率。
 
 `pnpm eval:offline` 用模拟模型把 12 个 fixture 跑成一次筛查阶段，用于验证评测运行器与整批上限核算（单次 run 预算与按阶段计数的整批上限见 [PLAN](docs/context-budget/PLAN.md#nx-08-评测批次上限预注册)）。该命令同样不使用真实模型，通过率不作为模型能力证据。
 
