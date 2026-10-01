@@ -10,7 +10,31 @@ NX-08e 开跑前必须先解决其前置条件（2026-09-30 修正）：裁剪�
 
 前置设施 NX-08e0 三步均已完成：e0-1 修正条件与需求、e0-2 让驱动支持同一会话内的任务序列（契约见 [PLAN](PLAN.md#nx-08e0-阶段序列驱动契约)）、e0-3 离线量化越过输入目标所需的旧任务规模（实测同量级阶段约需 3～4 个）。
 
-多阶段依赖 fixture 也已落地：`pipeline`（六阶段，实现在 `test/fixtures/coding/pipeline/`，契约与阶段性结论见 [PLAN](PLAN.md#nx-08e1-多阶段依赖-fixturepipeline)）。**下一步是 NX-08e2**——用真实模型烟测该 fixture，测出「第几个阶段开始触发裁剪」与每阶段真实历史规模，据此重预注册 `phaseCaps` 与单次 run 预算，再开对照 A。在烟测完成前不宣称 6 个阶段足以触发裁剪。
+多阶段依赖 fixture 已落地并扩到**十四阶段**（`pipeline`，实现在 `test/fixtures/coding/pipeline/`，契约与阶段数依据见 [PLAN](PLAN.md#nx-08e1-多阶段依赖-fixturepipeline)）。e2 各步已完成：逐阶段投影观测（e2-1）、入口按阶段参数化与 `--plan-only`（e2-2）、真实模型烟测（e2-3）、验收放宽到 SPEC 的实际要求（e2-5）、按实测重预注册上限（e2-6），以及**重启后的 e2-4**——它把阶段数由 6 扩到 10、再扩到 14，因为 e2-3 基于 n=1 的「6 阶段足够」被 6 次运行的正式批次否证了。
+
+**当前状态：NX-08e 的正式批次正在跑**（十四阶段 × 每臂 3 次重复 × 2 臂，证据落 `.eval-evidence/arm{A,B}-14stage/`）。跑完后按下面的清单回填。**报告口径**：样本量只有 1 条 fixture 序列 × 3 次重复 × 2 臂、二值结局，**不足以支撑「通过率差异」这类需要分母的结论**；加阶段买的是「处理真的生效」，不是统计功效。
+
+### NX-08e 报告必须回答的问题（跑完后逐项回填）
+
+口径先定，再看数据——否则「哪些 run 进分母」会在看到结果之后才被决定。
+
+| 报告项 | 口径 | 证据来源 | 现状 |
+| --- | --- | --- | --- |
+| 两臂通过率 | 分子 = `accepted === true` 的 run；分母 = 可计分的 run（排除 `infeasible` 与基础设施 `error`，两者单列） | `runs.jsonl` 的 `accepted`／`infeasible`／`error` | 可得 |
+| 越界位置 | 首次裁剪落在第几个阶段、该阶段的峰值估算输入 | `tasks[].firstPrunedProjection`／`maxEstimatedInputTokens` | 可得 |
+| 受处理阶段数 | `firstPrunedProjection !== null` 的阶段数占总数之比 | `tasks[]` | 可得 |
+| 重复间波动 | 每臂 3 次的逐阶段峰值与整次 token 的极差 | `runs.jsonl` 的 3 条记录 | 可得 |
+| 每成功任务有效 token | 该臂总 token ÷ 该臂 `accepted` 数 | `runs.jsonl` | 可得 |
+| 延迟与停止原因 | 逐阶段 `activeDurationMs` 之和、整次 run 墙钟；`status` 与 `error` | `counters`／`status` | 可得 |
+| 人工介入 | 自动化批次恒为 0 | — | 平凡 |
+| provider/estimated 分列 | **报 token，不报条目数**。`RunTaskDetail.usageSources` 记的是条目数（`eval-fixture.ts:63` 对每个 `model/usage` 计数），与 NX-08e 行承诺的「token 分列」对不上；但 R-21 的用词是「用量分列」，二者以更严的 token 为准。**无需改 `src/`**——`sessions/*/events.jsonl` 的 `model/usage` 自带 `source` 与三项 token，按 source 求和即可 | `sessions/*/events.jsonl` 的 `model/usage` | 可得（需另算） |
+| 编辑失败率 | 编辑类工具调用的失败比例 | **`runs.jsonl` 里没有**（`counters.toolCalls` 不分工具）；但 `events.jsonl` 有 `tool/start` + `tool/result` 配对，可判工具名与成败 | `events.jsonl` | 可得（需另算） |
+| 修复迭代次数 | 每阶段「改 → 跑检查 → 再改」的轮数 | `events.jsonl` 的 `file/change`／`file/change-result` 与 `verification/start`／`verification/result` 交错可得 | `events.jsonl` | 可得（需另算） |
+| 成本 | 采用 PLAN 已写明的算法：输入 85%／输出 15%、**无缓存命中**、峰值价、2026-09-30 价格页。已知偏高因素是忽略缓存命中，报告中标注 | `runs.jsonl` + 价格页 | 口径已定 |
+
+**三项「需另算」都从 `sessions/*/events.jsonl` 得出，不必改 `src/`，因此不必在批次跑完后重跑任何一次运行。** 这也意味着这三项在预注册里没有被单独列出来——`runs.jsonl` 的设计目标是逐阶段预算与裁剪观测，不是工具级统计；报告若引用它们，须说明来源是原始事件而非 `runs.jsonl`。
+
+**成本口径此前不一致，这里统一**：PLAN 只给过最坏上界（98M token ≈ $43，明写「不是计费承诺」），而 `PROGRESS` 里既有的「约 $0.15／$1／$4」是把同一算法套在实际用量上得出的、却**没有写下推导**；本轮又用了第三种（从既有花费反推 $/M）。**同一量用过三种方法，先统一再报数**——以后引用 `PROGRESS` 里的历史金额时，按同一算法重算或标注为不可复现。
 
 | 子步骤 | 内容 | 验收 | 提交边界 |
 | --- | --- | --- | --- |
