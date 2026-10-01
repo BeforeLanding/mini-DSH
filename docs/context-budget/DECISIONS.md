@@ -163,3 +163,56 @@
 - **检查开销按声明文件数走。** 默认最多 100 个文件、每个最多 1 MiB，声明得越多越慢。模型得自己权衡「覆盖够不够」与「读一遍要多久」。
 - **过期判定宁可保守。** 文件被文件工具改动过就算 `stale`，即使它最终被改回了原字节。代价是偶尔会把仍然有效的证据标成过期——这个方向的错误比反过来安全。
 - **证据只覆盖声明范围。** 未声明的依赖、目录新增、检查过程中被改又改回的文件，以及 Bash 之外途径的修改，都不在保证内。R-18 与 PLAN 的 NX-15 决策节都写明了这一条。
+
+---
+
+### 5. 未知副作用恢复
+
+**选择。** 一个工具**已经开始、但结果没有落盘**时，恢复把它记成 `unknown`——而不是「没跑过」；恢复过程本身不重放任何工具。只要同一个 task 里存在一条 `unknown` 结果，自动续跑就被拒绝，必须由人核验副作用之后显式开新任务。规范条目见 [PLAN 的 D-06 与 D-08](PLAN.md#设计决策及取舍)，验收见 REQUIREMENTS 的 R-11、R-12。
+
+**替代方案及其具体失效。**
+
+- 把没有结果的调用当作「没执行过」，恢复后重放：一个已经写了一半文件的命令会被执行第二遍，而它未必可重复。【决策时记录】
+- 把未知结果当作失败直接重试：同样等于再执行一次，只是把它包装成了错误处理。【决策时记录】
+- 崩溃之后自动续跑、不必人介入：「自动重放缺失结果可能重复副作用」，这是 PLAN 的 D-08 与 REQUIREMENTS 都写下的拒绝理由。【决策时记录】
+- 恢复后回到「上一个已知良好状态」再继续：那需要文件系统快照，而恢复只是事件重建，不恢复文件系统。【决策时记录】
+- 让恢复顺手把文件「纠正」回日志里记的样子：事件日志是**事实**来源，不是期望状态。照它去改磁盘，等于让 Harness 在没有模型、也没有审批的情况下自己动手改文件。【事后重构】
+- 只按「有没有结果事件」判断，不看有没有 `tool/start`：那就分不出「派发之前被预算拦下」和「派发之后结果丢了」。这两件事的处理方式正好相反——前者可以放心跳过，后者必须先核验。【事后重构】
+
+#### 锚点
+
+| 类型 | 锚点 | 它钉住什么 |
+| --- | --- | --- |
+| 代码 | `src/core/session-runtime.ts:48` | 恢复时逐个在途调用补一条结果，由有没有 `tool/start` 决定 `unknown` 还是 `skipped` |
+| 代码 | `src/core/session-runtime.ts:62` | 崩溃窗口里还停在 running 的 run 被封成 `error`，不留在半途 |
+| 代码 | `src/core/session-runtime.ts:129` | 同 task 只要存在一条 `unknown` 结果，自动续跑就被拒并说明原因 |
+| 代码 | `src/core/task-changes.ts:39` | 文件编辑意图没有配对结果时同样抛错，不让新任务在不知道结果的情况下开工 |
+| 代码 | `src/core/agent-runtime.ts:32` | `continue` 只是开一段新 run；拒绝的逻辑在 `beginRun` 里，不在调用方 |
+| 测试 | `test/store.test.ts` · `recovery preserves task state, adds unknown/skipped results and never executes tools` | 两个在途调用分别补成 `unknown` 与 `skipped`；副作用文件未被触碰；用量标 `uncertain` |
+| 测试 | `test/store.test.ts` · `a stale writer lock blocks recovery until it is removed explicitly, then restore marks the interrupted tool unknown` | 崩溃残局（日志停在 `tool/start` + 残留锁）经显式销锁后恢复，补出的正是 `unknown`，且续跑被拒 |
+| 测试 | `test/continue.test.ts` · `continuation protects all prior runs and refuses unresolved tool outcomes` | 存在未决结果时 `/continue` 抛错；reset 之后报的是「没有可续跑的任务」 |
+| 测试 | `test/tool-results.test.ts` · `structured failed and timed-out command events restore from JSONL without replaying side effects` | 恢复出来的命令结果与原始事件逐字相等，而副作用文件仍是原值——证明没有重放 |
+
+#### 代价
+
+- **恢复之后当前 task 可能续跑不了，只能显式开新任务。** 这是刻意的：宁可让用户多走一步确认，也不静默重放一个有副作用的操作。
+- **`unknown` 一旦落进日志就一直是 `unknown`。** 后来的人工核验结论不会写回事件——要写就得在模型与审批之外改文件。所以日志里会一直留着「当时不知道」这个事实。
+- **模型那一侧的尾部会丢，工具那一侧不会。** 流片段按 250ms 或 4KiB 合并追加、不逐 token sync，所以崩溃可能丢掉最后一段还没写盘的流；恢复会为缺 usage 的请求补一条 `estimated` 用量和一条 `complete:false` 的 `model/end`。工具不同：`tool/start` 是语义事件，先落盘并等待 sync 之后才执行命令，所以「已经开始」这件事本身不会丢。
+
+---
+
+## 总表
+
+五条选择、它们的规范出处，以及有没有一条能直接跑的演示。**本表只是索引**；权威锚点在上面各节的锚点表里，由 `test/decisions-doc.test.ts` 校验。
+
+| # | 选择 | 规范出处 | 可跑的演示 |
+| --- | --- | --- | --- |
+| [1](#1-事件与投影分离) | 事件日志是唯一事实来源，请求投影由它派生 | PLAN D-02、D-08 | 无对应演示 |
+| [2](#2-协议完整性) | 配对不可能被裁剪切断，停止时为每个在途调用补出结果 | PLAN D-03、D-06 / R-03、R-04 | `pnpm demo:resume` |
+| [3](#3-可靠编辑) | 字节指纹 + 唯一字面替换 + 同目录临时文件 `rename` | PLAN 的 NX-13 决策节 / R-16 | `pnpm demo:fix`（只走顺利路径） |
+| [4](#4-验证时效) | 检查证据绑定文件版本，之后的编辑使其过期 | PLAN 的 NX-15 决策节 / R-18 | `pnpm demo:fix`（只走通过路径） |
+| [5](#5-未知副作用恢复) | 结果未落盘记 `unknown`，不重放，并挡住自动续跑 | PLAN D-06、D-08 / R-11、R-12 | `pnpm demo:unknown` |
+
+**关于「可跑的演示」这一列，两点要说清楚。** 第一，三条演示用的是预设的脚本化模型，退出码 0 只说明 Harness 的行为符合预期，不代表任何模型能力（见 [README 的演示一节](../../README.md#演示)）。第二，`demo:fix` 只走**顺利路径**——它展示两个编辑都用 `read_file` 给的 `expectedHash` 提交成功、一次显式检查落成验证记录，但它**不展示**冲突、过期、`unknown` 这些分支。那些分支的证据在锚点表列的测试里，不在演示里。列在这里的两处 `demo:fix` 都只是「这条选择在真实运行里长什么样」，不是它的证明。
+
+**还有两件本文没有覆盖的事。** 一是事件持久化的写入语义（锁、sync 粒度、尾部半条记录）——它属于 D-08 与 PLAN 的持久化一节，且崩溃残局里那把 `writer.lock` 目前没有可脚本化的处置入口（已立项 NX-21）。二是上下文裁剪与输出额度的参数取舍——那些是数值，按本文开头的约定一律留在 PLAN。
