@@ -9,11 +9,15 @@ const sandbox = new SandboxRuntime({ workspace, autoApprove: true })
 const locked = new SandboxRuntime({ workspace, autoApprove: true, allowHosts: ['api.internal'] })
 
 // [group, expected, command, runtime] — expected is the target contract, so a "known gap" row is one the
-// gate does not meet yet. All three open gaps are over-blocking, not under-blocking: NX-18 rows are
-// lazy `..` text the gate still denies, NX-23 rows are URLs used as data, NX-24 rows are places where
-// the gate's lexer still disagrees with a real shell.
-// The `closed: NX-19 outbound closure` group was the `known gap NX-19` group until NX-19 landed;
-// those four rows read `met` on 2026-10-01 before being moved down here.
+// gate does not meet yet. Every open gap here is over-blocking, not under-blocking: NX-18 rows are lazy
+// `..` text the gate still denies, NX-23 rows are URLs used as data, NX-25 is a here-doc body treated as
+// a command word, NX-26 is `do`/`then`/`else` not counting as a command-segment start.
+// Two groups were gap groups until their work landed, and their rows read `met` first:
+// `closed: NX-19 outbound closure` (2026-10-01) and the two `fixed: quote-blind expansion` rows
+// moved out of `known gap NX-24` (2026-10-01, NX-24).
+// NX-24's third row did **not** close and was re-registered as `known gap NX-25` (here-doc): it was
+// split out because its mechanism is different — whether a here-doc body is data or a script depends
+// on the command consuming it (`cat <<'EOF'` is data, `bash <<'EOF'` is executed).
 const cases = [
   ['fixed: shell quoting', 'allow', 'node check.mjs && node --input-type=module -e "\nimport assert from \'node:assert/strict\'\n\n// nested plain objects merge recursively\nassert.deepEqual(1, 1)\n\nconst evil = JSON.parse(\'{\\"__proto__\\":{\\"polluted\\":true}}\')\n"'],
   ['fixed: shell quoting', 'allow', 'node -e "console.log(\\"a\\") // trailing"'],
@@ -27,6 +31,35 @@ const cases = [
   ['fixed: inert URL', 'allow', 'echo "https://example.com" || echo fallback'],
   ['fixed: inert URL', 'allow', 'echo "https://api.internal"', locked],
 
+  // NX-24：展开此前是引号盲、反斜杠盲的整串 replace，三处误拒。前两条原在 `known gap NX-24` 组，
+  // 先读到 met 再移到这里；其余按实测补——782 次真实模型 bash 调用里 18 条 `for` 变量、2 条 `\$`、
+  // 1 条单引号。净放宽到此为止：未知名字与无法证明安全的候选值照旧拒绝，且理由与出网／环境变量
+  // **不同串**，免得以后调绑定规则污染别的用例判据。
+  ['fixed: quote-blind expansion', 'allow', "echo '$HOME'"],
+  ['fixed: quote-blind expansion', 'allow', 'kind=local; echo $kind'],
+  ['fixed: quote-blind expansion', 'allow', 'for f in src/*.mjs; do echo "=== $f ==="; cat "$f"; done'],
+  ['fixed: quote-blind expansion', 'allow', 'for n in 07 08 09 10; do node tmp-verify-$n.mjs > r$n.log 2>&1; echo "$n exit=$?"; done'],
+  ['fixed: quote-blind expansion', 'allow', 'for f in delta plan-parse plan-merge; do cat "src/$f.mjs"; done'],
+  ['fixed: quote-blind expansion', 'allow', 'echo \\$HOME'],
+  ['fixed: quote-blind expansion', 'allow', 'sed -n "s/^## 11/x,\\$p" docs/SPEC.md'],
+  ['fixed: quote-blind expansion', 'deny', 'cat $MINI_DSH_UNSET_VAR/file'],
+  ['fixed: quote-blind expansion', 'deny', 'for f in a /etc/passwd; do cat $f; done'],
+  ['fixed: quote-blind expansion', 'deny', 'X=/etc/passwd; cat $X'],
+  // 双引号内**仍展开**：`$ad` 未定义即变空串，会静默改坏模型写的程序。这两条是本次最容易写错的一处。
+  ['fixed: quote-blind expansion', 'deny', 'node -e "show(\'a: b$ad\')"'],
+  ['fixed: quote-blind expansion', 'deny', 'read x; echo $x'],
+
+  // NX-24：被引号成词的**正文**以 `/` 开头时，此前被当成绝对路径。既有规则已经认「双斜杠 + 首分量
+  // 含空白」（JS 注释），但只认双斜杠，于是 awk／sed 的程序正文被误拒（实测 5 条）。改成任意条前导
+  // 斜杠，判据本身不动。最后一行是**接受的连带**：首分量含空白的 POSIX 根路径不再算路径操作数
+  // ——与既有 `//` 形态同一取舍，写在这里是为了让它成为记录在案的决定，而不是静默放宽。
+  ['fixed: quoted program text', 'allow', "awk '/^## 11/,/^## 12/' docs/SPEC.md"],
+  ['fixed: quoted program text', 'allow', "sed -n '/^## *9/,/^## *10/p' docs/SPEC.md"],
+  ['fixed: quoted program text', 'allow', "awk '/stage(7|7)|phase 7/{f=1} f' check.mjs"],
+  ['fixed: quoted program text', 'allow', 'cat "/Program Files/secret"'],
+  ['fixed: quoted program text', 'deny', 'cat /etc/passwd'],
+  ['fixed: quoted program text', 'deny', 'ls /'],
+
   ['kept: escape and system paths', 'deny', 'echo ../secret'],
   ['kept: escape and system paths', 'deny', 'cat /etc/passwd'],
   ['kept: escape and system paths', 'deny', 'ls /'],
@@ -34,6 +67,9 @@ const cases = [
   ['kept: escape and system paths', 'deny', 'cat //home/user/.ssh/id_rsa'],
   ['kept: escape and system paths', 'deny', 'cat //server/share/secret'],
   ['kept: escape and system paths', 'deny', 'rm -rf src'],
+  // `//comment` 是 deny 的孪生行（它的 allow 兄弟在 `fixed: comment shape`）：放宽前导斜杠的条数
+  // 只针对「首分量含空白」的正文形状，首分量干净的仍走 resolvePath。
+  ['kept: escape and system paths', 'deny', 'node -e "//comment"'],
   ['kept: egress', 'deny', 'curl https://example.com'],
   ['kept: egress', 'deny', 'curl example.com'],
   ['kept: egress', 'deny', 'git clone https://example.com/x.git'],
@@ -77,10 +113,13 @@ const cases = [
   // 结果相反（`--grep=<url>` 放行、`--grep <url>` 拒绝）就是这一点的直接证据。
   ['known gap NX-23', 'allow', 'git log --grep "https://github.com/x"'],
   ['known gap NX-23', 'allow', 'npm install --registry https://registry.npmjs.org'],
-  // NX-24：闸门词法仍与真实 shell 有系统偏差，三处各自机制不同。
-  ['known gap NX-24', 'allow', "echo '$HOME'"],
-  ['known gap NX-24', 'allow', 'kind=local; echo $kind'],
-  ['known gap NX-24', 'allow', "cat <<'EOF'\ncurl https://example.com\nEOF"],
+  // NX-25：here-doc 正文被当命令词（NX-24 期间从 NX-24-③ 拆出，机制不同——正文是数据还是脚本
+  // 取决于消费它的命令）。实测 782 次调用里只有 5 次用 `<<`。
+  ['known gap NX-25', 'allow', "cat <<'EOF'\ncurl https://example.com\nEOF"],
+  // NX-26：`do`／`then`／`else` 之后不算命令段起点，取网工具的操作数模型在那里不生效。这是**今日
+  // 就已存在**的放行（与 NX-24 无关），但 NX-24 绑定 `for` 变量后会有更多命令走到这里，所以登记
+  // 让这处暴露不被静默。
+  ['known gap NX-26', 'deny', 'for f in a b; do curl example.com; echo $f; done'],
 ]
 
 // A contract row that misses its target is a regression to investigate; a gap row that meets it means the

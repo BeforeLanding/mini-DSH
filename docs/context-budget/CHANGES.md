@@ -2,6 +2,133 @@
 
 更新：2026-10-01。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-24 闸门词法偏差的误拒收口
+
+- 关联：NX-19 期间登记的相邻缺陷（`nx17-gate-probes.mjs` 的 `known gap NX-24` 组）。不依赖其他任务，可独立验收。状态：**done**（2026-10-01，零付费）。**方向是放宽**——NX-19 修的是「真正会执行的文本被顶层分词漏掉」，本轮修的是反面：**闸门自己的词法与真实 shell 不一致，把数据当成了路径或变量**。子步骤与提交边界见 [TASKS 的 NX-24 一节](TASKS.md#nx-24-闸门词法偏差的误拒收口)，展开与绑定模型见 [PLAN 的 D-13](PLAN.md#d-13-环境展开与命令内绑定)。
+- 提交：`fcd06e7`（NX-24-0 立项与契约订正）、`27f27aa`（NX-24-1 反斜杠转义）、`84d9555`（NX-24-2 引号感知）、`a9708c1`（NX-24-3 波浪号）、`a173952`（NX-24-4 命令内绑定）、`f8f642c`（NX-24-5 路径形态），本提交（NX-24-6 回填）。
+
+### 现象与根因
+
+**证据是回放出来的，不是推断的。** 把 `.eval-evidence/` 下 33 份 `events.jsonl` 里 **782 次真实模型 bash 调用**逐条取出重放（`pnpm build && node docs/context-budget/nx24-replay-probe.mjs`），NX-24 之前**32 条被拒**：
+
+```
+23  unset environment variable in command
+ 9  path escapes the workspace
+```
+
+**方法学陷阱（我第一版就是这么错的）**：改用 `process.cwd()` 当 workspace 重放会得到 **64** 条，其中 32 条是**重放自身的伪影**——模型在评测里 `cd "C:\…\mini-dsh-fixture-*/workspace"`，而闸门的 workspace 就是那个临时目录。必须按会话从 `tool/result` 的 `cwd` 读回 workspace，否则结论凭空翻倍。这条写进了探针的文件头。
+
+**它改变了模型的行为**，不是推断——原始事件里模型的自述原文：
+
+```
+Hmm, the bash tool rejects `$f`? Let me just cat each file.
+the tool reports "unset environment variable in command" possibly because it detects
+`$VARIABLE`. Let me write a temp test script file instead.
+```
+
+根因是一条，不是四条：`sandbox-runtime.ts` 的环境展开是**引号盲、反斜杠盲**的整串 `String.replace`（对**本串内刚绑定过的**名字也一无所知），而路径形态判据只认「两条以上前导斜杠 ＋ 首分量含空白」。
+
+| 族 | 条数 | 形状（原文） | 判定 |
+| --- | --- | --- | --- |
+| ① `for` 绑定变量 | 18 | `for f in src/*.mjs; do echo "=== $f ==="; cat "$f"; done`；`for n in 07 08 09 10; do node tmp-verify-$n.mjs > r$n.log 2>&1; echo "$n exit=$?"; done` | 误拒 |
+| ② 反斜杠转义 | 2 | `node -e "…Array.from({length:2000},(_,i)=>\`n\${i}…\`)"`；`sed -n "$(grep -n '^## 11' docs/SPEC.md \| cut -d: -f1),\$p" docs/SPEC.md` | 误拒：`\$` 已转义 |
+| ③ 单引号内的 `$NAME` | 1 | `node --input-type=module -e '…throws("a: b$c\n", …)…'` | 误拒：单引号内不展开 |
+| ④ 被引号成词的正文以 `/` 开头 | 5 | `awk '/^## 11/,/^## 12/' docs/SPEC.md`；`sed -n '/^## *9/,/^## *10/p' docs/SPEC.md`；`awk '/stage(7\|7)\|phase 7/{f=1} f' check.mjs` | 误拒：awk／sed 程序正文被当成绝对路径 |
+| ⑤ **真阳性，本次刻意保留** | 2 | `node -e "… show('a: b$ad'); …"`；`node -e "… ['a: b $c', /line 1[\s\S]*/] …"` | **拦对了**：`$ad`／`$c` 在**双引号内且未转义**，bash 真的会展开成空串、静默改坏模型写的程序 |
+
+### 设计决策
+
+**判据取「这段文本会不会被 shell 展开」，不取出现位置。** 沿用 NX-17／NX-19 的方向：`$NAME` 在单引号内、在 `\` 之后就不该展开；`/^## 11/` 在引号内就不是路径。
+
+**四个族用一个改法，不给每族打补丁。** 共同根因是「展开不看引号也不看反斜杠」，所以把整串 `replace` 换成**一趟引号与转义感知的扫描** `expandEnvironment`。它逐字复制不替换的字符（含反斜杠与引号），仍只产出**同一条 `expanded` 字符串**——下游的 token 偏移（`tokens[index].index`、`expanded.slice(...)`）、`..` 整串正则与片段抽取都建立在这条串的原样形状上，改动它的形状等于同时改这三处的判据。
+
+**`\X` 整对复制，处理的是「`\$` 与 `\\$` 的分界」。** `\$` 是字面量，而 `\\` 先被整对吃掉、紧随的 `$` 仍是裸的、仍会被展开。写成「见到反斜杠就跳过下一个」会让 `echo \\$(curl x)` 漏检（有用例固定）。
+
+**双引号内的 `'` 不得开启单引号区间**（`!double` 守卫）。这是最容易写错的一处：少了它，真阳性 `node -e "show('a: b$ad')"` 会变成**放行**——而 bash 在双引号内确实会展开 `$ad`。
+
+**双引号内仍展开是特性，不是 bug。** `cat "$HOME/.ssh/id_rsa"` 必须继续被拒（`test/core.test.ts` 的 `Sandbox expands env paths before the escape check…` 已锁）。要改的只是展开对引号与反斜杠视而不见。
+
+**`for` 绑定用「代表值替换 ＋ 全候选值形状门槛」。** `for NAME in w1 w2 …` 的每个候选值都必须通过 `isSafeBindingWord`，任一不通过即整条拒绝；这样「用哪个值做代表检查」与逐值检查等价。否决的替代方案各有具体失效：只替换**首值**→ `for f in a /etc/passwd; do cat $f; done` 被放过；**多值文本拼接**→ `"$f"` 在双引号内合成一个词，同样被放过；**逐值展开循环体**→ 要对 `do…done` 做语法解析、要新增宽度上限，嵌套还会相乘。兜底是词表本身始终留在展开后的串里，危险字面量照旧被路径分支看见。
+
+**赋值只认命令段起点，且刻意不收 `read`。** `(?:^|[;&|\n])` 之外不认 `NAME=`，否则 `curl -d name=x` 这类实参会被当成赋值。`read NAME` 的取值来自 stdin、静态不可知，绑任何值都是猜测，按「不能证明安全就拒绝」处理。
+
+**三条拒绝理由互不共用**：`unset environment variable in command`、`unsafe for loop value in command`、`unsafe assigned value in command`。共用会让以后调绑定规则污染环境变量用例的判据。
+
+**④ 取最窄的推广：把 `/^\/{2,}/` 改成 `/^\/+/`，判据本身不动。** 加**元字符**判据是错的、已实测否决：sed 的程序正文里合法地含 `*`（`/^## *9,/`），把 `*` 计入会**漏掉** sed 那一例，不计入 `*` 又会放过 `/*/secret` 这种真实的根级读取。接受的连带是「首分量含空白的 POSIX 根路径不再算路径操作数」——与既有 `//` 形态**同一取舍**（`//Program Files/…` 今天就已经被跳过），只是把拼法从两条斜杠放宽到任意条，写进用例与矩阵各一行让它成为**记录在案的决定**。
+
+### 净放宽清单
+
+21 条误拒转放行，即上表①②③④各族。反向的 2 条真阳性**保持拒绝**，且 `test/core.test.ts` 新增用例把它们的**理由**也钉住（`unset environment variable`），以免以后哪次放宽顺手把它们放过。
+
+### 未放宽的部分
+
+NX-17／NX-19 记为「未放宽」的规则**本次一行未动**：`..` 逃逸（整串正则，属 NX-18）、系统路径、工作区外路径与软链、归一化后仍越界的双斜杠路径、递归删除与 `sudo`、UNC、出网与 allowHosts。`test/core.test.ts` 里这些行逐条仍在，并新增了 `node -e "//comment"`、`ls /`、`ls //etc` 等的孪生断言。
+
+### 验证
+
+基线（动手前 `node docs/context-budget/nx17-gate-probes.mjs`）：`no contract drift; 7 known gap(s) still open`，其中 `known gap NX-24` 三行两 `open`（`echo '$HOME'`、`kind=local; echo $kind`）一 `open`（here-doc）。
+
+两条缺口行的达标留证（NX-24-5 之后、搬移之前）：
+
+```
+met    allow (want allow) "echo '$HOME'"
+met    allow (want allow) "kind=local; echo $kind"
+open   deny  (want allow) "cat <<'EOF'\ncurl https://example.com\nEOF"   ← 未闭合，改登 NX-25
+```
+
+搬移进两个新契约组后：`no contract drift; 6 known gap(s) still open`（NX-18 ×2、NX-23 ×2、NX-25 ×1、NX-26 ×1），`fixed: quote-blind expansion`（12 行）与 `fixed: quoted program text`（6 行）全部 `ok`。
+
+```
+pnpm check            # syntax ok: 90 files
+pnpm test             # tests 212 / pass 212 / fail 0 / skipped 0（原 207，新增 5 条用例）
+pnpm fixtures:check   # 退出码 0，16 项
+pnpm eval:offline     # 12 条 status=completed、accepted=true
+pnpm demo:fix / demo:resume / demo:unknown   # 均退出 0
+node docs/context-budget/nx24-replay-probe.mjs   # 退出码 0：782 次调用 / 9 条拒绝
+```
+
+**回放终态：32 → 9 条**（4.1% → 1.15%）。9 条逐条有归属，探针做的是**集合断言**（任何一条翻面都会红），不是计数断言：
+
+| 条数 | 归属 |
+| --- | --- |
+| 2 | **真阳性**（双引号内未转义的 `$ad`／`$c`），本次刻意保留 |
+| 4 | NX-27：`> /tmp/…`，Git Bash 的 `/tmp` 与 `node:path` 不一致 |
+| 1 | NX-28：here-doc 正文里形如 `a:\tb\tc` 的字面量被判为盘符路径 |
+| 1 | NX-18：`cat ../package.json`（从 `src` 上一级仍在工作区内）撞 `..` 整串正则 |
+| 1 | NX-29：正则字面量 `/missing` 与真实绝对根路径同形，无判据可用 |
+
+`062d867579` 那条（NX-18）值得单独说一句：它在改动**之前也被拒**，只是当时的理由被更早触发的 `unset environment variable` 遮住了；本次让它暴露出真正的拦点是 `..` 规则。这不是本轮引入的回归。
+
+### 反例实跑（每条新分支都要能证明用例会咬）
+
+| 关掉的东西 | `node --test dist/test/core.test.js` 的输出 | 还原后 |
+| --- | --- | --- |
+| `\X` 整对复制改单字符前进（NX-24-1） | `AssertionError [ERR_ASSERTION]`（`Sandbox does not expand a variable whose dollar sign is backslash-escaped`） | 复绿 |
+| 单引号分支恒不置位（NX-24-2） | 同上（`…by shell quoting rules…`） | 复绿 |
+| `~` 还原成引号盲的 `replace`（NX-24-3） | 同上（`…bare tilde but not one inside single quotes…`） | 复绿 |
+| 删掉 `for` 分支（NX-24-4） | 同上（`…resolves names bound inside the command…`） | 复绿 |
+| `isSafeBindingWord` 恒真（NX-24-4） | `actual: 'system path is blocked'`，`expected: /unsafe for loop value/` | 复绿 |
+| 还原 `/^\/{2,}/`（NX-24-5） | 同上（`…quoted program body starting with a slash…`） | 复绿 |
+
+最后一行是**只能断言理由**的那一处：关掉形状门槛后 `for f in a /etc/passwd; do cat $f; done` **仍然被拒**，只是理由变成 `system path is blocked`——命令的判定没变，只有理由串变了。这就是拒绝理由必须互不共用的实证。
+
+### 只有实测才会暴露的坑
+
+1. **`process.cwd()` 重放会让数字翻倍**（64 vs 32），且翻倍的那一半与闸门无关。见「方法学陷阱」。
+2. **`*` 不能进形状门槛的禁用字符集**：首版把 `*` 当危险字符，于是 `for f in src/*.mjs` 被判 unsafe——而通配符只会在这个目录里展开，`/*` 已经被前导斜杠那条挡下。这个是跑出来才发现的。
+3. **`isSafeBindingWord` 的门槛在多数情况下只改变「理由」而不改变「判定」**，因为词表本身留在串里。若测试只断言 `action` 而不断言 `reason`，这道门槛会**静默失效**且测试全绿。
+4. **只替换首值会造成真实绕过**：`for f in a /etc/passwd; do cat $f; done` 取首值 `a` 就放行，而 bash 第二次迭代真的读 `/etc/passwd`。
+
+### 未覆盖、已登记为独立待办
+
+改前/改中发现的相邻缺陷，按 NX-17 的先例只登记不修，都已实测并进相应矩阵：
+
+- **NX-25 here-doc 正文被当命令词**（从 NX-24-③ 拆出）：`known gap NX-25` 一行。拆出的理由是它有一处三族没有的真难点——正文是数据还是脚本取决于**消费它的命令**（`cat <<'EOF'` 是数据，`bash <<'EOF'` 会被真正执行，当前靠「正文里的 URL 被当命令词」误打误撞拦下）。
+- **NX-26 `do`／`then`／`else` 之后不算命令段起点**：`known gap NX-26` 一行。**`for f in a; do curl example.com; done` 今日就是 allow**（已实测）——这是一条**独立于 NX-24 的既有放行**；但绑定 `for` 变量后会有更多命令走到这里（`for f in a; do curl example.com; echo $f; done` 改前是误拒、改后变放行），所以不能装作没看见。
+- **NX-27 Git Bash 的 `/tmp` 与 `node:path` 不一致**：win32 上 `path.resolve('/tmp/out.txt')` → `D:\tmp\out.txt`，于是任何 `/tmp/...` 都被判越界（实测 `echo x > /tmp/out.txt`、`cat /tmp/out.txt` 全拒）。机制与词法无关。
+- **NX-28 引号成词的正文以 `<字母>:\` 开头被判为盘符路径**：`node --input-type=module <<'EOF'` 正文里的 `parseDeps('a:\tb\tc\n')` 被当成 `a:\` 盘符。与族④同属「正文被当成路径」，但触发的是盘符那条臂，加「首分量含空白」盖不住它（首分量 `tb` 不含空白）。用 bisect 定位到具体行。
+- **NX-29 正则字面量与绝对根路径同形**：单引号 payload 里出现未转义的 `'` 时 tokenizer 会像 shell 一样断开引号区间，`assert.match(x, /missing/);` 里的 `/missing` 成了独立 token——与真实读取根目录的 `/missing` **形状完全相同**。这不是闸门漏检（闸门与 shell 一致），是拒因不够明确；处置方向是**给引号坏掉的命令更明确的理由**，而不是放宽路径判据。
+
 ## NX-19 出网拦截的真实缺口收口
 
 - 关联：NX-17 期间登记的相邻缺陷（`CHANGES.md` 的 NX-17 节末「未覆盖待办」与 `nx17-gate-probes.mjs` 的 `known gap NX-19` 组）。不依赖其他任务，可独立验收。状态：**done**（2026-10-01，零付费）。方向是**加强**，不是放宽。子步骤与提交边界见 [TASKS 的 NX-19 一节](TASKS.md#nx-19-出网拦截的真实缺口收口)，覆盖模型见 [PLAN 的 D-12](PLAN.md#d-12-沙箱命令策略的覆盖模型)。
