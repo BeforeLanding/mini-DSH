@@ -7,7 +7,7 @@ import { BudgetStop, emptyCounters } from '../src/core/budget.js'
 import type { BudgetPolicy, Counters } from '../src/core/budget.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
 import { JsonlStore } from '../src/core/event-store.js'
-import type { Adapter, ChatRequest, ChatResponse, ToolCall } from '../src/core/contracts.js'
+import type { Adapter, ChatRequest, ChatResponse, SessionEvent, ToolCall } from '../src/core/contracts.js'
 import * as sessions from '../src/plugins/session.js'
 import * as systemPrompt from '../src/plugins/system-prompt.js'
 import * as tools from '../src/plugins/tools.js'
@@ -34,6 +34,42 @@ const sumCounters = (all: readonly Counters[]): Counters => all.reduce((total, c
   activeDurationMs: total.activeDurationMs + counters.activeDurationMs,
   approvalDurationMs: total.approvalDurationMs + counters.approvalDurationMs,
 }), emptyCounters())
+
+// 逐阶段投影观测：判断「第几个阶段开始触发裁剪」必须看该阶段自己那条 run 的投影事件，而不是 RunState。
+// RunState.estimatedInputTokens 的「最近一次投影」是 D-08 的生产语义（恢复时也要按它重建），为了评测把
+// 它改成“本阶段最大值”是在污染生产状态；最大值与投影次数这里现算即可。
+// 也不复用 requestTrace：它按「当前 task」过滤（task-trace.ts 的 latestRun 取 taskId），同一会话里的
+// 更早阶段不在它的作用域内，拿不到要的东西。
+// 只读事件、不修改任何状态，因此可以直接对合成日志做构造式单测。
+export function summarizeStage(events: readonly SessionEvent[], runId: string) {
+  const scope = events.filter(event => event.runId === runId)
+  const projections = scope.filter(event => event.type === 'context/projection')
+  // 投影与 model/start 的落盘确认是异步的，两者之间存在窗口；调用点在阶段结束后，run 已 flush，
+  // 该窗口不再存在，所以这里可以按 requestId 直接判定「有投影没发送」。
+  const sent = new Set(scope.flatMap(event => event.type === 'model/start' ? [event.data.requestId] : []))
+  const estimates: number[] = []
+  const removedTaskIds: string[] = []
+  let firstPrunedProjection: number | null = null
+  let unsentProjections = 0
+  for (const [index, event] of projections.entries()) {
+    estimates.push(event.data.estimatedInputTokens)
+    if (event.data.removedTaskIds.length) {
+      firstPrunedProjection ??= index + 1
+      for (const taskId of event.data.removedTaskIds) if (!removedTaskIds.includes(taskId)) removedTaskIds.push(taskId)
+    }
+    if (event.data.requestId !== undefined && !sent.has(event.data.requestId)) unsentProjections += 1
+  }
+  const usageSources = { provider: 0, estimated: 0 }
+  for (const event of scope) if (event.type === 'model/usage') usageSources[event.data.usage.source] += 1
+  return {
+    ...(estimates.length ? { estimatedInputTokens: estimates.at(-1), maxEstimatedInputTokens: Math.max(...estimates) } : {}),
+    projections: projections.length,
+    firstPrunedProjection,
+    removedTaskIds,
+    unsentProjections,
+    usageSources,
+  }
+}
 
 // 适配器在 fixture 建好之后才构造：模拟模型需要读取该 fixture 的参考改动来生成工具序列。
 // 真实适配器忽略入参即可，运行器因此不感知模型来源。
@@ -70,7 +106,10 @@ export async function runFixtureTask(
         if (!(cause instanceof BudgetStop)) error = cause instanceof Error ? cause.message : String(cause)
       }
       const state = root.sessions.latestRun(session.id)
-      if (state) stages.push({ taskId: state.taskId, status: state.status, counters: state.counters })
+      if (state) stages.push({
+        taskId: state.taskId, status: state.status, counters: state.counters,
+        ...summarizeStage(root.sessions.visibleEvents(session.id), state.runId),
+      })
       // 基础设施失败后不再下发下一阶段：会话或工作区已经不健康，继续跑只会把同一个失败重复记成多份，
       // 而每一份都会进入阶段累计用量。预算触顶不属于这一类，它由状态承载并继续下一阶段。
       if (error !== undefined) break

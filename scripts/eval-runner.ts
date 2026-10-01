@@ -35,10 +35,23 @@ export interface AcceptanceDetail {
 // 一个 fixture 可以是一个任务，也可以是同一会话内按序下发的多个阶段任务（见 coding-fixtures.ts 的
 // readTaskSequence）。RunOutcome 描述整次 fixture 运行：status 取最后一个阶段，counters 是各阶段之和，
 // 验收仍是工作区终态一次判定；逐阶段的观测留在 tasks 里，用于定位是哪个阶段把预算或上下文用光。
+// NX-08e2 起还带逐阶段的投影观测：判断“第几个阶段开始触发裁剪”靠的是这些字段，counters 看不出来。
+// estimatedInputTokens 是该阶段最后一次投影的值，也是裁剪后的值——裁剪一开始，它就钉在输入目标附近，
+// 因此它只说明“当时有多大”，不代表该阶段自身的增长；裁剪前的规模只能由相邻阶段的投影外推。
 export interface RunTaskDetail {
   taskId: string
   status: StopReason | 'running'
   counters: Counters
+  estimatedInputTokens?: number
+  maxEstimatedInputTokens?: number
+  // 该阶段的投影次数与第几次投影首次裁剪（1 起；null 表示该阶段从未裁剪）。
+  projections: number
+  firstPrunedProjection: number | null
+  removedTaskIds: string[]
+  // 已记录投影但没有对应 model/start：该请求在发出前被 context_overflow 或 token 预算拦下。
+  unsentProjections: number
+  // provider 与 estimated 分列（R-21 要求报告给出这一区分），按使用条目数计。
+  usageSources: { provider: number; estimated: number }
 }
 export interface RunOutcome {
   status: StopReason | 'running'

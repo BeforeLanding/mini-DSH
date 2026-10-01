@@ -24,7 +24,11 @@ NX-08e 开跑前必须先解决其前置条件（2026-09-30 修正）：裁剪�
 | NX-08e1-1 | 新增多阶段依赖 fixture 并让注册表区分筛查批次 | `pipeline` 六阶段：初始失败（退出码 1、AssertionError）、参考解六个阶段全绿、`verify.mjs` 用另一组输入通过；注册表拆出 `screeningIds`/`sequenceIds`，`pnpm fixtures:check` 13 项初始 0/13 参考 13/13、`pnpm eval:offline` 仍 12/12 | 1 次 |
 | NX-08e1-2 | 离线覆盖多阶段驱动路径 | 补上 e0-2 声明未覆盖的三条：`runFixtureTask` 走完 6 个阶段且 `counters` 等于各阶段逐字段之和（独立求和，不复用实现的 `sumCounters`）；基础设施失败中止后续阶段且第三阶段正文一次未下发；`phaseCaps.screening.runs === screeningIds.length` | 1 次 |
 | NX-08e1-3 | fixture 契约与基线回填 | PLAN 增 fixture 契约与规模依据、TASKS 增子步骤与已完成、CHANGES 增三个小节、PROGRESS 的 fixture 计数与下一步同步；文档数字与实际命令输出一致 | 1 次 |
-| NX-08e2 | 多阶段 fixture 的真实模型烟测与整批上限重预注册 | 用真实适配器跑 `pipeline`，记录逐阶段估算输入、`removedTaskIds`、停止原因与用量；据此判定 6 个阶段是否越过 65,536（不足则增减最后一个阶段），再按实测值重预注册 `phaseCaps` 与单次 run 预算。**重预注册完成前不得开跑对照 A** | 1 次 |
+| NX-08e2-1 | 逐阶段投影观测进入 `RunOutcome.tasks` | 每个阶段给出该阶段最后一次投影的估算输入、投影梯度最大值、投影次数、首次裁剪的投影序号（未裁剪为 `null`）、被移除任务 id 并集、未发出投影数与 usage 来源分列；新增纯函数 `summarizeStage` 的构造式单测，并在 `pipeline` 序列用例上把「未裁剪」断言成确定性事实；`pnpm eval:offline` 仍 12/12 | 1 次 |
+| NX-08e2-2 | 真实适配器入口按阶段参数化并修正默认计划清单 | `--phase`（默认 `screening`）与 `--plan-only`（不落盘、不出网、无 key 也能跑）；默认清单改为按阶段注册表取，修掉「不带 `--tasks` 时计划 13 项对 12 次上限」的既有缺陷；`--tasks` 与当前阶段不匹配时报错并点名；`phaseCaps.sequence` 预注册为 runs 1 / requests 192 / tokens 12,000,000 且不计入 `batchCaps` 的 156；新增 `test/eval-cli.test.ts` 与 `pnpm eval:sequence` | 1 次 |
+| NX-08e2-3 | `pipeline` 的真实模型烟测与结论回填 | 记录逐阶段估算输入、`firstPrunedProjection`、`removedTaskIds`、停止原因与 usage 来源；判定 6 个阶段是否越过 65,536，被 `max_steps` 截断的阶段单列；PLAN/TASKS/CHANGES/PROGRESS 的数字与 `runs.jsonl` 逐项一致。这一步调用付费模型 | 1 次 |
+| NX-08e2-4 | 阶段数不足时增减最后一个阶段（条件执行） | 仅当烟测显示 6 个阶段不足以触发裁剪：改 `TASKS/06`（或新增 `07`）与对应模块，`pnpm fixtures:check` 初始 0/N、参考 N/N，`pnpm eval:offline` 仍 12/12。复跑烟测前先确认 | 1 次（视 e2-3 结果） |
+| NX-08e2-5 | 按实测重预注册 `phaseCaps` 与单次 run 预算 | `armA`/`armB`/`batchCaps` 按实测阶段历史规模重算并逐字写入 PLAN；`pnpm test` 通过。**该步完成前不得开跑对照 A** | 1 次 |
 | NX-08e | 对照 A：全历史 vs 现有裁剪 | 前置（2026-09-30 修正）：会话中必须存在**已结束且可裁剪的旧任务**，其累计估算输入还要足以让 `fits` 为假；当前 task 与续跑段恒受保护，加大单个任务无效。筛查跑 12 个 fixture 的单任务会话 `removedTaskIds` 全为空属结构性必然，全部不满足。前置设施见 NX-08e0，任务集见 NX-08e1，规模是否达标由 NX-08e2 的烟测判定。两臂预算一致、每题 3 次；报告通过率、回归失败数、编辑失败率、修复迭代次数、人工介入、provider/estimated token 分列、每成功任务有效 token、延迟与停止原因 | 1 次 |
 | NX-08f | 对照 B：现有裁剪 vs 裁剪加有界工具输出 | 同 e 的预算、模型、prompt、验收与整批上限条件；两次比较的结论分开陈述，不合并收益。**不受 e 的会话组成前置限制**：有界工具输出改变的是当前 task 内部的历史规模，单任务会话下就会出现一臂 `context_overflow`、另一臂完成 | 1 次 |
 | NX-08g | 评测报告与结论 | 含样本量、重复间波动、失败案例、成本与不可行项；不写未验证的提升比例，明确区分 harness 行为与真实模型能力 | 1 次 |

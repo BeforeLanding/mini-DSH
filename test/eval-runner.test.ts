@@ -2,11 +2,21 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { runPhase, summarize, phaseCaps, batchCaps, singleRunBudget, evalPolicy, capKeys } from '../scripts/eval-runner.js'
 import type { RunOutcome } from '../scripts/eval-runner.js'
-import { runFixtureTask, scriptedAdapter } from '../scripts/eval-fixture.js'
+import { runFixtureTask, scriptedAdapter, summarizeStage } from '../scripts/eval-fixture.js'
 import { screeningIds } from '../scripts/coding-fixtures.js'
 import { CLI_BUDGET } from '../src/core/budget.js'
 import type { Counters } from '../src/core/budget.js'
-import type { ChatRequest } from '../src/core/contracts.js'
+import type { ChatRequest, EventData, SessionEvent } from '../src/core/contracts.js'
+
+// summarizeStage 是对事件数组的纯函数，因此合成日志就能钉住裁剪触发点、未发出投影与 usage 来源这些
+// 边界；不该等到真实模型烟测才发现读数不对。
+const stageEvent = <K extends keyof EventData>(seq: number, type: K, data: EventData[K], runId = 'run-1'): SessionEvent =>
+  ({ version: 1, sessionId: 'session-1', id: `event-${seq}`, taskId: 'task-1', runId, seq, type, data, at: '2026-10-01T00:00:00.000Z' }) as SessionEvent
+const projection = (seq: number, estimatedInputTokens: number, removedTaskIds: string[], scope: { requestId?: string; runId?: string } = {}) =>
+  stageEvent(seq, 'context/projection', { ...(scope.requestId === undefined ? {} : { requestId: scope.requestId }), estimatedInputTokens, reservedOutputTokens: 4096, safetyMarginTokens: 2048, removedTaskIds }, scope.runId)
+const modelStart = (seq: number, requestId: string) => stageEvent(seq, 'model/start', { taskId: 'task-1', runId: 'run-1', requestId, estimatedInputTokens: 100 })
+const modelUsage = (seq: number, requestId: string, source: 'provider' | 'estimated') =>
+  stageEvent(seq, 'model/usage', { taskId: 'task-1', runId: 'run-1', requestId, usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12, source, uncertain: source === 'estimated' } })
 
 const counters = (modelRequests: number, totalTokens: number): Counters =>
   ({ modelRequests, toolCalls: 0, inputTokens: 0, outputTokens: 0, totalTokens, activeDurationMs: 0, approvalDurationMs: 0 })
@@ -141,6 +151,60 @@ test('the driver runs every stage of a sequence fixture and sums their counters'
   assert.equal(outcome.error, undefined)
   assert.deepEqual(outcome.counters, sumStages(stages.map(stage => stage.counters)))
   assert.ok(outcome.counters.modelRequests > stages.length, 'a sequence run costs more than one request per stage')
+  // 逐阶段投影观测：模拟适配器在第一个阶段就应用了全部参考改动，全序列估算输入峰值只有 13,614，因此
+  // 「未裁剪」在这里是确定性事实而不只是没被观察到——这让零计数也有断言。
+  assert.ok(stages.every(stage => stage.projections > 0))
+  assert.ok(stages.every(stage => (stage.maxEstimatedInputTokens ?? 0) >= (stage.estimatedInputTokens ?? 0)))
+  assert.ok(stages.every(stage => stage.firstPrunedProjection === null && stage.removedTaskIds.length === 0 && stage.unsentProjections === 0))
+  // usage 来源分类要能反映真实出处：模拟适配器不返回 usage，全部由估算补上。
+  assert.ok(stages.every(stage => stage.usageSources.estimated === stage.counters.modelRequests && stage.usageSources.provider === 0))
+})
+
+test('a stage summary reports a stage that never pruned without inventing evidence', () => {
+  const summary = summarizeStage([
+    projection(1, 1000, [], { requestId: 'q1' }), modelStart(2, 'q1'), modelUsage(3, 'q1', 'provider'),
+    projection(4, 2000, [], { requestId: 'q2' }), modelStart(5, 'q2'), modelUsage(6, 'q2', 'provider'),
+  ], 'run-1')
+  assert.deepEqual(summary, {
+    estimatedInputTokens: 2000, maxEstimatedInputTokens: 2000, projections: 2,
+    firstPrunedProjection: null, removedTaskIds: [], unsentProjections: 0,
+    usageSources: { provider: 2, estimated: 0 },
+  })
+})
+
+// 裁剪一旦开始，estimatedInputTokens 就被钉在输入目标附近，看不出「本阶段自己长了多少」；最大值与
+// 首次裁剪的投影序号正是为区分这两件事而记的，并集则给出被丢掉的是哪些旧任务。
+test('a stage summary locates the first pruned projection and unions the removed task ids', () => {
+  const summary = summarizeStage([
+    projection(1, 1000, [], { requestId: 'q1' }), modelStart(2, 'q1'),
+    projection(3, 2000, [], { requestId: 'q2' }), modelStart(4, 'q2'),
+    projection(5, 66_000, ['old-a'], { requestId: 'q3' }), modelStart(6, 'q3'),
+    projection(7, 65_500, ['old-a', 'old-b'], { requestId: 'q4' }), modelStart(8, 'q4'),
+  ], 'run-1')
+  assert.equal(summary.firstPrunedProjection, 3)
+  assert.deepEqual(summary.removedTaskIds, ['old-a', 'old-b'])
+  assert.equal(summary.estimatedInputTokens, 65_500)
+  assert.equal(summary.maxEstimatedInputTokens, 66_000)
+  assert.equal(summary.projections, 4)
+})
+
+// 三个边界：别的 run 的投影不算进本阶段；有投影但没有 model/start 的请求要单独计数（否则 context_overflow
+// 会缺少「为何没有发出」的证据）；没有任何投影的阶段不编造 estimatedInputTokens。
+test('a stage summary neither absorbs other runs nor hides projections that were never sent', () => {
+  const summary = summarizeStage([
+    projection(1, 1000, [], { requestId: 'q1' }), modelStart(2, 'q1'), modelUsage(3, 'q1', 'estimated'),
+    projection(4, 70_000, ['old-a'], { requestId: 'q2' }),
+    projection(5, 999_999, ['foreign'], { runId: 'run-2' }),
+    projection(6, 80_000, ['old-a']),
+  ], 'run-1')
+  assert.equal(summary.unsentProjections, 1)
+  assert.equal(summary.projections, 3)
+  assert.deepEqual(summary.removedTaskIds, ['old-a'])
+  assert.deepEqual(summary.usageSources, { provider: 0, estimated: 1 })
+  assert.deepEqual(summarizeStage([], 'run-1'), {
+    projections: 0, firstPrunedProjection: null, removedTaskIds: [], unsentProjections: 0,
+    usageSources: { provider: 0, estimated: 0 },
+  })
 })
 
 // 基础设施失败要么中止后续阶段，要么把同一个失败重复记成多份、而每一份都进入阶段累计用量——后者正是

@@ -1,6 +1,17 @@
 # 改动与验收证据
 
-更新：2026-09-30。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
+更新：2026-10-01。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
+
+## NX-08e2-1 逐阶段投影观测进入 `RunOutcome.tasks`
+- 关联：NX-08e2 的第一步，为烟测准备读数。状态：done（2026-10-01，本地通过）。本次不调用真实模型。
+- **为什么需要**：`RunState` 早就带 `removedTaskIds` 与 `estimatedInputTokens`（`src/core/budget.ts`），`agent-loop-runtime.ts` 每次投影都在更新它们，但驱动回传的 `RunTaskDetail` 只含 `taskId/status/counters`——判断「第几个阶段开始触发裁剪」所需的读数在驱动层被丢掉了，真实烟测跑完也答不出结论。
+- **新增的逐阶段字段**（`scripts/eval-fixture.ts` 的纯函数 `summarizeStage(events, runId)`）：`estimatedInputTokens`（该阶段最后一次投影）、`maxEstimatedInputTokens`（该阶段投影梯度最大值）、`projections`（投影次数）、`firstPrunedProjection`（第几次投影首次裁剪，1 起；未裁剪为 `null`）、`removedTaskIds`（并集）、`unsentProjections`（有投影但没有对应 `model/start`，即被 `context_overflow` 或 token 预算拦下）、`usageSources`（provider/estimated 分列，R-21 要求的口径）。
+- **刻意不做的两件事**：
+  - **不改 `session-runtime`**：`RunState.estimatedInputTokens` 的「最近一次投影」是 D-08 的生产语义（恢复时按它重建），为了评测把它改成「本阶段最大值」是在污染生产状态。最大值现算即可。
+  - **不复用 `requestTrace`**：它按「当前 task」过滤，同一会话里的更早阶段不在它的作用域内，拿不到这次要的东西；但它对「已发出投影但没有 model/start」的判定方式被照抄过来。
+- **一处口径必须写清**：`estimatedInputTokens` 是**裁剪后**的值（`context-runtime.ts` 的 `measure()` 每次基于已裁剪的 `selected` 重算）。裁剪一旦开始，它就钉在输入目标附近，看不出该阶段自身长了多少；「首次裁剪那一次的真实规模」没有落盘，只能由相邻阶段的投影外推。最大值与首次裁剪序号正是为区分这两件事而记的。
+- **测试**（`test/eval-runner.test.ts`，新增 3 条）：`summarizeStage` 的三个边界——未裁剪不编造证据、首次裁剪定位与并集去重、既不被别的 run 吸收也不隐藏未发出的投影（含空事件数组不产出 `estimatedInputTokens` 键）。全部用合成日志构造，不起子进程、不碰文件系统。既有的 `pipeline` 序列用例补了 4 条断言：每阶段 `projections > 0`、`max >= 最后一次`、`firstPrunedProjection === null && removedTaskIds.length === 0 && unsentProjections === 0`、`usageSources.estimated === counters.modelRequests`。模拟适配器全序列峰值 13,614，**「未裁剪」在这里是确定性事实**，所以零计数也有断言，而不只是「没被观察到」。
+- 验证：`pnpm check`（82 文件）、`pnpm test`（183/183，新增 3 条，无失败/跳过）、`pnpm eval:offline`（planned 12、executed 12、accepted 12、rate 12/12，66 请求，退出码 0）、`pnpm fixtures:check`（13 项、初始 13/13 以退出码 1 失败、参考 13/13 通过、`expected` 全为真，退出码 0）在本机通过。未产生付费请求。
 
 ## NX-08e1-3 fixture 契约与基线回填
 - 关联：NX-08e1 的收束。状态：done（2026-09-30）。纯文档，不触碰代码。
