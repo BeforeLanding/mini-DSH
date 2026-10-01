@@ -2,6 +2,54 @@
 
 更新：2026-10-01。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-26 保留字之后的命令段起点
+
+- 关联：NX-24 期间登记的相邻缺陷（`nx17-gate-probes.mjs` 的 `known gap NX-26` 组）。不依赖其他任务，可独立验收。状态：**in_progress**（2026-10-01，零付费）。**方向是收紧**——与 NX-24 相反，本轮修的是**闸门漏掉了一段真正会执行的命令**：`executable`（命令段起点的定义）不认识 shell 保留字，于是保留字后面的命令词既不重置段状态、也不开启取网工具的操作数模型。机制与取舍见 [PLAN 的 D-14](PLAN.md#d-14-命令段起点的词法判定)，子步骤与提交边界见 [TASKS 的 NX-26 一节](TASKS.md#nx-26-保留字之后的命令段起点)。
+- 提交：待回填（NX-26-0 立项与契约订正）。
+
+### 现象与根因
+
+**证据是跑出来的。** 矩阵当前读数（`pnpm build && node docs/context-budget/nx17-gate-probes.mjs`）：
+
+```
+known gap NX-26
+open   allow (want deny ) "for f in a b; do curl example.com; echo $f; done"
+```
+
+根因在 `src/core/sandbox-runtime.ts:439` 的一行判据：
+
+```ts
+let executable = index === 0 || /[|;&\n]\s*$/.test(expanded.slice(0, start))
+```
+
+它只有两种情况——**首 token** 与**紧邻 `|`／`;`／`&`／换行**。而 `executable` 为真才是**命令段起点**：它重置每段状态（`:441-449` 的 `networkTool`／`commandWord`／`hostOperandSeen`／`pipedDownstream`），并且是操作数模型的入口——`:466` 的 `model && !executable && …` 守卫。于是 `do`／`then`／`else`（以及 `if`／`elif`／`while`／`until`）后面那个 token 一切判定都不跑。
+
+这是一条**独立于 NX-24 的既有放行**，不是 NX-24 改出来的；但 NX-24 绑定 `for` 变量后会有更多命令走到这条路径（`for f in a; do curl example.com; echo $f; done` 在 NX-24 之前是误拒）。
+
+### 设计决策
+
+（NX-26-1／NX-26-2 落地后回填：单 token 前视旗标、为什么只活一个 token、为什么必须是原样字面词、清零点必须在循环开头，三条各自的反例。）
+
+### 净放宽清单
+
+（NX-26-2 落地后回填。）
+
+### 未放宽的部分
+
+（NX-26-3 回填。）
+
+### 验证
+
+（NX-26-3 回填。）
+
+### 反例实跑
+
+（NX-26-3 回填。）
+
+### 未覆盖、已登记为独立待办
+
+（NX-26-3 回填 NX-30。）
+
 ## NX-24 闸门词法偏差的误拒收口
 
 - 关联：NX-19 期间登记的相邻缺陷（`nx17-gate-probes.mjs` 的 `known gap NX-24` 组）。不依赖其他任务，可独立验收。状态：**done**（2026-10-01，零付费）。**方向是放宽**——NX-19 修的是「真正会执行的文本被顶层分词漏掉」，本轮修的是反面：**闸门自己的词法与真实 shell 不一致，把数据当成了路径或变量**。子步骤与提交边界见 [TASKS 的 NX-24 一节](TASKS.md#nx-24-闸门词法偏差的误拒收口)，展开与绑定模型见 [PLAN 的 D-13](PLAN.md#d-13-环境展开与命令内绑定)。
