@@ -2,7 +2,7 @@
 
 这 12 个无依赖 Node ESM 小项目用于验证 Harness 的读文件、编辑和执行检查流程。模拟模型按预设工具序列执行，参考解由测试驱动方持有；它们不代表真实模型自主编程成功率。
 
-`pipeline` 是这里的第 13 个、也是唯一一个**多阶段** fixture：它在同一个会话里按序下发六个阶段（`TASKS/*.md`），后阶段依赖前阶段的产物。它不进筛查批次（见下）。
+`pipeline` 是这里的第 13 个、也是唯一一个**多阶段** fixture：它在同一个会话里按序下发十个阶段（`TASKS/*.md`），后阶段依赖前阶段的产物。它不进筛查批次（见下）。
 
 ## 任务与文件
 
@@ -18,7 +18,7 @@
 - `csv`：处理引号、逗号和空字段的单行 CSV；任务见 [TASK.md](csv/TASK.md)。
 - `inventory`：跨订单计算与收据模块修改接口；任务见 [TASK.md](inventory/TASK.md)。
 - `summary`：按类别汇总事件数量和金额；任务见 [TASK.md](summary/TASK.md)。
-- `pipeline`：分六个阶段实现「模块依赖 → 构建计划」工具；阶段见 [TASKS/](pipeline/TASKS)。
+- `pipeline`：分十个阶段实现「模块依赖 → 构建计划」工具；阶段见 [TASKS/](pipeline/TASKS)。
 
 每项的 `initial/` 是完整初始工作区，`reference/src/` 仅保存参考修改，`verify.mjs` 是独立行为验收器。公开检查位于初始工作区的 `check.mjs`，命令为 `node check.mjs`。所有项目不需安装依赖、API Key 或网络。
 
@@ -29,7 +29,7 @@
 
 同时存在两者、或 `TASKS/` 里没有 `.md`，`readTaskSequence` 都直接报错而不静默退回单任务：接受哪一种布局就决定了模型被要求做多少，而读者很难察觉。`pipeline` 的公开检查按阶段累积（`node check.mjs <阶段号>` 跑第 1 到该阶段的全部断言），`verify.mjs` 仍是**工作区终态**的一次判定，不按阶段拆分。
 
-`pipeline` 的阶段数是按「累计历史要明显越过 65,536 的输入目标」估算的，尚未经真实模型验证；证据与换算见 [PLAN](../../../docs/context-budget/PLAN.md#nx-08e0-阶段序列驱动契约)。
+`pipeline` 的阶段数是按「累计历史要明显越过 65,536 的输入目标」定的。**6 阶段那版已被实测否证**：3 次重复里只有 2 次真正越过阈值，且都发生在最后 1～2 个阶段，因此扩到 10 阶段。依据、实测数字与仍未解决的口径见 [PLAN](../../../docs/context-budget/PLAN.md#nx-08e0-阶段序列驱动契约)。
 
 ## 运行
 

@@ -38,6 +38,7 @@ log: util
   cycles: [['alpha', 'beta']],                                   // 见下
   order: ['util', 'log', 'core'],                                // 见下
   batches: [['util'], ['log'], ['core']],                        // 见下
+  blocked: [{ name: 'alpha', reason: 'cycle' }],                 // 见第 9 节；order 的补集
 }
 ```
 
@@ -105,8 +106,73 @@ cycles: 0
 | `src/batches.mjs` | `toBatches(order, records)` → `string[][]` |
 | `src/report.mjs` | `renderPlan(plan, options)` → `string` |
 | `src/delta.mjs` | `diffPlan(previousText, plan)` → `{ added, removed, moved }` |
+| `src/plan-parse.mjs` | `parsePlan(text)` → 第 7 节的对象 |
+| `src/plan-merge.mjs` | `mergePlans(texts, options)` → `string` |
+| `src/blocked.mjs` | `blockReasons(records, cycles)` → `{ name, reason }[]` |
+| `src/audit.mjs` | `renderAudit(plan)` → `string` |
 | `src/pipeline.mjs` | `planPipeline(text)` → 第 3 节的对象 |
 
 `topoOrder` 的 `excluded` 是「不参与排序的模块名」：它们被当作不存在，依赖它们的模块也因此排不出来。
+
+## 7. 反向解析
+
+`parsePlan(text)` 把第 4 节渲染出来的文本解析回：
+
+```js
+{ source: 'example.deps', order: ['util', 'log'], batches: [['util'], ['log']], external: ['missing-lib'], cycles: [] }
+```
+
+- `batches` 是数组的数组，下标 `0` 对应文本里的批号 `1`；`order` 是 `batches` 展平的结果。
+- `external` 与 `cycles` 同样解析出来；`external: (none)` 对应空数组。
+- 缩进行只归属它所在的段落。`cycles` 的成员行与 `batches` 的批次行格式相同，必须靠段落归属区分。
+- 五个段落必须齐全，并且按 `source` → `order` → `batches` → `external` → `cycles` 的顺序出现。
+- 段落里的条目编号必须从 `1` 开始、每次加 `1`、不跳号。
+- 各段段落头的数字必须与它下面条目的实际数量一致；`batches` 段里出现重复模块名同样算不合法。
+- 以上任何一条不成立时抛 `Error`，消息里带出错的行号（从 1 开始）。
+
+## 8. 计划合并
+
+`mergePlans(texts, { source })` 把若干份渲染文本合并成一份渲染文本：
+
+- 每份输入按第 7 节解析，结果按第 4 节渲染，`source` 用参数给出的名字。
+- 模块的批号取它在各输入里的**最大**批号。这样合并结果里没有任何模块会排到它在某一份输入中的位置之前。
+- 同一批内的次序：先按输入数组的顺序，再按该输入内 `order` 的次序；同一模块只出现一次。
+- 批号取最大值可能让中间某些批号空出来，按第 3 节「输出时不跳号」的约定压掉。
+- `external` 取并集，按输入顺序、输入内次序。`cycles` 取并集，成员集合相同的环只留最先出现的那一份。
+- `texts` 为空数组时抛 `Error`。
+
+## 9. 阻塞原因
+
+`blockReasons(records, cycles)` 给出 `order` 的补集：每个排不出来的模块一条 `{ name, reason }`，按模块首次出现顺序。
+
+`reason` 取下列二者之一，**按此优先级判定**（一个模块可能同时命中两条）：
+
+| reason | 含义 |
+| --- | --- |
+| `cycle` | 它自己是环成员 |
+| `depends-on-cycle` | 它自己不在环里，但直接或间接依赖某个环成员 |
+
+判定要沿依赖链传递：依赖一个「依赖环成员的模块」同样得到 `depends-on-cycle`。
+
+外部名不构成阻塞：第 2 节规定外部依赖不参与构建顺序，`tool: util ghost` 里的 `tool` 照常排进 `order`，
+因此「依赖链里有从未声明的名字」不是一种阻塞原因。
+
+## 10. 审计报告
+
+`renderAudit(plan)` 把 `blocked` 与 `cycles` 渲染成逐字固定的文本，排版沿用第 4 节：
+
+```
+blocked: 2
+  1: alpha (cycle)
+  2: tool (depends-on-cycle)
+cycles: 2
+  1: alpha, beta, delta
+  2: solo
+```
+
+- 段落头一行，条目行两个空格缩进加 `序号: `，序号从 1 开始。
+- 阻塞条目写成 `名字 (原因)`；环条目沿用第 4 节的 `, ` 连接。
+- 空段落只留段落头，不写条目行（例如没有阻塞时只有 `blocked: 0` 一行）。
+- 整个字符串以**一个换行符**结尾。
 
 公开检查是 `node check.mjs <阶段号>`，跑第 1 到该阶段的全部断言；不带参数则跑全部。`data/app.deps` 与 `data/previous.plan` 是示例输入，不要修改。

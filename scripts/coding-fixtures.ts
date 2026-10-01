@@ -21,7 +21,7 @@ const fixtures = path.join(repository, 'test', 'fixtures', 'coding')
 export const fixtureProcessTimeoutMs = 30_000
 const sources: Record<FixtureId, string[]> = {
   boundary: ['src/index.mjs'], options: ['src/join.mjs'], interface: ['src/pricing.mjs', 'src/receipt.mjs'], summary: ['src/summary.mjs'], inventory: ['src/order.mjs', 'src/receipt.mjs'], csv: ['src/csv.mjs'], merge: ['src/merge.mjs', 'src/value.mjs'], retry: ['src/retry.mjs'], query: ['src/query.mjs'], pagination: ['src/page.mjs'], dedupe: ['src/unique.mjs'], normalize: ['src/name.mjs'],
-  pipeline: ['src/parse.mjs', 'src/order.mjs', 'src/cycles.mjs', 'src/batches.mjs', 'src/report.mjs', 'src/delta.mjs', 'src/pipeline.mjs'],
+  pipeline: ['src/parse.mjs', 'src/order.mjs', 'src/cycles.mjs', 'src/batches.mjs', 'src/report.mjs', 'src/delta.mjs', 'src/plan-parse.mjs', 'src/plan-merge.mjs', 'src/blocked.mjs', 'src/audit.mjs', 'src/pipeline.mjs'],
 }
 async function exists(target: string): Promise<boolean> { return fs.stat(target).then(() => true, () => false) }
 // 一个 fixture 要么是单个任务（TASK.md），要么是同一会话内按序下发的多个阶段（TASKS/*.md，按文件名

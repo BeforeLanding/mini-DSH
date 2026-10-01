@@ -167,9 +167,15 @@ test('a policy with a context target fails clearly when the adapter declares no 
 test('the driver runs every stage of a sequence fixture and sums their counters', { timeout: 60_000 }, async () => {
   const outcome = await runFixtureTask('pipeline', scriptedAdapter)
   const stages = outcome.tasks ?? []
-  assert.equal(stages.length, 6)
+  // 阶段数从 fixture 自己取，不写死：NX-08e2-4 按实测把序列从 6 段扩到 10 段，字面量会让每次调阶段数
+  // 都要回来改这条本来与阶段数无关的用例。它真正要钉的是「每个阶段各跑一次且各拿一个新 taskId」。
+  const fixture = await createFixture('pipeline')
+  const declared = fixture.tasks.length
+  await fixture.close()
+  assert.ok(declared > 1)
+  assert.equal(stages.length, declared)
   // 每个阶段一次 send，各自拿到新的 taskId；先前结束的阶段因此才是可裁剪的旧任务。
-  assert.equal(new Set(stages.map(stage => stage.taskId)).size, 6)
+  assert.equal(new Set(stages.map(stage => stage.taskId)).size, declared)
   assert.ok(stages.every(stage => stage.status === 'completed'))
   assert.equal(outcome.status, stages.at(-1)?.status)
   assert.equal(outcome.accepted, true)

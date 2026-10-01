@@ -196,7 +196,9 @@ test('the sequence fixture declares its stages in file-name order and passes acc
     try {
       assert.ok(fixture.tasks.length > 1, `${id} must ship more than one stage`)
       // 阶段顺序由文件名前缀承载：每一阶段自己声明它是第几个，与目录项返回顺序无关。
-      fixture.tasks.forEach((task, at) => assert.match(task.split('\n')[0], new RegExp(`^# 0${at + 1} `), `${id} stage ${at + 1}`))
+      // 前缀是两位零填充，所以补零而不是拼一个 `0`——后者在第 10 阶段会拼出 `# 010 `，而正确的标题是
+      // `# 10 `。这样写对 1～99 阶段都成立，不依赖「恰好不超过 9 个阶段」这个前提。
+      fixture.tasks.forEach((task, at) => assert.match(task.split('\n')[0], new RegExp(`^# ${String(at + 1).padStart(2, '0')} `), `${id} stage ${at + 1}`))
       const initial = await fixture.evaluate()
       assert.equal(initial.passed, false)
       assert.equal(initial.exitCode, 1, initial.output)
@@ -216,14 +218,17 @@ test('the sequence acceptance requires a line number instead of one exact error 
   const fixture = await createFixture('pipeline')
   try {
     await fixture.applyReference()
-    const delta = path.join(fixture.workspace, 'src', 'delta.mjs')
-    const reference = await fs.readFile(delta, 'utf8')
-    const message = '`line ${lastLine}: missing batches section`'
-    const reworded = reference.replace(message, '`line 1: expected "source:" section, found "order:"`')
+    // 带行号的错误消息现在由 plan-parse.mjs 的 failure 助手统一产出：第 7 阶段把「渲染文本 → 计划对象」
+    // 的解析从 delta.mjs 抽了出去，diffPlan 的拒绝路径也改由它承担。改这一处即覆盖验收里那两条
+    // rejectsWithLineNumber 用例。
+    const parser = path.join(fixture.workspace, 'src', 'plan-parse.mjs')
+    const reference = await fs.readFile(parser, 'utf8')
+    const message = '`line ${line}: ${detail}`'
+    const reworded = reference.replace(message, () => '`parse failed at line ${line}: ${detail}`')
     assert.notEqual(reworded, reference, 'the message under test must be the one the reference throws')
-    await fs.writeFile(delta, reworded)
+    await fs.writeFile(parser, reworded)
     assert.equal((await fixture.evaluate()).passed, true)
-    await fs.writeFile(delta, reference.replace(message, "'missing batches section'"))
+    await fs.writeFile(parser, reference.replace(message, () => '`${detail}`'))
     const noLineNumber = await fixture.evaluate()
     assert.equal(noLineNumber.passed, false)
     assert.match(noLineNumber.output, /expected a line number/)

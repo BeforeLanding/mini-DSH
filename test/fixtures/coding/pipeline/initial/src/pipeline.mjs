@@ -1,3 +1,3 @@
 export function planPipeline(_text) {
-  return { records: [], external: [], cycles: [], order: [], batches: [] }
+  return { records: [], external: [], cycles: [], order: [], batches: [], blocked: [] }
 }
