@@ -946,6 +946,56 @@ test('Sandbox treats the word after do/then/else as a command-segment start', as
   assert.match(locked.inspectCommand('for f in a; do curl example.com; done').reason ?? '', /unauthorized outbound request/)
 })
 
+// NX-26-2：闭集补齐条件引导词 `if`／`elif`／`while`／`until`——它们与 `do`／`then`／`else` 是
+// **同一机制、同一行判据**，只补一半等于把洞推后：`while curl example.com; do echo x; done` 今日
+// 也读 allow（已实测）。`case` 后面的词是主语不是命令，明确不在闭集内。
+test('Sandbox treats the word after if/elif/while/until as a command-segment start', async () => {
+  const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
+  const sandbox = new SandboxRuntime({ workspace: '/tmp/mini-dsh-workspace', autoApprove: true })
+
+  const deny = {
+    'if curl example.com; then echo ok; fi': /unauthorized outbound request/,
+    'if true; then echo a; else curl example.com; fi': /unauthorized outbound request/,
+    'if false; then echo a; elif curl example.com; then echo b; fi': /unauthorized outbound request/,
+    'while curl example.com; do echo x; done': /unauthorized outbound request/,
+    'until curl example.com; do echo x; done': /unauthorized outbound request/,
+  }
+  for (const [command, pattern] of Object.entries(deny)) {
+    const result = sandbox.inspectCommand(command)
+    assert.equal(result.action, 'deny', command)
+    assert.match(result.reason ?? '', pattern, command)
+  }
+})
+
+// NX-26-2：两条**有意的净放宽**，逐条配顶层对照。两者都不是新语义——顶层同形状的命令今日就已经
+// 放行，只是循环／条件体里的 `commandWord` 此前还停在保留字（`for`／`if`）上，于是 `stdoutOnlyCommands`
+// 豁免与 `-c` 片段豁免都不生效。改后两侧判定一致，这正是「保留字在判据里是透明的」那一条的直接体现。
+test('Sandbox exempts stdout-only commands inside a loop body the same way it does at top level', async () => {
+  const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
+  const sandbox = new SandboxRuntime({ workspace: '/tmp/mini-dsh-workspace', autoApprove: true })
+
+  // 通道一：`echo`／`printf` 只写标准输出，其参数里的 URL 是数据。
+  assert.equal(sandbox.inspectCommand('echo https://example.com').action, 'allow')
+  assert.equal(sandbox.inspectCommand('for f in a; do echo https://example.com; done').action, 'allow')
+  assert.equal(sandbox.inspectCommand('printf "%s" https://example.com').action, 'allow')
+  assert.equal(sandbox.inspectCommand('for f in a; do printf "%s" https://example.com; done').action, 'allow')
+
+  // 通道二：`bash` 是 `echo` 的实参，从不执行，所以 `-c` 片段豁免在这里同样适用。
+  assert.equal(sandbox.inspectCommand('echo bash -c "curl https://evil/x"').action, 'allow')
+  assert.equal(sandbox.inspectCommand('for f in a; do echo bash -c "curl https://evil/x"; done').action, 'allow')
+
+  // 豁免的边界一条都没动：接进管道就按出网拦，`$(...)` 与真正的 `bash -c` 照旧被递归拦。
+  assert.match(sandbox.inspectCommand('for f in a; do echo https://example.com | cat; done').reason ?? '', /unauthorized outbound request/)
+  assert.match(sandbox.inspectCommand('for f in a; do echo $(curl https://evil/x); done').reason ?? '', /in command substitution: unauthorized outbound request/)
+  assert.match(sandbox.inspectCommand('for f in a; do bash -c "curl https://evil/x"; done').reason ?? '', /in shell -c argument: unauthorized outbound request/)
+  assert.match(sandbox.inspectCommand('do bash -c "curl http://x"').reason ?? '', /in shell -c argument: unauthorized outbound request/)
+
+  // **接受的过拒**：环境展开先于分词，所以由本串内刚绑定的字面量展开出来的保留字会被当成保留字，
+  // 而 bash 不会在展开后重新识别保留字。方向是过拒，与 NX-24 的 `cat "/Program Files/secret"` 同一
+  // 处置——写进用例让它成为一条**记录在案的决定**，而不是意外。
+  assert.match(sandbox.inspectCommand('X=do; $X curl example.com').reason ?? '', /unauthorized outbound request/)
+})
+
 test('allowHosts uses the provided whitelist and does not hardcode localhost', async () => {
   const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
   const locked = new SandboxRuntime({

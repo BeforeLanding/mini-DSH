@@ -6,8 +6,9 @@ import { resolveInside } from '../utils/path.js'
 const stdoutOnlyCommands = new Set(['echo', 'printf'])
 
 // 引入命令位置的 shell 保留字：它们自己不是命令，**紧随其后的一个 token** 才是命令词的起点
-// （`for f in a; do curl example.com; done` 里的 `curl`）。
-const commandIntroducers = new Set(['do', 'then', 'else'])
+// （`for f in a; do curl example.com; done` 里的 `curl`）。这是一份**闭集**：终结符（`fi`／`done`／
+// `esac`）之后没有新命令，`case` 后面的词是主语不是命令，`in`／`!`／`time` 不引入命令位置。
+const commandIntroducers = new Set(['if', 'elif', 'while', 'until', 'do', 'then', 'else'])
 
 // 取网命令里「取值不是网络目标」的旗标。这些旗标后面的 token 只是取值，不做主机判定——
 // 否则 `curl -o out.txt http://localhost/x` 会把输出文件名 out.txt 当成主机而误拒
