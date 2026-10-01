@@ -72,7 +72,20 @@ const previous = [
   '',
 ].join('\n')
 assert.deepEqual(diffPlan(previous, plan), { added: ['util'], removed: ['legacy'], moved: [{ name: 'tool', from: 3, to: 2 }] })
-assert.throws(() => diffPlan('order: 1\n', plan), /missing batches section/)
-assert.throws(() => diffPlan('totally wrong\n', plan), /unknown header/)
+// SPEC 第 5 节要求的是「文本不符合第 4 节的渲染格式时抛 Error，消息里带行号」，措辞由实现自己定。
+// 这里原先钉的是参考解恰好吐出的两个字符串，于是按 SPEC 实现、只是换了消息文本的解法也会失败——验收比
+// 任务说明更严，NX-08e2 的烟测就撞在这上面。现在断言 SPEC 真正要求的东西：拒绝，且消息里有行号。
+const rejectsWithLineNumber = text => {
+  try {
+    diffPlan(text, plan)
+  } catch (error) {
+    assert.ok(error instanceof Error, `expected an Error for ${JSON.stringify(text)}`)
+    assert.match(error.message, /line \d+/, `expected a line number for ${JSON.stringify(text)}`)
+    return
+  }
+  assert.fail(`expected diffPlan to reject ${JSON.stringify(text)}`)
+}
+rejectsWithLineNumber('order: 1\n')
+rejectsWithLineNumber('totally wrong\n')
 
 console.log('acceptance passed: pipeline')

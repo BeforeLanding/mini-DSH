@@ -2,6 +2,36 @@
 
 更新：2026-10-01。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-08e2-5 验收放宽到 SPEC 的实际要求
+- 关联：NX-08e2 烟测暴露的夹具缺陷。状态：done（2026-10-01，本地通过）。本次不调用真实模型。
+- **为什么改**：`pipeline` 的独立验收 `verify.mjs` 断言 `diffPlan('order: 1\n', plan)` 抛出的消息匹配 `/missing batches section/`、`diffPlan('totally wrong\n', plan)` 匹配 `/unknown header/`。这两句话 SPEC **没写**、`TASKS/06-delta.md` **没写**、模型可见的公开检查 `check.mjs` **也没有**——它们只是参考解 `delta.mjs` 恰好吐出的字符串。而 SPEC 第 5 节与 `TASKS/06-delta.md` 实际要求的是「抛 `Error`，消息里带从 1 开始的行号」。于是**按 SPEC 实现、只是换了错误消息的解法会失败**：NX-08e2 的烟测正是如此，模型抛 `line 1: expected "source:" section, found "order:"`（带行号，符合 SPEC），却在第 75 行被判不通过，而那一行之前的断言——含两条功能性 `diffPlan` 比较——全部通过。
+- **改法**：把两条断言换成 `rejectsWithLineNumber(text)`，断言「必须拒绝」且「消息里有 `line <数字>`」。`missing batches section` 这个**条件**仍被覆盖（输入缺 `batches` 段就必须报错），只是不再钉措辞。验收应当由任务说明决定；改之前是验收比说明更严。
+- **参考解随之自洽**：原参考解抛的 `missing batches section` **不带行号**，与它自己那份 SPEC 的那句话相抵触。现在改为指向最后一行有内容的行（`line ${lastLine}: missing batches section`）——文本就是在那里结束、而没有出现 `batches` 段的。
+- **防止放宽变成空断言**：新增用例 `the sequence acceptance requires a line number instead of one exact error wording`（`test/coding-fixtures.test.ts`）同时钉两个方向——把参考解的消息替换成**烟测里模型抛的那条**（措辞完全不同、带行号）后验收仍通过；替换成**不带行号**的消息后验收必须失败并给出「expected a line number」。只用前者会退化成「只要抛点东西就算过」。
+- **不影响既有读数**：裁剪触发点与验收措辞无关，NX-08e2-3 的逐阶段投影读数不需要重测，也**不需要重跑付费烟测**。
+- 验证：`pnpm test`（191/191，新增 1 条，无失败/跳过）、`pnpm fixtures:check`（13 项、初始 13/13 以退出码 1 失败、参考 13/13 通过、`expected` 全为真，退出码 0）、`pnpm eval:offline`（planned 12、accepted 12，退出码 0）、`pnpm check`（84 文件）在本机通过。未产生付费请求。
+
+## NX-08e2-3 `pipeline` 的真实模型烟测与结论
+- 关联：NX-08e2 的核心测量——6 个阶段是否足以触发上下文裁剪。状态：done（2026-10-01）。**首次为 e2 调用付费模型**：`deepseek/deepseek-v4-flash`（服务端回显 `deepseek-flash`），1 次序列运行，成本约 **$1**（input 2,125,115 + output 63,044，按 PLAN 的 flash 峰值口径估算）。
+- 命令：`pnpm eval:sequence`（等于 `node dist/scripts/eval-screening.js --phase sequence`），证据在 `.eval-evidence/sequence-full/`（不入库）。协议探测与 NX-08d 一致：回显 `model=deepseek-flash`，流式路径 `complete=true`、usage 来自 provider。
+- **结论：6 个阶段足够，触发点是第 4 个阶段。** 因此 NX-08e2-4（增减阶段）**不需要执行**。
+
+| 阶段 | 状态 | 请求 | 工具 | token | 峰值估算输入 | 首次裁剪于第几次投影 | 被丢掉的旧阶段 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 01 parse | completed | 7 | 9 | 58,351 | 13,757 | — | — |
+| 02 order | completed | 5 | 6 | 93,939 | 23,951 | — | — |
+| 03 cycles | completed | 9 | 9 | 299,853 | 42,592 | — | — |
+| 04 batches | completed | 9 | 10 | 480,928 | **63,710** | **第 8 次** | 01 |
+| 05 report | completed | 8 | 8 | 484,792 | 65,496 | 第 1 次 | 01, 02 |
+| 06 delta | completed | 15 | 14 | 770,296 | 63,741 | 第 1 次 | 01, 02, 03, 04 |
+
+- 全序列 53 请求 / 56 工具 / 2,188,159 token，主动时间约 293 秒；`completed=1`、`stopped=0`、`errored=0`；usage **53/53 来自 provider**（估算 0）。
+- **阶段 1–3 从未裁剪、阶段 4 才首次裁剪**，与 `groupHistory` 只在 `run/finish` 之后把组标 `complete` 的结构约束一致：阶段 1 若出现 `removedTaskIds` 就是驱动接线错误。阶段 4 的峰值 63,710 逼近输入目标 65,536，第 8 次投影越过它并丢掉最旧的阶段；此后进入 e0-3 探针预测过的**滚动状态**——阶段 5 从第 1 次投影起就丢，阶段 6 把前四个阶段全丢，只留自己（current task 恒受保护）。
+- **没有被 `max_steps` 截断的阶段**：最高 15 次请求、77 万 token，都远低于每阶段 32 请求 / 2,000,000 token 的 `singleRunBudget`。因此这些历史规模是模型自然走出来的，不是预算截断的产物——e0-3 提示的那个伪信号没有出现。
+- **一处口径必须写清**：`estimatedInputTokens` 是裁剪**后**的值，所以阶段 5/6 的「最后一次投影」反而比峰值小（62,699 / 52,025）。真正说明「这一阶段自己长了多少」的是 `maxEstimatedInputTokens` 与相邻阶段的增长，而不是最后一个读数。
+- **验收结论 `accepted=false`（退出码 1，受保护文件未改动），但失败点不是功能**：`verify.mjs` 断言 `diffPlan('order: 1\n', plan)` 的消息匹配 `/missing batches section/`，模型抛的是 `line 1: expected "source:" section, found "order:"`。该短语 SPEC 第 5 节没写、`TASKS/06-delta.md` 没写、模型可见的 `check.mjs` 也没有；第 75 行之前的断言**全部通过**（含 `diffPlan(rendered, plan)` 与 `diffPlan(previous, plan)` 两条功能性比较），第 75 行之后没有执行。所以这是一条验收比任务说明更严的失败，处置见 NX-08e2-5。
+- 验证：`pnpm eval:sequence`（planned 1、executed 1、`aborted=null`，退出码 0——未通过验收是评测数据而非脚本失败）。逐阶段读数取自 `runs.jsonl` 的 `tasks[]`。
+
 ## NX-08e2-2 真实适配器入口按阶段参数化
 - 关联：NX-08e2 的第二步，让 `pipeline` 有真实入口且上限口径在开跑前固定。状态：done（2026-10-01，本地通过）。本次不调用真实模型。
 - **为什么需要**：`scripts/eval-screening.ts` 把 `phase` 写死为 `'screening'`，`phaseCaps` 只有 `screening`/`armA`/`armB`。多阶段 fixture `pipeline` 因此没有真实入口——用 `--tasks pipeline` 跑会套错 phase 标签与上限。

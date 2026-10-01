@@ -6,10 +6,14 @@ function readBatches(text) {
   const batches = new Map()
   let section = ''
   let seenBatches = false
+  // SPEC 第 5 节要求这类错误的消息里带行号，因此「缺 batches 段」也必须有行号可指：指向最后一行有内容的
+  // 行——文本就是在那里结束、而没有出现 batches 段的。
+  let lastLine = 1
   const lines = String(text).split('\n')
   for (let at = 0; at < lines.length; at += 1) {
     const line = lines[at].trimEnd()
     if (!line) continue
+    lastLine = at + 1
     if (/^\s/.test(line)) {
       if (section !== 'batches') continue
       const entry = /^\s+(\d+):\s*(.*)$/.exec(line)
@@ -26,7 +30,7 @@ function readBatches(text) {
     section = line.slice(0, line.indexOf(':'))
     if (section === 'batches') seenBatches = true
   }
-  if (!seenBatches) throw new Error('missing batches section')
+  if (!seenBatches) throw new Error(`line ${lastLine}: missing batches section`)
   return batches
 }
 

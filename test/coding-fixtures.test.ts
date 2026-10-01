@@ -209,6 +209,27 @@ test('the sequence fixture declares its stages in file-name order and passes acc
   }
 })
 
+// 验收放宽之后必须能同时证明两件事，否则「放宽」会退化成「只要抛点东西就算过」：换成别的措辞、只要带
+// 行号仍然通过；去掉行号则必须仍然失败。前者正是 NX-08e2 烟测里模型抛出的那条消息——它按 SPEC 实现了
+// 行为，却因为私有断言钉了参考解恰好吐出的字符串而被判失败。
+test('the sequence acceptance requires a line number instead of one exact error wording', async () => {
+  const fixture = await createFixture('pipeline')
+  try {
+    await fixture.applyReference()
+    const delta = path.join(fixture.workspace, 'src', 'delta.mjs')
+    const reference = await fs.readFile(delta, 'utf8')
+    const message = '`line ${lastLine}: missing batches section`'
+    const reworded = reference.replace(message, '`line 1: expected "source:" section, found "order:"`')
+    assert.notEqual(reworded, reference, 'the message under test must be the one the reference throws')
+    await fs.writeFile(delta, reworded)
+    assert.equal((await fixture.evaluate()).passed, true)
+    await fs.writeFile(delta, reference.replace(message, "'missing batches section'"))
+    const noLineNumber = await fixture.evaluate()
+    assert.equal(noLineNumber.passed, false)
+    assert.match(noLineNumber.output, /expected a line number/)
+  } finally { await fixture.close() }
+})
+
 async function runFixtureAcrossBudgetStop(id: FixtureId) {
   const fixture = await createFixture(id), root = new Context()
   try {
