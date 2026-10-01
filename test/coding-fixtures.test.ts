@@ -214,7 +214,9 @@ test('the bounded-tool-output fixture is a single task whose report dwarfs the i
     const report = spawnSync(process.execPath, ['report.mjs'], { cwd: fixture.workspace, encoding: 'utf8', timeout: fixtureProcessTimeoutMs, maxBuffer: 16 * 1024 * 1024, windowsHide: true })
     assert.equal(report.status, 0, report.stderr)
     assert.ok(Buffer.byteLength(report.stdout) > 512 * 1024, `report was ${Buffer.byteLength(report.stdout)} bytes`)
-    assert.ok(estimateText(report.stdout) > 4 * (evalPolicy.inputTargetTokens ?? 0), `report was ${estimateText(report.stdout)} tokens`)
+    // 余量取 3 倍：报告必须大到「一条不截断的结果就足以把当前 task 顶过输入目标」，而不是刚刚够。实测
+    // 3.41 倍（745,243 字节 / 223,573 估算 token）；NX-08f-4c 从报告里去掉散文规则后由 4.23 倍降到这个值。
+    assert.ok(estimateText(report.stdout) > 3 * (evalPolicy.inputTargetTokens ?? 0), `report was ${estimateText(report.stdout)} tokens`)
     // 三条缺陷轴各自都要有违规：只有一条轴时「报告里同时存在多种线索」就成了偶然，改生成器时这条会挡一下。
     assert.match(report.stdout, /^SUMMARY \d+$/m)
     for (const field of ['name', 'email', 'amount']) assert.match(report.stdout, new RegExp(`^KIND ${field} [1-9]\\d*$`, 'm'))
