@@ -140,7 +140,7 @@ NX-11-2…NX-11-5 这四步的验收**弱于** NX-11-6：那时锚点回归测�
 
 ### NX-08h 打破任务集天花板（方案 2，无公开检查变体）
 
-**进行中（2026-10-01，用户选定「只做方案 2」）。** 承接 [NX-08g0](CHANGES.md#nx-08g0-任务集天花板效应定性边界与补救排序) 的**方案 2**：「增设**无公开检查**变体：工作区不含 `check.mjs`，只能按 SPEC 自验」。NX-08g0 判定的天花板效应是——两处独立测量都取满值（NX-08d 筛查 12/12、NX-08e 对照 A 6/6），**方差为零**，以 `accepted` 为分子的通过率统计量**没有分辨力**。机制之一是**公开且受保护的 `check.mjs` 就在工作区里、十四个阶段的说明全都给出 `node check.mjs N` 这个命令**，模型不必一次写对，只需能收敛到绿。
+**离线部分已完成（2026-10-01，零付费）；付费烟测待单独授权。** 用户选定「只做方案 2」。承接 [NX-08g0](CHANGES.md#nx-08g0-任务集天花板效应定性边界与补救排序) 的**方案 2**：「增设**无公开检查**变体：工作区不含 `check.mjs`，只能按 SPEC 自验」。NX-08g0 判定的天花板效应是——两处独立测量都取满值（NX-08d 筛查 12/12、NX-08e 对照 A 6/6），**方差为零**，以 `accepted` 为分子的通过率统计量**没有分辨力**。机制之一是**公开且受保护的 `check.mjs` 就在工作区里、十四个阶段的说明全都给出 `node check.mjs N` 这个命令**，模型不必一次写对，只需能收敛到绿。
 
 **它测的是另一件事。** 现有 fixture 测「有完整、即时、廉价 oracle 时能否收敛」；去掉 oracle 之后测的是「能否按 SPEC 独立产出正确实现」。
 
@@ -155,16 +155,18 @@ NX-11-2…NX-11-5 这四步的验收**弱于** NX-11-6：那时锚点回归测�
 | 子步骤 | 内容 | 验收 | 提交边界 |
 | --- | --- | --- | --- |
 | NX-08h-0 | TASKS 立项与 PLAN 预注册节（**done**） | `grep -cE '^\| NX-08h-' docs/context-budget/TASKS.md` = 9；每行「验收」列至少含一个反引号命令或可判定的 `grep`/退出码判据；PLAN 新节写死规模、可比性、三条判据（打破／因其它原因被拒／未被打破）与「无论结果如何不改 fixture」；`git diff --stat` 只含两份 `docs/context-budget/` 文件 | 1 次 |
-| NX-08h-1 | 建 `blind` fixture 骨架与注册表 | `test/fixtures/coding/blind/` 存在且 `initial/` 下**无** `check.mjs`；`blind/verify.mjs` 与 `pipeline/verify.mjs` **仅 marker 一行不同**（`diff` 输出恰为该行）；`grep -c blindIds scripts/coding-fixtures.ts` ≥ 2；`sources.blind` 与 `sources.pipeline` 逐字相同；`pnpm check` 通过 | 1 次 |
-| NX-08h-2 | 改写阶段说明与 SPEC | `grep -rln 'check\.mjs' test/fixtures/coding/blind/initial test/fixtures/coding/blind/TASKS` **输出为空**；`grep -c '^\| NX-08h-' docs/context-budget/TASKS.md` 不变；十四份 `TASKS/*.md` 与 `pipeline` 对应文件的差异**只在末段**（`diff` 逐份核对记入 CHANGES）；文本不含「变体」等元信息 | 1 次 |
-| NX-08h-3 | 阶段枚举与上限 | `pnpm test` 中 `pre-registered caps match PLAN…` 用例绿且 `batchCaps` 仍为 `{18, 3_200, 88_000_000}`；`grep -n "'blind'" scripts/eval-runner.ts scripts/eval-cli.ts` 各至少命中 `PhaseName`／`phaseCaps`／`phaseNames`／`phaseRegistry` 四处；无 default 的 switch 经 `pnpm check` 证明穷尽 | 1 次 |
-| NX-08h-4 | `blind` 契约与机制证明用例 | `pnpm test` 新增用例全绿，其中机制证明断言：`blind/initial/` 无 `check.mjs`、`initial/` 与 `TASKS/` 文本不含 `check.mjs`、两份 `verify.mjs` 仅 marker 一行差、十四份阶段说明与 `pipeline` 只差末段；注册表五份数组两两互斥；`phaseRegistry('blind')` 逐字等于 `['blind']` | 1 次 |
-| NX-08h-5 | 离线机制证明（零付费） | `pnpm fixtures:check` **16 项、初始 0/16、参考 16/16**；`pnpm test` 全绿；`pnpm check` 90 文件；`pnpm eval:offline` 仍 12/12；三条 `demo:*` 退出 0；**反例实跑**：`blind/verify.mjs` 的 marker 改回 `pipeline` 后 `pnpm fixtures:check` 必须红，改回必须绿（命令与输出记入 CHANGES） | 1 次 |
-| NX-08h-6 | 文档回填（离线收尾） | CHANGES 增 NX-08h 节且命令与实际输出逐字一致；各行置 `done` 并记提交号；README／`test/fixtures/coding/README.md`／PROGRESS 的 `15→16` 项计数与实跑一致，`syntax ok: 90 files` 不变；带日期的历史证据逐字未动 | 1 次 |
+| NX-08h-1 | 建 `blind` fixture 骨架与注册表（**done**） | `test/fixtures/coding/blind/` 存在且 `initial/` 下**无** `check.mjs`；`blind/verify.mjs` 与 `pipeline/verify.mjs` **仅 marker 一行不同**（`diff` 输出恰为该行）；`grep -c blindIds scripts/coding-fixtures.ts` ≥ 2；`sources.blind` 与 `sources.pipeline` 逐字相同；`pnpm check` 通过 | 1 次 |
+| NX-08h-2 | 改写阶段说明与 SPEC（**done**） | `grep -rln 'check\.mjs' test/fixtures/coding/blind/initial test/fixtures/coding/blind/TASKS` **输出为空**；`grep -c '^\| NX-08h-' docs/context-budget/TASKS.md` 不变；十四份 `TASKS/*.md` 与 `pipeline` 对应文件的差异**只在末段**（`diff` 逐份核对记入 CHANGES）；文本不含「变体」等元信息 | 1 次 |
+| NX-08h-3 | 阶段枚举与上限（**done**） | `pnpm test` 中 `pre-registered caps match PLAN…` 用例绿且 `batchCaps` 仍为 `{18, 3_200, 88_000_000}`；`grep -n "'blind'" scripts/eval-runner.ts scripts/eval-cli.ts` 各至少命中 `PhaseName`／`phaseCaps`／`phaseNames`／`phaseRegistry` 四处；无 default 的 switch 经 `pnpm check` 证明穷尽 | 1 次 |
+| NX-08h-4 | `blind` 契约与机制证明用例（**done**） | `pnpm test` 新增用例全绿，其中机制证明断言：`blind/initial/` 无 `check.mjs`、`initial/` 与 `TASKS/` 文本不含 `check.mjs`、两份 `verify.mjs` 仅 marker 一行差、十四份阶段说明与 `pipeline` 只差末段；注册表五份数组两两互斥；`phaseRegistry('blind')` 逐字等于 `['blind']` | 1 次 |
+| NX-08h-5 | 离线机制证明（零付费，**done**） | `pnpm fixtures:check` **16 项、初始 0/16、参考 16/16**；`pnpm test` 全绿；`pnpm check` 90 文件；`pnpm eval:offline` 仍 12/12；三条 `demo:*` 退出 0；**反例实跑**：`blind/verify.mjs` 的 marker 改回 `pipeline` 后 `pnpm fixtures:check` 必须红，改回必须绿（命令与输出记入 CHANGES） | 与 NX-08h-6 同一次（本步不产生文件改动，证据直接写进 CHANGES 的 NX-08h 节） |
+| NX-08h-6 | 文档回填（离线收尾）（**done**） | CHANGES 增 NX-08h 节且命令与实际输出逐字一致；各行置 `done` 并记提交号；README／`test/fixtures/coding/README.md`／PROGRESS 的 `15→16` 项计数与实跑一致，`syntax ok: 90 files` 不变；带日期的历史证据逐字未动 | 1 次（NX-08h-5 的证据一并在此） |
 | NX-08h-7 | 付费烟测（**需单独授权**） | `pnpm eval:screening --phase blind --plan-only` 输出含 `1 个任务 × 1 次重复 = 1 次运行：blind`、`448 请求 / 28000000 token`、末行 `只做计划预演，未建立目录、未发出请求`；随后 `MINI_DSH_EVAL_EVIDENCE_DIR=.eval-evidence/blind-full pnpm eval:screening --phase blind` 退出码与逐阶段读数落盘 | 1 次 |
 | NX-08h-8 | 报告回填 | CHANGES 结果节含 `acceptance.output` 原文、逐阶段 `status`、`protectedFilesChanged`、是否出现 `max_steps`；结论按 PLAN 预注册的三条判据分类，n=1 只作存在性证据，不含任何比例或提升措辞（`grep -nE '提升\|提高\|优于\|更好\|显著\|效率\|收益\|成功率\|%'` 在新增报告节内输出为空） | 1 次 |
 
 NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，**验收只在事后核对差异范围**，不像 NX-11-6 那样有回归测试在写的时候挡住漂移——这一点照实写进 CHANGES。
+
+**离线部分提交**：`75a4614`（NX-08h-0）、`9bfafb4`（NX-08h-1）、`32efaf3`（NX-08h-2）、`a1d1077`（NX-08h-3）、`935b769`（NX-08h-4）、本提交（NX-08h-5＋NX-08h-6）。详细证据见 [CHANGES 的 NX-08h 节](CHANGES.md#nx-08h-打破任务集天花板方案-2无公开检查变体)。
 
 其他待办，按依赖排序：
 

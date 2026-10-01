@@ -2,6 +2,62 @@
 
 更新：2026-10-01。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-08h 打破任务集天花板（方案 2，无公开检查变体）
+
+- 关联：[NX-08g0](CHANGES.md#nx-08g0-任务集天花板效应定性边界与补救排序) 的**方案 2**（「增设**无公开检查**变体：工作区不含 `check.mjs`，只能按 SPEC 自验」）。状态：**离线部分 done**（2026-10-01，零付费）；付费烟测与结果回填另计。子步骤与提交边界见 [TASKS 的 NX-08h 一节](TASKS.md#nx-08h-打破任务集天花板方案-2无公开检查变体)，仪器与预注册见 [PLAN 的 NX-08h 一节](PLAN.md#nx-08h-无公开检查变体blind)。
+- **本次零代码改动**：`src/**` 一行未动（`git diff --stat 75a4614^..HEAD -- src/` 为空）。新增的 `blindIds` 与 `blind` 阶段都落在 `scripts/`（评测与 fixture 注册），不在生产路径上。
+- 提交：`75a4614`（NX-08h-0 立项与 PLAN 预注册）、`9bfafb4`（NX-08h-1 骨架与注册表）、`32efaf3`（NX-08h-2 阶段说明与 SPEC）、`a1d1077`（NX-08h-3 阶段枚举与上限）、`935b769`（NX-08h-4 契约与机制证明用例）、本提交（NX-08h-6 回填）。
+
+### 动因与设计要点
+
+**为什么必须新建 fixture，而不是给 `runFixtureTask` 加「隐藏 check.mjs」的开关。** 机制上不可行：`protectedFiles` 在 `createFixture` 时按 `initial/` 快照（`scripts/coding-fixtures.ts:87`），而 `check.mjs` 不在 `sources.pipeline` 里、因而是受保护项；运行期把它删掉会让 `evaluate()` 的 `lstat` 走 catch 分支（`:99-100`）把它记进 `protectedFilesChanged`，`passed` 恒为 false。要让它能用，就必须再去特判验收器——那正是在改独立验收口径来配合隐藏一个文件，与 NX-08h 自己的要求反向。新建 fixture 还保住两件东西：处理在 fixture 树里可见可评审；`.eval-evidence` 里六个历史目录零扰动。
+
+**仪器与可比性。** `blind` 是 `pipeline` 的复制，**只改三处**：删掉 `initial/check.mjs`；十四份 `TASKS/*.md` 的末句由「完成后运行 `node check.mjs N`」改为按 `docs/SPEC.md` 自验；`initial/docs/SPEC.md` 里两处提到 `check.mjs` 的句子改为只提独立验收。模型、prompt、初始工作区、验收器、单次 run 预算与输入目标 65,536 都与 NX-08e 的 `armB` 一致，**唯一差异是没有公开 oracle**。
+
+**为什么不能并进 `sequenceIds`。** `phaseCaps.sequence.runs = 1` 而 registry 会有 2 项，`repeatCount(1, 2)` 直接抛 `a phase scheduled for 1 runs cannot be split evenly across 2 fixtures`（`scripts/eval-cli.ts:83-88`，已被 `test/eval-cli.test.ts` 钉住）。即便整除，也会让对照 A 的两臂拿到不同的任务集，把被比较的东西从上下文策略换成任务难度。因此单独一份注册表 `blindIds`。
+
+**新阶段 `blind` 不进 `batchPhases`**，与 `sequence`／`smoke` 同口径取逐阶段预算的理论上界（14 × 32 = 448 请求；14 × 2,000,000 = 28,000,000 token）。`batchCaps` 因此保持 `{18, 3_200, 88_000_000}` 不变。**这不是 NX-08h 的正式预注册数字**——NX-08g0 的「不得沿用本轮的 `phaseCaps` 数字」指的是不得搬用 NX-08e 那套对照 A 的上限；`blind` 上的正式对照批次的上限要等本次烟测的实测之后另行确定，理由与 NX-08e2 的教训相同（按外推定的 token 上限被实测推翻过 64%）。
+
+**`phaseCaps` 由测试逐字钉死。** `test/eval-runner.test.ts` 用 `assert.deepEqual(phaseCaps, {…})` 记住全部阶段，加一个阶段而不改它就会红；同一用例里另按 `blind` **自己的**阶段数钉住理论上界，并断言它与 `pipeline` 的阶段数相等——阶段数一旦漂开，两次烟测的读数就不能再并排比。
+
+### 离线证据（零付费）
+
+```
+pnpm check            # syntax ok: 90 files
+pnpm test             # tests 205 / pass 205 / fail 0 / skipped 0（原 203，新增 2 条）
+pnpm fixtures:check   # 退出码 0：16 项，初始通过 0、参考通过 16、expected 全为真
+pnpm eval:offline     # planned 12 / executed 12 / accepted 12（筛查批次未被扰动）
+pnpm demo:fix         # 退出码 0
+pnpm demo:resume      # 退出码 0
+pnpm demo:unknown     # 退出码 0
+```
+
+`fixtures:check` 逐行 JSON 里 `blind` 的两条：
+
+```
+blind: initial passed=false, exitCode=1, 含 AssertionError=true, protectedFilesChanged=[]
+blind: reference passed=true, 输出="acceptance passed: blind"
+```
+
+`pnpm eval:offline` 仍是 12/12，是这次改动的关键旁证：注册表加了一档、`fixtureIds` 由 15 变 16，但筛查批次的清单与上限都没动，NX-08d 的 12/12 因此仍然对应同一个任务集。
+
+### 反例实跑（四条）
+
+机制证明只有在能变红时才算数。四条各自改坏一处、跑、还原、复绿：
+
+| 改坏什么 | 期望 | 实测 |
+| --- | --- | --- |
+| 给 `blind` 的阶段说明加回一行 `node check.mjs 1` | 红 | 红，`AssertionError: blind stage 1` |
+| 删掉 `blind` 阶段说明里一行与公开检查**无关**的内容 | 红 | 红，`stage 3 改掉了一行与公开检查无关的内容：- 环成员必须真的从 order 里消失，而不是留在末尾。` |
+| 把 `blind/verify.mjs` 的 marker 改回 `acceptance passed: pipeline` | 红 | 红，严格相等失败 |
+| 同上，跑 `pnpm fixtures:check` | 退出码 1 | 退出码 1，`blind: reference passed=false, expected=false`；改回后退出码 0 |
+
+第二条是这套仪器最要紧的一条：只断言「不含 `check.mjs`」会放过一整段被改写的任务要求，而那样的改动会让仪器悄悄测起别的东西。
+
+### 一个诚实说明
+
+NX-08h-1 与 NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，它们的验收**只在事后核对差异范围**（逐份 `diff`、`grep` 两类提到公开检查的行），当时并没有回归测试在写的时候挡住漂移——NX-08h-4 的用例是在改写**之后**才写的。这一点与 NX-11-2…NX-11-5 的处境相同，照实写在这里，不假装每步都有同等强度的验收。
+
 ## NX-11 整理设计取舍（五节）
 
 - 关联：路线图 M9 的最后一块（`docs/INTERNSHIP_ROADMAP.md:227`：「整理设计取舍：事件与投影分离、协议完整性、可靠编辑、验证时效和未知副作用恢复。**能从代码和测试解释选择**」）。状态：**done**（2026-10-01，零付费）。子步骤与提交边界见 [TASKS 的 NX-11 一节](TASKS.md#nx-11-整理设计取舍五节零付费)。

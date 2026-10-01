@@ -27,7 +27,7 @@
 | 提交范围 | `0a95a7f`～`c5fc9c4`（共 11 个） | `43e3829` 起 |
 | 语言 | 纯 JavaScript | TypeScript（tsc strict / NodeNext），Node 执行 `dist` 产物 |
 | 工具 | 6 个：`bash` + `read_file`／`write_file`／`edit_file`／`glob`／`grep` | 11 个：`tools/` 的 9 个（上列 6 个再加 `task_changes`／`request_trace`／`task_report`）与插件提供的 2 个（`project_context`／`read_tool_result`） |
-| 测试 | 22 条（`core.test.js` 20 + `integration.test.js` 2） | 202 条；另有 15 项编程 fixture 基线、离线评测入口与三条演示 |
+| 测试 | 22 条（`core.test.js` 20 + `integration.test.js` 2） | 205 条；另有 16 项编程 fixture 基线、离线评测入口与三条演示 |
 | 已有能力 | 基础配置、Session Event Log、Tool Runtime、System Prompt + LLM Adapter、Agent Loop、DeepSeek 适配器、runtime-context、外部插件与 MCP、沙箱与路径闸门、Bash/文件工具 | 上下文投影与裁剪、四维执行预算、JSONL 持久化与崩溃恢复、预算停止后的 `/continue`、有界读取/搜索与大结果回读、可靠编辑与任务变更清单、结构化前台命令、验证记录与交付报告、请求 trace、项目上下文、编程任务 fixture、真实模型评测 |
 
 上表每一行都能在仓库根目录复现（全部离线，不联网）：
@@ -56,8 +56,8 @@ git log --oneline --reverse | sed -n '12p'                # 43e3829：分界之�
 ```powershell
 pnpm install --frozen-lockfile
 pnpm check            # syntax ok: 90 files
-pnpm test             # tests 203 / pass 203 / fail 0 / skipped 0
-pnpm fixtures:check   # 15 项：初始全部失败、参考解全部通过
+pnpm test             # tests 205 / pass 205 / fail 0 / skipped 0
+pnpm fixtures:check   # 16 项：初始全部失败、参考解全部通过
 pnpm eval:offline     # planned 12 / executed 12 / accepted 12
 pnpm demo:fix         # 退出码 0：项目规则 → 定位 → 修改 → 失败测试 → 再修复 → diff 与证据
 pnpm demo:resume      # 退出码 0：预算停止与同 task 恢复
@@ -91,7 +91,7 @@ project-context 插件可通过 `limits` 配置 `maxFileBytes`（默认 16 KiB�
 
 ## 演示
 
-三条零付费入口把 M9 要求的演示做成可直接运行的脚本，配合带 `AGENTS.md` 的 fixture `repair`（15 个 fixture 里唯一带项目规则的一个）。它们只用预设的脚本化模型（`scripted/demo`），不读 `.env`、不出网、不调用付费 API，因此逐字可复现；退出码 0 表示该幕的全部判定成立，任一判定不成立就退出 1 并点名。**绿色只说明 Harness 的行为符合预期，不代表任何模型能力。**
+三条零付费入口把 M9 要求的演示做成可直接运行的脚本，配合带 `AGENTS.md` 的 fixture `repair`（16 个 fixture 里唯一带项目规则的一个）。它们只用预设的脚本化模型（`scripted/demo`），不读 `.env`、不出网、不调用付费 API，因此逐字可复现；退出码 0 表示该幕的全部判定成立，任一判定不成立就退出 1 并点名。**绿色只说明 Harness 的行为符合预期，不代表任何模型能力。**
 
 | 命令 | 展示什么 |
 | --- | --- |
@@ -141,9 +141,9 @@ pnpm check
 pnpm test
 ```
 
-当前 203 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读、可靠编辑/任务变更、结构化命令、验证报告与请求 trace 测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
+当前 205 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读、可靠编辑/任务变更、结构化命令、验证报告与请求 trace 测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
 
-NX-05a 起提供可重复的 [编程任务 fixture](test/fixtures/coding/README.md)，NX-05b 扩展到 12 项，覆盖边界修复、功能扩展、跨文件接口修改、去重、分页、查询重试、合并、CSV、库存与汇总等；此后又加入多阶段序列 `pipeline`、单任务 `audit` 与演示夹具 `repair`，**当前注册表共 15 项 = 筛查 12 项（上列，冻结）+ 这 3 项**。运行 `pnpm fixtures:check` 核验全部 15 项的初始失败/参考通过基线；`pnpm test` 还覆盖模拟模型经真实文件/Bash 工具完成失败→修改→重跑的流程。每次使用新临时工作区，独立验收器保留在工作区外；模拟结果不代表真实模型编程成功率。
+NX-05a 起提供可重复的 [编程任务 fixture](test/fixtures/coding/README.md)，NX-05b 扩展到 12 项，覆盖边界修复、功能扩展、跨文件接口修改、去重、分页、查询重试、合并、CSV、库存与汇总等；此后又加入多阶段序列 `pipeline`、单任务 `audit`、演示夹具 `repair`，以及 `pipeline` 的无公开检查变体 `blind`，**当前注册表共 16 项 = 筛查 12 项（上列，冻结）+ 这 4 项**（`blind` 与 `pipeline` 是同一套任务，只差工作区里有没有公开 `check.mjs`）。运行 `pnpm fixtures:check` 核验全部 16 项的初始失败/参考通过基线；`pnpm test` 还覆盖模拟模型经真实文件/Bash 工具完成失败→修改→重跑的流程。每次使用新临时工作区，独立验收器保留在工作区外；模拟结果不代表真实模型编程成功率。
 
 `pnpm eval:offline` 用模拟模型把 12 个 fixture 跑成一次筛查阶段，用于验证评测运行器与整批上限核算（单次 run 预算与按阶段计数的整批上限见 [PLAN](docs/context-budget/PLAN.md#nx-08-评测批次上限预注册)）。该命令同样不使用真实模型，通过率不作为模型能力证据。
 
@@ -169,7 +169,7 @@ GitHub Actions 在推送到 `main`、提交 Pull Request 或手动触发时运�
 
 筛查与对照 A 两批共 18 次运行**零基础设施失败、零人工介入**，三次实验的不可行项都是 0；usage 全部来自 provider，估算回退一次都没发生。
 
-**链路可用，能力结论不写。** 两处通过率测量都取满值（筛查 12/12、对照 A 6/6），**方差为零**——不是「差异很小」，是「量不出来」，因此以通过次数为分子的任何统计量在此规模下都没有分辨力。机制见 [NX-08g0](docs/context-budget/CHANGES.md#nx-08g0-任务集天花板效应定性边界与补救排序)：工作区里有公开且受保护的 `check.mjs`，十四个阶段的说明又全都以「完成后运行 `node check.mjs N`」结尾，模型不必一次写对、只需能收敛到绿——它确实是这么做的。
+**链路可用，能力结论不写。** 两处通过率测量都取满值（筛查 12/12、对照 A 6/6），**方差为零**——不是「差异很小」，是「量不出来」，因此以通过次数为分子的任何统计量在此规模下都没有分辨力。机制见 [NX-08g0](docs/context-budget/CHANGES.md#nx-08g0-任务集天花板效应定性边界与补救排序)：工作区里有公开且受保护的 `check.mjs`，十四个阶段的说明又全都以「完成后运行 `node check.mjs N`」结尾，模型不必一次写对、只需能收敛到绿——它确实是这么做的。**打破它的方案 2 已由 [NX-08h](docs/context-budget/PLAN.md#nx-08h-无公开检查变体blind) 执行**：新 fixture `blind` 去掉工作区里的公开 `check.mjs`。那是另一套仪器、另一次读数，本段的 12/12 与 6/6 二字未动。
 
 **对照 A 的处理确实生效，但它省下的是上下文规模。** 裁剪臂三次的首次裁剪落在第 8／6／6 个阶段、受处理阶段 7／9／9（共 14）；末阶段峰值估算输入两臂相差 2.65 倍。但两臂的请求数几乎持平、墙钟反而略长——**省的是上下文规模，不是步数或时间**。token 正是这个处理直接改变的指标，属操纵检查，不能当结局。
 

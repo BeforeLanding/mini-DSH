@@ -10,6 +10,8 @@
 
 `repair` 是第 15 个、也是唯一一个带**项目规则**的 fixture：`initial/` 下有根目录 `AGENTS.md` 与 `src/AGENTS.md` 两份规则，作用域不同，模型必须先查 `src` 才拿得到其中一条。它供 [NX-10 的三条演示](../../../README.md#演示)使用，规则随 `project:context` 注入系统提示、也能由 `project_context` 工具查回——这是评测路径（`runFixtureTask` 不装载 `runtime-context`/`project-context`）里不存在的一段。它另有一份 `partial/src/cart.mjs` 中间态（只修好两条规则中的一条），由 [coding-fixtures.test.ts](../../coding-fixtures.test.ts) 钉住「它确实过不了公开检查」。它单独一份注册表 `demoIds`。
 
+`blind` 是第 16 个，本身**不是一套新任务**，而是 `pipeline` 的**无公开检查变体**（NX-08h）：同一套十四个阶段、同一个 `docs/SPEC.md` 与同一份参考解，只去掉 `initial/check.mjs`、并把阶段说明末句由「运行 `node check.mjs N`」改成按 SPEC 自验。差别必须**只有这一件事**——这正是它可用的前提，因为与 `pipeline` 并排读的两个数字只有在这个前提下才能相互解释。它与 `pipeline` 测的不是同一件事：`pipeline` 测「有完整、即时、廉价 oracle 时能否收敛」，`blind` 测「能否按规格独立产出正确实现」，而 [NX-08g0](../../../docs/context-budget/CHANGES.md#nx-08g0-任务集天花板效应定性边界与补救排序) 判定的天花板正来自前者的 oracle。该前提由 [coding-fixtures.test.ts](../../coding-fixtures.test.ts) 的六条断言钉住，其中最强的一条是「从 `pipeline` 去掉的每一行都必须与公开检查有关」——只断言「不含 `check.mjs`」会放过一整段被改写的任务要求。它不进筛查批次、不进阶段序列，单独一份注册表 `blindIds`。
+
 ## 任务与文件
 
 - `boundary`：修复空集合、尾部和小数索引边界；任务见 [TASK.md](boundary/TASK.md)。
@@ -48,13 +50,13 @@ pnpm fixtures:check
 pnpm test
 ```
 
-`fixtures:check` 遍历 `fixtureIds`（筛查批次 12 项 + 阶段序列 + 对照 B 仪器 + 演示夹具），为每个任务新建临时目录，复制初始代码、执行独立验收、应用参考解、再次验收，然后删除本次创建的目录。逐行 JSON 包含初始/参考结果的 passed、退出码、输出及受保护文件变更；全部 15 项均符合“初始失败、参考通过”时命令退出 0，否则退出 1。
+`fixtures:check` 遍历 `fixtureIds`（筛查批次 12 项 + 阶段序列 + 对照 B 仪器 + 演示夹具 + 无公开检查变体），为每个任务新建临时目录，复制初始代码、执行独立验收、应用参考解、再次验收，然后删除本次创建的目录。逐行 JSON 包含初始/参考结果的 passed、退出码、输出及受保护文件变更；全部 16 项均符合“初始失败、参考通过”时命令退出 0，否则退出 1。
 
 `pnpm eval:offline` 只跑**筛查批次**（`screeningIds` 的 12 个单任务 fixture，对上 `phaseCaps.screening.runs = 12`）。多阶段序列属于对照 A 的仪器，不进筛查批次；它的驱动路径由 [eval-runner.test.ts](../../eval-runner.test.ts) 离线覆盖。
 
 测试入口为 [coding-fixtures.test.ts](../../coding-fixtures.test.ts)。它实际装配 Cordis 与文件/Bash 工具，用模拟适配器读取源码、检查失败、编辑并重跑。options 故意先只修 separator，收到 skipEmpty 的失败后再补修；interface 和 inventory 各编辑两个源码文件。最终 run 状态与独立验收结果分别检查，模型回答不会直接变成验收通过。
 
-复用接口在 [coding-fixtures.ts](../../../scripts/coding-fixtures.ts)：`createFixture(id)` 返回 workspace、`tasks`、参考 edits、applyReference、evaluate 和 close。创建者须在 finally 调用 close；参考 edits 只供离线测试驱动使用，后续真实模型评测只发送 `tasks` 和初始工作区。`evaluate` 默认超时 30 秒（`fixtureProcessTimeoutMs`）、输出上限 32 KiB，可通过 timeoutMs / maxOutputBytes 配置。注册表分五份：`screeningIds`（12 个单任务）、`sequenceIds`（阶段序列）、`boundedIds`（对照 B 的单任务仪器）、`demoIds`（演示夹具）、`fixtureIds`（四者之和，`fixtures:check` 用）。`readFixtureFile` 读取 fixture 目录里非 `initial/`／`reference/` 的部位（目前只有 `repair` 的 `partial/`），路径越界直接报错。
+复用接口在 [coding-fixtures.ts](../../../scripts/coding-fixtures.ts)：`createFixture(id)` 返回 workspace、`tasks`、参考 edits、applyReference、evaluate 和 close。创建者须在 finally 调用 close；参考 edits 只供离线测试驱动使用，后续真实模型评测只发送 `tasks` 和初始工作区。`evaluate` 默认超时 30 秒（`fixtureProcessTimeoutMs`）、输出上限 32 KiB，可通过 timeoutMs / maxOutputBytes 配置。注册表分六份：`screeningIds`（12 个单任务）、`sequenceIds`（阶段序列）、`boundedIds`（对照 B 的单任务仪器）、`demoIds`（演示夹具）、`blindIds`（`pipeline` 的无公开检查变体）、`fixtureIds`（五者之和，`fixtures:check` 用）。`readFixtureFile` 读取 fixture 目录里非 `initial/`／`reference/` 的部位（目前只有 `repair` 的 `partial/`），路径越界直接报错。
 
 可信验收器不从候选工作区读取测试逻辑；package.json / check.mjs 的内容和软链状态也受检查。公开检查被删改、只迁移一半接口或导入时提前退出都不会被这组回归误判为通过。临时目录与子进程不是操作系统安全隔离；这是已知离线 fixture 的验收设施，不声称能防御任意恶意代码。NX-05a 本步未新增生产验证事件、版本关联或任务交付报告；后续 NX-15 已独立实现显式文件范围验证与交付查询，仍不将普通 Bash 或 fixture 流程自动标为任务验收。
 
