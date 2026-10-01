@@ -59,3 +59,35 @@
 - **每次请求都要重新投影。** 裁剪是纯计算，长会话里这笔开销重复发生，换来的是不必维护任何投影缓存的一致性。
 - **旧信息可能不在模型眼前。** 被裁掉的旧任务仍然躺在日志里、`/history` 查得到，但模型看不到——这不是 bug，是 D-02 明确接受的代价。
 - **日志只增不减。** 没有 compaction；事件多了之后 `parseLog` 与投影的开销都会涨。要压缩就得先改契约（NX-16 的前提正是如此）。
+
+---
+
+### 2. 协议完整性
+
+**选择。** 送进模型的每一条 `assistant/tool_calls` 都必须带着它每一个调用的结果；裁剪永远不切断配对，停止或取消时也要为每个在途调用补出一条结果——真实完成、明确未执行的 `skipped`，或开始过但结果不可知的 `unknown`。规范条目见 [PLAN 的 D-03 与 D-06](PLAN.md#设计决策及取舍)，验收见 REQUIREMENTS 的 R-03、R-04。
+
+**替代方案及其具体失效。**
+
+- 按「最近 N 条消息」截断：会把 `tool_calls` 和它的结果分到两侧——供应商要么直接拒绝这种请求，要么接受了，而模型看到的是一个已发出、无回音的工具调用。【决策时记录】
+- 只计成功的工具调用：失败与拒批不计数，于是「一直失败、一直重试」不受任何预算约束。只限制循环本身也管不住单批工具的数量。【决策时记录】
+- 停止时不补结果、把调用留在半途：会话里出现一个只有 `tool/start` 的调用，恢复时无从判断它到底跑没跑。【决策时记录】
+- 只保护当前 task，不保护「还带着在途工具的旧任务」：一个已结束但工具没配完的旧任务会被裁掉，而裁掉的正是唯一能解释那一轮的证据。【事后重构】
+- 在投影里就地「修复」——给缺失的结果补一条空结果：事件与投影的边界就没了，而且补出来的东西和真的跑过一遍在日志里长得完全一样。【事后重构】
+
+#### 锚点
+
+| 类型 | 锚点 | 它钉住什么 |
+| --- | --- | --- |
+| 代码 | `src/core/context-runtime.ts:6` | `assertToolProtocol` 对孤立结果、缺失结果、重复或空 id 三种情况直接抛错，不静默丢弃 |
+| 代码 | `src/core/context-runtime.ts:40` | 组内只要还有未配对的调用、或 run 尚未结束，该组就被标成 `protected` |
+| 代码 | `src/core/context-runtime.ts:75` | 返回投影之前再跑一次 `assertToolProtocol`，裁剪不可能产出坏投影 |
+| 代码 | `src/core/agent-loop-runtime.ts:208` | 异常路径为每个在途调用补结果，按「进过工具入口没有」区分 `unknown` 与 `skipped` |
+| 代码 | `src/core/pending-tools.ts:2` | `pendingTools` 是「已声明未配对」的唯一判定，恢复与错误路径共用同一份实现 |
+| 测试 | `test/context.test.ts` · `history groups entire tasks including multiple runs and never splits pending tools` | 带在途工具的组被判 `protected`；`assertToolProtocol` 对缺结果与孤立结果分别抛错 |
+| 测试 | `test/budget.test.ts` · `a batch with one tool allowance executes only the first and pairs all skipped results` | 一批三个工具只执行第一个，其余各有 `skipped` 结果，投影仍然合法 |
+| 测试 | `test/core.test.ts` · `Cancelling a multi-tool turn still records a result for every tool_call` | 取消时每个 `tool_call` 仍拿到结果，数量一一对应 |
+
+#### 代价
+
+- 一批工具在额度将尽时是「执行到额度用尽、其余标 `skipped`」，不是「整批一起拒绝」。顺序执行会留下一个中间态，只能靠 `skipped` 结果把它解释清楚——这一条在 R-04 里是被明确接受的。
+- 受保护的组永远不裁剪。于是一个在途调用始终没被配对的旧任务会一直占着上下文位置。这是有意的取舍：宁可多占，也不裁掉无法解释的那一段。
