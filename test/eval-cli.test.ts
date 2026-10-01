@@ -32,10 +32,13 @@ test('--tasks cannot reach outside the selected phase', () => {
   assert.throws(() => resolvePlanned('screening', ','), /--tasks must name fixture ids/)
 })
 
-// 对照臂的任务集在 NX-08e2 重预注册之前不存在；沿用旧算式（12 任务 × 2 臂 × 3 次）会假装它还成立。
-test('the comparison arms refuse to plan until their task set is re-registered', () => {
-  assert.throws(() => phaseRegistry('armA'), /尚未预注册/)
-  assert.throws(() => resolvePlanned('armB'), /尚未预注册/)
+// 两臂跑同一份任务集是刻意的：对照 A 比较的是上下文策略，不是任务难度；臂间差异只由 eval-runner 的
+// armPolicy 承担（输入目标），因此这里必须相等。
+test('both comparison arms plan the same sequence task set', () => {
+  assert.deepEqual(phaseRegistry('armA'), ['pipeline'])
+  assert.deepEqual(resolvePlanned('armB'), ['pipeline'])
+  assert.equal(evidenceScope('armA', resolvePlanned('armA')), 'full')
+  assert.equal(phaseRegistry('armA').length, sequenceIds.length)
 })
 
 test('arguments are parsed into one options object with screening as the default phase', () => {

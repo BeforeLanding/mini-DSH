@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
-import { evalPolicy, phaseCaps, runPhase, summarize } from './eval-runner.js'
+import { armPolicy, evalPolicy, phaseCaps, runPhase, summarize } from './eval-runner.js'
 import type { RunOutcome } from './eval-runner.js'
 import type { FixtureId } from './coding-fixtures.js'
 import { evidenceScope, parseEvalArguments, resolveContextWindow, resolveInfeasible, resolveModel, resolvePlanned } from './eval-cli.js'
@@ -27,6 +27,8 @@ const infeasible = resolveInfeasible(phase, options.infeasible, options.infeasib
 const scope = evidenceScope(phase, planned)
 const baseUrl = (process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com').replace(/\/+$/, '')
 const contextWindowTokens = resolveContextWindow(process.env, baseUrl)
+// 对照 A 的两臂只差上下文策略（见 eval-runner.ts 的 armPolicy）；其余阶段用的是两臂共用的 evalPolicy。
+const policy = phase === 'armA' || phase === 'armB' ? armPolicy(phase, contextWindowTokens) : evalPolicy
 
 // 证据目录按「阶段 + 覆盖范围」分开放，并一次一跑：烟测的单个任务不会挡住整批，也不会混进整批的
 // 记录；同一范围重复运行时直接拒绝写入，避免“整体重跑”被误读成“同一次运行的追加”。
@@ -39,7 +41,8 @@ const reportPath = path.join(evidenceDirectory, 'report.json')
 // 能在花钱之前被人核对。它必须早于 ensureWritable 与 probeProtocol，否则“预演”自己就已经花掉了钱。
 if (options.planOnly) {
   console.log(`${phase}-${scope}: ${planned.length} 个任务：${planned.join(', ')}`)
-  console.log(`预算：单次 run ${evalPolicy.maxModelRequests} 请求 / ${evalPolicy.maxToolCalls} 工具 / ${evalPolicy.maxActiveDurationMs}ms / ${evalPolicy.maxTotalTokens} token；整批 ${caps.requests} 请求 / ${caps.tokens} token，${caps.runs} 次运行`)
+  console.log(`预算：单次 run ${policy.maxModelRequests} 请求 / ${policy.maxToolCalls} 工具 / ${policy.maxActiveDurationMs}ms / ${policy.maxTotalTokens} token；整批 ${caps.requests} 请求 / ${caps.tokens} token，${caps.runs} 次运行`)
+  console.log(`上下文：输入目标 ${policy.inputTargetTokens} token（对照 A 的臂间差异只在这里）`)
   console.log(`模型：${process.env.MINI_DSH_EVAL_MODEL ?? process.env.MINI_DSH_MODEL ?? '(未设置)'}；端点：${baseUrl}；窗口：${contextWindowTokens}`)
   console.log(`证据目录：${evidenceDirectory}`)
   console.log('只做计划预演，未建立目录、未发出请求')
@@ -54,7 +57,7 @@ if (!modelId) throw new Error('MINI_DSH_MODEL must name a model, e.g. deepseek/d
 
 const adapter = createDeepSeekAdapter({ baseUrl, models: [modelId], contextWindowTokens })
 console.log(`${phase}-${scope}: ${provider}/${modelId} @ ${baseUrl}, window ${contextWindowTokens}, ${planned.length} 个任务`)
-console.log(`预算：单次 run ${evalPolicy.maxModelRequests} 请求 / ${evalPolicy.maxToolCalls} 工具 / ${evalPolicy.maxActiveDurationMs}ms / ${evalPolicy.maxTotalTokens} token；整批 ${caps.requests} 请求 / ${caps.tokens} token`)
+console.log(`预算：单次 run ${policy.maxModelRequests} 请求 / ${policy.maxToolCalls} 工具 / ${policy.maxActiveDurationMs}ms / ${policy.maxTotalTokens} token；整批 ${caps.requests} 请求 / ${caps.tokens} token；输入目标 ${policy.inputTargetTokens}`)
 
 // 先确认这次能落盘再发任何付费请求：证据目录冲突时就该在花钱之前停下。
 if (!options.probeOnly) await ensureWritable()
@@ -76,7 +79,7 @@ const report = await runPhase(phase, planned.map(id => ({ id })), caps, async ta
   const outcome = await runFixtureTask(
     task.id,
     () => ({ provider, model: modelId, capabilities: adapter.capabilities, chat: adapter.chat }),
-    evalPolicy,
+    policy,
     path.join(sessionDirectory, task.id),
   )
   spent.runs += 1
@@ -88,7 +91,7 @@ const report = await runPhase(phase, planned.map(id => ({ id })), caps, async ta
   return outcome
 }, record => (infeasible.ids.has(record.task.id) ? { infeasible: true } : undefined))
 
-const summary = { ...summarize(report), model: `${provider}/${modelId}`, baseUrl, contextWindowTokens, probe, ...(infeasible.reason === undefined ? {} : { infeasibleReason: infeasible.reason }) }
+const summary = { ...summarize(report), model: `${provider}/${modelId}`, baseUrl, contextWindowTokens, inputTargetTokens: policy.inputTargetTokens, probe, ...(infeasible.reason === undefined ? {} : { infeasibleReason: infeasible.reason }) }
 await fs.writeFile(reportPath, `${JSON.stringify({ ...summary, runs: report.executed }, null, 2)}\n`)
 console.log(`\n汇总：${JSON.stringify(summary)}`)
 console.log(`证据：${runLog}\n报告：${reportPath}\n会话：${sessionDirectory}`)

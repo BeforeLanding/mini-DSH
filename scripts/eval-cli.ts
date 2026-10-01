@@ -22,13 +22,13 @@ export interface EvalOptions {
 // 阶段 → 该阶段允许出现的 fixture 清单。默认计划取整份清单，`--tasks` 只能在其内部取子集：允许跨阶段
 // 取任务会让「--tasks pipeline 挂在 screening 阶段」这类错误重新出现，而它恰好会让第 13 个计划任务
 // 撞上 runs = 12 的上限，把「跑了 12 个」读成「筛出了 12 个」。
+// 两臂用同一份任务集是刻意的：对照 A 比较的是上下文策略，不是任务难度；臂之间的差异只由 armPolicy 承担。
 export function phaseRegistry(phase: PhaseName): readonly FixtureId[] {
   switch (phase) {
     case 'screening': return screeningIds
+    case 'armA':
+    case 'armB':
     case 'sequence': return sequenceIds
-    // 对照臂的任务集还没定：PLAN 里的旧算式（12 任务 × 2 臂 × 3 次）在 fixture 变成多阶段序列后作废，
-    // 要等 NX-08e2 的烟测结论重算。在此之前让 armA/armB 直接失败，好过悄悄沿用一份已经不成立的任务集。
-    default: throw new Error(`${phase} 的任务集尚未预注册：对照臂要等 NX-08e2 的烟测结论重算 phaseCaps 与任务集（见 PLAN 的 NX-08 评测批次上限）`)
   }
 }
 

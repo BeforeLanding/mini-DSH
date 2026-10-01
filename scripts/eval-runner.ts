@@ -19,8 +19,12 @@ export type BatchPhase = typeof batchPhases[number]
 export type PhaseName = BatchPhase | 'sequence'
 export const phaseCaps: Readonly<Record<PhaseName, BatchCaps>> = Object.freeze({
   screening: { runs: 12, requests: 400, tokens: 8_000_000 },
-  armA: { runs: 72, requests: 2_400, tokens: 45_000_000 },
-  armB: { runs: 72, requests: 2_400, tokens: 45_000_000 },
+  // 对照 A 的两臂各 3 次运行（NX-08e2-6 按实测重预注册；旧算式「12 任务 × 2 臂 × 3 次」随 fixture 变成
+  // 多阶段序列而作废）。这里的「一次运行」是整条六阶段序列：单次烟测实测 53 请求 / 2,188,159 token。
+  // requests 取理论上界（3 × 6 阶段 × 32 请求 = 576，进位到 600），tokens 取实测的两倍余量
+  // （3 × 2 × 2,188,159 ≈ 13,128,954，进位到 15,000,000）。单次 run 预算仍是每阶段一份，是每次运行的硬闸门。
+  armA: { runs: 3, requests: 600, tokens: 15_000_000 },
+  armB: { runs: 3, requests: 600, tokens: 15_000_000 },
   // sequence 是 NX-08e2 的诊断烟测（多阶段 fixture pipeline），不是预注册对照批次的一部分。
   // 数值取逐阶段预算的理论上界：该阶段的计划里只有 1 个 fixture，而 runPhase 只在两次 fixture 之间
   // 检查累计值，整批上限对它本来就不构成中途制动——取更紧的值只会把一次跑完的烟测变成带 aborted 的
@@ -33,6 +37,17 @@ export const batchCaps: Readonly<BatchCaps> = Object.freeze(batchPhases.reduce((
   requests: totals.requests + phaseCaps[name].requests,
   tokens: totals.tokens + phaseCaps[name].tokens,
 }), { runs: 0, requests: 0, tokens: 0 }))
+// 对照 A 的两臂只差上下文策略：R-21 要求模型、prompt、初始状态、验收器与单次 run 预算完全一致，所以差异
+// 被压缩到一个可观察的量——输入目标。armB 用 PLAN 文档默认的 65,536（历史超出就移除最旧的完整任务）；
+// armA 把输入目标抬到模型窗口，让「输入 ≤ 目标」这一条恒成立，历史只受窗口容量约束。
+// 称它「全历史」要说清边界：它不是无限，输入 + 输出预留 + 容量余量仍须落在窗口内，越过就是
+// context_overflow 而不是静默截断。输出预留只由 maxTotalTokens / maxOutputTokens 决定、与输入目标无关，
+// 所以两臂的差异确实只在裁剪上。窗口不高于 armB 的目标时直接失败，而不是静默把两臂对调。
+export function armPolicy(phase: BatchPhase, contextWindowTokens: number): Readonly<BudgetPolicy> {
+  if (phase !== 'armA') return evalPolicy
+  if (contextWindowTokens <= (evalPolicy.inputTargetTokens ?? 0)) throw new Error(`arm A needs a window larger than arm B's input target, got ${contextWindowTokens}`)
+  return Object.freeze({ ...evalPolicy, inputTargetTokens: contextWindowTokens })
+}
 export const capKeys = ['runs', 'requests', 'tokens'] as const
 
 // 单次 run 预算与整批上限的优先关系：单次预算由 Agent 循环在 run 内强制，触顶只停止该次 run 并给出停止

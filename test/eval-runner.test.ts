@@ -1,9 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { runPhase, summarize, phaseCaps, batchCaps, batchPhases, singleRunBudget, evalPolicy, capKeys } from '../scripts/eval-runner.js'
+import { armPolicy, runPhase, summarize, phaseCaps, batchCaps, batchPhases, singleRunBudget, evalPolicy, capKeys } from '../scripts/eval-runner.js'
 import type { RunOutcome } from '../scripts/eval-runner.js'
 import { runFixtureTask, scriptedAdapter, summarizeStage } from '../scripts/eval-fixture.js'
-import { screeningIds, sequenceIds } from '../scripts/coding-fixtures.js'
+import { createFixture, screeningIds, sequenceIds } from '../scripts/coding-fixtures.js'
 import { CLI_BUDGET } from '../src/core/budget.js'
 import type { Counters } from '../src/core/budget.js'
 import type { ChatRequest, EventData, SessionEvent } from '../src/core/contracts.js'
@@ -34,21 +34,29 @@ const sumStages = (all: readonly Counters[]): Counters => ({
 const done = (modelRequests = 5, totalTokens = 1000): RunOutcome => ({ status: 'completed', counters: counters(modelRequests, totalTokens), accepted: true })
 const tasks = (count: number) => Array.from({ length: count }, (_, index) => ({ id: index }))
 
-test('pre-registered caps match PLAN and the phase caps sum to the whole-batch caps', () => {
+test('pre-registered caps match PLAN and the phase caps sum to the whole-batch caps', async () => {
   assert.deepEqual(singleRunBudget, { maxModelRequests: 32, maxToolCalls: 64, maxActiveDurationMs: 300_000, maxTotalTokens: 2_000_000 })
   assert.deepEqual(phaseCaps, {
     screening: { runs: 12, requests: 400, tokens: 8_000_000 },
-    armA: { runs: 72, requests: 2_400, tokens: 45_000_000 },
-    armB: { runs: 72, requests: 2_400, tokens: 45_000_000 },
+    // 对照 A 的两臂各 3 次运行（NX-08e2-6 按实测重预注册）。这里的一次运行是整条六阶段序列，
+    // 单次烟测实测 53 请求 / 2,188,159 token。
+    armA: { runs: 3, requests: 600, tokens: 15_000_000 },
+    armB: { runs: 3, requests: 600, tokens: 15_000_000 },
     // 诊断烟测：单条六阶段序列，取逐阶段预算的理论上界（6 × 32 请求 / 6 × 2,000,000 token）。
     sequence: { runs: 1, requests: 192, tokens: 12_000_000 },
   })
-  // 整批只归约预注册的三个对照阶段。把诊断阶段算进去会改变「156 次运行」的含义，因此按值钉死而不是
-  // 只断言求和：以前改 armA 只会静默改变和值，现在会直接撞上预注册数字。
-  assert.deepEqual(batchCaps, { runs: 156, requests: 5_200, tokens: 98_000_000 })
+  // 整批只归约预注册的三个对照阶段。把诊断阶段算进去会改变这个数字的含义，因此按值钉死而不是只断言
+  // 求和：以前改 armA 只会静默改变和值，现在会直接撞上预注册数字。
+  assert.deepEqual(batchCaps, { runs: 18, requests: 1_600, tokens: 38_000_000 })
   for (const cap of capKeys) assert.equal(batchCaps[cap], batchPhases.reduce((total, name) => total + phaseCaps[name][cap], 0), cap)
-  // 单次预算不能替代整批上限：每个 run 都用满单次 token 预算时总量远超整批上限，正是 PLAN 要求独立整批上限的理由。
-  assert.ok(batchCaps.runs * (singleRunBudget.maxTotalTokens ?? 0) > batchCaps.tokens)
+  // 单次预算不能替代整批上限：每个 run 都用满单次 token 预算时总量远超整批上限，正是 PLAN 要求独立整批
+  // 上限的理由。对照臂的一次运行是整条序列，因此每 run 的上界是「阶段数 × 单次预算」；阶段数从 fixture
+  // 本身取，改动阶段数时这条断言会跟着动而不是留下一个对不上的常数。
+  const pipeline = await createFixture('pipeline')
+  const stages = pipeline.tasks.length
+  await pipeline.close()
+  assert.ok(phaseCaps.screening.runs * (singleRunBudget.maxTotalTokens ?? 0) > phaseCaps.screening.tokens)
+  assert.ok(phaseCaps.armA.runs * stages * (singleRunBudget.maxTotalTokens ?? 0) > phaseCaps.armA.tokens)
 })
 
 // 预注册只固定四项；上下文目标与窗口必须由文档默认值补上，否则投影不裁剪、context_overflow 不再触发，
@@ -62,6 +70,19 @@ test('the evaluation policy keeps the pre-registered overrides on top of the doc
   assert.equal(evalPolicy.inputTargetTokens, 65_536)
   assert.equal(evalPolicy.maxOutputTokens, 16_384)
   assert.equal(singleRunBudget.inputTargetTokens, undefined)
+})
+
+// 对照 A 的两臂除输入目标外必须逐字段相等，否则被比较的就不是上下文裁剪。输出预留只由 maxTotalTokens /
+// maxOutputTokens 决定、与输入目标无关，这一点由「其余字段全等」间接钉住。
+test('the two comparison arms differ only in the input target', () => {
+  const armA = armPolicy('armA', 1_000_000), armB = armPolicy('armB', 1_000_000)
+  assert.equal(armA.inputTargetTokens, 1_000_000)
+  assert.equal(armB, evalPolicy)
+  assert.equal(armB.inputTargetTokens, evalPolicy.inputTargetTokens)
+  const withoutTarget = (policy: Readonly<typeof evalPolicy>) => Object.fromEntries(Object.entries(policy).filter(([key]) => key !== 'inputTargetTokens'))
+  assert.deepEqual(withoutTarget(armA as typeof evalPolicy), withoutTarget(evalPolicy))
+  // 窗口不高于 armB 的目标时直接失败，而不是静默把两臂对调成「armA 裁得更多」。
+  assert.throws(() => armPolicy('armA', 65_536), /window larger than arm B/)
 })
 
 test('a phase whose run cap equals the planned count completes without a false abort', async () => {
