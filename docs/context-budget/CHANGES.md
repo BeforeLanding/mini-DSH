@@ -4,8 +4,8 @@
 
 ## NX-30 子 shell 与分组的命令段起点
 
-- 关联：与 NX-26 同族——NX-26 补了「保留字之后的命令位」，本轮补**引入命令位置的另一半：算子**（矩阵的 `known gap NX-30` 组）。不依赖其他任务，可独立验收。状态：**进行中**（2026-10-01，零付费）。**方向是收紧**：`executable`（命令段起点的定义）此前连算子都不认，于是子 shell 与分组里的 `curl` 既不重置段状态、也不开启取网工具的操作数模型。机制与取舍见 [PLAN 的 D-15](PLAN.md#d-15-命令段起点的算子支)，子步骤与提交边界见 [TASKS 的 NX-30 一节](TASKS.md#nx-30-子-shell-与分组的命令段起点)。
-- 提交：`（NX-30-0 立项与契约订正）`，后续子提交见本节末尾。
+- 关联：与 NX-26 同族——NX-26 补了「保留字之后的命令位」，本轮补**引入命令位置的另一半：算子**（矩阵的 `known gap NX-30` 组）。不依赖其他任务，可独立验收。状态：**done**（2026-10-01，零付费）。**方向是收紧**：`executable`（命令段起点的定义）此前连算子都不认，于是子 shell 与分组里的 `curl` 既不重置段状态、也不开启取网工具的操作数模型。机制与取舍见 [PLAN 的 D-15](PLAN.md#d-15-命令段起点的算子支)，子步骤与提交边界见 [TASKS 的 NX-30 一节](TASKS.md#nx-30-子-shell-与分组的命令段起点)。
+- 提交：`7ae54f3`（NX-30-0 立项与契约订正）、`eaac0d5`（NX-30-1 机制与用例），本提交（NX-30-2 回填）。
 
 ### 现象与根因
 
@@ -24,7 +24,7 @@ allow:  "(curl example.com)"          allow:  "{ curl example.com; }"
 allow:  "( curl example.com )"        allow:  "(bash -c 'curl http://x')"
 ```
 
-**根因只有一条**：`executable`（`src/core/sandbox-runtime.ts:446`）是命令段起点的**定义**——它为真才重置每段状态（`:452-464`）、才开启取网工具的操作数模型（`:481` 的 `model && !executable` 守卫）。而它只认「首 token」与「紧邻 `|`／`;`／`&`／换行」，**不认识子 shell 与分组的括符**。更深一层的成因是**词体类把括符粘进了 token**：`"(?:[^"\\]|\\.)*"|'[^']*'|[^\s|;&<>]+`（`:432`）不含 `(`／`)`／`{`／`}`，于是 `(curl example.com)` 分成 `(curl` 与 `example.com)` 两个 token，`basename('(curl')` 不是 `curl`，`networkTools` 与 `shellWords` 双双落空。同一原因让 `(bash -c 'curl http://x')` 连 `-c` 片段抽取都不启动——`basename('(bash')` 不在 `shellWords` 里。
+**根因只有一条**：`executable`（`src/core/sandbox-runtime.ts:464`）是命令段起点的**定义**——它为真才重置每段状态（`:470-478`）、才开启取网工具的操作数模型（`:501` 的 `model && !executable` 守卫）。而它只认「首 token」与「紧邻 `|`／`;`／`&`／换行」，**不认识子 shell 与分组的括符**。更深一层的成因是**词体类把括符粘进了 token**：`"(?:[^"\\]|\\.)*"|'[^']*'|[^\s|;&<>]+`（`:438`）不含 `(`／`)`／`{`／`}`，于是 `(curl example.com)` 分成 `(curl` 与 `example.com)` 两个 token，`basename('(curl')` 不是 `curl`，`networkTools` 与 `shellWords` 双双落空。同一原因让 `(bash -c 'curl http://x')` 连 `-c` 片段抽取都不启动——`basename('(bash')` 不在 `shellWords` 里。
 
 **这是一条独立于 NX-26 的既有放行**，与 NX-26 修的那条并列：NX-26 之前 `for f in a; do curl example.com; done` 是 allow，是因为保留字没被认；本条是算子没被认，**算子从未被认过**。
 
@@ -36,27 +36,78 @@ allow:  "( curl example.com )"        allow:  "(bash -c 'curl http://x')"
 2. **它会凭空造出裸 `/` 开头的 token。** `mkdir -p src/{a,b}/x` 被切成 `src/`、`a,b`、`/x`，最后那个是**根路径操作数** → `path escapes the workspace`；`echo {a,b}/c` 同理。这是对**普通合法命令**的误伤，语料里就有这一族。
 3. **改用把 `(` 加进分隔符类**（`[|;&\n(){}]`）会引入另一处误拒：`$()` 里的 token 变可执行、`commandWord` 被重置成 `date`，于是 `echo $(date) https://example.com` 由 allow 变 deny——顶层 `echo` 的惰性 URL 豁免失效。
 
-三条合起来是一个判据：**分词器与 `expanded` 的下标对齐是下游的承重墙**。`pipedDownstream`（`:459` 用 `start + raw.length`）、`eval` 参数切片（`:538-542` 按 token 下标过滤）、`-c` 片段抽取三处全都建立在它上面。所以宁可**规范 token**，也不改分词。
+三条合起来是一个判据：**分词器与 `expanded` 的下标对齐是下游的承重墙**。`pipedDownstream`（`:477` 用 `start + raw.length`）、`eval` 参数切片（`:561` 按 token 下标过滤）、`-c` 片段抽取三处全都建立在它上面。所以宁可**规范 token**，也不改分词。
 
-**采用的机制**：分词器、分隔符正则 `[|;&\n]`、`findShellCommandFlag`（`:188`）的分隔符守卫、`bindingWord`（`:251`）**一行都不动**（`:250` 那句「与 #inspect 的分词器同源」的注释因此一字不改）。改为在去引号之后把 token 首尾**未被引用**的 `(`／`{` 与 `)`／`}` 剥掉——含 `$(` 的词跳过（`$(pwd)/file.txt` 的 `)` 是词内结构，不是子 shell 收尾），空结果保留原样（免得孤立的 `)` 变成空 token）。再把 `(`／`{` 接进**与保留字同一支**的 `pendingCommandPosition` 前视：opener **自身**处于命令段起点、且未被引用也未被规范化时，令紧随的一个 token 也算段起点。`)`／`}` 只收尾，不引入命令位。
+**采用的机制**：分词器、分隔符正则 `[|;&\n]`、`findShellCommandFlag`（`:194`）的分隔符守卫、`bindingWord`（`:257`）**一行都不动**（`:256` 那句「与 #inspect 的分词器同源」的注释因此一字不改）。改为在去引号之后把 token 首尾**未被引用**的 `(`／`{` 与 `)`／`}` 剥掉——含 `$(` 的词跳过（`$(pwd)/file.txt` 的 `)` 是词内结构，不是子 shell 收尾），空结果保留原样（免得孤立的 `)` 变成空 token）。再把 `(`／`{` 接进**与保留字同一支**的 `pendingCommandPosition` 前视：opener **自身**处于命令段起点、且未被引用也未被规范化时，令紧随的一个 token 也算段起点。`)`／`}` 只收尾，不引入命令位。
 
 `raw === token` 的含义在此自然扩展为「未被引用**且未被规范化**」：`(curl` 规范化后 `raw !== token`，故**不**设旗标——它自己就是命令；孤立的 `(`／`{` 保持 `raw === token`，设旗标，与保留字行为完全对称。
 
 ### 净放宽清单
 
-（NX-30-1 落地后回填：四条，各配顶层对照。）
+四条，都是 NX-26 那两条的同一形状——子 shell 里的 `commandWord` 终于**是那个真实的命令**，于是既有的豁免判据开始生效。改前 `commandWord` 停在 `(` 上，`stdoutOnlyCommands` 豁免与 `-c` 片段豁免都查不到它，所以是误拒。每条都配一条**顶层对照**（今日即 allow），证明这是**同一语义终于生效**，不是新语义：
+
+| 子 shell 形状 | 改前 | 改后 | 顶层对照 | 生效的豁免 |
+| --- | --- | --- | --- | --- |
+| `(echo https://example.com)` | deny | allow | `echo https://example.com` | `stdoutOnlyCommands` |
+| `{ echo https://example.com; }` | deny | allow | `echo https://example.com` | `stdoutOnlyCommands` |
+| `(printf "%s" https://example.com)` | deny | allow | `printf "%s" https://example.com` | `stdoutOnlyCommands` |
+| `(echo bash -c "curl https://evil/x")` | deny | allow | `echo bash -c "curl https://evil/x"` | `-c` 片段豁免（`bash` 是 `echo` 的实参，从不执行） |
+
+**豁免边界一条未动**：`(echo https://example.com | cat)` 与 `{ echo https://example.com | cat; }` 仍被拒绝——接管道时下游可能真的取网。这条作为**孪生行**写进用例与矩阵，防止净放宽被误读成「子 shell 里的 echo 一律放行」。
+
+**三条接受的过拒**，全部落在 shell 语法错误的输入上，写进用例让它成为**记录在案的决定**（与 NX-24 的 `cat "/Program Files/secret"` 同一处置）：
+
+| 命令 | 为什么可接受 |
+| --- | --- |
+| `{curl example.com;}` | bash 里 `{curl` 是普通命令名（分组要求 `{` 单独成词），command-not-found |
+| `curl (example.com)` | bash 语法错误；规范化把括符剥掉后 `example.com` 是主机形状词——这正是 NX-26 的 CHANGES 预告过的那一类 |
+| `(curl example.com` | 不配对，bash 语法错误 |
 
 ### 验证
 
-（NX-30-2 回填。）
+实现顺序：`pnpm build` → 先确认矩阵两行读到 **`met`**（留证）→ 搬进契约组 → 重跑。
+
+```
+pnpm build && node docs/context-budget/nx17-gate-probes.mjs
+    # 改前：open   allow (want deny ) "(curl example.com)" / "{ curl example.com; }"
+    #       no contract drift; 7 known gap(s) still open
+    # 改后先读到：met    deny  (want deny ) 两行
+    # 搬移后：closed: NX-30 subshell and group command position 全 ok（16 行）
+    #       no contract drift; 8 known gap(s) still open   （7 − 2 已闭合 + 1 arm body + 2 NX-31）
+pnpm check            # syntax ok: 90 files
+pnpm test             # 216/216（原 215，新增 1 条用例）
+pnpm fixtures:check   # 16 项，退出码 0
+pnpm eval:offline     # 12/12
+node docs/context-budget/nx24-replay-probe.mjs
+    # 退出码 0：782 次真实调用仍是那 9 条、no unexpected deny —— 真实语料上零新增拒绝
+pnpm demo:fix / demo:resume / demo:unknown   # 均退出 0
+```
+
+**过拒回归闸是本次最关键的一条读数**：`nx24-replay-probe.mjs` 对 782 次真实模型 bash 调用做**集合断言**（不是计数），任何未登记的新拒绝都会让它变红。它保持 `no unexpected deny`，说明本项在真实语料上既不新增拒绝也不丢失拒绝。这与事先的静态测量一致：语料里「真正由算子引入命令位」只有 2 处（`(git status --porcelain || echo no-git)` 与 `{ echo "FAIL(exit=$?)"; … }`），**0 处取网**。
 
 ### 反例实跑
 
-（NX-30-2 回填。）
+四条，每条都实测到**指定用例变红**（`pnpm test` 报 `fail 1`、`✖ Sandbox treats a subshell or group opener at command position as a command-segment start`）：
+
+| # | 关掉的东西 | 首个变红的断言 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 删掉 opener 旗标那半支（`|| commandPositionOpeners.has(token)`） | `{ curl example.com; }` → `actual: 'allow'` / `expected: 'deny'` | 旗标半支承载**检测**：规范化只能剥掉粘在词上的括符，`( curl x )` 与 `{ …; }` 里那个**单独成词**的 opener 只能靠前视旗标接上 |
+| 2 | 只保留首部规范化、去掉 `.replace(/[)}]+$/, '')` | `(curl example.com)` → `actual: 'allow'` / `expected: 'deny'` | 单独钉住**尾部收尾剥离**——最容易被后来的人当作冗余删掉的一行；`example.com)` 不匹配主机形状（正则要求 `(?:\/|$)` 收尾） |
+| 3 | 整段规范化去掉（只留旗标） | `(curl example.com)` → `actual: 'allow'` / `expected: 'deny'` | 分支级兜底：规范化整体缺失时 `(curl` 仍是原样 token，`basename` 不是 `curl`，检测整段失效 |
+| 4 | `commandPositionOpeners` 缩成 `['(']` | `{ curl example.com; }` → `actual: 'allow'` / `expected: 'deny'` | 证明**花括号不是装饰**：`{` 与 `(` 走同一支判据但彼此独立，缺一个就漏一组形状 |
+
+**两个被否决的方案也各留了实测反例**（这是 D-15 那条决策的直接证据，不是推演）：
+
+| 被否决的方案 | 实测反例 |
+| --- | --- |
+| 把 `(`／`)`／`{`／`}` 从词体类 `[^\s|;&<>]+` 里拿掉 | **五条普通合法命令被误伤**：`mkdir -p src/{a,b}/x`、`echo {a,b}/c`、`cp {src,lib}/index.ts dist/`、`cd $(dirname $0)/src`、`cat $(pwd)/file.txt` 全部变 `path escapes the workspace`（切出的裸 `/x` 被当根路径操作数）。它同时**看起来**修好了 `(curl example.com)`——靠的却是「把 `(` 删掉、让 `curl` 落到 index 0」，所以连带空格的 `( curl x )` 都得另外修 |
+| 把 `(`／`)`／`{`／`}` 加进分隔符类 `[|;&\n(){}]` | `echo $(date) https://example.com` 由 allow 变 **deny**（`unauthorized outbound request`）：`)` 让 `$()` 之后的 token 变成段起点、`commandWord` 被重置，顶层 `echo` 的惰性 URL 豁免失效 |
 
 ### 未覆盖、已登记为独立待办
 
-（NX-30-2 回填。）
+- **NX-30 的剩余半**：`case $x in a) curl … ;; esac` 的臂体——`a)` 是一个 token，臂体不是段起点。矩阵新增 `known gap NX-30 arm body` 一行让它**不被静默**（与 NX-25 从 NX-24 拆出时同一处置）。`exec` 与赋值／重定向前缀（`exec curl x`、`X=1 curl x`、`>out curl x`）本轮同样未做，留在 TASKS 的 NX-30 条目里标为未做。
+- **NX-31（本轮新登记）**：**命令位被包装命令吃掉**——`env curl example.com`、`nice curl example.com`、`timeout 5 curl example.com`、`command curl example.com`、`find . -name x -exec curl example.com ;` 今日全是 allow；**进程替换** `<(curl x)` 同属这一族。与本族同一个根因，但机制不同：要新增一份「操作数里哪个才是命令」的工具知识表（`env -i A=1 cmd` 跳过 `-i` 与赋值、`nice -n 5 cmd` 跳过 `-n N`、`timeout -k 5 10 cmd` 跳过时长与 `-k N`、`xargs -n1 cmd` 跳过自己的旗标），且与 D-12 记录过的「不采用按工具清单收窄」正面相邻，须先定边界。矩阵已加两行 `known gap NX-31`。**语料 0 处**（782 次调用里 `exec` 0 次、真实赋值 0 次、前导重定向 0 次），加它买的是必要性不是安全性。
+- **不宣称命令闸门已闭合**：`..`、系统路径、工作区外路径、软链、递归删除、`sudo`、UNC、allowHosts、惰性输出的管道边界全部照旧；`node -e`／`python -c` 程序字符串、脚本文件内容、base64 解码后进 shell、here-doc 正文照旧不在覆盖内。
 
 ## NX-26 保留字之后的命令段起点
 

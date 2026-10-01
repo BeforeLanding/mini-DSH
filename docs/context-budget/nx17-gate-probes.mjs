@@ -9,17 +9,20 @@ const sandbox = new SandboxRuntime({ workspace, autoApprove: true })
 const locked = new SandboxRuntime({ workspace, autoApprove: true, allowHosts: ['api.internal'] })
 
 // [group, expected, command, runtime] — expected is the target contract, so a "known gap" row is one the
-// gate does not meet yet. Every open gap here is over-blocking, not under-blocking: NX-18 rows are lazy
-// `..` text the gate still denies, NX-23 rows are URLs used as data, NX-25 is a here-doc body treated as
-// a command word, NX-30 is a command position introduced by an untracked operator (`(`/`)`/`{`/`}`,
-// a `case` arm body) rather than by a reserved word.
-// Three groups were gap groups until their work landed, and their rows read `met` first:
+// gate does not meet yet. **Gaps come in both directions and the direction is stated per row**:
+// over-blocking (expect allow, get deny) — NX-18 rows are lazy `..` text the gate still denies, NX-23
+// rows are URLs used as data, NX-25 is a here-doc body treated as a command word; under-blocking
+// (expect deny, get allow) — `known gap NX-30 arm body` is a `case` arm body, and NX-31 rows are
+// network tools whose command position was eaten by a wrapper (`env`/`timeout`/`nice`/`xargs`).
+// Four groups were gap groups until their work landed, and their rows read `met` first:
 // `closed: NX-19 outbound closure` (2026-10-01), the two `fixed: quote-blind expansion` rows
-// moved out of `known gap NX-24` (2026-10-01, NX-24), and `closed: NX-26 reserved-word command
-// position` (2026-10-01, NX-26) — the last one is the only gap that was *under*-blocking.
-// NX-24's third row did **not** close and was re-registered as `known gap NX-25` (here-doc): it was
-// split out because its mechanism is different — whether a here-doc body is data or a script depends
-// on the command consuming it (`cat <<'EOF'` is data, `bash <<'EOF'` is executed).
+// moved out of `known gap NX-24` (2026-10-01, NX-24), `closed: NX-26 reserved-word command
+// position` (2026-10-01, NX-26), and `closed: NX-30 subshell and group command position`
+// (2026-10-01, NX-30) — the last two are the only gaps that were *under*-blocking.
+// Two rows did **not** close and were re-registered: NX-24's here-doc row became `known gap NX-25`
+// (its mechanism differs — whether a here-doc body is data or a script depends on the command
+// consuming it: `cat <<'EOF'` is data, `bash <<'EOF'` is executed), and NX-30's `case` arm body
+// stayed open as `known gap NX-30 arm body` while the operator half closed.
 const cases = [
   ['fixed: shell quoting', 'allow', 'node check.mjs && node --input-type=module -e "\nimport assert from \'node:assert/strict\'\n\n// nested plain objects merge recursively\nassert.deepEqual(1, 1)\n\nconst evil = JSON.parse(\'{\\"__proto__\\":{\\"polluted\\":true}}\')\n"'],
   ['fixed: shell quoting', 'allow', 'node -e "console.log(\\"a\\") // trailing"'],
@@ -127,6 +130,32 @@ const cases = [
   // `case` 后面的词是主语不是命令：本项不覆盖 case 臂体（NX-30）。
   ['closed: NX-26 reserved-word command position', 'allow', 'case a in a) echo hi;; esac'],
 
+  // NX-30（2026-10-01）：引入命令位置的**算子**那一半——子 shell `(` 与分组 `{`。两行从 `known gap
+  // NX-30` 搬来（先读到 met 再搬）。与保留字**同一支**前视：opener 自身处于命令段起点、且未被引用
+  // 也未被规范化时，令紧随的一个 token 也算段起点；`)`／`}` 只收尾，不引入命令位。实现上不动分词器，
+  // 只规范 token 首尾的括符——被否决的两个方案各有实测反例，见 PLAN 的 D-15。
+  ['closed: NX-30 subshell and group command position', 'deny', '(curl example.com)'],
+  ['closed: NX-30 subshell and group command position', 'deny', '( curl example.com )'],
+  ['closed: NX-30 subshell and group command position', 'deny', '{ curl example.com; }'],
+  // `-c` 只有 basename 去成 `bash` 之后才认得出，脚本 token 才抽得出来
+  ['closed: NX-30 subshell and group command position', 'deny', "(bash -c 'curl http://x')"],
+  // opener 不必是首 token
+  ['closed: NX-30 subshell and group command position', 'deny', 'echo a; (curl example.com)'],
+  ['closed: NX-30 subshell and group command position', 'deny', '(curl example.com)', locked],
+  ['closed: NX-30 subshell and group command position', 'allow', '(curl https://api.internal/x)', locked],
+  // 四条记录在案的净放宽：子 shell 里的 commandWord 与顶层一致，惰性 URL 豁免与 -c 片段豁免都生效
+  ['closed: NX-30 subshell and group command position', 'allow', '(echo https://example.com)'],
+  ['closed: NX-30 subshell and group command position', 'allow', '{ echo https://example.com; }'],
+  // 豁免边界未动：接管道即按出网拦
+  ['closed: NX-30 subshell and group command position', 'deny', '(echo https://example.com | cat)'],
+  // `)`／`}` 不切断词，`{a,b}` 留在词体里——被否决方案正是在这两处误伤真实命令
+  ['closed: NX-30 subshell and group command position', 'allow', 'echo $(date) https://example.com'],
+  ['closed: NX-30 subshell and group command position', 'allow', 'cd $(dirname $0)/src'],
+  ['closed: NX-30 subshell and group command position', 'allow', 'mkdir -p src/{a,b}/x'],
+  ['closed: NX-30 subshell and group command position', 'allow', 'find . -name x -exec grep -l y {} ;'],
+  ['closed: NX-30 subshell and group command position', 'allow', '(git status --porcelain || echo no-git)'],
+  ['closed: NX-30 subshell and group command position', 'allow', 'case a in a) echo hi;; esac'],
+
   ['known gap NX-18', 'allow', 'echo "see ../docs for details"'],
   ['known gap NX-18', 'allow', 'grep -n ".." src/index.ts'],
   // NX-23：URL 是数据还是请求目标，当前只看「整 token 恰为 URL」的形状。同一条语义两种写法
@@ -136,11 +165,15 @@ const cases = [
   // NX-25：here-doc 正文被当命令词（NX-24 期间从 NX-24-③ 拆出，机制不同——正文是数据还是脚本
   // 取决于消费它的命令）。实测 782 次调用里只有 5 次用 `<<`。
   ['known gap NX-25', 'allow', "cat <<'EOF'\ncurl https://example.com\nEOF"],
-  // NX-30：保留字以外的「命令位置引入符」——NX-26 只补了保留字这一支。`(`／`)`／`{`／`}` 在现有
-  // 分词里归进 token 体（`[^\s|;&<>]+`），要先把算子集扩进去才谈得上判定；`case … in X)` 的臂体
-  // 同理。方向与 NX-26 相同（收紧），但属「未跟踪算子」这一独立机制。
-  ['known gap NX-30', 'deny', '(curl example.com)'],
-  ['known gap NX-30', 'deny', '{ curl example.com; }'],
+  // NX-30 的**剩余半**：`case … in X)` 的臂体——`a)` 是一个 token，臂体不是段起点。本轮只补了
+  // 算子那一支，这一支留在这里可见，不让它静默（与 NX-25 从 NX-24 拆出时同一处置）。
+  ['known gap NX-30 arm body', 'deny', 'case a in a) curl example.com;; esac'],
+  // NX-31（2026-10-01，NX-30 期间新发现）：命令位被**包装命令**吃掉。与 NX-26／NX-30 同族、方向
+  // 同为收紧，但机制不同——要新增一份「操作数里哪个才是命令」的工具知识表（`env -i A=1 cmd`、
+  // `nice -n 5 cmd`、`timeout -k 5 10 cmd`、`xargs -n1 cmd` 各不相同），故不塞进 NX-30。
+  // 进程替换 `<(...)` 同属这一族。语料 0 处（782 次调用里 exec 0 次、真实赋值 0 次、前导重定向 0 次）。
+  ['known gap NX-31', 'deny', 'timeout 5 curl example.com'],
+  ['known gap NX-31', 'deny', 'env curl example.com'],
 ]
 
 // A contract row that misses its target is a regression to investigate; a gap row that meets it means the
