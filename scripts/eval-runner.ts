@@ -23,6 +23,9 @@ export const phaseCaps: Readonly<Record<PhaseName, BatchCaps>> = Object.freeze({
   // 多阶段序列而作废）。这里的「一次运行」是整条六阶段序列：单次烟测实测 53 请求 / 2,188,159 token。
   // requests 取理论上界（3 × 6 阶段 × 32 请求 = 576，进位到 600），tokens 取实测的两倍余量
   // （3 × 2 × 2,188,159 ≈ 13,128,954，进位到 15,000,000）。单次 run 预算仍是每阶段一份，是每次运行的硬闸门。
+  // runs 是**该阶段一共要跑几次**，不只是中止阈值：registry 只有 1 个 fixture，因此它是「每个 fixture
+  // 重复 3 次」，由 eval-cli 的 repeatCount/resolveRuns 展开成真正的执行清单。NX-08e 之前的实现只把它
+  // 当中止阈值用，一条命令实际只跑 1 次——`test/eval-cli.test.ts` 现在把「上限」和「计划长度」钉在一起。
   armA: { runs: 3, requests: 600, tokens: 15_000_000 },
   armB: { runs: 3, requests: 600, tokens: 15_000_000 },
   // sequence 是 NX-08e2 的诊断烟测（多阶段 fixture pipeline），不是预注册对照批次的一部分。

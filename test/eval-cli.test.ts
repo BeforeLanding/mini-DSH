@@ -1,6 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { evidenceScope, parseEvalArguments, phaseRegistry, resolveContextWindow, resolveInfeasible, resolveModel, resolvePlanned } from '../scripts/eval-cli.js'
+import { evidenceScope, parseEvalArguments, phaseRegistry, repeatCount, resolveContextWindow, resolveInfeasible, resolveModel, resolvePlanned, resolveRuns } from '../scripts/eval-cli.js'
+import { phaseCaps } from '../scripts/eval-runner.js'
+import type { PhaseName } from '../scripts/eval-runner.js'
 import { screeningIds, sequenceIds } from '../scripts/coding-fixtures.js'
 
 // 入口脚本本身有顶层 await（协议探测、付费批次），被 import 就会花钱，所以真实的参数与计划判据全部
@@ -39,6 +41,39 @@ test('both comparison arms plan the same sequence task set', () => {
   assert.deepEqual(resolvePlanned('armB'), ['pipeline'])
   assert.equal(evidenceScope('armA', resolvePlanned('armA')), 'full')
   assert.equal(phaseRegistry('armA').length, sequenceIds.length)
+})
+
+// NX-08e 的事故：armA/armB 的 phaseCaps.runs = 3 当时只被 overCap 当中止阈值用，入口没有任何产生重复
+// 的机制（runPhase 遍历的是 registry 那 1 个 fixture），于是「每臂 3 次运行」的预注册一条命令只兑现 1 次；
+// --plan-only 还把上限当计划打印，让它在花钱之前看不出破绽。这条断言把两者钉死在一起，是当时缺的那一环。
+test('every phase schedules exactly as many runs as its cap pre-registers', () => {
+  const phases: readonly PhaseName[] = ['screening', 'armA', 'armB', 'sequence']
+  for (const phase of phases) assert.equal(resolveRuns(phase).length, phaseCaps[phase].runs, phase)
+  // 两臂的差异只能来自上下文策略，不能来自跑了几次或跑了哪些任务，因此执行清单必须逐字相同。
+  assert.deepEqual(resolveRuns('armA'), resolveRuns('armB'))
+  assert.deepEqual(resolveRuns('armA'), [
+    { id: 'pipeline', repeat: 0 },
+    { id: 'pipeline', repeat: 1 },
+    { id: 'pipeline', repeat: 2 },
+  ])
+  assert.deepEqual(resolveRuns('sequence'), [{ id: 'pipeline', repeat: 0 }])
+})
+
+// 重复数从整份 registry 推，不从 --tasks 的子集推：从子集推会把「只跑 2 个 fixture」放大成「每个跑 6 遍」，
+// 多花 4 倍的钱。子集只减少运行次数，不改变每个 fixture 跑几遍。
+test('a subset selection reduces the run count instead of inflating repeats', () => {
+  assert.equal(repeatCount(12, 12), 1)
+  assert.equal(repeatCount(3, 1), 3)
+  assert.equal(resolveRuns('screening', 'boundary,merge').length, 2)
+  assert.deepEqual(resolveRuns('screening', 'boundary,merge').map(run => run.repeat), [0, 0])
+  assert.equal(resolveRuns('armA', 'pipeline').length, 3)
+})
+
+// 「一共几次」与「跑哪些」对不上时必须直接失败，而不是取整：这正是 NX-08e 少跑 4 次的成因。
+test('a run count that does not divide evenly across the registry is rejected', () => {
+  assert.throws(() => repeatCount(4, 3), /cannot be split evenly across 3 fixtures/)
+  assert.throws(() => repeatCount(0, 1), /cannot be split evenly across 1 fixtures/)
+  assert.throws(() => repeatCount(3, 0), /registry cannot be empty/)
 })
 
 test('arguments are parsed into one options object with screening as the default phase', () => {

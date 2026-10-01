@@ -1,6 +1,6 @@
 import { screeningIds, sequenceIds } from './coding-fixtures.js'
 import type { FixtureId } from './coding-fixtures.js'
-import { batchPhases } from './eval-runner.js'
+import { batchPhases, phaseCaps } from './eval-runner.js'
 import type { PhaseName } from './eval-runner.js'
 
 // 真实适配器评测入口的参数解析与计划推算，全部是纯函数：不读环境变量、不碰文件系统、不发请求。
@@ -69,6 +69,27 @@ export function resolvePlanned(phase: PhaseName, taskList?: string): FixtureId[]
   if (outside.length) throw new Error(`--tasks names fixtures outside the ${phase} phase: ${outside.join(', ')}`)
   if (new Set(requested).size !== requested.length) throw new Error('duplicate fixture ids in --tasks')
   return requested as FixtureId[]
+}
+
+// 「一共跑几次」与「跑哪些 fixture」是两个独立的事实：registry 只说后者，`phaseCaps[phase].runs` 说
+// 前者，相除就是每个 fixture 的重复数。重复数只能从**整份 registry** 推，不能从 `--tasks` 的子集推——
+// 否则「只跑 2 个 fixture」会被读成「每个跑 6 遍」而多花 4 倍的钱。
+// NX-08e 的事故正是这两者脱节：armA 的 runs = 3 当时只被 `overCap` 当中止阈值用，入口没有任何产生重复
+// 的机制，一条命令实际只跑 1 次，而 --plan-only 还把上限当计划打印了出来。现在 runs 是唯一来源，
+// 「上限」与「计划」由构造相等。
+export function repeatCount(runs: number, fixtures: number): number {
+  if (fixtures < 1) throw new Error('a phase registry cannot be empty')
+  const repeats = runs / fixtures
+  if (!Number.isSafeInteger(repeats) || repeats < 1) throw new Error(`a phase scheduled for ${runs} runs cannot be split evenly across ${fixtures} fixtures`)
+  return repeats
+}
+
+// 实际执行的 run 序列：同一 fixture 的重复按次序编号，落在证据里就能分辨「第几次重复」。
+export interface PlannedRun { id: FixtureId; repeat: number }
+
+export function resolveRuns(phase: PhaseName, taskList?: string): PlannedRun[] {
+  const repeats = repeatCount(phaseCaps[phase].runs, phaseRegistry(phase).length)
+  return resolvePlanned(phase, taskList).flatMap(id => Array.from({ length: repeats }, (_, repeat) => ({ id, repeat })))
 }
 
 // 证据目录按「阶段 + 覆盖范围」分开放，并一次一跑：同一范围重复运行时调用方会拒绝写入（见入口脚本的

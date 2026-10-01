@@ -5,7 +5,7 @@ import dotenv from 'dotenv'
 import { armPolicy, evalPolicy, phaseCaps, runPhase, summarize } from './eval-runner.js'
 import type { RunOutcome } from './eval-runner.js'
 import type { FixtureId } from './coding-fixtures.js'
-import { evidenceScope, parseEvalArguments, resolveContextWindow, resolveInfeasible, resolveModel, resolvePlanned } from './eval-cli.js'
+import { evidenceScope, parseEvalArguments, phaseRegistry, repeatCount, resolveContextWindow, resolveInfeasible, resolveModel, resolvePlanned, resolveRuns } from './eval-cli.js'
 import { runFixtureTask } from './eval-fixture.js'
 import { createDeepSeekAdapter } from '../src/models/deepseek.js'
 import type { ChatResponse } from '../src/core/contracts.js'
@@ -23,6 +23,10 @@ const phase = options.phase
 const caps = phaseCaps[phase]
 
 const planned = resolvePlanned(phase, options.tasks)
+// 真正会被调度的 run 序列：`planned` 是「跑哪些 fixture」（去重，用于证据目录名与不可行判定），
+// `runs` 是展开重复之后的执行清单。两者长度之比就是每个 fixture 的重复数。
+const runs = resolveRuns(phase, options.tasks)
+const repeats = repeatCount(caps.runs, phaseRegistry(phase).length)
 const infeasible = resolveInfeasible(phase, options.infeasible, options.infeasibleReason)
 const scope = evidenceScope(phase, planned)
 const baseUrl = (process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com').replace(/\/+$/, '')
@@ -40,7 +44,9 @@ const reportPath = path.join(evidenceDirectory, 'report.json')
 // 预演排在一切副作用之前：不建目录、不出网、不需要 API key，让「这次要跑什么、上限多少、证据落在哪」
 // 能在花钱之前被人核对。它必须早于 ensureWritable 与 probeProtocol，否则“预演”自己就已经花掉了钱。
 if (options.planOnly) {
-  console.log(`${phase}-${scope}: ${planned.length} 个任务：${planned.join(', ')}`)
+  // 打印的是**会被调度的计划**，不是上限：NX-08e 就是因为这里把 runs 上限当计划印出来，才让「3 次运行」
+  // 看起来已经兑现，而实际只跑 1 次。两者现在由构造相等，但说清楚仍然是这个预演存在的理由。
+  console.log(`${phase}-${scope}: ${planned.length} 个任务 × ${repeats} 次重复 = ${runs.length} 次运行：${planned.join(', ')}`)
   console.log(`预算：单次 run ${policy.maxModelRequests} 请求 / ${policy.maxToolCalls} 工具 / ${policy.maxActiveDurationMs}ms / ${policy.maxTotalTokens} token；整批 ${caps.requests} 请求 / ${caps.tokens} token，${caps.runs} 次运行`)
   console.log(`上下文：输入目标 ${policy.inputTargetTokens} token（对照 A 的臂间差异只在这里）`)
   console.log(`模型：${process.env.MINI_DSH_EVAL_MODEL ?? process.env.MINI_DSH_MODEL ?? '(未设置)'}；端点：${baseUrl}；窗口：${contextWindowTokens}`)
@@ -56,7 +62,7 @@ if (provider !== 'deepseek') throw new Error(`only the deepseek provider is wire
 if (!modelId) throw new Error('MINI_DSH_MODEL must name a model, e.g. deepseek/deepseek-v4-flash')
 
 const adapter = createDeepSeekAdapter({ baseUrl, models: [modelId], contextWindowTokens })
-console.log(`${phase}-${scope}: ${provider}/${modelId} @ ${baseUrl}, window ${contextWindowTokens}, ${planned.length} 个任务`)
+console.log(`${phase}-${scope}: ${provider}/${modelId} @ ${baseUrl}, window ${contextWindowTokens}, ${planned.length} 个任务 × ${repeats} 次重复 = ${runs.length} 次运行`)
 console.log(`预算：单次 run ${policy.maxModelRequests} 请求 / ${policy.maxToolCalls} 工具 / ${policy.maxActiveDurationMs}ms / ${policy.maxTotalTokens} token；整批 ${caps.requests} 请求 / ${caps.tokens} token；输入目标 ${policy.inputTargetTokens}`)
 
 // 先确认这次能落盘再发任何付费请求：证据目录冲突时就该在花钱之前停下。
@@ -75,7 +81,9 @@ if (options.probeOnly) {
 }
 
 const spent = { runs: 0, requests: 0, tokens: 0 }
-const report = await runPhase(phase, planned.map(id => ({ id })), caps, async task => {
+const report = await runPhase(phase, runs, caps, async task => {
+  // 重复之间共用同一个 fixture 子目录：每次运行的 session id 是随机分配的，落盘时天然各占一个子目录，
+  // 不会互相覆盖；分辨「第几次重复」靠的是记录里的 repeat 字段，不是目录名。
   const outcome = await runFixtureTask(
     task.id,
     () => ({ provider, model: modelId, capabilities: adapter.capabilities, chat: adapter.chat }),
@@ -86,8 +94,8 @@ const report = await runPhase(phase, planned.map(id => ({ id })), caps, async ta
   spent.requests += outcome.counters.modelRequests
   spent.tokens += outcome.counters.totalTokens
   // 每跑完一个就落一行：付费批次被中断时不至于连已花掉的部分都取不回来。
-  await fs.appendFile(runLog, `${JSON.stringify({ phase, fixture: task.id, ...outcome })}\n`)
-  console.log(describe(task.id, outcome, spent, caps))
+  await fs.appendFile(runLog, `${JSON.stringify({ phase, fixture: task.id, repeat: task.repeat, ...outcome })}\n`)
+  console.log(describe(task.id, task.repeat, outcome, spent, caps))
   return outcome
 }, record => (infeasible.ids.has(record.task.id) ? { infeasible: true } : undefined))
 
@@ -133,8 +141,8 @@ function trimmed(response: ChatResponse) {
   return (response.content ?? '').trim().slice(0, 40)
 }
 
-function describe(id: FixtureId, outcome: RunOutcome, spent: { runs: number; requests: number; tokens: number }, limits: { requests: number; tokens: number }) {
+function describe(id: FixtureId, repeat: number, outcome: RunOutcome, spent: { runs: number; requests: number; tokens: number }, limits: { requests: number; tokens: number }) {
   const acceptance = outcome.acceptance
   const reason = outcome.error ? `error=${outcome.error}` : acceptance && !acceptance.passed ? `验收退出码=${acceptance.exitCode} protected=${acceptance.protectedFilesChanged.join('|') || '无'}` : ''
-  return `[${spent.runs}] ${id}: ${outcome.status} accepted=${outcome.accepted} 请求=${outcome.counters.modelRequests} 工具=${outcome.counters.toolCalls} token=${outcome.counters.totalTokens} ${reason} 累计 ${spent.requests}/${limits.requests} 请求 ${spent.tokens}/${limits.tokens} token`
+  return `[${spent.runs}] ${id}#${repeat}: ${outcome.status} accepted=${outcome.accepted} 请求=${outcome.counters.modelRequests} 工具=${outcome.counters.toolCalls} token=${outcome.counters.totalTokens} ${reason} 累计 ${spent.requests}/${limits.requests} 请求 ${spent.tokens}/${limits.tokens} token`
 }
