@@ -14,6 +14,7 @@
     "fixtures:check": "pnpm build && node dist/scripts/check-coding-fixtures.js",
     "eval:offline": "pnpm build && node dist/scripts/eval-offline.js",
     "eval:screening": "pnpm build && node dist/scripts/eval-screening.js",
+    "eval:sequence": "pnpm build && node dist/scripts/eval-screening.js --phase sequence",
     "eval:estimate": "pnpm build && node dist/scripts/eval-estimate.js",
     "check": "pnpm build && node scripts/check-syntax.js",
     "lint": "biome check .",

@@ -11,14 +11,28 @@ export const singleRunBudget: Readonly<BudgetPolicy> = Object.freeze({
 // inputTargetTokens 与 contextWindowTokens：ContextBudgetRuntime 对两者均未配置时恒判 fits，裁剪与
 // context_overflow 全部失效，A/B 两臂的上下文差异也随之归零。
 export const evalPolicy: Readonly<BudgetPolicy> = Object.freeze({ ...CLI_BUDGET, ...singleRunBudget })
-export type PhaseName = 'screening' | 'armA' | 'armB'
 export interface BatchCaps { runs: number; requests: number; tokens: number }
+// batchCaps 是「整批 156 次运行」这条预注册结论的载体，因此它的成员被单独列出来，而不是「PhaseName 的
+// 全部」：诊断烟测会随开发增减，让它混进预注册算术会让那个数字不再对应同一件事。
+export const batchPhases = ['screening', 'armA', 'armB'] as const
+export type BatchPhase = typeof batchPhases[number]
+export type PhaseName = BatchPhase | 'sequence'
 export const phaseCaps: Readonly<Record<PhaseName, BatchCaps>> = Object.freeze({
   screening: { runs: 12, requests: 400, tokens: 8_000_000 },
   armA: { runs: 72, requests: 2_400, tokens: 45_000_000 },
   armB: { runs: 72, requests: 2_400, tokens: 45_000_000 },
+  // sequence 是 NX-08e2 的诊断烟测（多阶段 fixture pipeline），不是预注册对照批次的一部分。
+  // 数值取逐阶段预算的理论上界：该阶段的计划里只有 1 个 fixture，而 runPhase 只在两次 fixture 之间
+  // 检查累计值，整批上限对它本来就不构成中途制动——取更紧的值只会把一次跑完的烟测变成带 aborted 的
+  // 退出码 1，拦不住任何花费。烟测真正的闸门是每阶段的 singleRunBudget（32 请求 / 2,000,000 token），
+  // 6 个阶段合计即这里的 192 / 12,000,000。
+  sequence: { runs: 1, requests: 192, tokens: 12_000_000 },
 })
-export const batchCaps: Readonly<BatchCaps> = Object.freeze({ runs: 156, requests: 5_200, tokens: 98_000_000 })
+export const batchCaps: Readonly<BatchCaps> = Object.freeze(batchPhases.reduce((totals, name) => ({
+  runs: totals.runs + phaseCaps[name].runs,
+  requests: totals.requests + phaseCaps[name].requests,
+  tokens: totals.tokens + phaseCaps[name].tokens,
+}), { runs: 0, requests: 0, tokens: 0 }))
 export const capKeys = ['runs', 'requests', 'tokens'] as const
 
 // 单次 run 预算与整批上限的优先关系：单次预算由 Agent 循环在 run 内强制，触顶只停止该次 run 并给出停止

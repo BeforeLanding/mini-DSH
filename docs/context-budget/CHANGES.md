@@ -2,6 +2,18 @@
 
 更新：2026-10-01。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-08e2-2 真实适配器入口按阶段参数化
+- 关联：NX-08e2 的第二步，让 `pipeline` 有真实入口且上限口径在开跑前固定。状态：done（2026-10-01，本地通过）。本次不调用真实模型。
+- **为什么需要**：`scripts/eval-screening.ts` 把 `phase` 写死为 `'screening'`，`phaseCaps` 只有 `screening`/`armA`/`armB`。多阶段 fixture `pipeline` 因此没有真实入口——用 `--tasks pipeline` 跑会套错 phase 标签与上限。
+- **顺带修掉的既有缺陷（NX-08e1-1 遗留）**：`resolvePlanned()` 在未给 `--tasks` 时返回全部 `fixtureIds`。拆注册表后它是 **13 项**，而 `phaseCaps.screening.runs` 仍是 12：不带参数跑 `pnpm eval:screening` 时第 13 项 `pipeline` 会被排进计划却永远不被调度（开跑前检查取「累计 ≥ 上限」），`report.aborted` 非空、退出码 1。现在默认清单改为取**该阶段的注册表**（`screening → screeningIds` 12 项、`sequence → sequenceIds` 1 项），证据目录重新回到 `.eval-evidence/screening-full`。
+- **参数与计划判据抽成纯函数**（新文件 `scripts/eval-cli.ts`）：`parseEvalArguments` / `phaseRegistry` / `resolvePlanned` / `evidenceScope` / `resolveInfeasible` / `resolveModel` / `resolveContextWindow`。抽出来的理由是**可离线验收**——入口脚本有顶层 await（协议探测、付费批次），被测试 import 会真的花钱，所以这些判据不能只住在那个文件里。入口脚本因此变薄，只做编排与落盘。
+- **`--tasks` 只能取当前阶段清单内的子集**：跨阶段取任务现在直接报错并点名（`--tasks names fixtures outside the screening phase: pipeline`）。它正是上面那条缺陷的成因，堵死比记一笔「注意」可靠。
+- **新增 `--plan-only`**：打印阶段、计划清单、单次/整批上限、模型、端点、窗口与证据目录，然后退出 0。它排在 `ensureWritable` 与 `probeProtocol` **之前**——否则「预演」自己就已经花了钱——因此不需要 API key，也不建目录、不出网。实测三条：默认打印 12 项与 `screening-full`，`--phase sequence` 打印 1 项与 `sequence-full`，`--phase screening --tasks pipeline` 以退出码 1 拒绝；三条跑完 `.eval-evidence/` 内容不变。
+- **对照臂拒绝出计划**：`armA`/`armB` 的任务集在 fixture 变成多阶段序列后已经不成立（PLAN 的旧算式 12 任务 × 2 臂 × 3 次作废），要等烟测结论重算。在此之前 `phaseRegistry('armA')` 直接抛错并指向 PLAN，好过悄悄沿用一份已经不成立的任务集。
+- **上限建模**：新增 `batchPhases = ['screening','armA','armB']`，`PhaseName = BatchPhase | 'sequence'`，`batchCaps` 改为对 `batchPhases` 归约——**诊断阶段不并入「整批 156 次运行」**，那个数字的含义因此不被烟测的增减污染。`phaseCaps.sequence` 预注册为 **runs 1 / requests 192 / tokens 12,000,000**，取逐阶段预算的理论上界（理由见 PLAN：该阶段只有 1 个 fixture，整批上限对它本就不构成中途制动，取更紧的值只会把一次跑完的烟测变成带 `aborted` 的退出码 1）。测试里 `batchCaps` 由「求和」升级为**按值钉死** `{ runs: 156, requests: 5_200, tokens: 98_000_000 }`。
+- **一份口径随之写进 PLAN**：单次 run 预算是**每阶段一份**（每个阶段一次 `agent.send()` → `beginRun` 新建 `RunState`、counters 归零），整条六阶段序列的上界即 192 请求 / 12,000,000 token。某阶段用满 32 次请求会以 `max_steps` 停止并被如实记录，后续阶段仍拿到全新的 32 次额度——**被截断的阶段不能用来判断「需要几个阶段才越过 65,536」**，报告必须单列。
+- 验证：`pnpm check`（82 文件）、`pnpm test`（190/190，新增 7 条 `eval-cli` 用例，无失败/跳过）、`pnpm eval:offline`（planned 12、executed 12、accepted 12、rate 12/12，退出码 0）、`pnpm fixtures:check`（13 项、`expected` 全为真，退出码 0）在本机通过；三条 `--plan-only`/拒绝路径见上，均不落盘、不出网、未产生付费请求。
+
 ## NX-08e2-1 逐阶段投影观测进入 `RunOutcome.tasks`
 - 关联：NX-08e2 的第一步，为烟测准备读数。状态：done（2026-10-01，本地通过）。本次不调用真实模型。
 - **为什么需要**：`RunState` 早就带 `removedTaskIds` 与 `estimatedInputTokens`（`src/core/budget.ts`），`agent-loop-runtime.ts` 每次投影都在更新它们，但驱动回传的 `RunTaskDetail` 只含 `taskId/status/counters`——判断「第几个阶段开始触发裁剪」所需的读数在驱动层被丢掉了，真实烟测跑完也答不出结论。

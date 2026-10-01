@@ -45,6 +45,8 @@ NX-08e 开跑前必须先解决其前置条件（2026-09-30 修正）：裁剪�
 
 ## 已完成
 
+- **NX-08e2-2 真实适配器入口按阶段参数化 — done**：`--phase`（默认 `screening`）与 `--plan-only`（不落盘、不出网、无需密钥）；默认清单改为按阶段注册表取，**修掉 NX-08e1-1 遗留的「不带 `--tasks` 时计划 13 项对 12 次上限」缺陷**；`--tasks` 跨阶段取任务直接报错点名；参数与计划判据抽成 `scripts/eval-cli.ts` 的纯函数以便离线验收；新增 `batchPhases`，`batchCaps` 改为只归约预注册的三个对照阶段，诊断阶段 `phaseCaps.sequence` 单独预注册为 runs 1 / requests 192 / tokens 12,000,000；`pnpm eval:sequence` 入口。[详细证据](CHANGES.md#nx-08e2-2-真实适配器入口按阶段参数化)。
+- **NX-08e2-1 逐阶段投影观测进入 `RunOutcome.tasks` — done**：`RunTaskDetail` 增加该阶段最后一次与最大估算输入、投影次数、首次裁剪的投影序号、被移除任务 id 并集、未发出投影数与 usage 来源分列；纯函数 `summarizeStage` 只读事件、不改生产状态，`session-runtime` 的 D-08 语义未被污染。[详细证据](CHANGES.md#nx-08e2-1-逐阶段投影观测进入-runoutcometasks)。提交 `6978f63`。
 - **NX-08e1-1 新增多阶段依赖 fixture 并让注册表区分筛查批次 — done**：`pipeline` 是第一个声明 `TASKS/*.md` 的真实 fixture——六阶段在同一会话内按序下发，后阶段复用前阶段写下的模块（公开检查按阶段累积，06 反向解析自己 05 的渲染格式）；注册表拆成 `screeningIds`（12 个单任务，冻结）与 `sequenceIds`，`eval:offline` 改用前者。提交 `2c61a58`；[详细证据](CHANGES.md#nx-08e1-1-新增多阶段依赖-fixture-pipeline-并区分筛查批次)。
 - **NX-08e1-2 离线覆盖多阶段驱动路径 — done**：补齐 e0-2 声明未覆盖的三条——6 阶段各自的 `taskId` 与 `counters` 逐字段求和、基础设施失败中止后续阶段且第三阶段正文一次未下发、筛查上限与 `screeningIds` 同步。提交 `ed95858`；[详细证据](CHANGES.md#nx-08e1-2-离线覆盖多阶段驱动路径)。
 - **NX-08e1-3 fixture 契约与基线回填 — done**：PLAN 记录 fixture 契约与阶段数依据，TASKS/PROGRESS 同步计数与下一步；同时记下模拟适配器流量下序列峰值仅 13,614、不足以判断阶段数是否够这一负面事实。本批三个提交一次性推送，[CI 36693778212](https://github.com/BeforeLanding/mini-DSH/actions/runs/36693778212) 在 tip `c554bab` 上四组 success、attempt=1——**只有 tip 的 run，没有逐提交证据**。[详细证据](CHANGES.md#nx-08e1-3-fixture-契约与基线回填)。

@@ -1,9 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { runPhase, summarize, phaseCaps, batchCaps, singleRunBudget, evalPolicy, capKeys } from '../scripts/eval-runner.js'
+import { runPhase, summarize, phaseCaps, batchCaps, batchPhases, singleRunBudget, evalPolicy, capKeys } from '../scripts/eval-runner.js'
 import type { RunOutcome } from '../scripts/eval-runner.js'
 import { runFixtureTask, scriptedAdapter, summarizeStage } from '../scripts/eval-fixture.js'
-import { screeningIds } from '../scripts/coding-fixtures.js'
+import { screeningIds, sequenceIds } from '../scripts/coding-fixtures.js'
 import { CLI_BUDGET } from '../src/core/budget.js'
 import type { Counters } from '../src/core/budget.js'
 import type { ChatRequest, EventData, SessionEvent } from '../src/core/contracts.js'
@@ -40,8 +40,13 @@ test('pre-registered caps match PLAN and the phase caps sum to the whole-batch c
     screening: { runs: 12, requests: 400, tokens: 8_000_000 },
     armA: { runs: 72, requests: 2_400, tokens: 45_000_000 },
     armB: { runs: 72, requests: 2_400, tokens: 45_000_000 },
+    // 诊断烟测：单条六阶段序列，取逐阶段预算的理论上界（6 × 32 请求 / 6 × 2,000,000 token）。
+    sequence: { runs: 1, requests: 192, tokens: 12_000_000 },
   })
-  for (const cap of capKeys) assert.equal(batchCaps[cap], phaseCaps.screening[cap] + phaseCaps.armA[cap] + phaseCaps.armB[cap], cap)
+  // 整批只归约预注册的三个对照阶段。把诊断阶段算进去会改变「156 次运行」的含义，因此按值钉死而不是
+  // 只断言求和：以前改 armA 只会静默改变和值，现在会直接撞上预注册数字。
+  assert.deepEqual(batchCaps, { runs: 156, requests: 5_200, tokens: 98_000_000 })
+  for (const cap of capKeys) assert.equal(batchCaps[cap], batchPhases.reduce((total, name) => total + phaseCaps[name][cap], 0), cap)
   // 单次预算不能替代整批上限：每个 run 都用满单次 token 预算时总量远超整批上限，正是 PLAN 要求独立整批上限的理由。
   assert.ok(batchCaps.runs * (singleRunBudget.maxTotalTokens ?? 0) > batchCaps.tokens)
 })
@@ -236,6 +241,8 @@ test('an infrastructure failure stops the sequence instead of repeating it on ev
 // 计划任务之前中止阶段，12/12 的历史基线与旧上限就不再对应同一个任务集。
 test('the screening cap still covers exactly the frozen screening batch', () => {
   assert.equal(phaseCaps.screening.runs, screeningIds.length)
+  // 诊断阶段同理：它的 runs 按 fixture 运行次数计，因此必须等于该阶段 fixture 的个数。
+  assert.equal(phaseCaps.sequence.runs, sequenceIds.length)
 })
 
 // 成功率口径：分子只数通过验收的 run；不可行任务与基础设施失败都从分母排除并各自单列，不能静默丢弃。

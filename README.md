@@ -47,11 +47,13 @@ pnpm check
 pnpm test
 ```
 
-当前 165 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读、可靠编辑/任务变更、结构化命令、验证报告与请求 trace 测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
+当前 190 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读、可靠编辑/任务变更、结构化命令、验证报告与请求 trace 测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
 
 NX-05a 起提供可重复的 [编程任务 fixture](test/fixtures/coding/README.md)，NX-05b 扩展到 12 项，覆盖边界修复、功能扩展、跨文件接口修改、去重、分页、查询重试、合并、CSV、库存与汇总等。运行 `pnpm fixtures:check` 核验初始失败/参考通过基线；`pnpm test` 还覆盖模拟模型经真实文件/Bash 工具完成失败→修改→重跑的流程。每次使用新临时工作区，独立验收器保留在工作区外；模拟结果不代表真实模型编程成功率。
 
 `pnpm eval:offline` 用模拟模型把 12 个 fixture 跑成一次筛查阶段，用于验证评测运行器与整批上限核算（单次 run 预算与按阶段计数的整批上限见 [PLAN](docs/context-budget/PLAN.md#nx-08-评测批次上限预注册)）。该命令同样不使用真实模型，通过率不作为模型能力证据。
+
+`pnpm eval:screening` 与 `pnpm eval:sequence` 是**会真实计费**的评测入口：前者跑筛查批次的 12 个单任务 fixture，后者跑多阶段 fixture `pipeline` 的诊断烟测（同一会话内按序下发的六个阶段，用于测量上下文裁剪在哪个阶段被触发）。两者都需要 `.env` 里的 `DEEPSEEK_API_KEY`，按 `--phase` 选择批次；先加 `--plan-only` 可以在不建目录、不出网、不需要密钥的情况下核对「这次要跑什么、上限多少、证据落在哪」。`--tasks` 只能取当前阶段清单内的子集。三个与评测相关的环境变量见 [.env.example](.env.example)。
 
 `pnpm eval:estimate` 打印输入估算器与 DeepSeek 官方离线 tokenizer 的偏差分布（语料与固定参考值见 [test/fixtures/estimation](test/fixtures/estimation/README.md)）。结论：对中文、英文一致高估；对代码与 JSON 不是一致安全，实测有样本低估超过 10% 的容量余量。估算器或语料变化时该命令以非零退出码提示重新测量，不静默沿用旧结论。
 
