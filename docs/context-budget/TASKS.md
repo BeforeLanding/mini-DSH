@@ -140,7 +140,7 @@ NX-11-2…NX-11-5 这四步的验收**弱于** NX-11-6：那时锚点回归测�
 
 ### NX-08h 打破任务集天花板（方案 2，无公开检查变体）
 
-**离线部分已完成（2026-10-01，零付费）；付费烟测待单独授权。** 用户选定「只做方案 2」。承接 [NX-08g0](CHANGES.md#nx-08g0-任务集天花板效应定性边界与补救排序) 的**方案 2**：「增设**无公开检查**变体：工作区不含 `check.mjs`，只能按 SPEC 自验」。NX-08g0 判定的天花板效应是——两处独立测量都取满值（NX-08d 筛查 12/12、NX-08e 对照 A 6/6），**方差为零**，以 `accepted` 为分子的通过率统计量**没有分辨力**。机制之一是**公开且受保护的 `check.mjs` 就在工作区里、十四个阶段的说明全都给出 `node check.mjs N` 这个命令**，模型不必一次写对，只需能收敛到绿。
+**已完成（2026-10-01；离线部分零付费，付费烟测约 $1.43）。结果：未观测到失败，另暴露预注册的一处缺口。** 用户选定「只做方案 2」。承接 [NX-08g0](CHANGES.md#nx-08g0-任务集天花板效应定性边界与补救排序) 的**方案 2**：「增设**无公开检查**变体：工作区不含 `check.mjs`，只能按 SPEC 自验」。NX-08g0 判定的天花板效应是——两处独立测量都取满值（NX-08d 筛查 12/12、NX-08e 对照 A 6/6），**方差为零**，以 `accepted` 为分子的通过率统计量**没有分辨力**。机制之一是**公开且受保护的 `check.mjs` 就在工作区里、十四个阶段的说明全都给出 `node check.mjs N` 这个命令**，模型不必一次写对，只需能收敛到绿。
 
 **它测的是另一件事。** 现有 fixture 测「有完整、即时、廉价 oracle 时能否收敛」；去掉 oracle 之后测的是「能否按 SPEC 独立产出正确实现」。
 
@@ -161,12 +161,14 @@ NX-11-2…NX-11-5 这四步的验收**弱于** NX-11-6：那时锚点回归测�
 | NX-08h-4 | `blind` 契约与机制证明用例（**done**） | `pnpm test` 新增用例全绿，其中机制证明断言：`blind/initial/` 无 `check.mjs`、`initial/` 与 `TASKS/` 文本不含 `check.mjs`、两份 `verify.mjs` 仅 marker 一行差、十四份阶段说明与 `pipeline` 只差末段；注册表五份数组两两互斥；`phaseRegistry('blind')` 逐字等于 `['blind']` | 1 次 |
 | NX-08h-5 | 离线机制证明（零付费，**done**） | `pnpm fixtures:check` **16 项、初始 0/16、参考 16/16**；`pnpm test` 全绿；`pnpm check` 90 文件；`pnpm eval:offline` 仍 12/12；三条 `demo:*` 退出 0；**反例实跑**：`blind/verify.mjs` 的 marker 改回 `pipeline` 后 `pnpm fixtures:check` 必须红，改回必须绿（命令与输出记入 CHANGES） | 与 NX-08h-6 同一次（本步不产生文件改动，证据直接写进 CHANGES 的 NX-08h 节） |
 | NX-08h-6 | 文档回填（离线收尾）（**done**） | CHANGES 增 NX-08h 节且命令与实际输出逐字一致；各行置 `done` 并记提交号；README／`test/fixtures/coding/README.md`／PROGRESS 的 `15→16` 项计数与实跑一致，`syntax ok: 90 files` 不变；带日期的历史证据逐字未动 | 1 次（NX-08h-5 的证据一并在此） |
-| NX-08h-7 | 付费烟测（**需单独授权**） | `pnpm eval:screening --phase blind --plan-only` 输出含 `1 个任务 × 1 次重复 = 1 次运行：blind`、`448 请求 / 28000000 token`、末行 `只做计划预演，未建立目录、未发出请求`；随后 `MINI_DSH_EVAL_EVIDENCE_DIR=.eval-evidence/blind-full pnpm eval:screening --phase blind` 退出码与逐阶段读数落盘 | 1 次 |
-| NX-08h-8 | 报告回填 | CHANGES 结果节含 `acceptance.output` 原文、逐阶段 `status`、`protectedFilesChanged`、是否出现 `max_steps`；结论按 PLAN 预注册的三条判据分类，n=1 只作存在性证据，不含任何比例或提升措辞（`grep -nE '提升\|提高\|优于\|更好\|显著\|效率\|收益\|成功率\|%'` 在新增报告节内输出为空） | 1 次 |
+| NX-08h-7 | 付费烟测（**done**） | `pnpm eval:screening --phase blind --plan-only` 输出含 `1 个任务 × 1 次重复 = 1 次运行：blind`、`448 请求 / 28000000 token`、末行 `只做计划预演，未建立目录、未发出请求`；随后 `MINI_DSH_EVAL_EVIDENCE_DIR=.eval-evidence/blind-full pnpm eval:screening --phase blind` 退出码与逐阶段读数落盘 | 1 次 |
+| NX-08h-8 | 报告回填（**done**） | CHANGES 结果节含 `acceptance.output` 原文、逐阶段 `status`、`protectedFilesChanged`、是否出现 `max_steps`；结论按 PLAN 预注册的三条判据分类，n=1 只作存在性证据，不含任何比例或提升措辞（`grep -nE '提升\|提高\|优于\|更好\|显著\|效率\|收益\|成功率\|%'` 在新增报告节内输出为空） | 1 次 |
 
 NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，**验收只在事后核对差异范围**，不像 NX-11-6 那样有回归测试在写的时候挡住漂移——这一点照实写进 CHANGES。
 
-**离线部分提交**：`75a4614`（NX-08h-0）、`9bfafb4`（NX-08h-1）、`32efaf3`（NX-08h-2）、`a1d1077`（NX-08h-3）、`935b769`（NX-08h-4）、本提交（NX-08h-5＋NX-08h-6）。详细证据见 [CHANGES 的 NX-08h 节](CHANGES.md#nx-08h-打破任务集天花板方案-2无公开检查变体)。
+**提交**：`75a4614`（NX-08h-0）、`9bfafb4`（NX-08h-1）、`32efaf3`（NX-08h-2）、`a1d1077`（NX-08h-3）、`935b769`（NX-08h-4）、NX-08h-5＋NX-08h-6（合并一次），以及本提交（NX-08h-7＋NX-08h-8）。详细证据见 [CHANGES 的 NX-08h 节](CHANGES.md#nx-08h-打破任务集天花板方案-2无公开检查变体)。
+
+**结论（2026-10-01，付费约 $1.43）**：单次运行 `accepted`、退出码 0、输出逐字 `acceptance passed: blind`、受保护文件零改动、**零 `max_steps`**——按预注册字面命中**「未被打破」**，只可写「这一次没有失败」。222 请求 / 256 工具 / 8,710,662 token / 约 21.4 分钟，usage 全部来自 provider。**两处必须照实写的事实**：① **4/14 个阶段以 `context_overflow` 结束**（第 6、7、13、14），触发点是**输入目标** 65,536 而非窗口，且发生在裁剪到底之后——**预注册的判据只防了 `max_steps`，这是它的缺口**，判据正文逐字未改，缺口记在 CHANGES 与 PLAN 的追记里；② 模型**自建了检查脚本**（`tmp-verify-06.mjs`／`tmp-verify-07.mjs`，第 10 阶段还回头复用了一次），117 次 bash 里 31 次是 `node` 内联脚本，而提到 `check.mjs` 的**是 0 次**。**不得**写成「无公开检查不影响结果」，**不得**与 `armB` 并排读（本次是诊断烟测，与 `armB` 的比较不在预注册内），**不得**据此改 `blind` 或重跑。
 
 其他待办，按依赖排序：
 
