@@ -32,8 +32,9 @@ export const phaseCaps: Readonly<Record<PhaseName, BatchCaps>> = Object.freeze({
   // 数值取逐阶段预算的理论上界：该阶段的计划里只有 1 个 fixture，而 runPhase 只在两次 fixture 之间
   // 检查累计值，整批上限对它本来就不构成中途制动——取更紧的值只会把一次跑完的烟测变成带 aborted 的
   // 退出码 1，拦不住任何花费。烟测真正的闸门是每阶段的 singleRunBudget（32 请求 / 2,000,000 token），
-  // 6 个阶段合计即这里的 192 / 12,000,000。
-  sequence: { runs: 1, requests: 192, tokens: 12_000_000 },
+  // 阶段数 × 这组值即这里的 320 / 20,000,000（NX-08e2-4 把序列从 6 阶段扩到 10 阶段）。
+  // 上限必须跟着阶段数走：留在 6 阶段的 192 上，10 阶段的理论上界就会越过去，把一次正常的烟测记成 aborted。
+  sequence: { runs: 1, requests: 320, tokens: 20_000_000 },
 })
 export const batchCaps: Readonly<BatchCaps> = Object.freeze(batchPhases.reduce((totals, name) => ({
   runs: totals.runs + phaseCaps[name].runs,

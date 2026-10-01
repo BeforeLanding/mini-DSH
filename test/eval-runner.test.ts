@@ -42,8 +42,9 @@ test('pre-registered caps match PLAN and the phase caps sum to the whole-batch c
     // 单次烟测实测 53 请求 / 2,188,159 token。
     armA: { runs: 3, requests: 600, tokens: 15_000_000 },
     armB: { runs: 3, requests: 600, tokens: 15_000_000 },
-    // 诊断烟测：单条六阶段序列，取逐阶段预算的理论上界（6 × 32 请求 / 6 × 2,000,000 token）。
-    sequence: { runs: 1, requests: 192, tokens: 12_000_000 },
+    // 诊断烟测：单条序列，取逐阶段预算的理论上界（阶段数 × 32 请求 / 阶段数 × 2,000,000 token）。
+    // NX-08e2-4 把序列从 6 阶段扩到 10 阶段，上限跟着走。
+    sequence: { runs: 1, requests: 320, tokens: 20_000_000 },
   })
   // 整批只归约预注册的三个对照阶段。把诊断阶段算进去会改变这个数字的含义，因此按值钉死而不是只断言
   // 求和：以前改 armA 只会静默改变和值，现在会直接撞上预注册数字。
@@ -57,6 +58,11 @@ test('pre-registered caps match PLAN and the phase caps sum to the whole-batch c
   await pipeline.close()
   assert.ok(phaseCaps.screening.runs * (singleRunBudget.maxTotalTokens ?? 0) > phaseCaps.screening.tokens)
   assert.ok(phaseCaps.armA.runs * stages * (singleRunBudget.maxTotalTokens ?? 0) > phaseCaps.armA.tokens)
+  // 诊断阶段的上限是「阶段数 × 单次预算」的理论上界，因此必须与阶段数逐字相等而不是只够用就行：
+  // 阶段数一变（NX-08e2-4 从 6 到 10）上限不跟，一次正常的烟测就会越过去、被记成 aborted 并以退出码 1
+  // 结束——那是把上限的陈旧读成模型或仪器的毛病。
+  assert.equal(phaseCaps.sequence.requests, stages * (singleRunBudget.maxModelRequests ?? 0))
+  assert.equal(phaseCaps.sequence.tokens, stages * (singleRunBudget.maxTotalTokens ?? 0))
 })
 
 // 预注册只固定四项；上下文目标与窗口必须由文档默认值补上，否则投影不裁剪、context_overflow 不再触发，
