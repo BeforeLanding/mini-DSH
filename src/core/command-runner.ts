@@ -20,6 +20,11 @@ export interface CommandOptions {
 
 export function commandFailed(result: CommandResult) { return result.status !== 'exited' || result.exitCode !== 0 }
 
+// 等进程树终结的上限（仅 Windows 用得上，见 kill）。taskkill 可能挂住，超限按「尽力而为」放行，
+// 不把 runCommand 无限期拖住。取 2 秒而不是收尾预算的 5 秒：这段等待会推迟工具结果与验证账本，
+// 与 run 的收尾预算叠加会拉长「run 已终结但事件还在追加」的窗口。
+const treeKillDeadlineMs = 2_000
+
 export async function runCommand(options: CommandOptions): Promise<CommandResult> {
   const limit = positiveLimit(options.maxCaptureBytes, 8 * 1024 * 1024, 'maxCaptureBytes')
   const timeoutMs = positiveLimit(options.timeoutMs, 30_000, 'timeoutMs', 2_147_483_647)
@@ -56,12 +61,36 @@ export async function runCommand(options: CommandOptions): Promise<CommandResult
       if (chunk.length > remaining) target.truncated = true
       if (remaining > 0) { const kept = chunk.subarray(0, remaining); target.chunks.push(kept); bytes += kept.length }
     }
-    const kill = () => {
-      if (!child.pid) return
-      if (process.platform === 'win32') execFile('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }, cause => { if (cause) child.kill() })
-      else { try { process.kill(-child.pid, 'SIGKILL') } catch { child.kill('SIGKILL') } }
+    // 杀进程树，返回一个**永不 reject** 的 Promise，表示「树已经收掉了」这件事何时落定。
+    // POSIX 上 `kill(-pgid, SIGKILL)` 在系统调用层面同步送达，返回即已送达（SIGKILL 不可捕获，
+    // 组内成员不可能再跑自己的定时器），所以直接 resolve。
+    // Windows 上没有进程组，树由一个**外部进程** taskkill 异步拆——不等它落定就 resolve，就会出现
+    // 「已经返回 cancelled，子进程树还在跑」的窗口：实测 taskkill 往返约 460ms，而调用方可能在
+    // 这期间就把终态记成了事实。
+    const kill = (): Promise<void> => {
+      if (!child.pid) return Promise.resolve()
+      if (process.platform !== 'win32') {
+        try { process.kill(-child.pid, 'SIGKILL') } catch { child.kill('SIGKILL') }
+        return Promise.resolve()
+      }
+      return new Promise<void>(settle => {
+        let done = false
+        const finish = () => { if (!done) { done = true; settle() } }
+        const deadline = setTimeout(() => { child.kill(); finish() }, treeKillDeadlineMs)
+        execFile('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }, cause => {
+          clearTimeout(deadline)
+          if (cause) child.kill()
+          finish()
+        })
+      })
     }
-    const stop = (reason: 'timed_out' | 'cancelled') => { if (status !== 'exited') return; status = reason; kill() }
+    // `status !== 'exited'` 是闩：stop 最多生效一次，terminating 也最多被赋值一次。
+    let terminating: Promise<void> | undefined
+    const stop = (reason: 'timed_out' | 'cancelled') => {
+      if (status !== 'exited') return
+      status = reason
+      terminating = kill()
+    }
     const abort = () => stop('cancelled')
     const timer = setTimeout(() => stop('timed_out'), timeoutMs)
     options.signal.addEventListener('abort', abort, { once: true })
@@ -71,7 +100,11 @@ export async function runCommand(options: CommandOptions): Promise<CommandResult
     child.on('error', cause => { if (status === 'exited') status = 'spawn_error'; error = cause.message })
     child.on('close', (code, signal) => {
       clearTimeout(timer); options.signal.removeEventListener('abort', abort)
-      resolve(result(code, signal))
+      // 只在下过 kill 时多等一步；正常退出（close 先于任何 stop）路径一行未变。
+      // 仍然**只**在 close 上 resolve：deadline 超时也不强行 resolve，否则「resolve 即进程已退」
+      // 这条不变式会破，exitCode 与 signal 会变成猜的。
+      if (!terminating) return resolve(result(code, signal))
+      terminating.then(() => resolve(result(code, signal)))
     })
   })
 }

@@ -58,6 +58,9 @@ test('cancellation returns partial logs and kills descendants before their side 
     const result = await pending
     assert.equal(result.status, 'cancelled'); assert.equal(result.cancelled, true); assert.equal(result.timedOut, false)
     assert.equal(result.stdout.text, 'partial'); assert.equal(commandFailed(result), true)
+    // 这里刻意**不**加「durationMs 不得短于一次 taskkill 往返」之类的断言：实测新旧实现都约
+    // 400～460ms（老的 close 本来就要等 taskkill 把子进程杀掉才触发），两边都过，那样的断言
+    // 声称能区分实现却并不区分。真正的不变式由下一行的 marker 断言把住。
     await delay(1700)
     await assert.rejects(fs.access(marker))
     await assert.rejects(runCommand({ executable: process.execPath, args: ['-e', ''], command: '', cwd: directory, signal: AbortSignal.abort() }), /abort/i)
