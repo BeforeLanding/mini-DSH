@@ -368,6 +368,12 @@ export class SandboxRuntime {
         if (!(stdoutOnlyCommands.has(commandWord) && !pipedDownstream)) {
           if (targetHost === null || !this.allowHosts.includes(targetHost)) return deny('unauthorized outbound request')
         }
+      } else if (/^\\\\[^\\/]+\\/.test(token)) {
+        // 反斜杠 UNC：`\\server\share`、`\\?\C:\…`、`\\.\pipe\…`。正则要求 `\\`＋主机段＋`\`，
+        // 不能用 `^\\\\` 一刀切——`printf '\\n'` 这类正当写法会中招。与位置无关，任意 token 都查。
+        // 也不能只靠下面的路径分支：POSIX 上 path.resolve 会把 `\\server\share` 当成工作区内的
+        // 相对名而放行，只有 Windows 才解析成 UNC。
+        return deny('UNC path is blocked')
       } else if (/^(?:\/|[A-Za-z]:[\\/])/.test(token)) {
         const normalized = token.replace(/\\/g, '/')
         if (token === '/dev/null') { executable = false; continue }

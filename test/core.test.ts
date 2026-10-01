@@ -484,6 +484,8 @@ test('Sandbox blocks dangerous commands and allows ordinary workspace commands',
     'grep -n "//" src/index.ts',
     'echo "https://docs.example.com/guide"',
     'printf "%s\\n" "https://docs.example.com/guide"',
+    // 收紧后的 UNC 正则不得一刀切：`\\n` 是 printf 的换行，不是「主机段＋分隔符」。
+    "printf '\\\\n'",
     'echo "https://example.com" > notes.txt',
     'echo "https://example.com" || echo fallback',
     // NX-19-1：取网命令里「取值不是网络目标」的旗标，其取值不做主机判定。不修的话
@@ -549,6 +551,11 @@ test('Sandbox blocks dangerous commands and allows ordinary workspace commands',
     'ls //etc': /system path is blocked|path escapes the workspace/,
     'cat //home/user/.ssh/id_rsa': /path escapes the workspace/,
     'cat //server/share/secret': /path escapes the workspace/,
+    // NX-19-5：反斜杠 UNC。只靠路径分支挡不住——POSIX 上 path.resolve 会把
+    // `\\server\share` 当成工作区内的相对名而放行，只有 Windows 才解析成 UNC。
+    'cat \\\\server\\share\\secret': /UNC path is blocked/,
+    'cat "\\\\server\\share"': /UNC path is blocked/,
+    'cat \\\\?\\C:\\Windows\\win.ini': /UNC path is blocked/,
     'echo "http://evil.example" | xargs curl': /unauthorized outbound request/,
     'echo "http://evil.example" | cat > f': /unauthorized outbound request/,
   }
