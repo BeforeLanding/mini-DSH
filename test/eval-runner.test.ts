@@ -1,12 +1,16 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { armPolicy, runPhase, summarize, phaseCaps, batchCaps, batchPhases, singleRunBudget, evalPolicy, capKeys } from '../scripts/eval-runner.js'
 import type { RunOutcome } from '../scripts/eval-runner.js'
-import { runFixtureTask, scriptedAdapter, summarizeStage } from '../scripts/eval-fixture.js'
+import { runFixtureTask, scriptedAdapter, summarizeStage, type FixtureAdapter, type ToolOutputMode } from '../scripts/eval-fixture.js'
 import { createFixture, screeningIds, sequenceIds } from '../scripts/coding-fixtures.js'
 import { CLI_BUDGET } from '../src/core/budget.js'
 import type { Counters } from '../src/core/budget.js'
-import type { ChatRequest, EventData, SessionEvent } from '../src/core/contracts.js'
+import { assertToolProtocol } from '../src/core/context-runtime.js'
+import type { ChatRequest, ChatResponse, EventData, SessionEvent } from '../src/core/contracts.js'
 
 // summarizeStage 是对事件数组的纯函数，因此合成日志就能钉住裁剪触发点、未发出投影与 usage 来源这些
 // 边界；不该等到真实模型烟测才发现读数不对。
@@ -204,6 +208,53 @@ test('the driver runs every stage of a sequence fixture and sums their counters'
   assert.ok(stages.every(stage => stage.firstPrunedProjection === null && stage.removedTaskIds.length === 0 && stage.unsentProjections === 0))
   // usage 来源分类要能反映真实出处：模拟适配器不返回 usage，全部由估算补上。
   assert.ok(stages.every(stage => stage.usageSources.estimated === stage.counters.modelRequests && stage.usageSources.provider === 0))
+})
+
+// 对照 B 的自变量是「工具输出是否有界」。两臂必须装载**同一个** tool-results 插件、只改它的
+// maxPreviewBytes：该插件无条件注册 read_tool_result，装与不装会让 tools.schemas() 相差一个条目，而
+// 工具表既进入模型请求又进入输入估算，那样两臂差的就不只是有界性。这条用例用同一个 fixture、同一段
+// 大输出、同一预算，只切这一个参数，并直接读回会话事件来钉住结果形态。
+test('the bounded tool-output switch truncates a large result while the unbounded one keeps every byte', { timeout: 60_000 }, async () => {
+  const command = `node -e 'process.stdout.write("VIOLATION line ".repeat(20000)+"SENTINEL-END")'`
+  const bigOutput = (): FixtureAdapter => {
+    let step = 0
+    return {
+      provider: 'scripted', model: 'fixture', capabilities: { fixture: { contextWindowTokens: 1_000_000 } },
+      chat: async ({ messages = [] }: ChatRequest): Promise<ChatResponse> => {
+        assertToolProtocol(messages)
+        return step++ === 0 ? { toolCalls: [{ id: 'big', name: 'bash', arguments: { command } }] } : { content: 'done' }
+      },
+    }
+  }
+  // 落盘才能读回结果形态：runFixtureTask 只在给出 sessionDirectory 时持久化事件。
+  const capturedResult = async (mode: ToolOutputMode) => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'eval-tool-output-'))
+    try {
+      await runFixtureTask('boundary', bigOutput, { ...evalPolicy, maxModelRequests: 8 }, directory, mode)
+      const [session] = await fs.readdir(directory)
+      const log = await fs.readFile(path.join(directory, session!, 'events.jsonl'), 'utf8')
+      return log.trim().split('\n').map(line => JSON.parse(line) as SessionEvent)
+        .filter(event => event.type === 'tool/result').map(event => event.data.content).join('')
+    } finally { await fs.rm(directory, { recursive: true, force: true }) }
+  }
+
+  // 读回的是 CommandResult 的 JSON，命令原文也在里面（末尾哨兵因此在 command 字段出现一次）——要判断
+  // 结果有没有被截断，必须看 stdout.text 而不是整段 JSON。
+  const streamText = (content: string) => (JSON.parse(content) as { stdout: { text: string } }).stdout.text
+
+  // 有界：结果被截成 8 KiB 预览 + 落盘引用，末尾哨兵留在存储里而不是历史里。
+  const projected = JSON.parse(await capturedResult({ bounded: true })) as { stdout: { text: string; previewTruncated?: boolean; ref?: string } }
+  assert.equal(projected.stdout.previewTruncated, true)
+  assert.ok(projected.stdout.ref, 'a truncated stream must carry a ref back to the stored result')
+  assert.ok(!projected.stdout.text.includes('SENTINEL-END'), 'the preview must not carry the tail of a large result')
+  assert.ok(Buffer.byteLength(projected.stdout.text) <= 8192, `preview was ${Buffer.byteLength(projected.stdout.text)} bytes`)
+
+  // 无界：同一段输出逐字进入历史，没有 previewTruncated 也没有 ref——这正是 NX-07 之前的行为，也是对照 B
+  // 的基线臂。它同样说明「无界」不是把插件拆掉，而是把预览上限抬到任何单条结果都装得下。
+  const unbounded = await capturedResult({ bounded: false })
+  assert.ok(streamText(unbounded).endsWith('SENTINEL-END'))
+  assert.ok(!unbounded.includes('previewTruncated'))
+  assert.ok(Buffer.byteLength(streamText(unbounded)) > 200_000, `unbounded result was ${Buffer.byteLength(streamText(unbounded))} bytes`)
 })
 
 test('a stage summary reports a stage that never pruned without inventing evidence', () => {

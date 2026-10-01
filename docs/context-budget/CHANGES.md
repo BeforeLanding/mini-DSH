@@ -2,6 +2,45 @@
 
 更新：2026-10-01。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-08f 对照 B：现有裁剪 vs 裁剪加有界工具输出
+
+- 关联：NX-08 的第二条对照，也是 `armA`/`armB` 明确归属对照 A 之后空出来的那一支。状态：**in_progress**。整批上限与阶段尚未预注册（见 PLAN 的「对照 B 因此不再有对应的阶段与上限」），本节按子步骤累积证据。
+
+### 与对照 A 的两处结构差别
+
+- **不受会话组成前置限制**。对照 A 要产生差异，会话里必须存在**已结束且可裁剪的旧任务**（`context-runtime.ts:29,68-74` 只移除 `!protected && complete` 的组），所以它必须用多阶段序列。有界工具输出改变的是**当前 task 内部**的历史规模，而当前 task 恒 `protected`、无法被裁剪——单任务会话下无界臂就会 `context_overflow`、有界臂完成，两臂可直接分辨。
+- **判别量是 `context_overflow` 这个结构性事实，不是 `accepted`**。因此 NX-08g0 判定的「任务集天花板效应」不会让对照 B 失效：它不需要两臂在通过率上分出高低。
+
+### 自变量：为什么是「同一插件的不同配置」而不是「装 / 不装」
+
+`src/plugins/tool-results.ts` 在 `apply()` 里**无条件**注册 `read_tool_result`（`:45-53`），而 `tools.schemas()` 每次请求都把工具表交给模型，`token-estimator.ts:10` 又把它计入输入估算。因此「装 / 不装」会让两臂的 `tools` 数组相差一整个条目——既改变模型看到的能力，也改变估算，被比较的就不只是有界性，违反 R-21 的「两臂共用同一 prompt 与工具」。
+
+改用 `maxPreviewBytes`：两臂都装载同一个插件，有界走生产默认（`positiveLimit` 的 16 KiB 预览），无界抬到 64 MiB（`UNBOUNDED_PREVIEW_BYTES`，bash 单流采集上限 8 MiB 经 JSON 转义后最坏约翻倍，仍装得下）。两者的工具与 schema 逐字相同，唯一差别是结果是否被投影截断。**生产代码零改动**——`maxPreviewBytes` 是现成配置项。
+
+### NX-08f-1 工具输出开关与两臂装配 — done（2026-10-01，零付费）
+
+- **改动**：`scripts/eval-fixture.ts` 新增 `ToolOutputMode`（`{ bounded: boolean }`）与 `UNBOUNDED_PREVIEW_BYTES`，`runFixtureTask` 追加**第 5 个可选位置参数** `toolOutput`。不传时不装载插件，既有阶段（screening / armA / armB / sequence）与全部离线用例的行为一字不变。
+- **验收**：`test/eval-runner.test.ts` 新增用例用同一个 fixture（`boundary`）、同一段 300 KB bash 输出、同一预算，只切 `bounded` 一个参数，并**从会话事件里读回结果形态**（`runFixtureTask` 只在给出 `sessionDirectory` 时落盘）：
+  - `bounded: true` → 恰一个 `tool/result`，`stdout.previewTruncated === true`、带 `ref`、`stdout.text` 恰 8,192 字节（= `maxPreviewBytes`/2）且**不含**末尾哨兵；
+  - `bounded: false` → `stdout.text` 以末尾哨兵结尾、>200,000 字节、**无** `previewTruncated`。
+- **一处易错点（已写进用例）**：`tool/result` 的内容是 `CommandResult` 的 JSON，**命令原文也在里面**，末尾哨兵因此在 `command` 字段出现一次。判断「结果有没有被截断」必须看 `stdout.text` 而不是整段 JSON——第一版断言整段 JSON 时被这条绊住。
+- **回归**：`pnpm check` 84 文件语法通过；`pnpm test` **196/196**（原 195，新增 1 条）。未调用付费模型。
+
+### 子步骤与提交边界
+
+| 子步 | 内容 | 付费 | 状态 |
+| --- | --- | --- | --- |
+| NX-08f-1 | 工具输出开关与两臂装配（`runFixtureTask` 第 5 参 + 单测） | 否 | **done** |
+| NX-08f-2 | 新增单任务 fixture `audit`（大输出仪器） | 否 | todo |
+| NX-08f-3 | 离线机制证明（同 fixture 下无界臂溢出、有界臂完成）+ 诊断探针 | 否 | todo |
+| NX-08f-4 | 接好诊断阶段 `smoke`，使付费烟测可被 `--phase`/`--plan-only` 调度 | 否 | todo |
+| NX-08f-4b | 真实模型烟测：模型是否**真的**产生大输出 | **是**（需单独授权） | todo |
+| NX-08f-5 | 按实测预注册 `armC`/`armD` 的 `phaseCaps` 与 `batchCaps` | 否 | todo |
+| NX-08f-6 | 正式批次（1 fixture × 6 次重复 × 2 臂） | **是** | todo |
+| NX-08f-7 | 报告回填（NX-08-REPORT / CHANGES / TASKS / PROGRESS） | 否 | todo |
+
+顺序不可调换：先离线证明**开关**有效（f-3），再花钱测量**模型**是否产生差异（f-4b），最后才按实测预注册（f-5）。这正是 NX-08e2 的反面——那次先用 n=1 外推定案，再被 n=6 否证。
+
 ## NX-08g 评测报告与结论
 
 - 关联：NX-08 的收尾项；NX-08e 与 NX-08g0 的合并结论。状态：done（2026-10-01）。**不调用付费模型、不新增运行、不改 `src/` 与 fixture**；全部数字从既有证据目录的 `runs.jsonl` 与 `sessions/*/events.jsonl` 读出。

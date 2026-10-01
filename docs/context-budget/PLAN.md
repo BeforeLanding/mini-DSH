@@ -284,3 +284,20 @@ e0 只固化了驱动与布局，没有 fixture 声明 `TASKS/`。`pipeline` 是
 - **单次 run 预算按阶段各计一份这一点被实测确认**：6 个阶段各自一次 `agent.send()`、各自一份 32 请求 / 2,000,000 token，最大的一阶段（06）也只用了 15 次请求。32 这个「约束值」在这里不是绑定约束——它保证了对照 A 两臂拿到相同工作量，而不是把某一阶段掐断。
 - **`estimatedInputTokens` 是裁剪后的值，读法要小心**：阶段 5/6 的「最后一次投影」反而低于峰值（62,699 / 52,025 与 65,496 / 63,741）。判断某一阶段自身长了多少要看 `maxEstimatedInputTokens` 与相邻阶段的增长。裁**剪前**的规模没有落盘，只能由相邻投影外推。
 - **这次运行的终态验收是 `accepted=false`，但失败点不是功能**：验收钉了 SPEC 没有规定的错误措辞。处置与依据见 [CHANGES 的 NX-08e2-3](CHANGES.md#nx-08e2-3-pipeline-的真实模型烟测与结论) 与 NX-08e2-5，读数本身（裁剪触发点）不受影响。
+
+## NX-08f 对照 B：工具输出有界性
+
+**自变量是唯一的：工具输出是否有界。** 其余（模型、prompt、初始状态、验收器、单次 run 预算、**输入目标 65,536**）两臂完全一致。两臂都开「现有裁剪」，即 `armPolicy` 对它们都返回 `evalPolicy`。
+
+**实现方式：同一插件的不同配置，而不是装 / 不装。** `src/plugins/tool-results.ts` 在 `apply()` 里无条件注册 `read_tool_result`（`:45-53`）；`tools.schemas()` 每次请求都把工具表交给模型，`token-estimator.ts:10` 又把它计入输入估算。装 / 不装会让两臂的 `tools` 数组相差一个条目——既改变模型看到的能力，也改变估算，被比较的就不只是有界性，违反 R-21 的「两臂共用同一 prompt 与工具」。因此两臂**都**装载该插件，只改 `maxPreviewBytes`：
+
+- **有界臂**：走生产默认（`positiveLimit` 的 16 KiB 预览；bash 每条流截到 `maxPreviewBytes/2` = 8 KiB），超出部分落盘并返回 `ref`，模型可用 `read_tool_result` 分页回读。
+- **无界臂**：`maxPreviewBytes` 抬到 `UNBOUNDED_PREVIEW_BYTES = 64 MiB`（`scripts/eval-fixture.ts`）。bash 单流采集上限 8 MiB、经 `JSON.stringify` 转义后最坏约翻倍，因此任何单条结果都装得下，不会走截断分支、也不产生 `ref`。这是 NX-07 之前的行为。
+
+**开关的落点是 `runFixtureTask` 的第 5 个可选参数**（`ToolOutputMode`）。不传时不装载插件——screening / armA / armB / sequence 与全部离线用例的行为因此一字不变，历史基线不受污染。
+
+**为什么对照 B 不需要多阶段序列。** 对照 A 要产生差异，会话里必须存在**已结束且可裁剪的旧任务**（`context-runtime.ts:29,68-74` 只移除 `!protected && complete` 的组），所以它必须用多阶段序列才能构造出可裁剪的历史。有界工具输出改变的是**当前 task 内部**的历史规模，而当前 task 恒 `protected`、无法被裁剪——单任务会话下无界臂就会 `context_overflow`、有界臂完成。**两臂的可测性因此不对称，这不是缺陷而是两种处理作用在不同位置的必然结果。**
+
+**判别量是结构性的，不是通过率。** 对照 B 的分辨信号是 `context_overflow`（`agent-loop-runtime.ts:80`）这个事实，不需要两臂在 `accepted` 上分出高低——因此 NX-08g0 判定的「任务集天花板效应」不会让对照 B 失效。反之，**两臂的 token 差正是处理本身设定的量，只能作操纵检查，不得写成收益**。
+
+**尚未预注册。** `phaseCaps` 的 `armA`/`armB` 已归属对照 A 的两条臂，对照 B 的两臂（`armC` 有界 / `armD` 无界）的阶段与整批上限留到 NX-08f-5，**且必须晚于 f-4b 的真实模型烟测**：NX-08e2 的教训是外推的 token 数被实测推翻（外推 3,884,608 / 实测 6,379,862，差 64%），预注册不得建立在没有实测支撑的外推上。样本量按用户选定为 **1 条 fixture × 6 次重复 × 2 臂**。

@@ -15,10 +15,18 @@ import * as llm from '../src/plugins/llm.js'
 import * as agents from '../src/plugins/agent.js'
 import * as agentLoop from '../src/plugins/agent-loop.js'
 import * as sandbox from '../src/plugins/sandbox.js'
+import * as toolResults from '../src/plugins/tool-results.js'
 import * as files from '../src/tools/files.js'
 import * as bash from '../src/tools/bash.js'
 
 export type Fixture = Awaited<ReturnType<typeof createFixture>>
+// 对照 B 的自变量：工具输出是否有界。两臂都必须装载同一个 tool-results 插件，只改它的配置——插件无条件
+// 注册 read_tool_result，装与不装会让 tools.schemas() 相差一个条目，而工具表既进入模型请求又进入输入
+// 估算，那样两臂差的就不只是有界性，R-21 的「同一 prompt 与工具」不再成立。
+export interface ToolOutputMode { bounded: boolean }
+// 「无界」仍是同一插件，只是把预览上限抬到任何单条结果都装得下：bash 单流采集上限 8 MiB，经
+// JSON.stringify 转义后最坏约翻倍，64 MiB 留足余量，因此不会走到截断分支、也不会产生 ref。
+export const UNBOUNDED_PREVIEW_BYTES = 64 * 1024 * 1024
 // capabilities 必须随适配器一起传入：投影只在能查到窗口容量时才会拿到 contextWindowTokens，否则预算
 // 校验会以“缺少上下文容量”直接失败，而不是静默退化成无上限。
 export interface FixtureAdapter { provider: string; model: string; chat: Adapter['chat']; capabilities?: Adapter['capabilities'] }
@@ -78,9 +86,12 @@ export function summarizeStage(events: readonly SessionEvent[], runId: string) {
 // fixture.tasks 的阶段按序在同一个 session 内下发：每次 send 分配新 taskId，于是先前结束的阶段成为
 // 可裁剪的旧任务——这是对照 A 能产生差异的前提（单任务会话无论多大都不会触发裁剪）。验收仍在最后
 // 对工作区终态做一次判定，不按阶段拆分。
+// toolOutput 是对照 B 的自变量，不传时**不装载** tool-results 插件，既有阶段（screening/armA/armB/
+// sequence 与全部离线用例）的行为与历史基线因此一字不变。
 export async function runFixtureTask(
   id: FixtureId, makeAdapter: (fixture: Fixture) => FixtureAdapter,
   budget: Readonly<BudgetPolicy> = evalPolicy, sessionDirectory?: string,
+  toolOutput?: ToolOutputMode,
 ): Promise<RunOutcome> {
   const fixture = await createFixture(id), root = new Context()
   let store: JsonlStore | undefined
@@ -88,6 +99,9 @@ export async function runFixtureTask(
     for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
     await root.plugin(sandbox, { workspace: fixture.workspace, autoApprove: true })
     await root.plugin(files); await root.plugin(bash)
+    // 有界走生产默认（positiveLimit 的 16 KiB 预览），无界抬到 UNBOUNDED_PREVIEW_BYTES。两者注册的工具
+    // 与 schema 逐字相同，差异只在结果是否被投影截断。
+    if (toolOutput) await root.plugin(toolResults, { maxPreviewBytes: toolOutput.bounded ? undefined : UNBOUNDED_PREVIEW_BYTES })
     const adapter = makeAdapter(fixture)
     root.llm.register(adapter.provider, { models: [adapter.model], ...(adapter.capabilities ? { capabilities: adapter.capabilities } : {}), chat: adapter.chat })
     const session = root.sessions.create({ source: 'eval', fixtureId: id })
