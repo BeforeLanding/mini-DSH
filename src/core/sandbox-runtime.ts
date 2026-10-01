@@ -171,6 +171,66 @@ function extractExecutedFragments(command: string) {
   return fragments
 }
 
+// 会执行 `-c` 参数的解释器（按 basename 匹配，`/bin/bash` 同样命中）。
+const shellWords = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh'])
+
+// 从 shell 词之后找 `-c` 族旗标（`-c`、`-lc`、`-ic`…）。遇到 `--`、非旗标或新的命令段就停：
+// `bash -- -c x` 里的 `-c` 不是选项，`bash x.sh -c` 里的 `-c` 是脚本自己的参数。
+// 找不到返回 -1。
+function findShellCommandFlag(tokens: RegExpMatchArray[], expanded: string, shellIndex: number) {
+  for (let index = shellIndex + 1; index < tokens.length; index++) {
+    const start = tokens[index].index ?? 0
+    if (/[|;&\n]\s*$/.test(expanded.slice(0, start))) return -1
+    const token = tokens[index][0].replace(/^["']|["']$/g, '')
+    if (token === '--' || !token.startsWith('-')) return -1
+    if (/^-[A-Za-z]*c[A-Za-z]*$/.test(token)) return index
+  }
+  return -1
+}
+
+// shell 的去引号。单引号内原样；双引号内只解析 `\"`、`\\`、`\$`、`` \` ``，其余 `\X` 保留反斜杠；
+// 引号外 `\X` 一律是 X。不能复用分词器那句 raw.replace(/^["']|["']$/g, '')——它不处理 `\$`，
+// 于是 `bash -c "echo \$(curl x)"` 的替换会留在转义态里而漏检：外层 shell 早已把 `\$` 变成 `$`，
+// 内层 bash 会真的执行它。
+function unquoteShellArgument(raw: string) {
+  let out = ''
+  let index = 0
+  while (index < raw.length) {
+    const char = raw[index]
+    if (char === '\\') {
+      const next = raw[index + 1]
+      if (next === undefined) { out += char; index += 1; continue }
+      out += next
+      index += 2
+      continue
+    }
+    if (char === "'") {
+      const end = raw.indexOf("'", index + 1)
+      out += raw.slice(index + 1, end === -1 ? raw.length : end)
+      index = end === -1 ? raw.length : end + 1
+      continue
+    }
+    if (char === '"') {
+      index += 1
+      while (index < raw.length && raw[index] !== '"') {
+        if (raw[index] === '\\' && index + 1 < raw.length) {
+          const next = raw[index + 1]
+          out += '"\\$`'.includes(next) ? next : `\\${next}`
+          index += 2
+          continue
+        }
+        out += raw[index]
+        index += 1
+      }
+      index += 1
+      continue
+    }
+    out += char
+    index += 1
+  }
+  return out
+}
+
 // 该 token 是不是「取值不是网络目标」的旗标，且它的取值是**下一个** token。
 // 长旗标带 `=` 时取值内联（`--output=x`），不需要跳过下一个。短旗标允许合并（`-sS`、`-so`）：
 // 只有合并串的**最后一个**字母取下一个 token 作值，`-os x` 的 s 是 o 的内联取值。
@@ -211,6 +271,18 @@ export class SandboxRuntime {
     if (typeof command !== 'string' || !command.trim()) return { action: 'deny' as const, reason: 'command is required' }
     return this.#inspect(command, 0)
   }
+  // 嵌套片段的统一入口：上限与拒绝理由只在这一处定义，`$()`／反引号与 `-c`／`eval` 共用。
+  // 超限即拒绝而不是放行——否则 `$(a$(b$(c$(curl x))))` 就成了一个明文可复制的绕过构造。
+  #inspectFragments(fragments: { text: string; origin: string }[], depth: number): { action: 'deny'; reason: string } | null {
+    if (!fragments.length) return null
+    if (fragments.length > maxExecutedFragments) return { action: 'deny', reason: 'too many nested command fragments to inspect' }
+    if (depth >= maxInspectionDepth) return { action: 'deny', reason: 'nested command text is too deep to inspect' }
+    for (const fragment of fragments) {
+      const result = this.#inspect(fragment.text, depth + 1)
+      if (result.action === 'deny') return { action: 'deny', reason: `${fragment.origin}${result.reason}` }
+    }
+    return null
+  }
   #inspect(command: string, depth: number): { action: 'allow' | 'deny'; reason: string | undefined } {
     const deny = (reason: string): { action: 'deny'; reason: string } => ({ action: 'deny', reason })
     let expanded
@@ -232,13 +304,8 @@ export class SandboxRuntime {
     if (/(?:^|[\s"'=])(?:[^\s"']*[\\/])?\.\.(?:[\\/]|[\s"']|$)/.test(expanded)) return deny('.. path escape is blocked')
     // `$(...)` 与反引号里的文本会被 shell 真正执行，顶层分词看不见它们，所以先抽出来逐段检查。
     // 递归保留 allowHosts 等全部语义：片段走的是同一个 #inspect，不是「见到取网工具就拒」。
-    const fragments = extractExecutedFragments(expanded)
-    if (fragments.length > maxExecutedFragments) return deny('too many command substitutions to inspect')
-    if (fragments.length && depth >= maxInspectionDepth) return deny('nested command substitution is too deep to inspect')
-    for (const fragment of fragments) {
-      const result = this.#inspect(fragment.text, depth + 1)
-      if (result.action === 'deny') return deny(`${fragment.origin}${result.reason}`)
-    }
+    const substituted = this.#inspectFragments(extractExecutedFragments(expanded), depth)
+    if (substituted) return substituted
     // 双引号按 shell 语义识别 \"：否则内联脚本（node -e "…"）里的转义引号会提前闭合引号，
     // 把注释和字符串碎片暴露成独立 token，闸门就会去检查 shell 根本看不到的“路径”。
     const tokens = [...expanded.matchAll(/"(?:[^"\\]|\\.)*"|'[^']*'|[^\s|;&<>]+/g)]
@@ -248,6 +315,7 @@ export class SandboxRuntime {
     let hostOperandSeen = false
     let commandWord = ''
     let pipedDownstream = false
+    const scriptFragments: { text: string; origin: string }[] = []
     for (let index = 0; index < tokens.length; index++) {
       const raw = tokens[index][0]
       const token = raw.replace(/^["']|["']$/g, '')
@@ -313,8 +381,31 @@ export class SandboxRuntime {
         try { this.resolvePath(token) } catch (error) { return deny(error instanceof Error ? error.message : String(error)) }
       }
       if (networkTool && takesValueFromNextToken(token, networkToolWord)) pendingValueToken = true
+      // shell 的 `-c` 参数与 `eval` 的参数都是**会被执行**的文本。这里**不以 executable 为前提**：
+      // 否则 `env bash -c 'curl …'`、`nice -n 5 bash -c '…'`、`xargs bash -c '…'` 会成组漏检。
+      // 但 echo/printf 只写标准输出，`-c` 只是它们的参数文本，所以豁免照旧生效。
+      if (!(stdoutOnlyCommands.has(commandWord) && !pipedDownstream)) {
+        if (shellWords.has(basename)) {
+          const flag = findShellCommandFlag(tokens, expanded, index)
+          if (flag !== -1) {
+            let scriptIndex = flag + 1
+            if (scriptIndex < tokens.length && unquoteShellArgument(tokens[scriptIndex][0]) === '--') scriptIndex += 1
+            const script = tokens[scriptIndex]
+            // `-c` 之后**恰好一个** token 是脚本，其余是位置参数（连 `-x` 也只是 `$0`）。
+            if (script) scriptFragments.push({ text: unquoteShellArgument(script[0]), origin: 'in shell -c argument: ' })
+          }
+        } else if (basename === 'eval') {
+          const tail = expanded.slice(start + raw.length)
+          const cut = tail.search(/[;&|\n]/)
+          const segmentEnd = cut === -1 ? expanded.length : start + raw.length + cut
+          const args = tokens.slice(index + 1).filter(item => (item.index ?? 0) < segmentEnd)
+          if (args.length) scriptFragments.push({ text: args.map(item => unquoteShellArgument(item[0])).join(' '), origin: 'in eval argument: ' })
+        }
+      }
       executable = false
     }
+    const scripted = this.#inspectFragments(scriptFragments, depth)
+    if (scripted) return scripted
     return { action: 'allow', reason: undefined }
   }
   assertCommand(command: unknown) {

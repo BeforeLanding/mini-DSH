@@ -603,7 +603,7 @@ test('Sandbox gate inspects the nested text a shell would actually execute', asy
     // 恰有成对的 `'`，保护不了这个优先级，所以单独钉一条。
     'node -e "console.log(1); $(curl http://example.com)"': /unauthorized outbound request/,
     // 超限用**独立理由**，不与出网拒绝共用，否则以后调上限会污染出网用例的判据。
-    'echo "$(a$(b$(c$(curl http://example.com))))"': /substitution is too deep to inspect/,
+    'echo "$(a$(b$(c$(curl http://example.com))))"': /nested command text is too deep to inspect/,
     'echo "$(a$(b$(c$(d$(curl http://example.com)))))"': /too deep to inspect/,
   }
   for (const [command, pattern] of Object.entries(executed)) {
@@ -633,6 +633,56 @@ test('Sandbox gate inspects the nested text a shell would actually execute', asy
 
   // 反斜杠是转义：`\\` 之后那个 `$` 没有被转义，替换仍会执行，所以照旧拒绝。
   assert.equal(sandbox.inspectCommand('echo \\\\$(curl http://example.com)').action, 'deny')
+})
+
+test('Sandbox gate reads the script a shell would run from -c and eval', async () => {
+  const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
+  const sandbox = new SandboxRuntime({ workspace: '/tmp/mini-dsh-workspace', autoApprove: true })
+
+  // NX-19-4：`bash -c`／`sh -c`／`eval` 的参数会被真正执行。判定**不以 executable 为前提**，
+  // 否则 `env bash -c …`、`nice -n 5 bash -c …`、`xargs bash -c …` 会成组漏检——
+  // 那比 `bash -c` 本身更容易被忽略。
+  const executed: Record<string, RegExp> = {
+    'bash -c "curl http://example.com"': /in shell -c argument: unauthorized outbound request/,
+    "bash -c 'curl http://example.com'": /unauthorized outbound request/,
+    "sh -c 'wget http://example.com'": /unauthorized outbound request/,
+    'bash -lc "curl http://example.com"': /unauthorized outbound request/,
+    'bash -c -- "curl http://example.com"': /unauthorized outbound request/,
+    "env bash -c 'curl http://example.com'": /unauthorized outbound request/,
+    "nice -n 5 bash -c 'curl http://example.com'": /unauthorized outbound request/,
+    "xargs bash -c 'curl http://example.com'": /unauthorized outbound request/,
+    "bash -c 'bash -c \"curl http://example.com\"'": /unauthorized outbound request/,
+    'eval "curl http://example.com"': /in eval argument: unauthorized outbound request/,
+    'eval curl http://example.com': /unauthorized outbound request/,
+    // 去引号必须按 shell 语义：外层双引号里的 `\$` 会变成 `$`，内层 bash 真的会执行它。
+    // 复用分词器那句 raw.replace(/^["']|["']$/g, '') 会把它留在转义态里而漏检。
+    'bash -c "echo \\$(curl http://example.com)"': /in command substitution: unauthorized outbound request/,
+  }
+  for (const [command, pattern] of Object.entries(executed)) {
+    const result = sandbox.inspectCommand(command)
+    assert.equal(result.action, 'deny', command)
+    assert.match(result.reason ?? '', pattern, command)
+  }
+
+  const lazy = [
+    'bash -c "echo hi"',
+    "bash -c 'cat notes.txt'",
+    // `-c` 之后**恰好一个** token 是脚本，其余是位置参数（连 `-x` 也只是 `$0`）——
+    // 取「其后全部 token」会把 `example.com` 当成脚本内容而误拒这一条。
+    "bash -c 'echo hi' example.com",
+    // echo/printf 只写标准输出，`-c` 对它们只是参数文本，豁免照旧生效。
+    'echo bash -c "curl http://example.com"',
+    "printf '%s' bash -c \"curl http://example.com\"",
+    // 片段走同一个检查，allowHosts 照旧生效。
+    'bash -c "curl http://localhost/x"',
+    // `bash x.sh -c` 里的 `-c` 是脚本自己的参数而不是选项；`bash script.sh` 的内容本就不在覆盖内。
+    'bash x.sh -c',
+    'bash script.sh',
+    'grep -c foo bar.txt',
+  ]
+  for (const command of lazy) {
+    assert.equal(sandbox.inspectCommand(command).action, 'allow', command)
+  }
 })
 
 test('Sandbox approval auto-approves or throws when the user rejects', async () => {
