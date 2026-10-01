@@ -5,12 +5,12 @@ import os from 'node:os'
 import path from 'node:path'
 import { armPolicy, runPhase, summarize, phaseCaps, batchCaps, batchPhases, singleRunBudget, evalPolicy, capKeys } from '../scripts/eval-runner.js'
 import type { RunOutcome } from '../scripts/eval-runner.js'
-import { runFixtureTask, scriptedAdapter, summarizeStage, type FixtureAdapter, type ToolOutputMode } from '../scripts/eval-fixture.js'
+import { runFixtureTask, scriptedAdapter, summarizeStage, type Fixture, type FixtureAdapter, type ToolOutputMode } from '../scripts/eval-fixture.js'
 import { createFixture, screeningIds, sequenceIds } from '../scripts/coding-fixtures.js'
 import { CLI_BUDGET } from '../src/core/budget.js'
 import type { Counters } from '../src/core/budget.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
-import type { ChatRequest, ChatResponse, EventData, SessionEvent } from '../src/core/contracts.js'
+import type { ChatRequest, ChatResponse, EventData, SessionEvent, ToolCall } from '../src/core/contracts.js'
 
 // summarizeStage 是对事件数组的纯函数，因此合成日志就能钉住裁剪触发点、未发出投影与 usage 来源这些
 // 边界；不该等到真实模型烟测才发现读数不对。
@@ -255,6 +255,56 @@ test('the bounded tool-output switch truncates a large result while the unbounde
   assert.ok(streamText(unbounded).endsWith('SENTINEL-END'))
   assert.ok(!unbounded.includes('previewTruncated'))
   assert.ok(Buffer.byteLength(streamText(unbounded)) > 200_000, `unbounded result was ${Buffer.byteLength(streamText(unbounded))} bytes`)
+})
+
+// 对照 B 的机制证明：不需要真实模型，也不需要多阶段会话。同一个 audit fixture、同一预算，只切「工具
+// 输出是否有界」，无界臂在报告进入历史后的下一个投影就 context_overflow，有界臂走完全流程并通过验收。
+// 这是「先离线证明开关有效」的那一步；真实模型是否会真的产生这份报告，由 f-4b 的付费烟测回答，本用例
+// 的结论不得外推成「真实模型下也一样」。
+// docs/context-budget/nx08f-output-probe.mjs 是同一个装置：用例钉行为，探针把数值打出来供人核对。
+test('the tool-output switch alone decides whether a single task overflows its input target', { timeout: 120_000 }, async () => {
+  const inputTarget = evalPolicy.inputTargetTokens ?? 0
+  const scriptedAudit = (fixture: Fixture): FixtureAdapter => {
+    // 脚本化的固定序列：跑公开检查（只有一行结论）→ 跑报告（产生大输出）→ 读两个源文件 → 改两个源文件
+    // → 复跑检查。参考解直接取 fixture.edits，因此这条路径能真正走到「通过验收」，而不是停在半途。
+    const commands: ToolCall[] = [
+      { id: 'check-before', name: 'bash', arguments: { command: 'node check.mjs' } },
+      { id: 'report', name: 'bash', arguments: { command: 'node report.mjs' } },
+      ...fixture.edits.map((edit, index) => ({ id: `read-${index}`, name: 'read_file', arguments: { path: edit.path } })),
+      ...fixture.edits.map((edit, index) => ({ id: `edit-${index}`, name: 'edit_file', arguments: edit })),
+      { id: 'check-after', name: 'bash', arguments: { command: 'node check.mjs' } },
+    ]
+    let step = 0
+    return {
+      provider: 'scripted', model: 'fixture', capabilities: { fixture: { contextWindowTokens: 1_000_000 } },
+      chat: async ({ messages = [] }: ChatRequest): Promise<ChatResponse> => {
+        assertToolProtocol(messages)
+        return step < commands.length ? { toolCalls: [commands[step++]] } : { content: 'audit finished' }
+      },
+    }
+  }
+  const budget = { ...evalPolicy, maxModelRequests: 16 }
+  const bounded = await runFixtureTask('audit', scriptedAudit, budget, undefined, { bounded: true })
+  const unbounded = await runFixtureTask('audit', scriptedAudit, budget, undefined, { bounded: false })
+  const [boundedStage] = bounded.tasks ?? [], [unboundedStage] = unbounded.tasks ?? []
+
+  // 两臂拿到的是同一份工具序列与同一份预算，差的只有结果有没有被截断——所以结局的分叉只能归因到这一点。
+  assert.equal(unbounded.counters.toolCalls, 2, 'the unbounded arm must stop right after the report, not run on')
+  assert.equal(unbounded.status, 'context_overflow')
+  assert.equal(unbounded.accepted, false)
+  assert.equal(bounded.status, 'completed')
+  assert.equal(bounded.accepted, true, bounded.acceptance?.output)
+  assert.equal(bounded.counters.toolCalls, 7, 'check-before + report + two reads + two edits + check-after')
+
+  // 分叉的机制是历史规模：有界臂的峰值远在输入目标之内，无界臂的峰值越过去并被拦在「已准备但未发出」
+  // 的那次投影上（requestId 在投影之前生成，见 agent-loop-runtime）。
+  assert.ok((boundedStage.maxEstimatedInputTokens ?? 0) < inputTarget, `bounded peaked at ${boundedStage.maxEstimatedInputTokens}`)
+  assert.ok((unboundedStage.maxEstimatedInputTokens ?? 0) > inputTarget, `unbounded peaked at ${unboundedStage.maxEstimatedInputTokens}`)
+  assert.ok((unboundedStage.maxEstimatedInputTokens ?? 0) > 3 * (boundedStage.maxEstimatedInputTokens ?? 0))
+  assert.ok((unboundedStage.unsentProjections ?? 0) >= 1, 'the overflowed projection must be recorded as prepared but never sent')
+  assert.equal(boundedStage.unsentProjections, 0)
+  // 单任务会话里当前 task 恒 protected，两臂都不可能裁掉旧任务：溢出不是裁剪失效造成的。
+  for (const stage of [boundedStage, unboundedStage]) assert.deepEqual(stage.removedTaskIds, [])
 })
 
 test('a stage summary reports a stage that never pruned without inventing evidence', () => {
