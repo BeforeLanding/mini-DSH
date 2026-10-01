@@ -18,6 +18,33 @@
 
 当前已具备有界文件/Bash 工具与大结果回读、仓库规则与检查入口上下文、可靠编辑与可恢复的任务变更清单/diff、结构化验证与交付报告，以及可重跑的真实模型评测入口。完成状态以 [TASKS](docs/context-budget/TASKS.md) 与 [PROGRESS](PROGRESS.md) 为准。
 
+## 基线与本项目的分界
+
+本仓库的来源分两段，分界点是提交 `c5fc9c4`：它及之前是照着教程主线做的，`43e3829`（M0 文档基线）起是本项目自己的开发。把分界写出来，是为了让「哪些是教程已有的、哪些是本项目加的」可以核对，而不是靠印象。
+
+| | 教程基线 | 本项目独立扩展 |
+| --- | --- | --- |
+| 提交范围 | `0a95a7f`～`c5fc9c4`（共 11 个） | `43e3829` 起 |
+| 语言 | 纯 JavaScript | TypeScript（tsc strict / NodeNext），Node 执行 `dist` 产物 |
+| 工具 | 6 个：`bash` + `read_file`／`write_file`／`edit_file`／`glob`／`grep` | 11 个：`tools/` 的 9 个（上列 6 个再加 `task_changes`／`request_trace`／`task_report`）与插件提供的 2 个（`project_context`／`read_tool_result`） |
+| 测试 | 22 条（`core.test.js` 20 + `integration.test.js` 2） | 200 条；另有 14 项编程 fixture 基线与离线评测入口 |
+| 已有能力 | 基础配置、Session Event Log、Tool Runtime、System Prompt + LLM Adapter、Agent Loop、DeepSeek 适配器、runtime-context、外部插件与 MCP、沙箱与路径闸门、Bash/文件工具 | 上下文投影与裁剪、四维执行预算、JSONL 持久化与崩溃恢复、预算停止后的 `/continue`、有界读取/搜索与大结果回读、可靠编辑与任务变更清单、结构化前台命令、验证记录与交付报告、请求 trace、项目上下文、编程任务 fixture、真实模型评测 |
+
+上表每一行都能在仓库根目录复现（全部离线，不联网）：
+
+```powershell
+git rev-list --count c5fc9c4                              # 11：教程主线提交数（含端点）
+git ls-tree -r --name-only c5fc9c4 | grep -c '\.ts$'      # 0：基线没有 TypeScript
+git ls-tree -r --name-only c5fc9c4 src/ | wc -l           # 22：基线源文件数
+git show c5fc9c4:src/tools/files.js | grep -o "name: '[a-z_]*'"   # 5 个文件工具
+git show c5fc9c4:src/tools/bash.js  | grep -o "name: '[a-z_]*'"   # bash
+git show c5fc9c4:test/core.test.js        | grep -c '^test('      # 20
+git show c5fc9c4:test/integration.test.js | grep -c '^test('      # 2
+git log --oneline --reverse | sed -n '12p'                # 43e3829：分界之后的第一个提交
+```
+
+**没有的事**：本仓库里**不存在**「教程第 N 天 ↔ 某个 CB 编号」的映射，不必去对——上面那句「第 0～7 天主线及补充篇」是对教程本身的引用，粒度就到那里。
+
 ## 运行
 
 已配置阿里云服务器的启动、自动发布和回滚操作见 [ECS 部署说明](docs/ECS_DEPLOYMENT.md)。
