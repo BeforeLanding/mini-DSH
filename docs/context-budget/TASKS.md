@@ -4,7 +4,7 @@
 
 ## 待办
 
-**NX-08 与 NX-09 两支均已收尾**：NX-08 的对照 A 完成（NX-08e）、对照 B 以「仪器未成立」的负面结果归档（NX-08f），结论合并进 [NX-08-REPORT](NX-08-REPORT.md)；NX-09 的 M9 交付件七步全部落地（子步骤见下方 [NX-09 一节](#nx-09-readme-定位原创增量架构图与零密钥运行入口)）。**当前没有进行中的主线**，下一步从下方「其他待办」里选，或按用户指示新立项。下面 NX-08 各节保留为执行记录；整批上限、各臂一致的单次 run 预算与预注册口径见 [PLAN 的评测批次上限](PLAN.md#nx-08-评测批次上限预注册)，预注册参数在开跑后不得再单独调整某一臂或某次重复。
+**NX-08 与 NX-09 两支均已收尾**：NX-08 的对照 A 完成（NX-08e）、对照 B 以「仪器未成立」的负面结果归档（NX-08f），结论合并进 [NX-08-REPORT](NX-08-REPORT.md)；NX-09 的 M9 交付件七步全部落地（子步骤见下方 [NX-09 一节](#nx-09-readme-定位原创增量架构图与零密钥运行入口)）。**当前主线是 NX-10（M9 演示，见下方 [NX-10 一节](#nx-10-固定代码修复演示三幕零付费)）**，它是 NX-09 收尾后按用户指示从「其他待办」里选定的；其余待办仍未排期。下面 NX-08 各节保留为执行记录；整批上限、各臂一致的单次 run 预算与预注册口径见 [PLAN 的评测批次上限](PLAN.md#nx-08-评测批次上限预注册)，预注册参数在开跑后不得再单独调整某一臂或某次重复。
 
 NX-08e 开跑前必须先解决其前置条件（2026-09-30 修正）：裁剪要求会话中存在**已结束且可裁剪的旧任务**，单任务会话无论多大都不会触发——当前 task 与 `/continue` 的续跑段恒受保护（依据见 [PLAN 的对照有效性条件](PLAN.md#nx-08 评测批次上限预注册)）。现有驱动每个 fixture 只发一次 `send`，因此筛查跑的 `removedTaskIds` 全为空属结构性必然。
 
@@ -86,13 +86,34 @@ M9 出口要求「陌生读者能按说明运行并检查最终文件/测试；�
 | NX-09-5 | README 零密钥上手路径（**done**） | 在未设 `DEEPSEEK_API_KEY` 的环境逐条实跑且退出码 0：`pnpm install --frozen-lockfile` → `pnpm check`（`syntax ok: 84 files`）→ `pnpm test`（`pass 200` / `fail 0`）→ `pnpm fixtures:check`（14 项，初始全失败、参考全通过）→ `pnpm eval:offline`（12 planned / 12 accepted）；README 记的每个数字与实跑输出逐字一致；该块内不出现 `pnpm start`；`grep -nE '[0-9]+ ?分钟内\|分钟跑完' README.md` 输出为空 | 1 次 |
 | NX-09-6 | README 实验报告一节 + TASKS/CHANGES/PROGRESS 回填（**done**） | 链 `docs/context-budget/NX-08-REPORT.md` 且锚点在文件内匹配；**该节内** `grep -nE '提升\|提高\|优于\|更好\|最好\|显著\|效率\|收益\|成功率\|%'` 输出为空（**故意严格**：连「token 少 45.4%（非效率提升）」这种带免责的写法也不写，直接链报告不复述数字）；把「结局饱和（方差为零）」与「样本量小」写成两条独立限制并引 NX-08g0 判据；教程基线／独立扩展／真实模型结果／模拟回归四类分列；回填的命令与实际输出一致 | 1 次 |
 
+### NX-10 固定代码修复演示（三幕，零付费）
+
+**进行中（2026-10-01）**。路线图 M9 在 NX-09 之后剩下的两块之一（另一块是 NX-11 的设计取舍整理）。M9 出口要求「陌生读者能按说明运行并检查最终文件/测试」——NX-09 给的是「怎么跑起来」，本项给的是「跑起来能看见什么」。
+
+「固定」指**预设脚本化模型**而非真实模型：三条演示都只向本地注册 `scripted` 适配器、从不 import `src/index.ts`，因此不读 `.env`、不出网、不调用付费 API，逐字可复现。**不改 `src/`**，也不改 `docs/INTERNSHIP_ROADMAP.md`（其状态段陈旧归 NX-20）。
+
+立项前核实的三个缺口：① `scripts/` 下没有任何读者面向的入口；② **项目规则这一段在演示路径上根本不存在**——规则源只有 `AGENTS.md`（`src/core/project-context-runtime.ts:122`），14 个 fixture 的 `initial/` 里一个都没有，而 `scripts/eval-fixture.ts:96-101` 的 `runFixtureTask` 也不装载 `runtime-context` 与 `project-context`；③ 预算停止/恢复、unknown、diff 与证据三块各自有测试（`coding-fixtures.test.ts:295`、`store.test.ts:44`、`task-*.test.ts`），但从未被串成读者能看的叙事。
+
+一条必须照实写的发现：**子进程被杀会留下 `writer.lock`**，而 `JsonlStore.open` 对任何已存在的锁一律拒绝（`src/core/event-store.ts:40`）、`quarantineTail` 也要先抢同一把锁（`:17-20`），因此恢复的**唯一路径是先由人删掉该锁**，`src/plugins/cli.ts:36-40` 的启动恢复也没有对应入口。第三幕照实演示这一步，并据此另立 **NX-21**，本次不修。
+
+| 子步骤 | 内容 | 验收 | 提交边界 |
+| --- | --- | --- | --- |
+| NX-10-0 | TASKS 立项：NX-10 子步骤表（**done**） | `grep -cE '^\| NX-10-' docs/context-budget/TASKS.md` = 9；每行「验收」列至少含一个反引号命令或可判定的退出码/`grep` 判据；`git diff --stat` 只含 `docs/context-budget/TASKS.md` | 1 次 |
+| NX-10-1 | 演示 fixture `repair` 与 `demoIds` 注册表 | `pnpm fixtures:check` 输出 15 行且 `expected` 全为真；`repair` 初始态退出码**恰为 1**（`check-coding-fixtures.ts:10` 的判据）；两份 `AGENTS.md`、`check.mjs`、`src/legacy/cart.mjs` 均不在 `sources.repair` 内因而进受保护集合；`test/eval-runner.test.ts:398` 的筛查/序列上限断言不受影响 | 1 次 |
+| NX-10-2 | `repair` 三态基线用例 | `pnpm test` 201/201（新增 1 条）：初始失败（退出 1）、只应用 `partial/` 仍失败、应用 `reference/` 通过；改写任一受保护文件后该验收不通过 | 1 次 |
+| NX-10-3 | 第一幕 `pnpm demo:fix` | `pnpm demo:fix` 退出 0，且输出含系统提示四个 section 与顺序、`project_context` 返回的**作用域**规则、失败检查的原始输出、`task_changes` 的非空确认 diff、`task_report` 的 `[Run]`/`[File]`/`[Check]` 行、独立验收 `acceptance passed: repair`；任一不成立则退出 1 并点名 | 1 次 |
+| NX-10-4 | 第二幕 `pnpm demo:resume` | `pnpm demo:resume` 退出 0，且输出含 `max_steps`、在途工具的 `status:'skipped'`、`continuations === 1`、逐 `toolCallId` 无重复执行、两段 run 的 `previous=` 关系、最终独立验收 | 1 次 |
+| NX-10-5 | 第三幕 `pnpm demo:unknown` | `pnpm demo:unknown` 退出 0，且：子进程被 `taskkill /T /F` 异常终止；`JsonlStore.open` 先以 `/session writer lock exists/` 失败；显式 `unlink` 后重开成功；`restore` 合成恰好一条 `status:'unknown'`；`events.jsonl` 行数因此增加（证明合成落盘）；`.demo-side-effect` 仍在；`agent.continue()` 以 `/unknown tool outcome/` 被拒；连跑两次均退出 0 | 1 次 |
+| NX-10-6 | 陈旧会话锁的显式恢复路径用例 | `pnpm test` 202/202（新增 1 条）：日志停在 `tool/start` 且目录残留 `writer.lock` 时 `open` 拒绝、`unlink` 后重开成功、`restore` 得恰好一条 `unknown`、副作用文件未被触碰、`continue()` 被拒；**子进程杀进程那半不写进用例**（平台相关），只把它之后确定性的断言写进用例 | 1 次 |
+| NX-10-7 | 演示一节与计数订正 | README 新增 `## 演示`，其中每条命令与实测输出逐字一致；`grep -nE '当前 [0-9]+ 条测试' README.md` 只有一处且等于 `pnpm test` 实测；README／`test/fixtures/coding/README.md`／PROGRESS 的 `84→89` 文件、`200→202` 测试、`14→15` 项三处计数与实跑一致；带日期的历史证据（README 的 SHA 锚定行、`PROGRESS.md:7` 的 NX-09 条、NX-09 各行、CHANGES 各处）逐字未动 | 1 次 |
+| NX-10-8 | TASKS/CHANGES/PROGRESS 回填与 NX-21 立项 | 各行置 `done` 并记提交号；CHANGES 增 NX-10 节且命令与实际输出一致；PROGRESS 的当前状态与下一步同步；NX-21 在 TASKS/PROGRESS 均出现 | 1 次 |
+
 其他待办，按依赖排序：
 
 - **NX-08h 打破任务集天花板 — todo（NX-08g0 立项，2026-10-01）**：承接 NX-08g0 的方案 2／3——增设「工作区不含公开 `check.mjs`、只能按 SPEC 自验」的变体，或提高阶段难度。**它改的是 fixture 契约，因而需要新的独立验收口径与预注册，不得沿用本轮的 `phaseCaps` 数字**；离线可以改好，但「是否真的产生失败」只能靠一次付费跑回答，开跑前须单独授权。优先级低于 NX-08f（对照 B）。
 - **NX-18 `..` 族误判 — todo（NX-17 期间发现）**：`..` 规则是整串正则，会命中引号内的惰性文本——`echo "see ../docs for details"`、`grep -n ".." src/index.ts`、`git log --grep "../ fixes"` 全部被判 `.. path escape is blocked`。该规则是用户「放宽不得削弱 `..`」条款点名保护的对象，NX-17 因此没有动它。收紧需要把判定从整串正则改为 token 级的路径操作数判定，且必须保持 `echo ../secret`、`cat ../secret`、`cp ../a b` 仍被拒；修改前先补需求/设计决策。
 - **NX-19 出网拦截的真实缺口 — todo（NX-17 期间发现）**：`bash -c "curl http://example.com"`、`sh -c "wget …"`、`echo "$(curl …)"`、`nc example.com 80`、`ssh user@example.com`、反斜杠 UNC（`cat \\server\share\secret`）当前全部放行；其中反斜杠 UNC 与 NX-17 无关，是既有缺口。出网规则只覆盖「整个 token 是一个 URL 且位于命令词可识别的段内」，命令替换、内联脚本与未被识别的取网工具都在覆盖范围之外。收口属于「加强」而非「放宽」，需要单独设计与验收，不得顺手塞进 NX-17 的提交。
 - **NX-16 持久化结构化编程任务状态与可选 compaction — todo（条件阶段，依赖 NX-08）**：只有评测确认当前 task 膨胀仍是主要失败源后才实现 compaction；实施前必须修订 R-03/D-02 的“当前 task 所有 run 原文进入请求”契约，不能作为小优化塞入。范围见[路线图 M8](../INTERNSHIP_ROADMAP.md)。
-- **NX-10 固定代码修复演示 — todo**：展示项目规则→定位→修改→失败测试→再修复→diff 与证据；另需展示预算停止/恢复和 unknown。
 - **NX-11 整理设计取舍 — todo**：事件与投影分离、协议完整性、可靠编辑、验证时效、未知副作用恢复，须能从代码和测试解释选择。
 - **NX-20 路线图状态段整体陈旧 — todo（NX-09 期间发现）**：`docs/INTERNSHIP_ROADMAP.md` 是**带日期的记录**，line 3 已把源码基线评估定为「历史证据保留」，因此不能只改其中一处而让全文自相矛盾。已核实陈旧点至少四处：顶部注记与 line 215 的「真实模型实验额度尚未在本次任务中设定或使用」（已被 NX-08 的约 $4.96 推翻）、line 194 的 M5 出口「旧 57 条回归」（现为 200 条）、line 213/215 的 M7 出口、line 233-239 §6 的「当前可以写…完成 57 条回归及 Windows/Linux × Node 22/24 CI」（且「Linux」与 README 实际使用的「Ubuntu/Windows」不一致）。处置须**按该文件自己的惯例加一条带日期的修订注记**，不静默改写正文历史。按 NX-17 的先例（改前发现的相邻缺陷另立待办，不塞进当前提交），NX-09 只立项、不修。
 - **T6 Biome 只读诊断与处置 — todo**：先诊断告警数量与类别、评估修绿成本，再由用户选择修到绿并设为门禁、或移除 Biome；选定前不修改 Biome、依赖或 CI 门禁。
