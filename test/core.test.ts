@@ -747,6 +747,32 @@ test('Sandbox expands env paths before the escape check instead of banning them'
   }
 })
 
+// NX-24-1：环境展开此前完全按引号无关、反斜杠无关的全局 replace 处理，于是 `\$NAME` 被展开、
+// 报 unset 或越界。真实 shell 里 `\X` 是 X：`\$` 就是字面量 `$`。实测依据是 782 次真实模型
+// bash 调用里 2 条因此被误拒（`node -e "…\`n\${i}\`…"` 与 `sed -n "…,\$p"`）。
+test('Sandbox does not expand a variable whose dollar sign is backslash-escaped', async () => {
+  const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
+  const sandbox = new SandboxRuntime({ workspace: process.cwd(), autoApprove: true })
+
+  // `\$NAME` 是字面量：既不展开（不会因未定义而拒绝），也不因展开出的绝对路径而越界。
+  assert.equal(sandbox.inspectCommand('echo \\$HOME').action, 'allow')
+  assert.equal(sandbox.inspectCommand('echo "\\$HOME"').action, 'allow')
+  assert.equal(sandbox.inspectCommand('sed -n "s/^## 11/x,\\$p" docs/SPEC.md').action, 'allow')
+
+  // 转义是**整对**的：`\\` 先被吃掉，紧随的 `$` 仍是裸的、仍会被展开。这条是 `\$` 与 `\\$`
+  // 的分界，也是最容易写成「见到反斜杠就跳过下一个」而漏掉的一处。
+  assert.equal(sandbox.inspectCommand('echo \\$(curl http://example.com)').action, 'allow')
+  assert.match(
+    sandbox.inspectCommand('echo \\\\$(curl http://example.com)').reason ?? '',
+    /unauthorized outbound request/,
+  )
+
+  // 未被转义的未定义变量照旧拒绝——宽松只到「shell 不会展开它」为止。
+  const unset = sandbox.inspectCommand('cat $MINI_DSH_UNSET_VAR/file')
+  assert.equal(unset.action, 'deny')
+  assert.match(unset.reason ?? '', /unset environment variable/)
+})
+
 test('allowHosts uses the provided whitelist and does not hardcode localhost', async () => {
   const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
   const locked = new SandboxRuntime({

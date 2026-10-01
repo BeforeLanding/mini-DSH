@@ -231,6 +231,42 @@ function unquoteShellArgument(raw: string) {
   return out
 }
 
+// 环境变量引用。用 sticky 标志在指定位置尝试匹配，避免对整串反复扫描。
+const envReference = /\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)/y
+
+// 环境展开按 shell 的**转义**语义进行：`\` 与其后的一个字符**整对**原样复制，不参与展开。
+// 于是 `\$HOME` 是字面量（bash 不展开它，此前被展开是误拒），而 `\\$HOME` 里的 `$` 仍会被展开
+// ——`\\` 已作为一对被吃掉，剩下的是裸 `$`。这一步不做引号状态，引号语义见下一步。
+// 不替换的字符逐字复制（含反斜杠与引号）：下游的 token 偏移、`..` 整串正则与片段抽取都建立在
+// 这条串的原样形状上，改动它的形状等于同时改这三处的判据。
+function expandEnvironment(command: string) {
+  let out = ''
+  let index = 0
+  while (index < command.length) {
+    const char = command[index]
+    if (char === '\\') {
+      out += command.slice(index, index + 2)
+      index += 2
+      continue
+    }
+    if (char === '$') {
+      envReference.lastIndex = index
+      const match = envReference.exec(command)
+      if (match) {
+        const name = match[1] ?? match[2]
+        const value = process.env[name]
+        if (value === undefined) throw new Error('unset environment variable in command')
+        out += value
+        index += match[0].length
+        continue
+      }
+    }
+    out += char
+    index += 1
+  }
+  return out
+}
+
 // 该 token 是不是「取值不是网络目标」的旗标，且它的取值是**下一个** token。
 // 长旗标带 `=` 时取值内联（`--output=x`），不需要跳过下一个。短旗标允许合并（`-sS`、`-so`）：
 // 只有合并串的**最后一个**字母取下一个 token 作值，`-os x` 的 s 是 o 的内联取值。
@@ -287,11 +323,7 @@ export class SandboxRuntime {
     const deny = (reason: string): { action: 'deny'; reason: string } => ({ action: 'deny', reason })
     let expanded
     try {
-      expanded = command.replace(/\$\{([A-Za-z_][\w]*)\}|\$([A-Za-z_][\w]*)/g, (_, braced, bare) => {
-        const value = process.env[braced ?? bare]
-        if (value === undefined) throw new Error('unset environment variable in command')
-        return value
-      })
+      expanded = expandEnvironment(command)
       expanded = expanded.replace(/(^|[\s"'])~(?=\/|[\s"']|$)/g, (_, prefix) => {
         const home = process.env.HOME ?? process.env.USERPROFILE
         if (!home) throw new Error('unset home path')
