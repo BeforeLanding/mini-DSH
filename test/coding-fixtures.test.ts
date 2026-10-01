@@ -5,9 +5,10 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { Context } from '@deepseek-ai/cordis'
-import { createFixture, screeningIds, sequenceIds, boundedIds, demoIds, fixtureProcessTimeoutMs, readTaskSequence, readFixtureFile } from '../scripts/coding-fixtures.js'
+import { createFixture, screeningIds, sequenceIds, boundedIds, demoIds, blindIds, fixtureProcessTimeoutMs, readTaskSequence, readFixtureFile } from '../scripts/coding-fixtures.js'
 import type { FixtureId } from '../scripts/coding-fixtures.js'
-import { evalPolicy } from '../scripts/eval-runner.js'
+import { batchPhases, evalPolicy } from '../scripts/eval-runner.js'
+import { phaseRegistry } from '../scripts/eval-cli.js'
 import type { ToolCall } from '../src/core/contracts.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
 import { estimateText } from '../src/core/token-estimator.js'
@@ -196,8 +197,8 @@ test('the screening batch is still twelve single-task fixtures', async () => {
 // 上限，进了阶段序列会被当成多阶段 fixture。
 test('the bounded-tool-output fixture is a single task whose report dwarfs the input target', { timeout: 60_000 }, async () => {
   assert.deepEqual([...boundedIds], ['audit'])
-  const otherBatches: readonly string[] = [...screeningIds, ...sequenceIds]
-  for (const id of boundedIds) assert.ok(!otherBatches.includes(id), `${id} must stay out of the other two batches`)
+  const otherBatches: readonly string[] = [...screeningIds, ...sequenceIds, ...blindIds]
+  for (const id of boundedIds) assert.ok(!otherBatches.includes(id), `${id} must stay out of the other batches`)
   const fixture = await createFixture('audit')
   try {
     assert.equal(fixture.tasks.length, 1, 'the tool-output instrument must be a single task')
@@ -290,6 +291,83 @@ test('the sequence acceptance requires a line number instead of one exact error 
     assert.equal(noLineNumber.passed, false)
     assert.match(noLineNumber.output, /expected a line number/)
   } finally { await fixture.close() }
+})
+
+// NX-08h 的仪器：pipeline 的十四阶段复制件，但工作区里**没有公开的 `check.mjs`**——任务说明不再给出那个
+// 命令，只能按 `docs/SPEC.md` 自验。它把被测的问题从「有完整、即时、廉价 oracle 时能否收敛」换成「能否
+// 按规格独立产出正确实现」，而 NX-08g0 判定的天花板正来自前者的 oracle。
+//
+// 这条用例守着的东西比别处更硬：方案 2 本身就是「改 fixture 契约」，没有第二道门禁看着它。因此除了基线，
+// 还要钉住「与 pipeline 的差别只有公开检查这一件事」——差得更多，两次读数就不能并排比；差得更少（只删
+// 文件不改说明），模型会去找一个不存在的命令。
+test('the blind fixture drops the public check and stops pointing its stages at it', { timeout: 60_000 }, async () => {
+  const fixture = await createFixture('blind')
+  const other = await createFixture('pipeline')
+  try {
+    assert.equal(fixture.tasks.length, other.tasks.length, 'blind must ship exactly the stages pipeline ships')
+    fixture.tasks.forEach((task, at) => assert.match(task.split('\n')[0], new RegExp(`^# ${String(at + 1).padStart(2, '0')} `), `blind stage ${at + 1}`))
+
+    // 1. 工作区里没有公开检查，且模型看得见的内容一处都不提它。工作区是 initial/ 的整份复制，因此遍历它
+    //    等价于遍历 initial/，不必自己去推算 fixture 目录的位置。
+    const names = await fs.readdir(fixture.workspace, { recursive: true })
+    const files: string[] = []
+    for (const name of names) if ((await fs.stat(path.join(fixture.workspace, name))).isFile()) files.push(name)
+    assert.ok(files.length, 'the workspace must not be empty')
+    assert.ok(!files.includes('check.mjs'), 'blind must not ship a public check')
+    for (const name of files) assert.doesNotMatch(await fs.readFile(path.join(fixture.workspace, name), 'utf8'), /check\.mjs/, `${name} must not mention the public check`)
+
+    // 2. 阶段说明同样不提它，但仍然指得出权威——「按 SPEC 自验」只有在 SPEC 还被点到时才成立。
+    fixture.tasks.forEach((task, at) => {
+      assert.doesNotMatch(task, /check\.mjs/, `blind stage ${at + 1}`)
+      assert.match(task, /docs\/SPEC\.md/, `blind stage ${at + 1} must still name the authority`)
+    })
+
+    // 3. 从 pipeline 去掉的每一行都必须与公开检查有关。只断言「不含 check.mjs」会放过一整段被改写的任务
+    //    要求，而那样的改动会让这套仪器悄悄测起别的东西。
+    other.tasks.forEach((stage, at) => {
+      const kept = new Set(fixture.tasks[at].split('\n'))
+      for (const line of stage.split('\n')) if (!kept.has(line)) assert.match(line, /check\.mjs|检查/, `stage ${at + 1} 改掉了一行与公开检查无关的内容：${line}`)
+    })
+
+    // 4. 两份验收器只差 marker 一行。marker 是 evaluate() 的逐字判定（`acceptance passed: <id>`），照抄
+    //    pipeline 的那一行会让初始态与参考解双双验收失败。
+    const pipelineVerify = await readFixtureFile('pipeline', 'verify.mjs')
+    assert.equal(await readFixtureFile('blind', 'verify.mjs'), pipelineVerify.replace('acceptance passed: pipeline', 'acceptance passed: blind'))
+
+    // 5. 基线：初始失败、参考通过，且终态判定与 marker 逐字相等。
+    const initial = await fixture.evaluate()
+    assert.equal(initial.passed, false)
+    assert.equal(initial.exitCode, 1, initial.output)
+    assert.match(initial.output, /AssertionError/)
+    await fixture.applyReference()
+    const reference = await fixture.evaluate()
+    assert.equal(reference.passed, true, reference.output)
+    assert.equal(reference.output.trim(), 'acceptance passed: blind')
+
+    // 6. 没有公开检查之后，`docs/SPEC.md` 与 `data/` 成了工作区里唯一的规范载体，也更有动机被改动；它们
+    //    必须仍在受保护集合里，否则某次失败可能来自「模型改了规格」，而不是「没有 oracle 就做不出来」。
+    for (const filename of ['docs/SPEC.md', 'data/app.deps']) {
+      const target = path.join(fixture.workspace, filename), original = await fs.readFile(target)
+      await fs.writeFile(target, 'tampered\n')
+      const tampered = await fixture.evaluate()
+      assert.equal(tampered.passed, false, `${filename} rewrite must be rejected`)
+      assert.deepEqual(tampered.protectedFilesChanged, [filename])
+      await fs.writeFile(target, original)
+    }
+    assert.equal((await fixture.evaluate()).passed, true)
+  } finally { await fixture.close(); await other.close() }
+})
+
+// 注册表互斥：blind 必须自成一档。并进 sequenceIds 会让 repeatCount(1, 2) 抛错，也会让对照 A 的两臂拿到
+// 不同的任务集，把被比较的东西从上下文策略换成任务难度；并进 batchPhases 则会改变那条预注册的
+// {18, 3_200, 88_000_000} 的含义。上面两条 otherBatches 断言原来只列了另外几档，blind 因此在跨批次上
+// 是裸的——这条把它补上。
+test('the blind fixture stays out of every other batch and owns a diagnostic phase', () => {
+  assert.deepEqual([...blindIds], ['blind'])
+  const others: readonly string[] = [...screeningIds, ...sequenceIds, ...boundedIds, ...demoIds]
+  for (const id of blindIds) assert.ok(!others.includes(id), `${id} must stay out of the other four batches`)
+  assert.ok(!(batchPhases as readonly string[]).includes('blind'), 'blind must not join the pre-registered batch phases')
+  assert.deepEqual(phaseRegistry('blind'), ['blind'])
 })
 
 async function runFixtureAcrossBudgetStop(id: FixtureId) {
@@ -386,8 +464,8 @@ test('acceptance bounds hung code and output, rejects invalid limits and reports
 // 当成多阶段 fixture，进对照 B 仪器则会让那台仪器的「单任务」契约不再唯一。
 test('the repair fixture keeps a partial fix that still fails the public check', { timeout: 30_000 }, async () => {
   assert.deepEqual([...demoIds], ['repair'])
-  const otherBatches: readonly string[] = [...screeningIds, ...sequenceIds, ...boundedIds]
-  for (const id of demoIds) assert.ok(!otherBatches.includes(id), `${id} must stay out of the other three batches`)
+  const otherBatches: readonly string[] = [...screeningIds, ...sequenceIds, ...boundedIds, ...blindIds]
+  for (const id of demoIds) assert.ok(!otherBatches.includes(id), `${id} must stay out of the other four batches`)
   const fixture = await createFixture('repair')
   try {
     assert.equal(fixture.tasks.length, 1, 'the demo fixture works in a single task')
