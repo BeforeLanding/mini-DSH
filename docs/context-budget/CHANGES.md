@@ -58,6 +58,19 @@
 - **「已准备但未发出」有据可查**：无界臂的 `unsentProjections === 1`。`requestId` 在投影之前生成（`agent-loop-runtime.ts`），所以那条越过输入目标、随后抛 `BudgetStop('context_overflow')` 的投影在日志里仍可辨认，有界臂则为 0。
 - **回归**：`pnpm test` **199/199**（原 198，新增 1 条）；`pnpm check` 84 文件语法通过。未调用付费模型。
 
+### NX-08f-4 接好诊断阶段 `smoke` — done（2026-10-01，零付费）
+
+- **目的**：让付费烟测能被既有的 `--phase` / `--plan-only` 机制调度。这一步必须早于 f-4b，否则「跑什么、上限多少、差在哪」在花钱之前无从核对。
+- **新增诊断阶段 `smoke`**，跑 `boundedIds`（即 `audit`），1 次运行。上限取**单次 run 预算的理论上界**（32 请求 / 2,000,000 token），与 `sequence` 同口径：该阶段的计划里只有 1 个 fixture，整批上限本来就不构成中途制动，取更紧的值只会把一次跑完的烟测变成带 `aborted` 的退出码 1。**它不进 `batchPhases`/`batchCaps`**——对照 B 正式的两臂（`armC`/`armD`）与它们的上限留到 f-5 按实测预注册，`batchCaps` 仍是 `{18, 3_200, 88_000_000}`。
+- **新增 `toolOutputPolicy(phase)`**：`smoke` 返回 `{ bounded: false }`（无界），其余阶段返回 `undefined`（不装载插件）。烟测取无界是刻意的——它要回答的正是「模型会不会真的产生大输出」，那是有界臂永远问不出来的问题。
+- **一处重构**：`ToolOutputMode` 从 `eval-fixture.ts` 移到 `eval-runner.ts`。阶段 → 模式的映射是策略，策略模块（`eval-runner` 的 `armPolicy` 旁边）才是它的落点，驱动只负责按模式装配。`import` 是类型级的，两文件不构成运行期循环。
+- **预演必须看得见差异**：`--plan-only` 分支新增一行打印工具输出模式。对照 A 的臂间差异（`inputTargetTokens`）已经在预演里，对照 B 的差异不打印就等于预演失效。只打语义不打数值——具体预览上限属于驱动侧实现细节，写死在入口会多出第二处需要同步的常量。
+- **验收（实测命令输出）**：
+  - `pnpm eval:screening --phase smoke --plan-only` → `smoke-full: 1 个任务 × 1 次重复 = 1 次运行：audit`、`工具输出：无界（结果原样进入历史，不截断）`、证据目录 `.eval-evidence/smoke-full`；**未建立目录、未发出请求、不需要密钥**。
+  - `pnpm eval:screening --plan-only` 与 `pnpm eval:sequence --plan-only` 仍打印 `不装载 tool-results 插件（既有阶段的行为）`——既有阶段行为一字不变。
+  - `test/eval-runner.test.ts` 新增用例钉住 `toolOutputPolicy`（只有 `smoke` 非空）；`phaseCaps` 与 `batchCaps` 的逐值断言同步；`test/eval-cli.test.ts` 的 phases 循环与「unknown phase」错误串加入 `smoke`（错误串顺序敏感）。
+- **回归**：`pnpm test` **200/200**（原 199，新增 1 条）；`pnpm check` 84 文件语法通过。未调用付费模型。
+
 ### 子步骤与提交边界
 
 | 子步 | 内容 | 付费 | 状态 |
@@ -65,7 +78,7 @@
 | NX-08f-1 | 工具输出开关与两臂装配（`runFixtureTask` 第 5 参 + 单测） | 否 | **done** |
 | NX-08f-2 | 新增单任务 fixture `audit`（大输出仪器） | 否 | **done** |
 | NX-08f-3 | 离线机制证明（同 fixture 下无界臂溢出、有界臂完成）+ 诊断探针 | 否 | **done** |
-| NX-08f-4 | 接好诊断阶段 `smoke`，使付费烟测可被 `--phase`/`--plan-only` 调度 | 否 | todo |
+| NX-08f-4 | 接好诊断阶段 `smoke`，使付费烟测可被 `--phase`/`--plan-only` 调度 | 否 | **done** |
 | NX-08f-4b | 真实模型烟测：模型是否**真的**产生大输出 | **是**（需单独授权） | todo |
 | NX-08f-5 | 按实测预注册 `armC`/`armD` 的 `phaseCaps` 与 `batchCaps` | 否 | todo |
 | NX-08f-6 | 正式批次（1 fixture × 6 次重复 × 2 臂） | **是** | todo |

@@ -47,7 +47,7 @@ test('both comparison arms plan the same sequence task set', () => {
 // 的机制（runPhase 遍历的是 registry 那 1 个 fixture），于是「每臂 3 次运行」的预注册一条命令只兑现 1 次；
 // --plan-only 还把上限当计划打印，让它在花钱之前看不出破绽。这条断言把两者钉死在一起，是当时缺的那一环。
 test('every phase schedules exactly as many runs as its cap pre-registers', () => {
-  const phases: readonly PhaseName[] = ['screening', 'armA', 'armB', 'sequence']
+  const phases: readonly PhaseName[] = ['screening', 'armA', 'armB', 'sequence', 'smoke']
   for (const phase of phases) assert.equal(resolveRuns(phase).length, phaseCaps[phase].runs, phase)
   // 两臂的差异只能来自上下文策略，不能来自跑了几次或跑了哪些任务，因此执行清单必须逐字相同。
   assert.deepEqual(resolveRuns('armA'), resolveRuns('armB'))
@@ -80,7 +80,7 @@ test('arguments are parsed into one options object with screening as the default
   assert.deepEqual(parseEvalArguments([]), { phase: 'screening', probeOnly: false, planOnly: false })
   assert.deepEqual(parseEvalArguments(['--phase', 'sequence', '--plan-only']), { phase: 'sequence', probeOnly: false, planOnly: true })
   assert.deepEqual(parseEvalArguments(['--phase=sequence', '--tasks=pipeline']), { phase: 'sequence', tasks: 'pipeline', probeOnly: false, planOnly: false })
-  assert.throws(() => parseEvalArguments(['--phase', 'bogus']), /unknown phase: bogus; expected one of screening, armA, armB, sequence/)
+  assert.throws(() => parseEvalArguments(['--phase', 'bogus']), /unknown phase: bogus; expected one of screening, armA, armB, sequence, smoke/)
   assert.throws(() => parseEvalArguments(['--phase']), /--phase needs a value/)
   assert.throws(() => parseEvalArguments(['--plan-only=yes']), /--plan-only takes no value/)
   assert.throws(() => parseEvalArguments(['--unknown']), /unknown option: --unknown/)

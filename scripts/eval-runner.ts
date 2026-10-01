@@ -16,7 +16,7 @@ export interface BatchCaps { runs: number; requests: number; tokens: number }
 // 全部」：诊断烟测会随开发增减，让它混进预注册算术会让那个数字不再对应同一件事。
 export const batchPhases = ['screening', 'armA', 'armB'] as const
 export type BatchPhase = typeof batchPhases[number]
-export type PhaseName = BatchPhase | 'sequence'
+export type PhaseName = BatchPhase | 'sequence' | 'smoke'
 export const phaseCaps: Readonly<Record<PhaseName, BatchCaps>> = Object.freeze({
   screening: { runs: 12, requests: 400, tokens: 8_000_000 },
   // 对照 A 的两臂各 3 次运行（NX-08e2-6 按实测重预注册，NX-08e2-4 之后随序列扩到十四阶段再重算一次；
@@ -45,6 +45,12 @@ export const phaseCaps: Readonly<Record<PhaseName, BatchCaps>> = Object.freeze({
   // 阶段数 × 这组值即这里的 448 / 28,000,000（NX-08e2-4 把序列从 6 阶段扩到 10 阶段，再扩到 14 阶段）。
   // 上限必须跟着阶段数走：留在旧值上，新的理论上界就会越过去，把一次正常的烟测记成 aborted。
   sequence: { runs: 1, requests: 448, tokens: 28_000_000 },
+  // smoke 是 NX-08f 的诊断烟测（单任务 fixture audit，无界工具输出），回答「真实模型会不会真的产生
+  // 那份报告」。与 sequence 同口径取**单次 run 预算的理论上界**：该阶段的计划里只有 1 个 fixture，而
+  // runPhase 只在两次 fixture 之间检查累计值，整批上限对它本来就不构成中途制动——取更紧的值只会把一次
+  // 跑完的烟测变成带 aborted 的退出码 1，拦不住任何花费。烟测真正的闸门是 singleRunBudget。
+  // 它不进 batchPhases：对照 B 正式的两臂（armC/armD）与它们的上限留到 NX-08f-5 按实测预注册。
+  smoke: { runs: 1, requests: 32, tokens: 2_000_000 },
 })
 export const batchCaps: Readonly<BatchCaps> = Object.freeze(batchPhases.reduce((totals, name) => ({
   runs: totals.runs + phaseCaps[name].runs,
@@ -61,6 +67,18 @@ export function armPolicy(phase: BatchPhase, contextWindowTokens: number): Reado
   if (phase !== 'armA') return evalPolicy
   if (contextWindowTokens <= (evalPolicy.inputTargetTokens ?? 0)) throw new Error(`arm A needs a window larger than arm B's input target, got ${contextWindowTokens}`)
   return Object.freeze({ ...evalPolicy, inputTargetTokens: contextWindowTokens })
+}
+
+// 对照 B 的自变量：工具输出是否有界。两臂都装载同一个 tool-results 插件、只改它的配置——插件无条件
+// 注册 read_tool_result，装与不装会让 tools.schemas() 相差一个条目，而工具表既进入模型请求又进入输入
+// 估算，那样两臂差的就不只是有界性，R-21 的「同一 prompt 与工具」不再成立。
+export interface ToolOutputMode { bounded: boolean }
+// 阶段 → 工具输出模式。只有 smoke（NX-08f 的诊断烟测）返回配置，其余阶段返回 undefined = **不装载**
+// tool-results 插件，screening / armA / armB / sequence 与全部离线用例的行为因此一字不变。
+// smoke 取无界：烟测要回答的正是「模型会不会真的产生大输出」，那是有界臂永远问不出来的问题。
+// 对照 B 正式的两臂（armC 有界 / armD 无界）在 NX-08f-5 按实测预注册时再加进来。
+export function toolOutputPolicy(phase: PhaseName): ToolOutputMode | undefined {
+  return phase === 'smoke' ? { bounded: false } : undefined
 }
 export const capKeys = ['runs', 'requests', 'tokens'] as const
 

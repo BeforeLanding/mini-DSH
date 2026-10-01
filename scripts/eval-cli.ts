@@ -1,4 +1,4 @@
-import { screeningIds, sequenceIds } from './coding-fixtures.js'
+import { boundedIds, screeningIds, sequenceIds } from './coding-fixtures.js'
 import type { FixtureId } from './coding-fixtures.js'
 import { batchPhases, phaseCaps } from './eval-runner.js'
 import type { PhaseName } from './eval-runner.js'
@@ -6,7 +6,7 @@ import type { PhaseName } from './eval-runner.js'
 // 真实适配器评测入口的参数解析与计划推算，全部是纯函数：不读环境变量、不碰文件系统、不发请求。
 // 抽出来的理由是「可离线验收」——eval-screening.ts 有顶层 await（协议探测、批次执行），被测试 import
 // 会真的发起付费请求，所以这些判据不能只住在那个文件里。env 一律由调用方传入。
-const phaseNames: readonly PhaseName[] = [...batchPhases, 'sequence']
+const phaseNames: readonly PhaseName[] = [...batchPhases, 'sequence', 'smoke']
 const flagOptions = new Set(['probe-only', 'plan-only'])
 const valueOptions = new Set(['phase', 'tasks', 'infeasible', 'infeasible-reason'])
 
@@ -29,6 +29,9 @@ export function phaseRegistry(phase: PhaseName): readonly FixtureId[] {
     case 'armA':
     case 'armB':
     case 'sequence': return sequenceIds
+    // smoke 是 NX-08f 的诊断烟测：跑对照 B 的仪器（单任务 audit），一次运行，用来回答「真实模型会不会
+    // 真的产生那份报告」。它与正式对照臂共用同一台仪器，但上限单独预注册、不进 batchCaps。
+    case 'smoke': return boundedIds
   }
 }
 

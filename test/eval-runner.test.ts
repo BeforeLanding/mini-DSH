@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { armPolicy, runPhase, summarize, phaseCaps, batchCaps, batchPhases, singleRunBudget, evalPolicy, capKeys } from '../scripts/eval-runner.js'
-import type { RunOutcome } from '../scripts/eval-runner.js'
-import { runFixtureTask, scriptedAdapter, summarizeStage, type Fixture, type FixtureAdapter, type ToolOutputMode } from '../scripts/eval-fixture.js'
+import { armPolicy, runPhase, summarize, phaseCaps, batchCaps, batchPhases, singleRunBudget, evalPolicy, capKeys, toolOutputPolicy } from '../scripts/eval-runner.js'
+import type { RunOutcome, ToolOutputMode } from '../scripts/eval-runner.js'
+import { runFixtureTask, scriptedAdapter, summarizeStage, type Fixture, type FixtureAdapter } from '../scripts/eval-fixture.js'
 import { createFixture, screeningIds, sequenceIds } from '../scripts/coding-fixtures.js'
 import { CLI_BUDGET } from '../src/core/budget.js'
 import type { Counters } from '../src/core/budget.js'
@@ -56,6 +56,9 @@ test('pre-registered caps match PLAN and the phase caps sum to the whole-batch c
     // 诊断烟测：单条序列，取逐阶段预算的理论上界（阶段数 × 32 请求 / 阶段数 × 2,000,000 token）。
     // NX-08e2-4 把序列从 6 阶段扩到 10 阶段、再扩到 14 阶段，上限跟着走。
     sequence: { runs: 1, requests: 448, tokens: 28_000_000 },
+    // NX-08f 的诊断烟测：单任务 fixture audit（无界工具输出），取单次 run 预算的理论上界。它也不进
+    // batchCaps——对照 B 正式两臂（armC/armD）的上限留到 NX-08f-5 按实测预注册。
+    smoke: { runs: 1, requests: 32, tokens: 2_000_000 },
   })
   // 整批只归约预注册的三个对照阶段。把诊断阶段算进去会改变这个数字的含义，因此按值钉死而不是只断言
   // 求和：以前改 armA 只会静默改变和值，现在会直接撞上预注册数字。
@@ -100,6 +103,16 @@ test('the two comparison arms differ only in the input target', () => {
   assert.deepEqual(withoutTarget(armA as typeof evalPolicy), withoutTarget(evalPolicy))
   // 窗口不高于 armB 的目标时直接失败，而不是静默把两臂对调成「armA 裁得更多」。
   assert.throws(() => armPolicy('armA', 65_536), /window larger than arm B/)
+})
+
+// 对照 B 的自变量是工具输出模式而不是输入目标，因此它落在另一个函数上，且不能顺带改动任何既有阶段——
+// undefined 表示不装载 tool-results 插件，screening / armA / armB / sequence 的行为与历史基线一字不变。
+test('only the diagnostic smoke phase turns on the tool output policy', () => {
+  assert.deepEqual(toolOutputPolicy('smoke'), { bounded: false })
+  for (const phase of ['screening', 'armA', 'armB', 'sequence'] as const) assert.equal(toolOutputPolicy(phase), undefined, phase)
+  // smoke 与两条对照臂落在同一输入目标上：差异只来自工具输出有界性，不来自上下文策略。
+  assert.equal(evalPolicy.inputTargetTokens, 65_536)
+  assert.equal(armPolicy('armB', 1_000_000), evalPolicy)
 })
 
 test('a phase whose run cap equals the planned count completes without a false abort', async () => {

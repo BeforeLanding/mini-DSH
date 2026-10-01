@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
-import { armPolicy, evalPolicy, phaseCaps, runPhase, summarize } from './eval-runner.js'
+import { armPolicy, evalPolicy, phaseCaps, runPhase, summarize, toolOutputPolicy } from './eval-runner.js'
 import type { RunOutcome } from './eval-runner.js'
 import type { FixtureId } from './coding-fixtures.js'
 import { evidenceScope, parseEvalArguments, phaseRegistry, repeatCount, resolveContextWindow, resolveInfeasible, resolveModel, resolvePlanned, resolveRuns } from './eval-cli.js'
@@ -33,6 +33,9 @@ const baseUrl = (process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com').re
 const contextWindowTokens = resolveContextWindow(process.env, baseUrl)
 // 对照 A 的两臂只差上下文策略（见 eval-runner.ts 的 armPolicy）；其余阶段用的是两臂共用的 evalPolicy。
 const policy = phase === 'armA' || phase === 'armB' ? armPolicy(phase, contextWindowTokens) : evalPolicy
+// 对照 B 的自变量是工具输出是否有界（见 eval-runner.ts 的 toolOutputPolicy）。undefined 表示不装载
+// tool-results 插件，既有阶段的行为一字不变。
+const toolOutput = toolOutputPolicy(phase)
 
 // 证据目录按「阶段 + 覆盖范围」分开放，并一次一跑：烟测的单个任务不会挡住整批，也不会混进整批的
 // 记录；同一范围重复运行时直接拒绝写入，避免“整体重跑”被误读成“同一次运行的追加”。
@@ -49,6 +52,9 @@ if (options.planOnly) {
   console.log(`${phase}-${scope}: ${planned.length} 个任务 × ${repeats} 次重复 = ${runs.length} 次运行：${planned.join(', ')}`)
   console.log(`预算：单次 run ${policy.maxModelRequests} 请求 / ${policy.maxToolCalls} 工具 / ${policy.maxActiveDurationMs}ms / ${policy.maxTotalTokens} token；整批 ${caps.requests} 请求 / ${caps.tokens} token，${caps.runs} 次运行`)
   console.log(`上下文：输入目标 ${policy.inputTargetTokens} token（对照 A 的臂间差异只在这里）`)
+  // 对照 B 的臂间差异是工具输出模式而不是输入目标，预演里看不见它就等于预演失效——这正是这个分支存在的
+  // 理由。只打语义不打数值：具体的预览上限属于驱动侧的实现细节，写在这里会多出第二处需要同步的常量。
+  console.log(`工具输出：${toolOutput ? (toolOutput.bounded ? '有界（超出预览上限即截断并落盘，可用 read_tool_result 回读）' : '无界（结果原样进入历史，不截断）') : '不装载 tool-results 插件（既有阶段的行为）'}`)
   console.log(`模型：${process.env.MINI_DSH_EVAL_MODEL ?? process.env.MINI_DSH_MODEL ?? '(未设置)'}；端点：${baseUrl}；窗口：${contextWindowTokens}`)
   console.log(`证据目录：${evidenceDirectory}`)
   console.log('只做计划预演，未建立目录、未发出请求')
@@ -89,6 +95,7 @@ const report = await runPhase(phase, runs, caps, async task => {
     () => ({ provider, model: modelId, capabilities: adapter.capabilities, chat: adapter.chat }),
     policy,
     path.join(sessionDirectory, task.id),
+    toolOutput,
   )
   spent.runs += 1
   spent.requests += outcome.counters.modelRequests
