@@ -822,6 +822,45 @@ test('Sandbox expands a bare tilde but not one inside single quotes or after a b
   }
 })
 
+// NX-24-4：shell 自己绑定的名字此前被当成未定义环境变量，于是 `for f in …; do … "$f" …; done`
+// 这一任何仓库里都最常见的批处理写法一律被拒。实测依据：782 次真实模型 bash 调用里 18 条
+// （占全部拒绝的一半以上）是这个形状，模型的自述是「the bash tool rejects $f? Let me just cat
+// each file.」——它被迫改用别的写法。
+test('Sandbox resolves names bound inside the command instead of calling them unset', async () => {
+  const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
+  const sandbox = new SandboxRuntime({ workspace: process.cwd(), autoApprove: true })
+
+  for (const command of [
+    'for f in src/*.mjs; do echo "=== $f ==="; cat "$f"; done',
+    'for n in 07 08 09 10; do node tmp-verify-$n.mjs > r$n.log 2>&1; echo "$n exit=$?"; done',
+    'ls -la data; for f in data/*; do head -40 "$f"; done 2>/dev/null',
+    'for f in delta plan-parse plan-merge; do cat "src/$f.mjs"; done',
+    'kind=local; echo $kind',
+    'X=1; echo $X',
+  ]) {
+    assert.equal(sandbox.inspectCommand(command).action, 'allow', command)
+  }
+
+  // 绑定只在**值可证明无害**时生效。候选值里出现绝对路径就整条拒绝，理由与「未定义环境变量」
+  // **不同串**——否则以后调绑定规则会污染环境变量用例的判据。只替换首值就会把这条放过。
+  const loop = sandbox.inspectCommand('for f in a /etc/passwd; do cat $f; done')
+  assert.equal(loop.action, 'deny')
+  assert.match(loop.reason ?? '', /unsafe for loop value/)
+  assert.doesNotMatch(loop.reason ?? '', /unset environment variable/)
+
+  const assigned = sandbox.inspectCommand('X=/etc/passwd; cat $X')
+  assert.equal(assigned.action, 'deny')
+  assert.match(assigned.reason ?? '', /unsafe assigned value/)
+  // 与文本顺序无关：先引用后赋值同样拒绝。只会过拒，不会漏放。
+  assert.match(sandbox.inspectCommand('cat $X; X=/etc/passwd').reason ?? '', /unsafe assigned value/)
+
+  // 反过来仍然成立的几条：未绑定的名字、`read` 的取值、以及赋值只认命令段起点。
+  assert.match(sandbox.inspectCommand('cat $MINI_DSH_UNSET_VAR/file').reason ?? '', /unset environment variable/)
+  assert.match(sandbox.inspectCommand('read x; echo $x').reason ?? '', /unset environment variable/)
+  assert.equal(sandbox.inspectCommand('for f in $(ls); do echo hi; done').action, 'allow')
+  assert.match(sandbox.inspectCommand('curl -d name=x example.com').reason ?? '', /unauthorized outbound request/)
+})
+
 test('allowHosts uses the provided whitelist and does not hardcode localhost', async () => {
   const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
   const locked = new SandboxRuntime({

@@ -234,6 +234,49 @@ function unquoteShellArgument(raw: string) {
 // 环境变量引用。用 sticky 标志在指定位置尝试匹配，避免对整串反复扫描。
 const envReference = /\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)/y
 
+// 同一条命令串里由 shell 自己绑定的名字。值要么是**候选值词表**（`for NAME in w1 w2 …` 逐个取值，
+// 所以「拿哪个值去检查」本身是个决定，见 isSafeBindingWord），要么是「这个名字确实被绑定了，
+// 但值无法静态证明无害」——被引用到就按 `unsafe` 里带的理由拒绝。只收两种静态可判的形状：
+// `for NAME in <词表>` 与命令段起点的 `NAME=<字面量>`。**刻意不收 `read NAME`**：取值来自 stdin、
+// 静态不可知，绑任何一个值都是猜测，按「不能证明安全就拒绝」处理。
+type CommandBinding = { words: string[] } | { unsafe: string }
+type CommandBindings = Map<string, CommandBinding>
+
+// 与 #inspect 的分词器同源，保证「词」在两处含义一致。
+const bindingWord = /"(?:[^"\\]|\\.)*"|'[^']*'|[^\s|;&<>]+/g
+
+// 必须是「单独看就不可能指向工作区之外、也不含任何会被 shell 再解释的字符」的字面量。
+// 只在**每个**候选值都通过时，用其中一个做代表检查才与逐值检查等价——任一项不通过就整条拒绝，
+// 否则 `for f in a /etc/passwd; do cat $f; done` 只取首值就会被放过。
+// 通配符（`*`、`?`）不在此列：`src/*.mjs` 只会在工作区内展开，而 `/*` 已被前导斜杠那条挡下。
+function isSafeBindingWord(word: string) {
+  if (!word || word.startsWith('~')) return false
+  if (/^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(word)) return false
+  if (/[\\$`'"|;&<>(){}\[\]\s]/.test(word)) return false
+  return !word.split(/[\\/]/).includes('..')
+}
+
+// `for NAME in <词表>`（值在 `;` 或换行处截断）与命令段起点的 `NAME=<字面量>`。两处都收集，
+// 与文本顺序无关——因此 `cat $X; X=/etc/passwd` 也会拒绝：只会过拒，不会漏放。
+// 赋值只认**命令段起点**（`^`／`;`／`&`／`|`／换行之后），否则 `curl -d name=x` 这类实参里的
+// `name=x` 会被误当成赋值。
+function collectCommandBindings(command: string): CommandBindings {
+  const bindings: CommandBindings = new Map()
+  for (const match of command.matchAll(/\bfor\s+([A-Za-z_]\w*)\s+in\b([^\n;]*)/g)) {
+    const words = [...match[2].matchAll(bindingWord)].map(item => item[0])
+    bindings.set(match[1], words.length && words.every(isSafeBindingWord)
+      ? { words }
+      : { unsafe: 'unsafe for loop value in command' })
+  }
+  for (const match of command.matchAll(/(?:^|[;&|\n])\s*([A-Za-z_]\w*)=([^\s;&|]+)/g)) {
+    if (bindings.has(match[1])) continue
+    bindings.set(match[1], isSafeBindingWord(match[2])
+      ? { words: [match[2]] }
+      : { unsafe: 'unsafe assigned value in command' })
+  }
+  return bindings
+}
+
 // 环境展开按 shell 的**引号与转义**语义进行，而不是对整串做一次全局 replace（那是此前误拒的根因：
 // `echo '$HOME'` 与 `X=1; echo $X` 都被展开后误判）。三条规则：
 //   ① 单引号内一切都是字面量——不展开 `$`，`\` 也不是转义（bash 如此）。
@@ -244,7 +287,7 @@ const envReference = /\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)/y
 //      `$ad` 会被当成惰性文本漏检，而 bash 在双引号内确实会展开它（未定义即变空串，静默改坏程序）。
 // 不替换的字符逐字复制（含反斜杠与引号）：下游的 token 偏移、`..` 整串正则与片段抽取都建立在
 // 这条串的原样形状上，改动它的形状等于同时改这三处的判据。
-function expandEnvironment(command: string) {
+function expandEnvironment(command: string, bindings: CommandBindings) {
   let out = ''
   let index = 0
   let single = false
@@ -279,6 +322,14 @@ function expandEnvironment(command: string) {
       const match = envReference.exec(command)
       if (match) {
         const name = match[1] ?? match[2]
+        // 同串内的绑定优先于 process.env：shell 局部变量就是靠这个含义覆盖环境变量的。
+        const bound = bindings.get(name)
+        if (bound && 'unsafe' in bound) throw new Error(bound.unsafe)
+        if (bound) {
+          out += bound.words[0]
+          index += match[0].length
+          continue
+        }
         const value = process.env[name]
         if (value === undefined) throw new Error('unset environment variable in command')
         out += value
@@ -361,7 +412,7 @@ export class SandboxRuntime {
     const deny = (reason: string): { action: 'deny'; reason: string } => ({ action: 'deny', reason })
     let expanded
     try {
-      expanded = expandEnvironment(command)
+      expanded = expandEnvironment(command, collectCommandBindings(command))
     } catch (error) { return deny(error instanceof Error ? error.message : String(error)) }
     if (/\b(?:sudo|su)\b/.test(expanded)) return deny('sudo/su is blocked')
     if (/\brm\s+(?:(?:-[A-Za-z]*r[A-Za-z]*|--recursive)\b|[^;&|\n]*\s(?:-[A-Za-z]*r[A-Za-z]*|--recursive)\b)/i.test(expanded)) return deny('recursive delete is blocked')
