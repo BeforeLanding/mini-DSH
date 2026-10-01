@@ -286,6 +286,19 @@ function expandEnvironment(command: string) {
         continue
       }
     }
+    // `~` 走同一趟扫描：只在词首边界展开，跟着 `/`、空白、引号或串尾才算词首。
+    // 走同一趟之后它自动继承上面两条规则——单引号内的 `~` 与 `\~` 都不再展开。
+    // 双引号内**保持展开**（与既有行为 parity）：本步只修单引号与反斜杠两处，不引入新的拒绝。
+    if (char === '~' && (index === 0 || /[\s"']/.test(command[index - 1]))) {
+      const next = command[index + 1]
+      if (next === undefined || /[/\s"']/.test(next)) {
+        const home = process.env.HOME ?? process.env.USERPROFILE
+        if (!home) throw new Error('unset home path')
+        out += home
+        index += 1
+        continue
+      }
+    }
     out += char
     index += 1
   }
@@ -349,11 +362,6 @@ export class SandboxRuntime {
     let expanded
     try {
       expanded = expandEnvironment(command)
-      expanded = expanded.replace(/(^|[\s"'])~(?=\/|[\s"']|$)/g, (_, prefix) => {
-        const home = process.env.HOME ?? process.env.USERPROFILE
-        if (!home) throw new Error('unset home path')
-        return prefix + home
-      })
     } catch (error) { return deny(error instanceof Error ? error.message : String(error)) }
     if (/\b(?:sudo|su)\b/.test(expanded)) return deny('sudo/su is blocked')
     if (/\brm\s+(?:(?:-[A-Za-z]*r[A-Za-z]*|--recursive)\b|[^;&|\n]*\s(?:-[A-Za-z]*r[A-Za-z]*|--recursive)\b)/i.test(expanded)) return deny('recursive delete is blocked')

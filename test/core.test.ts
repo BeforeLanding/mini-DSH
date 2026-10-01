@@ -804,6 +804,24 @@ test('Sandbox expands variables by shell quoting rules, not by a quote-blind swe
   }
 })
 
+// NX-24-3：`~` 此前走的是另一句引号盲的 replace（边界字符里含 `'`），所以 `echo '~'` 也会展开。
+// 折进同一趟扫描后它自动继承「单引号内不展开」与「`\` 之后不展开」两条规则。
+// **这一条没有任何跑量证据**：782 次真实 bash 调用里没有一例因此被拒，此前也没有任何测试覆盖 `~`。
+// 单独成一个提交就是为了让它能单独回退。
+test('Sandbox expands a bare tilde but not one inside single quotes or after a backslash', async () => {
+  const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
+  const home = process.env.HOME ?? process.env.USERPROFILE
+  const sandbox = new SandboxRuntime({ workspace: process.cwd(), autoApprove: true })
+
+  assert.equal(sandbox.inspectCommand("echo '~'").action, 'allow')
+  assert.equal(sandbox.inspectCommand('echo \\~').action, 'allow')
+  if (home) {
+    // 裸 `~` 仍展开，因此仍能被既有的越界与递归删除规则看见。
+    assert.match(sandbox.inspectCommand('cat ~/.ssh/id_rsa').reason ?? '', /path escapes the workspace/)
+    assert.match(sandbox.inspectCommand('rm -rf ~').reason ?? '', /recursive delete/)
+  }
+})
+
 test('allowHosts uses the provided whitelist and does not hardcode localhost', async () => {
   const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
   const locked = new SandboxRuntime({
