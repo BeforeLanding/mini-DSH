@@ -17,6 +17,7 @@
     "eval:sequence": "pnpm build && node dist/scripts/eval-screening.js --phase sequence",
     "eval:estimate": "pnpm build && node dist/scripts/eval-estimate.js",
     "demo:fix": "pnpm build && node dist/scripts/demo-fix.js",
+    "demo:resume": "pnpm build && node dist/scripts/demo-resume.js",
     "check": "pnpm build && node scripts/check-syntax.js",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
