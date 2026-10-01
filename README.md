@@ -75,7 +75,26 @@ project-context 插件可通过 `limits` 配置 `maxFileBytes`（默认 16 KiB�
 
 入口负责装配插件；`core/` 实现事件日志、工具注册表、提示词、模型路由和 Agent Loop；`plugins/` 将 runtime 暴露为 Cordis 服务；`models/` 实现 DeepSeek 流式协议。工具分两处注册：`tools/` 提供 9 个（Bash、五个文件工具、`task_changes`、`request_trace`、`task_report`），插件再提供 2 个（`project_context`、`read_tool_result`），合计 11 个。
 
-请求经过 CLI → agent.send → Agent Loop → Session Event Log → LLM；模型请求工具时经过 ToolRuntime，记录结果后继续下一轮。Loop 通过服务契约工作，不依赖具体模型或工具，底层未注入预算时没有固定次数上限；CLI 默认使用有限预算。
+```mermaid
+flowchart LR
+  CLI["CLI<br/>src/plugins/cli.ts"] -->|agent.send| Loop["Agent Loop<br/>src/core/agent-loop-runtime.ts"]
+
+  Loop --> Ctx["上下文投影<br/>src/core/context-runtime.ts<br/>按 task 分组，只裁旧任务"]
+  Loop --> Bud["执行预算<br/>src/core/run-budget-runtime.ts<br/>请求·工具·主动时间·token"]
+  Loop --> Llm["模型适配器<br/>src/models/deepseek.ts"]
+  Loop --> Tools["工具注册表<br/>src/core/tool-runtime.ts"]
+
+  Tools --> Tools9["tools/ 注册 9 个<br/>bash、read_file、write_file、edit_file<br/>glob、grep、task_changes<br/>request_trace、task_report"]
+  Tools --> Plugins2["插件注册 2 个<br/>project_context、read_tool_result"]
+
+  Log[("事件日志 JSONL<br/>src/core/event-store.ts<br/>唯一事实来源")] -. 投影由它派生 .-> Ctx
+  Llm --> Log
+  Tools --> Log
+```
+
+看这张图要看三件事：**请求**从 CLI 进 Agent Loop，再由 Loop 分发给投影、预算、模型与工具；**事件日志是唯一事实来源**，请求投影（虚线）是从它派生出来的视图，裁剪只作用于投影、不删原始事件；**工具在两处注册**——`tools/` 9 个与插件 2 个，合计 11 个。
+
+Loop 通过服务契约工作，不依赖具体模型或工具，底层未注入预算时没有固定次数上限；CLI 默认使用有限预算。每个已记录的 tool_call 都保证有配对结果（真实完成、`skipped` 或 `unknown`）。
 
 路径闸门检查词法路径、真实路径及尚未创建文件的父目录，拒绝软链越界。命令策略用于防止误操作，审批负责确认执行；这是应用层策略，不是操作系统隔离。命令策略按 shell 语义分词后检查越界路径、系统路径、危险删除与出网目标，惰性参数（注释形状的 `//`、`echo`/`printf` 参数里的 URL）不拦；它不覆盖命令替换、内联脚本与未被识别的取网工具，详细契约见[需求 R-20](docs/context-budget/REQUIREMENTS.md)。
 
