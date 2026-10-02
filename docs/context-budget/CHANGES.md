@@ -83,6 +83,10 @@ node docs/context-budget/nx24-replay-probe.mjs   # no unexpected deny: 7 条全�
 
 `8e36afd`（NX-18-0 立项）、`b9ca89f`（NX-18-1 判据替换）、`dfcfa1c`（NX-18-2 契约与矩阵），以及本提交（NX-18-3 回填）。
 
+### CI
+
+本次推送（`8e36afd`…`0ddeaeb`）的 [CI 36992959210](https://github.com/BeforeLanding/mini-DSH/actions/runs/36992959210) 在 tip `0ddeaeb` 上四组合（Ubuntu/Windows × Node 22/24）**全部 success**，**attempt=1**，无重跑。**本次含 `src/`、`test/` 改动**（判据替换与契约扩表），所以与 T6 那次不同——不是靠文档改动顺带触发；四组合覆盖的是同一条 `pnpm check` + `pnpm test` 链。
+
 ## T6 Biome 的收窄配置与处置
 
 ### 现象与根因
