@@ -55,8 +55,8 @@ git log --oneline --reverse | sed -n '12p'                # 43e3829：分界之�
 
 ```powershell
 pnpm install --frozen-lockfile
-pnpm check            # syntax ok: 91 files
-pnpm test             # tests 205 / pass 205 / fail 0 / skipped 0
+pnpm check            # syntax ok: 93 files
+pnpm test             # tests 211 / pass 211 / fail 0 / skipped 0
 pnpm fixtures:check   # 16 项：初始全部失败、参考解全部通过
 pnpm eval:offline     # planned 12 / executed 12 / accepted 12
 pnpm demo:fix         # 退出码 0：项目规则 → 定位 → 修改 → 失败测试 → 再修复 → diff 与证据
@@ -103,7 +103,7 @@ project-context 插件可通过 `limits` 配置 `maxFileBytes`（默认 16 KiB�
 
 `demo:resume` 的第一段把请求预算压到 4 次，第 4 次请求带回的那条编辑在**派发之前**被拦下，恢复后补做；判定逐条核对首段确实停止、被跳过的调用没有 `tool/start`、恢复后真的执行了一次、`continuations` 为 1、没有任何工具被执行两次。
 
-`demo:unknown` 起一个子进程执行一条写下真实副作用文件后阻塞的命令，等文件出现后按进程树杀掉它，因此留在磁盘上的残局是真的。它同时暴露一个目前**没有**对应入口的步骤：崩溃留下的 `writer.lock` 会让 `JsonlStore.open` 直接拒绝（`session writer lock exists; verify stale locks explicitly`），而 `quarantineTail` 也要先抢同一把锁，所以恢复的唯一路径是由人确认 pid 已死、再显式删掉这把锁——CLI 也没有 `/recover`。演示照实做这一步并说明它属于操作者的判断，该缺口已立项 NX-21，本次未修。
+`demo:unknown` 起一个子进程执行一条写下真实副作用文件后阻塞的命令，等文件出现后按进程树杀掉它，因此留在磁盘上的残局是真的。它同时演示崩溃之后绕不开的一步：崩溃留下的 `writer.lock` 会让 `JsonlStore.open` 直接拒绝（`session writer lock exists; verify stale locks explicitly`），而 `quarantineTail` 也要先抢同一把锁，所以**销掉这把锁是恢复的唯一路径**。这一步此前只能由人手删文件（CLI 起不来，进程内命令在真正需要它时不可达），现在走 `pnpm session:lock <sessionId>`：它只把证据摆出来（锁体的 token 与 pid、pid 存活探针、锁文件时间、`events.jsonl` 尾部是否完整），**解除与否由操作者判断**，且必须显式给出 `--remove --token <检视里看到的那个 token>`——token 对不上会被拒，免得删掉一把刚被新写入者拿到的活锁。演示照实走一遍，包括**先用错 token 试一次**。
 
 三条演示的事件日志落在 `.demo-runs/`，与 `.eval-evidence/`（真实模型证据）分开存放，两者都不入库。
 
@@ -141,7 +141,7 @@ pnpm check
 pnpm test
 ```
 
-当前 205 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读、可靠编辑/任务变更、结构化命令、验证报告、请求 trace 与文档锚点回归测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
+当前 211 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读、可靠编辑/任务变更、结构化命令、验证报告、请求 trace、文档锚点与会话锁核验回归测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
 
 NX-05a 起提供可重复的 [编程任务 fixture](test/fixtures/coding/README.md)，NX-05b 扩展到 12 项，覆盖边界修复、功能扩展、跨文件接口修改、去重、分页、查询重试、合并、CSV、库存与汇总等；此后又加入多阶段序列 `pipeline`、单任务 `audit`、演示夹具 `repair`，以及 `pipeline` 的无公开检查变体 `blind`，**当前注册表共 16 项 = 筛查 12 项（上列，冻结）+ 这 4 项**（`blind` 与 `pipeline` 是同一套任务，只差工作区里有没有公开 `check.mjs`）。运行 `pnpm fixtures:check` 核验全部 16 项的初始失败/参考通过基线；`pnpm test` 还覆盖模拟模型经真实文件/Bash 工具完成失败→修改→重跑的流程。每次使用新临时工作区，独立验收器保留在工作区外；模拟结果不代表真实模型编程成功率。
 
@@ -212,7 +212,7 @@ files 插件 maxEditBytes 默认 1 MiB、maxTrackedFiles 默认每 task 100，�
 
 CLI 默认每段模型请求64次、工具128次、主动10分钟、累计2M token，输入目标64Ki、最大输出16Ki、最低输出预留4Ki。容量余量为 max(2048,input估算10%)。模型请求180秒，审批300秒；Bash保留30秒。用 `.env` 中 `MINI_DSH_BUDGET` JSON 或 `/budget {"maxModelRequests":8}` 覆盖，`/budget` 查看有效配置、最近run、任务累计、估算来源和裁剪任务ID。次数/总额0表示零额度；输出和容量必须为正整数。
 
-默认写入 `~/.mini-dsh/sessions/<sessionId>/events.jsonl`，CLI打印session ID；可用 `MINI_DSH_SESSION_DIR` 改目录，设置 `MINI_DSH_SESSION_ID` 在同一规范化工作区恢复。单写入者持锁；正常退出等待写入并释放锁。失效writer.lock需人工确认旧进程与副作用后处理；不会仅凭PID自动解除。尾部半条事件拒绝恢复；可在核验后调用 `JsonlStore.quarantineTail(directory,id)` 保存原日志并隔离尾部，中部损坏或未知版本明确报错。
+默认写入 `~/.mini-dsh/sessions/<sessionId>/events.jsonl`，CLI打印session ID；可用 `MINI_DSH_SESSION_DIR` 改目录，设置 `MINI_DSH_SESSION_ID` 在同一规范化工作区恢复。单写入者持锁；正常退出等待写入并释放锁。失效writer.lock用 `pnpm session:lock <sessionId>` 核验：它打印锁体的token与pid、pid存活探针、锁文件时间与尾部状态，解除要显式 `--remove --token <检视输出里的token>`，token对不上会被拒；pid存活只作线索，需人工确认旧进程与副作用后处理，不会仅凭PID自动解除。尾部半条事件拒绝恢复；可在核验后调用 `JsonlStore.quarantineTail(directory,id)` 保存原日志并隔离尾部，中部损坏或未知版本明确报错。
 
 停止后 `/continue` 关联同一task的新run，沿用有效额度并累计任务用量，不复制用户输入、不重放已完成或未知工具。completed不继续；context_overflow需先调整上下文配置；unknown需先人工核验副作用，再开始明确的新任务，自动续跑会拒绝。`/model` 和 `/budget` 设置追加到日志，恢复保留，reset清理任务并保留当前配置。
 

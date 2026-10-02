@@ -2,6 +2,130 @@
 
 更新：2026-10-02。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-21 会话锁的陈旧核验入口与显式移除
+
+### 现象与根因
+
+`JsonlStore.open` 对任何已存在的 `writer.lock` 一律拒绝（提示语 `session writer lock exists; verify stale locks explicitly`），而 `quarantineTail` 也要先抢同一把锁，因此崩溃之后**销掉这把锁是恢复的唯一路径**。仓库此前没有任何可脚本化的核验入口，这一步只能由人手删文件——NX-10 的第三幕照实演示了它。
+
+**入口形态被一处实测事实定死**：`src/plugins/cli.ts:38` 在 `ctx.effect` 建立 REPL **之前**就 `await JsonlStore.open(...)`，撞上崩溃过的会话直接抛错。所以 `/recover`／`/lock` 这类**进程内命令在真正需要它的时刻根本不可达**——入口只能是独立脚本。
+
+**方向依据是既有的规范性条款**，不是新决策：`PLAN.md` 的持久化一节写着「失效锁显式核验，**不仅凭 PID 自动移除**」。因此本项不新增决策编号，只在该行补上入口名字。
+
+### 交付物
+
+**核心**（`src/core/event-store.ts`，与 `quarantineTail` 同处——它是既有的「操作者恢复助手」先例）：
+
+- `LockInspection`：`present`／`ownerReadable`／`token`／`pid`／`modifiedAt`／`pidStatus`／`eventsTail`。
+- `static inspectLock(directory, sessionId)`：**纯读**。与 `open` 不同，它**不 `mkdir`**——核验不能有副作用，目录不存在就是「无锁」。只读 `events.jsonl` 的**最后 1 字节**判定尾部，口径与 `decodeLog` 一致。
+- `static removeStaleLock(directory, sessionId, token)`：缺文件抛 `session writer lock is gone; nothing to remove`；`owner.token !== token` 抛 `writer lock ownership changed`；两者都过了才 `unlink`。**它不读 pid、不做任何存活判断。**
+- `open`／`close`／`quarantineTail` **一行未动**，既有锁语义逐字保留。
+
+**入口**（`scripts/session-lock.ts` → `pnpm session:lock <sessionId> [--remove --token <token>]`）：目录解析逐字照抄 `src/plugins/cli.ts:32`。检视成功即退出 0（**发现陈旧锁不是失败**）；参数错、移除被拒、移除抛错 → 退出 1 并写 stderr。「下一步」那行打印**完整 token**，使命令可直接复制。
+
+**PID 探针只作线索**：三态 `alive`／`not-found`／`inconclusive`，`pid ≤ 0` 或非整数一律 `inconclusive`——本机实测（win32，Node 24）`process.kill(0, 0)` **会成功**，直接问会拿到一个假的 `alive`；`EPERM`（进程存在但无权发信号）归入 `alive`。输出固定带一句「pid 复用下 `alive` 不等价于持有者还在」。
+
+### 实测证据
+
+```
+$ pnpm check
+syntax ok: 92 files            # NX-21-1 后（新增 1 个脚本）；NX-21-2 加测试文件后为 93
+
+$ MINI_DSH_SESSION_DIR=/tmp/nx21-probe node dist/scripts/session-lock.js <id>      # 无锁
+锁：无
+事件：events.jsonl 尾部完整
+没有需要处置的锁，直接恢复：MINI_DSH_SESSION_ID=<id> pnpm start
+exit=0
+
+$ printf '{"token":"t","pid":1}' > /tmp/nx21-probe/<id>/writer.lock
+$ node dist/scripts/session-lock.js <id>                                           # 陈旧锁
+锁：存在  mtime=2026-10-02T08:57:18.615Z
+持有者：token=t pid=1
+pid 探针：not-found（本机无此进程）
+注意：pid 存活只作线索，pid 复用下不等价于「持有者还在」；确认旧进程与副作用之后再解除。
+下一步（确认副作用后可执行）：
+  pnpm session:lock <id> --remove --token t
+exit=0
+
+$ node dist/scripts/session-lock.js <id> --remove --token wrong
+session:lock 失败：writer lock ownership changed
+exit=1    # 锁仍在，ls 可见 writer.lock
+$ node dist/scripts/session-lock.js <id> --remove --token t
+锁已移除：…/writer.lock
+exit=0    # ls 只剩 events.jsonl
+
+# 四种用法错一律退出 1：无参、--remove 缺 --token、--token 无 --remove、未知选项 --bogus
+```
+
+**两处只有真跑才会暴露的坑**：
+
+1. **`--token` 的取值既不是旗标也不是位置参数**。第一版用「过滤掉 `--` 开头的」挑位置参数，于是 `--token wrong` 里的 `wrong` 被算成**第二个 sessionId**，四个状态里两个直接报「必须给出一个 sessionId」。改成按「谁消费了谁」逐个走才对。
+2. **演示里判定「锁已移除」不能到判定那一刻再查文件**。第一版把 `!(await exists(lockPath))` 写进 `[5]` 的 `checks`，跑出来是 ✗——因为 `[4]` 重开会装上一把**新锁**，那时 `lockPath` 当然又存在。必须在下手那一幕就地取值。这条改的是**断言**，不是实现。
+
+**另一处连带修正**：本次向 `event-store.ts` 插入 45 行使 `DECISIONS.md` 钉住的 `src/core/event-store.ts:52`（`append`）漂到 `:97`，由 `test/decisions-doc.test.ts` 当场抓出：
+
+```
+✖ the decision write-up keeps every code and test anchor pointing at something real
+  + [ '锚点与说明对不上：src/core/event-store.ts:52 附近 5 行内找不到 `append`' ]
+```
+
+### 回归与反例实跑
+
+新增 `test/session-lock.test.ts` 六条用例：检视是纯读且不建目录、pid 三态与不可读锁体、`eventsTail` 两态、错 token 被拒且锁仍在、正 token 移除后 `open` 成功且 `restore` 补出**恰好一条 `unknown`**、`session:lock` 脚本的 CLI 表面（四种用法错退出 1 + 检视 + 拒绝 + 移除）。**已退出的子进程 pid 由「spawn 后等它退出」取得**，比猜一个大数字可靠（大 pid 可能撞上 pid 复用）。
+
+**反例实跑**（把 `removeStaleLock` 的 token 比较改成恒真 `if (!isRecord(owner))`）：
+
+```
+ℹ tests 211
+✖ removeStaleLock refuses a token the operator did not just read
+✖ the session:lock script inspects, refuses a bad token and removes on an explicit one
+ℹ pass 209 / fail 2
+```
+
+改回后 `pass 211 / fail 0`。两条都咬——守卫同时被核心用例与 CLI 冒烟用例覆盖。
+
+### 第三幕改用新入口
+
+`scripts/demo-unknown.ts` 的 `[3]` 从一行裸 `fs.unlink` 改为 `inspectLock` → **先用错 token 试一次** → 正确 token `removeStaleLock`。反例直接演在演示里。`pnpm demo:unknown` 退出 0，判定由 6 条增至 9 条：
+
+```
+✓ 重开先被陈旧锁拒绝
+✓ 入口报出的 pid 探针指向一个已不存在的进程
+✓ 错误 token 被拒、锁仍在
+✓ 正确 token 显式移除（下一幕重开会装上新的锁）
+✓ 副作用文件仍在（它真的写过）
+✓ 恰好一条 unknown 结果，且就是那次 bash
+✓ 被崩溃中断的 run 被封为 error
+✓ 补出的记录落盘（日志行数增加）
+✓ 自动续跑被拒
+```
+
+`[3]` 的实际输出：
+
+```
+入口报出的持有者：token=e5fd18c5-…-108c09696edb pid=45936；pid 探针 not-found；事件尾部 complete
+先用错 token 试一次："writer lock ownership changed"；锁仍在？true
+再用检视到的 token 显式移除；锁仍在？false
+```
+
+### 口径订正与不动的东西
+
+改动：`README.md`（零密钥八条里的计数、测试小节、`demo:unknown` 一节从「目前**没有**对应入口…已立项 NX-21，本次未修」改为入口说明、持久化一节补上入口命令并**逐字保留**「不会仅凭PID自动解除」）、`PROGRESS.md`（当前状态新增一条、阻塞段就地改写为已解决、下一步摘掉 NX-21 并新增第 9 条）、`DECISIONS.md`（结尾那句「没有可脚本化的处置入口」改为指向入口）、`PLAN.md`（持久化一行补入口名字，决策文字未动）。
+
+**带日期的历史证据逐字不动**：`TASKS.md` 的 NX-10 一节「恢复的唯一路径是先由人删掉该锁」、本文件的 NX-10-5／NX-10-6 两节、`PROGRESS.md:25` 的 `[NX-21](#阻塞)` 与「本次只立项不修」。那些限制在写下时**为真**。NX-21 的 backlog 条目按 NX-22 的先例处理：前半写处置、后半「**原始记录（todo）**」照抄原文。
+
+**未触碰**：`test/fixtures/estimation/corpus/chinese/doc-readme-context.txt`（含 README 持久化段落的冻结快照，改它会让 `corpusDigest` 变、`pnpm eval:estimate` 退出 1——本次实测该命令仍退出 0）。`README.md` 的 CLI 命令清单未改（没有新增斜杠命令）、`.env.example` 未改、`open`／`close`／`quarantineTail` 未改。
+
+### 验收
+
+`pnpm check` **93 文件**、`pnpm test` **211/211**（199 → 205 → 211 的第三次增长即本次 6 条）、`pnpm demo:unknown` 退出 0（判定 9 条全 ✓）、`pnpm fixtures:check` 16 项（初始 0/16、参考 16/16）、`pnpm eval:offline` 12/12、`pnpm eval:estimate` 退出 0。零付费、无网络、无 tag、未触碰生产 ECS。
+
+**CI**：见本节的追记（提交后回填 run 号与 attempt 数）。
+
+### 提交
+
+`4fb4e7c`（NX-21-0 立项）、`90b7733`（NX-21-1 核心与脚本）、`2d35d28`（NX-21-2 测试与 DECISIONS 锚点）、`4551e62`（NX-21-3 第三幕）＋本提交（NX-21-4 回填）。
+
 ## NX-22 文档内锚点的逐个校验与口径订正
 
 ### 现象与根因
