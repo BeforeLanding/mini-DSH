@@ -1,6 +1,6 @@
 # NX-08 真实模型评测报告
 
-更新：2026-10-01（NX-08h 追记）。本文件是 NX-08 四次真实模型实验的**读者面向报告**——合并 NX-08d 筛查跑、NX-08e 对照 A、NX-08f 对照 B 与 NX-08h 无公开检查变体的结论。逐步的行为、提交与验收证据在 [CHANGES](CHANGES.md)，参数与预注册口径在 [PLAN 的评测批次上限](PLAN.md#nx-08-评测批次上限预注册)，执行状态在 [TASKS](TASKS.md) 与 [PROGRESS](../../PROGRESS.md)。
+更新：2026-10-02（NX-22 计数订正）。本文件是 NX-08 四次真实模型实验的**读者面向报告**——合并 NX-08d 筛查跑、NX-08e 对照 A、NX-08f 对照 B 与 NX-08h 无公开检查变体的结论。逐步的行为、提交与验收证据在 [CHANGES](CHANGES.md)，参数与预注册口径在 [PLAN 的评测批次上限](PLAN.md#nx-08-评测批次上限预注册)，执行状态在 [TASKS](TASKS.md) 与 [PROGRESS](../../PROGRESS.md)。
 
 **范围**：只覆盖有独立验收口径的实验。NX-08c 的输入估算误差实验另见 [CHANGES 的 NX-08c 节](CHANGES.md#nx-08c-输入估算误差实验)，此处只引用其结论（对自然语言一致高估、对结构化工况不是一致安全），不重述数值。**NX-08f 对照 B 的仪器未成立**，它的价值是负面结果与机制解释，单列一节。**NX-08h 是一次诊断烟测**（1 个 fixture × 1 次运行），只回答「去掉公开 oracle 之后会不会真的失败」，单列一节；它没有对照臂，与 `armB` 的比较不在其预注册内。
 
@@ -283,4 +283,4 @@ off-peak 输入 $0.15/M、输出 $0.60/M；peak 输入 $0.30/M、输出 $1.20/M�
 - **对照 B 重跑换目录是刻意的**：`ensureWritable` 拒绝复用同一目录，而第一次的证据要保留——两次运行要能并排比对，才能看出「换了策略、避开的还是同一件事」。
 - 每条 run 的 `runs.jsonl` 一行含状态、counters、验收结论与逐阶段明细；工具级统计（编辑失败率、修复迭代、探针数）**不在 `runs.jsonl` 里**——它的设计目标是逐阶段预算与裁剪观测——须从 `sessions/<fixture>/<sessionId>/events.jsonl` 现算，本报告的两个批次数字均按此口径得出。
 - 付费入口 `pnpm eval:screening` / `pnpm eval:sequence` 每次调用都需要新的明确授权；证据目录每次运行只能用一次（`ensureWritable` 拒绝复用）。
-- 离线可复现的部分：`pnpm fixtures:check`（初始 0/13、参考 13/13）、`pnpm eval:offline`（筛查批次 12/12）、`pnpm test`。三者都不调用付费模型。
+- 离线可复现的部分：`pnpm fixtures:check`（初始 0/16、参考 16/16）、`pnpm eval:offline`（筛查批次 12/12）、`pnpm test`。三者都不调用付费模型。
