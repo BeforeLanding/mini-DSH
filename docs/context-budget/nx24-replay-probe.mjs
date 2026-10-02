@@ -13,7 +13,8 @@
 // 数字会凭空翻倍，且翻倍的那一半与闸门无关。
 //
 // 基线：NX-24 动手前（提交 76ebadc）为 782 次调用 / 32 条拒绝（23 条 `unset environment variable`、
-// 9 条 `path escapes the workspace`）。NX-24 之后为 9 条，NX-32 收缩后为 7 条（见下表）——
+// 9 条 `path escapes the workspace`）。NX-24 之后为 9 条，NX-32 收缩后为 7 条，NX-25 后为 6 条
+// （见下表）——
 // 减少的两条是环境展开撤销的连带，不是修好了。`.eval-evidence/` 不入库，所以这个探针只在有历史
 // 证据的工作区里可跑。
 //
@@ -23,7 +24,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { SandboxRuntime } from '../../dist/src/core/sandbox-runtime.js'
 
-// 仍被拒的条目，逐条标了归属。**断言集合而不是断言计数**——以后修 NX-25/27/28/29
+// 仍被拒的条目，逐条标了归属。**断言集合而不是断言计数**——以后修 NX-27/29
 // 时这些条目会从这里消失，那时应当把条目删掉，而不是把断言放宽成一个数字。
 // **NX-18 已经改完，它那条却没有消失**：拦住 `cat ../package.json` 的不是 `..` 判据的形状，而是闸门
 // 看不见命令内部的 `cd`（命令先 `cd src`）。那条缺口属 D-16 撤掉的「命令位置状态」一族，不在 NX-18
@@ -34,7 +35,6 @@ import { SandboxRuntime } from '../../dist/src/core/sandbox-runtime.js'
 // 由 `nx17-gate-probes.mjs` 盯着，不在这里留一个宽松的断言。
 const expected = new Map([
   ['7d13fdc54a', 'NX-27 写 /tmp（Git Bash 的 /tmp 与 node:path 不一致）'],
-  ['c7475a2f5e', 'NX-28 here-doc 正文里形如 a:\\tb\\tc 的字面量被判为盘符路径'],
   ['96a488b3e0', 'NX-29 正则字面量 `/missing` 与绝对根路径 `/missing` 形状完全相同'],
   ['062d867579', 'NX-18 `cat ../package.json`：闸门不看命令内的 `cd`（命令先 `cd src`），相对 workspace 根确实越界'],
   ['52e783f9c4', 'NX-27 写 /tmp'],

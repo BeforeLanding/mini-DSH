@@ -2,6 +2,41 @@
 
 更新：2026-10-02。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-25 here-doc 正文按消费者分流
+
+### 现象、决策与实现
+
+闸门此前把整串命令逐 token 扫描，here-doc 的正文也在其中：`cat <<'EOF'` 里的 `curl https://example.com` 是交给 `cat` 的数据，却被当成新命令段拒绝；但不能无条件跳过，因为 `bash <<'EOF'` 确实会执行正文。D-18 因此只引入一条窄语义：识别未被引用的 `<<WORD`／`<< WORD`／`<<-WORD` 与带引号定界符，按出现顺序配对正文；`sh`／`bash`／`zsh`／`dash`／`ksh` 消费者的正文递归走同一闸门，其余正文从顶层扫描剥离。命令行本身始终保留，所以 `curl <<EOF` 与 `cat <<EOF; curl x` 仍拒绝；`<<<` here-string、引号里的 `"<<EOF"` 与注释里的形状不按 here-doc 处理。
+
+实现集中在 `src/core/sandbox-runtime.ts`：`hereDocumentRedirects` 做一趟引号／转义感知的重定向扫描，`splitHereDocuments` 负责按 shell 顺序取正文，`#inspect` 共享同一个计数／字节预算递归检查 shell 正文。消费者取简单命令首词的 basename；`env bash <<EOF` 等包装形式仍属于 D-16 已登记的包装命令边界，不借本项恢复通用 shell parser。
+
+失败闭合与上限均给独立理由：最多 **16 份** here-doc、正文累计 **256 KiB**、shell 正文递归最多 **3 层**；缺终止词、坏定界符或越过任一上限都拒绝。边界值（16 份、恰好 256 KiB、3 层）逐条放行，下一单位逐条拒绝。
+
+### 回放与连带结果
+
+诊断矩阵的 `known gap NX-25` 先读到 `met`，再搬进 `fixed: here-document consumers`，并增加 `bash` 正文拒绝的孪生行；结果为 `no contract drift; 28 known gap(s) still open`（原 29）。真实回放 782 次 bash 调用中，拒绝由 **7 条降到 6 条**：消失的唯一条目是 `c7475a2f5e`，即 NX-28 的 node here-doc 正文里 `a:\tb\tc` 被当成盘符路径。盘符规则一行未动，NX-28 是由“数据正文不再进入路径扫描”连带闭合。
+
+另一条含 here-doc 的回放 `7d13fdc54a` 仍被拒，因为命令行本身是 `cat > /tmp/t1.mjs <<'EOF'`：拒绝来自 `/tmp` 与 Windows `node:path` 的语义差异（NX-27），不是正文。本项没有把它误放。探针删除 NX-28 指纹后退出 0，其余 6 条集合与理由不漂移。
+
+### 验证与反例
+
+```
+pnpm check                                       # syntax ok: 93 files
+pnpm test                                        # tests 213 / pass 213 / fail 0
+pnpm lint                                        # Checked 102 files. No fixes applied.
+pnpm fixtures:check                              # 16 项：初始均失败、reference 均通过
+pnpm eval:offline                                # planned/executed/accepted 12/12/12
+pnpm eval:estimate                               # estimator/corpus matchesReference 均为 true
+node docs/context-budget/nx17-gate-probes.mjs    # no contract drift; 28 known gap(s) still open
+node docs/context-budget/nx24-replay-probe.mjs   # no unexpected deny: 6 条全部有归属
+```
+
+四个失败闭合守卫逐一临时放宽、每次重建后只跑定向用例，均按对应断言变红：数量 `> 16` 改成 `> 17` 后 17 份未拒；字节 `> 262144` 改成 `> 262145` 后 262145 字节未拒；深度 `>= 3` 改成 `> 3` 后 4 层未拒；缺终止词分支改成吞到 EOF 后未拒。逐项恢复后定向用例重新通过。测试过程还抓出一处真实实现坑：只排除第一个 `<<` 会在 `<<<` 的第二个字符重新命中，必须同时检查前一个与后两个字符；`cat <<<"curl example.com"` 的回归将它钉住。
+
+### 提交
+
+`f04251d`（NX-25-0 契约）、`c214059`（NX-25-1 分流）、`9759b38`（NX-25-2 上限），以及本提交（NX-25-3 回放与回填）。全程零付费模型调用。
+
 ## NX-18 目录逃逸的 token 级判定
 
 ### 现象与根因
