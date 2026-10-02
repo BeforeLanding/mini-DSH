@@ -2,6 +2,80 @@
 
 更新：2026-10-02。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-22 文档内锚点的逐个校验与口径订正
+
+### 现象与根因
+
+[NX-11](#nx-11-整理设计取舍五节) 把「相对链接与锚点目标逐个命中」做成可核对的检查时，只覆盖了 `DECISIONS.md` 一个文件（`test/decisions-doc.test.ts` 里目标路径与 topics 都是硬编码的）。全仓其余 md 之间的锚点**从没被任何检查碰过**，于是漂了 6 处——文件在、标题不在，点击停在页首，肉眼扫不出来。
+
+### 口径判定：成本数字以 `NX-08-REPORT` 的成本表为准
+
+同一个批次有三个互相矛盾的数字：`CHANGES.md` 的 f-4b **标题**写 `$0.02`、紧邻**正文**写 `$0.03`，`PROGRESS.md` 两条写 `$0.03`／`$0.04`。判定依据不是随手挑一个：
+
+- `NX-08-REPORT.md` 的成本表把 NX-08f 两次烟测合计记为 **$0.05**，并拆成「第一次 139k token 约 **$0.02**、第二次 166k 约 **$0.03**」；同一文件开头的总额 $6.44 按这 $0.05 计入。**这张表内部自洽**，另外三处各自不自洽。
+- 按价格页 off-peak 输入 $0.15/M 复算：139k ≈ $0.021、166k ≈ $0.025，与 $0.02／$0.03 吻合。**反证**：若两笔都记 $0.03，合计是 $0.06，与 $6.44 里的 $0.05 对不上。
+- **结论：错的是 CHANGES 的 f-4b 正文与 PROGRESS 的两条；CHANGES 的两个标题是对的，未改。** 共改正三处数字。
+
+### 处置：新增 `test/docs-links.test.ts`
+
+扫描全仓 md（排除 `node_modules`／`.git`／`dist`／`.demo-runs`／`.eval-evidence`），抽出 `](目标)` 形式的链接，对带 `#` 的仓库内目标计算标题 slug 集合、逐个断言命中；目标文件不存在也报。按 **github-slugger v2 语义**：小写 → 去标点与符号（`-` 与 `_` 例外，要保留）→ **每个字面空格各换一个 `-`**。沿用 `test/decisions-doc.test.ts` 的 `../../` 根定位与 CRLF 归一写法。
+
+**两个坑都实测踩到过，都留在代码注释里**：
+
+1. **空格不折叠**：`烟测 — done` 得到 `烟测--done`（em dash 被剥掉，两侧空格各换一个连字符）。按 `\s+ → -` 折叠会把这一类**正确的**双连字符链接误报成坏的。
+2. **反引号内不算链接**：第一版把本文档里「用反引号引用的坏链接示例」也判成了红。GitHub 上那渲染成**代码**而不是链接，所以先剥掉行内代码段再匹配——**在 `` ` `` 里引用一个坏链接是说明它，不是使用它**。
+
+**还有一处是手算 slug 不可靠的直接证据**：NX-22 登记时的诊断说两条 `PROGRESS` 链接「只有数字对不上（`003`／`004`）」。实际把数字改对之后**测试仍然红**——真实 slug 是 `…付费约-003-结果仍未观测到处理生效`，`结果` 前是**单**连字符（原文是 `）— **结果`，中间只有一个空格），而链接里写的是双连字符。**登记时漏了这处，正是要把这件事做成回归而不是再手工核一遍的理由。**
+
+### 要修的 6 处
+
+| 位置 | 问题 | 修法 |
+| --- | --- | --- |
+| `TASKS.md:9` `[PLAN 的对照有效性条件](PLAN.md#nx-08 评测批次上限预注册)` | 锚点含**字面空格**，任何 slug 规则下都不存在 | 改为 `#nx-08-评测批次上限预注册`（同文件上文已写对） |
+| `TASKS.md:253` `[NX-31](#其他待办按依赖排序)` | 目标「其他待办，按依赖排序：」是**正文行**不是标题 | 去掉链接（NX-31 全文无对应节） |
+| `TASKS.md:344` `[NX-21](#其他待办按依赖排序)` | 同上 | 去掉链接（NX-21 全文无对应节） |
+| `TASKS.md:345` `[NX-20](#其他待办按依赖排序)` | 同上 | 指向 NX-20 新立的节（该节已存在） |
+| `PROGRESS.md:26` | slug 数字与连字符数都不对；该条成本写 `$0.04` | `付费约-004--结果` → `付费约-003-结果`；成本 → **$0.03** |
+| `PROGRESS.md:27` | 同上；该条成本写 `$0.03` | `付费约-003--结果` → `付费约-002-结果`；成本 → **$0.02** |
+
+另订正 `CHANGES.md` 的 f-4b **正文**：`约 **$0.03**（139k token…）` → **$0.02**（标题已对，未改）。
+
+### 验证
+
+**修前红——恰好 6 条，逐条如下**（`pnpm test`，第二轮用）：
+
+```
+✖ every in-repository markdown anchor points at a real heading
+  + 'docs/context-budget/TASKS.md:9 锚点在 docs/context-budget/PLAN.md 中不存在：nx-08 评测批次上限预注册',
+  + 'docs/context-budget/TASKS.md:253 锚点在 docs/context-budget/TASKS.md 中不存在：其他待办按依赖排序',
+  + 'docs/context-budget/TASKS.md:344 锚点在 docs/context-budget/TASKS.md 中不存在：其他待办按依赖排序',
+  + 'docs/context-budget/TASKS.md:345 锚点在 docs/context-budget/TASKS.md 中不存在：其他待办按依赖排序',
+  + 'PROGRESS.md:26 锚点在 docs/context-budget/CHANGES.md 中不存在：nx-08f-4c-重跑烟测--done2026-10-01付费约-004--结果仍未观测到处理生效',
+  + 'PROGRESS.md:27 锚点在 docs/context-budget/CHANGES.md 中不存在：nx-08f-4b-真实模型烟测--done2026-10-01付费约-003--结果未观测到处理生效'
+ℹ tests 205 / pass 204 / fail 1
+```
+
+**恰好 6 条、其余 160 条全过——这同时证明检查器没有假阳性**（全仓带锚点的仓库内链接 160 余条）。
+
+**修后**：`pnpm test` → `ℹ tests 205 / pass 205 / fail 0`；`grep -c '付费约 \$0\.04' PROGRESS.md` = **0**。
+
+**反例实跑**（把刚修好的 `PROGRESS.md:26` 锚点末尾加一个 `X`）：
+
+```
+ℹ tests 205 / pass 204 / fail 1
+PROGRESS.md:26 锚点在 docs/context-budget/CHANGES.md 中不存在：nx-08f-4c-重跑烟测--done2026-10-01付费约-003-结果仍未观测到处理生效X
+```
+
+改回后回到 `pass 205 / fail 0`。
+
+### 未覆盖
+
+只校验锚点的**存在性**，不校验它是否指向语义贴切的位置；也**不校验**不带锚点的相对链接（指向源码、图片等）是否存在——那是另一类，本项不动。
+
+### 提交
+
+`4c7946c`（NX-22-0 立项）、`5e170b7`（NX-22-1 测试与修前红）、`0d11876`（NX-22-2 修 6 处锚点与三处成本）、`e3ae322`（NX-22-3 报告计数），以及本提交（NX-22-4 回填）。
+
 ## NX-20 路线图状态段的带日期修订注记
 
 ### 现象与根因
@@ -12,7 +86,7 @@
 
 **不逐处改写正文。** 该文件在同一页上同时承载「带日期的历史证据」与「当前状态」，逐处改写会让这两者混成一片（例如 §3 的 F1～F3 缺口描述、各处复现值，本来就该保持评估时点）。按该文件自己的既有惯例——「修复更新（2026-09-29）：」与「路线修订：2026-09-29，」两条页首注记——**在 H1 标题之后、正文之前**追加一条 `> **状态修订（2026-10-02）：**` 引用块，按类归纳四组订正，并显式写明「正文一字未改」与「与本条无关的带日期结论继续保留」。
 
-四类订正：① **§5 完成标记**——NX-04／NX-07／NX-08／NX-09／NX-10／NX-11 均已完成，§5 开头那句「其余功能均为 todo」不再成立；② **数字**——回归数 57 → **204**、`pnpm check` 产物 46 → **90**、真实模型付费额度由「尚未在本次任务中设定或使用」变为约 **$6.44**；③ **术语**——「Windows/Linux」中的「Linux」应读作 **Ubuntu**；④ **§4 的方向段落**——「先实现…」「缺少…」多已落地（NX-07 大结果回读、NX-13 变更清单与 diff、NX-14 结构化命令结果、NX-15 `verification`、NX-08a 的 `requestId`、NX-05a／b 的 3 与 12 个 fixture）。
+四类订正：① **§5 完成标记**——NX-04／NX-07／NX-08／NX-09／NX-10／NX-11 均已完成，§5 开头那句「其余功能均为 todo」不再成立；② **数字**——回归数 57 → **205**、`pnpm check` 产物 46 → **91**、真实模型付费额度由「尚未在本次任务中设定或使用」变为约 **$6.44**；③ **术语**——「Windows/Linux」中的「Linux」应读作 **Ubuntu**；④ **§4 的方向段落**——「先实现…」「缺少…」多已落地（NX-07 大结果回读、NX-13 变更清单与 diff、NX-14 结构化命令结果、NX-15 `verification`、NX-08a 的 `requestId`、NX-05a／b 的 3 与 12 个 fixture）。
 
 **正文位置一律引标题与引文，不引行号。** 注记本身就插在页首，任何「line N」引用会在插入后立刻漂移——`NX-22` 的锚点校验器把同一类问题变成了回归（见本文档的 NX-22 一节）。
 
@@ -25,7 +99,7 @@ $ git diff --numstat docs/INTERNSHIP_ROADMAP.md
 
 **9 行全部为新增、0 行删除**，即正文逐字未动——这是「不静默改写正文历史」的可核对证据。
 
-三类数字逐条核对出处：`pnpm check` 实测 `syntax ok: 90 files`；回归数 204 见 `PROGRESS.md:7`；总额约 $6.44 见 `NX-08-REPORT.md:14`（筛查 $0.15 ＋ 对照 A $4.81 ＋ 对照 B 两次烟测 $0.05 ＋ NX-08h $1.43）；CI 用词见 `README.md:154`「覆盖 Ubuntu / Windows 和 Node.js 22 / 24」。
+三类数字逐条核对出处：`pnpm check` 实测 `syntax ok: 90 files`；回归数 204 见 `PROGRESS.md` 的基线行；（**2026-10-02 追记：NX-22 新增 `test/docs-links.test.ts` 后 `pnpm check` 90 → 91、`pnpm test` 204 → 205，上面这句话里的 90／204 是 NX-20 当时的读数，注记正文已同步为 91／205。**）总额约 $6.44 见 `NX-08-REPORT.md:14`（筛查 $0.15 ＋ 对照 A $4.81 ＋ 对照 B 两次烟测 $0.05 ＋ NX-08h $1.43）；CI 用词见 `README.md:154`「覆盖 Ubuntu / Windows 和 Node.js 22 / 24」。
 
 ```
 $ grep -n "Ubuntu\|Windows" README.md
@@ -39,6 +113,46 @@ $ grep -n "Ubuntu\|Windows" README.md
 ### 提交
 
 `ecf5249`（NX-20-0 立项）、`f3a04d2`（NX-20-1 注记），以及本提交（NX-20-2 回填）。
+
+## 部署链路零风险前置核对（2026-10-02，零付费）
+
+### 为什么只做前置，不做真部署
+
+`.github/workflows/deploy-ecs.yml` 已切换为 tag 触发，但仓库**当前没有任何 tag**——`v*.*.*` 触发路径与标签回滚流程**一次都没有实跑过**。真实部署会 SSH 到生产 ECS 并原子切换 `current`：GitHub 的 `production` environment 下五项 Secrets（`ECS_HOST`／`ECS_PORT`／`ECS_USER`／`ECS_SSH_KEY`／`ECS_KNOWN_HOSTS`）**均已配置**，而 `docs/ECS_DEPLOYMENT.md` 写明「标签一旦推送不得删除、强推或改指向」。因此本轮**只做不触碰生产的部分**，首次真发布由用户另行决定。
+
+### 做了什么
+
+1. 本地实跑工作流第 49–50 步用的**同一个脚本** `bash scripts/test-ecs-bundle.sh`。已核实它是**纯本地**的：`mktemp` 临时目录 ＋ 临时 git 仓库 ＋ `MINI_DSH_DEPLOY_BASE` 覆盖，且 Git Bash 上显式 defer 掉 symlink 段。
+2. 逐条比对 `deploy-ecs.yml` 的 tag 断言与 `docs/ECS_DEPLOYMENT.md` §版本标签与发布锚点 的清单。
+
+### 验证
+
+```
+$ bash scripts/test-ecs-bundle.sh
+Invalid commit SHA
+Invalid release path
+Bundle import, wrong SHA/path/revision rejection passed.
+Linux symlink activation checks deferred to Actions.
+$ echo $?
+0
+```
+
+（前两行是负向断言**期望**被拒的提示，出现在退出码 0 的一次成功运行里。）
+
+### 已核对一致
+
+工作流 `Resolve and verify deployment target` 步（`deploy-ecs.yml:41-48`）的 `git merge-base --is-ancestor "$deploy_sha" origin/main`，以及 tag push 时额外校验 `refs/tags/v[0-9]+\.[0-9]+\.[0-9]+` 且 `git rev-list -n 1 "$RELEASE_REF"` 等于检出 SHA——与 `docs/ECS_DEPLOYMENT.md` §发布流程／§版本标签与发布锚点 写的「目标提交必须可从 `main` 到达」「标签名在工作流内再次校验为 `vMAJOR.MINOR.PATCH`」逐条对应，未发现遗漏。`Publish requested release` 步对 `ECS_USER == deploy`、端口范围、严格主机密钥校验的断言，也与该文档 §服务器布局／§回滚 的描述一致。
+
+### 本轮**没有**验证的（只能在真 tag 部署时才知道）
+
+- tag push 是否真的触发工作流，`environment: production` 的门是否按预期拦住。
+- 服务器上的 `prepare`／`activate` 原子切换、`REVISION` 回写、`PREVIOUS_RELEASE` 记录。
+- **回滚块**（`docs/ECS_DEPLOYMENT.md` §回滚）的实际执行结果。本机是 Git Bash，`test-ecs-bundle.sh` 已显式 defer 掉 symlink 段，所以「原子切换」这条路径本轮**一次也没有真跑过**。
+- 首次发布前须实跑一次，并核对服务器 `REVISION` 等于标签解析出的 commit SHA。
+
+### 提交
+
+无独立行为变化，随本次 NX-22 的回填提交一并提交。
 
 ## NX-32 命令闸门的有意收缩与取消窗口
 
