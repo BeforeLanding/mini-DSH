@@ -118,7 +118,9 @@ $ grep -n "Ubuntu\|Windows" README.md
 
 ### 为什么只做前置，不做真部署
 
-`.github/workflows/deploy-ecs.yml` 已切换为 tag 触发，但仓库**当前没有任何 tag**——`v*.*.*` 触发路径与标签回滚流程**一次都没有实跑过**。真实部署会 SSH 到生产 ECS 并原子切换 `current`：GitHub 的 `production` environment 下五项 Secrets（`ECS_HOST`／`ECS_PORT`／`ECS_USER`／`ECS_SSH_KEY`／`ECS_KNOWN_HOSTS`）**均已配置**，而 `docs/ECS_DEPLOYMENT.md` 写明「标签一旦推送不得删除、强推或改指向」。因此本轮**只做不触碰生产的部分**，首次真发布由用户另行决定。
+`.github/workflows/deploy-ecs.yml` 已切换为 tag 触发，但仓库**当前没有任何 tag**——`v*.*.*` 触发路径一次都没有被触发过。真实部署会 SSH 到生产 ECS 并原子切换 `current`：GitHub 的 `production` environment 下五项 Secrets（`ECS_HOST`／`ECS_PORT`／`ECS_USER`／`ECS_SSH_KEY`／`ECS_KNOWN_HOSTS`）**均已配置**，而 `docs/ECS_DEPLOYMENT.md` 写明「标签一旦推送不得删除、强推或改指向」。因此本轮**只做不触碰生产的部分**，首次真发布由用户另行决定。
+
+**核对 run 历史时纠正了一处此前的过度概括。** 「部署新路径未验证」容易被读成**整条链路**没验证过，事实不是：2026-09-30 有 **8 次 `workflow_run` 触发的 Deploy ECS 全部 success**，而当时的 workflow（`8893f8a`）就已包含 `environment: production`、`persist-credentials: false`、`scripts/deploy-ecs-bundle.sh` 的 `prepare`／`activate` 与 `REVISION` 校验——**这些都真跑过生产**。`2ac85bd`（2026-09-30 10:57，`ci: 改为版本标签触发 ECS 部署`）**唯一改掉的是触发器**，而最后一次成功的部署 run（同日 10:47 +0800）就在它之前 10 分钟。**所以没验证的是触发器，不是部署机制。**
 
 ### 做了什么
 
@@ -143,12 +145,14 @@ $ echo $?
 
 工作流 `Resolve and verify deployment target` 步（`deploy-ecs.yml:41-48`）的 `git merge-base --is-ancestor "$deploy_sha" origin/main`，以及 tag push 时额外校验 `refs/tags/v[0-9]+\.[0-9]+\.[0-9]+` 且 `git rev-list -n 1 "$RELEASE_REF"` 等于检出 SHA——与 `docs/ECS_DEPLOYMENT.md` §发布流程／§版本标签与发布锚点 写的「目标提交必须可从 `main` 到达」「标签名在工作流内再次校验为 `vMAJOR.MINOR.PATCH`」逐条对应，未发现遗漏。`Publish requested release` 步对 `ECS_USER == deploy`、端口范围、严格主机密钥校验的断言，也与该文档 §服务器布局／§回滚 的描述一致。
 
-### 本轮**没有**验证的（只能在真 tag 部署时才知道）
+### 本轮**没有**验证的
 
-- tag push 是否真的触发工作流，`environment: production` 的门是否按预期拦住。
-- 服务器上的 `prepare`／`activate` 原子切换、`REVISION` 回写、`PREVIOUS_RELEASE` 记录。
-- **回滚块**（`docs/ECS_DEPLOYMENT.md` §回滚）的实际执行结果。本机是 Git Bash，`test-ecs-bundle.sh` 已显式 defer 掉 symlink 段，所以「原子切换」这条路径本轮**一次也没有真跑过**。
-- 首次发布前须实跑一次，并核对服务器 `REVISION` 等于标签解析出的 commit SHA。
+- **tag push 与 `workflow_dispatch` 这两条新触发器本身**是否真的唤起工作流。这是 `2ac85bd` 唯一改变的东西，也是**唯一没有成功历史**的东西。
+- **手工回滚块**（`docs/ECS_DEPLOYMENT.md` §回滚）：它是一次都没实跑过的独立程序，在服务器终端执行，本轮无从验证。注意「上一版本」这条线本身有证据——`test-ecs-bundle.sh` 断言过 `PREVIOUS_RELEASE` 的写入，2026-09-30 的激活也真跑过，但**回滚方向**没有。
+- 本机 `test-ecs-bundle.sh` 在 Git Bash 上**显式 defer 掉 symlink 段**，所以本轮本地运行没有覆盖「原子切换」那几行；那几行在服务器上已被真跑过，但**不是由本轮的本地证据覆盖的**。
+- 首次发布前须实跑一次 tag 发布，并核对服务器 `REVISION` 等于标签解析出的 commit SHA。
+
+**明确不算「未验证」的**：SSH 连接、bundle 传送、`prepare`／`activate` 原子切换、`REVISION` 回写、`PREVIOUS_RELEASE` 记录、`environment: production` 门——它们在 2026-09-30 的 8 次成功运行里都真跑过。
 
 ### 提交
 
