@@ -130,6 +130,8 @@ $ pnpm test
 
 `c01f253`（T6-0 立项）、`b46dd79`（T6-1 配置与源码订正），以及本提交（T6-2 口径订正与回填）。
 
+**CI**：本次推送（`c01f253`…`ed33743`）的 [CI 36990893326](https://github.com/BeforeLanding/mini-DSH/actions/runs/36990893326) 在 Ubuntu／Windows × Node 22／24 四组合**全部 success**，**attempt=1**，无重跑。本次含 `src/`、`test/` 与 `package.json` 改动，因此触发；T6-2 单独一次纯文档推送本会落在 `paths-ignore` 内，它与前两个提交同批推送，所以一并被这次 run 覆盖。
+
 ## NX-21 会话锁的陈旧核验入口与显式移除
 
 ### 现象与根因
