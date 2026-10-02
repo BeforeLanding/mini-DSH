@@ -321,6 +321,36 @@ NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，
 
 **提交**：`4c7946c`（NX-22-0 立项）、`5e170b7`（NX-22-1 测试与修前红）、`0d11876`（NX-22-2 修 6 处锚点与三处成本）、`e3ae322`（NX-22-3 报告计数），以及本提交（NX-22-4 回填）。详细证据见 [CHANGES 的 NX-22 节](CHANGES.md#nx-22-文档内锚点的逐个校验与口径订正)。
 
+### NX-21 会话锁的陈旧核验入口与显式移除
+
+**已立项（2026-10-02，零付费）**（NX-10-5 期间发现）。`JsonlStore.open` 对任何已存在的 `writer.lock` 一律拒绝（`src/core/event-store.ts:40`），提示语要求「verify stale locks explicitly」，但仓库里没有可脚本化的核验入口，于是崩溃之后唯一的恢复路径是由人手删文件。本项把这一步换成一条**只把证据摆出来、解除与否由操作者显式决定**的入口。
+
+**立项前核实（2026-10-02）**：
+
+1. **进程内子命令在真正需要它的时刻不可达**——`src/plugins/cli.ts:38` 在 `ctx.effect` 建立 REPL **之前**就 `await JsonlStore.open(...)`，撞上崩溃过的会话直接抛错，`/recover`／`/lock` 这类斜杠命令根本轮不到被输入。这一条决定了入口的形态：**独立脚本，不是斜杠命令**。
+2. **`quarantineTail` 不是替代路径**：它也要先抢同一把锁（`src/core/event-store.ts:17-20`），只能在**锁已被移除之后**才谈得上。
+3. **锁体里的 `pid` 从不被读回**。本机实测（win32，Node 24）：`process.kill(存活 pid, 0)` 成功、对**已退出**的子进程抛 `ESRCH`——但 `process.kill(0, 0)` **同样成功**，pid 0 会被误报成「存活」。跨平台差异与 pid 复用都要求这条探针只能是**线索**。
+4. **规范性依据已存在**：`PLAN.md` 的持久化一节写有「失效锁显式核验，**不仅凭 PID 自动移除**」。本项**不新增决策编号**——它实现这条既有决策，不是新决策。
+
+**设计边界（写死，实施期不改）**：
+
+- **PID 只作证据，不作判据**：探针结论是三态 `alive`／`not-found`／`inconclusive`，`pid` 非正整数或 `pid ≤ 0` 一律 `inconclusive`；输出必须写明「pid 复用下 `alive` 不等价于持有者还在」。
+- **移除必须由操作者显式表达**：`--remove` **且** `--token <检视输出里的那个 token>`。token 比较是竞态守卫，与 `close()` 的 `writer lock ownership changed`（`event-store.ts:74-75`）同一套语义——它挡住的正是「原持有者已死、新写入者刚拿到锁」这个窗口。
+- **范围（用户选定「最小可用」）**：单会话检视 + 显式移除。**不做**无参列表、**不做** `--quarantine`（只在检视里**报告**尾部是否完整，供操作者决定下一步）。
+- **不改 `open`／`close`／`quarantineTail` 的任何一行**——既有的拒绝语义逐字不动。
+
+**带日期的历史证据逐字不动**（与 NX-20 同一条规则）：`TASKS.md` 的 NX-10 一节里「恢复的唯一路径是先由人删掉该锁」、`CHANGES.md` 的 NX-10-5／NX-10-6 两节、`PROGRESS.md:25`（`[NX-21](#阻塞)` 与「本次只立项不修」）。那条限制在写下时**为真**，本项不是「补上漏改」。
+
+| 子步骤 | 内容 | 验收 | 提交边界 |
+| --- | --- | --- | --- |
+| NX-21-0 | TASKS 立项：本节的设计边界与子步骤表（**done**） | `grep -cE '^\| NX-21-' docs/context-budget/TASKS.md` = 5；每行「验收」列至少含一个反引号命令或可判定的退出码／`grep` 判据；`git diff --stat` 只含 `docs/context-budget/TASKS.md` | 1 次 |
+| NX-21-1 | 核心 `JsonlStore.inspectLock`／`removeStaleLock` 与入口脚本 `scripts/session-lock.ts`（含 `pnpm session:lock`） | `pnpm check` → `syntax ok: 92 files`；临时 `MINI_DSH_SESSION_DIR` 上造「无锁」「陈旧锁 `{token:'t',pid:1}`」两态，`node dist/scripts/session-lock.js <id>` 均退出 0 并打印 pid 探针与可复制的下一步命令；`--remove` 缺 `--token`、token 不符、`--token` 无 `--remove` 三种用法错误均退出 1 | 1 次 |
+| NX-21-2 | `test/session-lock.test.ts` | `pnpm test` → `fail 0`，用例数按实跑填；**反例实跑**：把 `removeStaleLock` 的 token 比较改成恒真后 `pnpm test` 必须红、改回必须绿（命令与输出记入 CHANGES）；用例覆盖 `pidStatus` 三态与 `eventsTail` 两态、错 token 被拒后锁仍在、正 token 移除后 `JsonlStore.open` 成功且 `restore` 补出恰好一条 `unknown` | 1 次 |
+| NX-21-3 | 第三幕改用新入口（含错 token 被拒的反例） | `pnpm demo:unknown` 退出 0，输出含 pid 探针行、`✓ 错误 token 被拒、锁仍在`、`✓ 正确 token 显式移除`，且**不再**出现「没有可脚本化的核验入口」 | 1 次 |
+| NX-21-4 | 口径订正、计数同步与三份清单回填 | 各行置 `done` 并记提交号；README／PROGRESS／DECISIONS／PLAN 四处口径与实现一致，且 `README.md` 的「不会仅凭PID自动解除」逐字保留；`sed -n '54,64p' README.md \| grep -c '^pnpm '` = 8（新命令不进零密钥八条）；`pnpm check`／`pnpm test` 计数与实跑逐字一致；`pnpm eval:estimate` 仍退出 0（未碰 estimation corpus） | 1 次 |
+
+**提交**：待本项收尾时回填。
+
 其他待办，按依赖排序：
 
 **另有一条口径变化（2026-10-01，NX-32）：NX-19／NX-24／NX-26／NX-30 由「已完成」退回「已知缺口」。** 它们的机制随收缩一起删除，矩阵里原先的 `closed:` 组整组降级为 `known gap … reopened`（当前共 32 行已知缺口）。与下面的待办不同，**这几条不再排期**——按 D-16 的处置规则，只有 `.eval-evidence` 回放出现新拒绝、或实际使用中撞上才重开。
