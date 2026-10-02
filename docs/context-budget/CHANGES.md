@@ -2,6 +2,87 @@
 
 更新：2026-10-02。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-18 目录逃逸的 token 级判定
+
+### 现象与根因
+
+`..` 是闸门保留的四条整串正则之一。整串正则的优点是廉价且稳定，代价是**不区分「数据」与「代码」**——`/(?:^|[\s"'=])(?:[^\s"']*[\\/])?\.\.(?:[\\/]|[\s"']|$)/` 只看文本形状，于是引号里的同形文本一起被拒：`echo "see ../docs for details"`（散文里的 `../`）、`grep -n ".." src/index.ts`（正则）、`git log --grep "../ fixes"` 三条全判 `.. path escape is blocked`。这条规则同时是用户「放宽不得削弱 `..`」条款点名保护的对象，所以 NX-17／NX-19／NX-24／NX-32 四轮都刻意绕开它。
+
+**先把这条例外的价格算清**：把 `.eval-evidence/` 下 782 次真实模型 bash 调用按**各会话自己的 workspace** 重放，含 `..` 的调用 **57 条，其中只有 1 条被拒**（`062d867579`）。
+
+**但那条不是整串正则的错**：命令是 `cd src && for f in …; do …; done; cat ../package.json; ls ../data`——闸门**不知道命令内部的 `cd` 改过目录**，`../package.json` 相对 workspace 根确实越界。**所以本轮修完它仍然被拒**。它在 `nx24-replay-probe.mjs` 的断言集合里**保留**，只把注记从「`..` 整串正则」订正成真实原因（闸门不看命令内的 `cd`，属 D-16 撤掉的命令位置状态族）。把这两件事分开写，是因为「登记一条缺口」与「这条缺口会不会被本轮关掉」是两回事。
+
+### 判据
+
+整串正则退场，改为 **token 级路径形状判定**（`src/core/sandbox-runtime.ts` 的 `isPathEscape`）。一个 token 判为逃逸，当且仅当它的**去引号正文**同时满足：
+
+| # | 条件 | 挡住的误判 |
+| --- | --- | --- |
+| ① | 不含空白 | `"see ../docs for details"`、`"../ fixes"`（含空白的 token 不是可寻址路径，沿用 NX-24-5 处理前导斜杠时的同一条先例） |
+| ② | 按 `[\\/=]` 切分后存在分量恰为 `..` | `a..b`、`...`、`a/x../y`（判分量而不是判子串） |
+| ③ | 正文含分隔符，或它在原串里是裸词 | 引号成词的裸 `".."`（真实语料里那是正则），同时保住裸 `..` 仍被拒 |
+
+**`=` 计入分量边界是有意的保守取法**：不计入的话 `--file=../secret` 会因为「分量是 `--file=..`」被放过去，顺着这次放宽新开一个洞。代价是 `--grep=..` 这类惰性文本仍被拒——它与 `--dir=..` 在形状上无判据可用，按 NX-29 的口径处理：没有可用的形状判据就不放宽。
+
+### 交付物
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/core/sandbox-runtime.ts` | 删掉整串 `..` 正则；新增 `isPathEscape` 与循环内的一次调用；`:18` 与 `:78` 两处注释里的「四个整串正则」改为「三个」并写明为何只有这一条被放出来 |
+| `test/core.test.ts` | allow 表 +5（三条惰性文本 ＋ 两条「分量不是子串」孪生行）；deny 表 +7（裸 `..`、`cd ..`、`cp ../a b`、`"../secret"`、`--file=../secret`、`X=..; cat $X/secret`、刻意钉住的 `--grep=..`） |
+| `docs/context-budget/nx17-gate-probes.mjs` | 两行 `known gap NX-18` 读到 met 后搬进新契约组 `fixed: lazy dotdot text`；`X=..; cat $X/secret` 搬到 `kept` 组而孪生行留在 gap 组；头部两处注释同步 |
+| `docs/context-budget/nx24-replay-probe.mjs` | `062d867579` 的注记订正；头部说明「本项修完它为什么仍在」 |
+| `docs/context-budget/REQUIREMENTS.md` | R-20 的四条判据里第 1 条由四改三、第 2 条补 `..` 判据；验收句与已知边界句订正 |
+| `docs/context-budget/PLAN.md` | 新增 D-17；D-16 末尾加一条带日期的局部修订注记 |
+| `docs/context-budget/TASKS.md`、`PROGRESS.md`、`README.md` | 状态、待办清单与计数同步 |
+
+### 实测证据
+
+```
+pnpm check                                       # syntax ok: 93 files
+pnpm lint                                        # Checked 102 files. No fixes applied.（0 诊断）
+pnpm test                                        # tests 211 / pass 211 / fail 0
+node docs/context-budget/nx17-gate-probes.mjs    # no contract drift; 29 known gap(s) still open
+node docs/context-budget/nx24-replay-probe.mjs   # no unexpected deny: 7 条全部有归属
+```
+
+矩阵的已知缺口由 **32 行降到 29 行**：两行是 NX-18 的两条，第三行见下。**回放探针的拒绝集合一条未增**（仍 7 条，`062d867579` 含在内，理由仍是 `.. path escape is blocked`——拦住它的从整串正则换成了 token 判定，而它相对 workspace 根确实越界）。
+
+**一处连带收紧，是矩阵读到 `met` 才发现的**：`X=..; cat $X/secret` 由 allow 变 deny。分词把 token 切在 `;` 之前，于是 `X=..` 的分量 `..` 与边界 `=` 同时命中。它原本挂在 `known gap NX-32 variable indirection` 组下，现在搬到 `kept` 组——**但理由是 `..` 而不是变量间接**：孪生行 `Y=/etc; cat $Y/passwd` 仍是 gap，两条分开记，不合并成「变量间接已覆盖」。
+
+### 反例实跑
+
+仓库硬性惯例：每条新分支都要能证明用例会咬。两条各自打掉一个分支，跑完都用 `git restore` 复原：
+
+```
+① 还原整串正则并停用 token 判定
+   ✖ Sandbox blocks dangerous commands and allows ordinary workspace commands
+     AssertionError: echo "see ../docs for details"
+       actual: 'deny'   expected: 'allow'
+   pass 210 / fail 1
+② 把分量判定退化成 body.includes('..')（判子串而非分量）
+   ✖ 同上用例   AssertionError: ls a/x../y   actual: 'deny'   expected: 'allow'
+   pass 209 / fail 2
+改回：pass 211 / fail 0
+```
+
+第 ① 条证明「含空白放行」这一支是承重的；第 ② 条证明「分量不是子串」这一支是承重的（退化成子串判定就会把 `a/x../y` 这样的普通文件名判成逃逸）。
+
+### 未做与代价
+
+- **不修 `062d867579`**：它的根因是闸门看不见命令内的 `cd`，那是 D-16 撤掉的命令位置状态族。本项**不宣称**「回放里的 `..` 拒绝已清零」，只宣称判据从整串换成了 token 级。
+- **`--grep=..` 仍是误拒**，且刻意保留（无判据可用）；它被写进测试与矩阵，将来若要放宽必须先给出可用的形状判据。
+- **净放宽一条**：引号包住裸 `..`（`cd ".." && cat x`）从此放行。这是本项的记录在案代价，写在 D-17 与 R-20 里，不用「已闭合」措辞。
+- **闸门仍然不是安全边界**：真正的边界是 `utils/path.ts` 的 `resolveInside` 与人工审批，两者都不是操作系统隔离。
+
+### 验收
+
+`test/core.test.ts` 的 allow/deny 表逐条钉住六种仍被拒的路径形状与三条新放行的惰性文本；矩阵 `no contract drift`、已知缺口 29 行；回放探针退出 0 且拒绝集合不增；两条反例实跑各自点名到具体用例。**只动 `src/` 的一个函数与三份文档，未碰 `utils/path.ts`、`contracts.ts` 与 estimation 语料**（`pnpm eval:estimate` 仍退出 0）。
+
+### 提交
+
+`8e36afd`（NX-18-0 立项）、`b9ca89f`（NX-18-1 判据替换）、`dfcfa1c`（NX-18-2 契约与矩阵），以及本提交（NX-18-3 回填）。
+
 ## T6 Biome 的收窄配置与处置
 
 ### 现象与根因

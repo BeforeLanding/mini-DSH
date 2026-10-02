@@ -27,7 +27,7 @@
 | 提交范围 | `0a95a7f`～`c5fc9c4`（共 11 个） | `43e3829` 起 |
 | 语言 | 纯 JavaScript | TypeScript（tsc strict / NodeNext），Node 执行 `dist` 产物 |
 | 工具 | 6 个：`bash` + `read_file`／`write_file`／`edit_file`／`glob`／`grep` | 11 个：`tools/` 的 9 个（上列 6 个再加 `task_changes`／`request_trace`／`task_report`）与插件提供的 2 个（`project_context`／`read_tool_result`） |
-| 测试 | 22 条（`core.test.js` 20 + `integration.test.js` 2） | 205 条；另有 16 项编程 fixture 基线、离线评测入口与三条演示 |
+| 测试 | 22 条（`core.test.js` 20 + `integration.test.js` 2） | 211 条；另有 16 项编程 fixture 基线、离线评测入口与三条演示 |
 | 已有能力 | 基础配置、Session Event Log、Tool Runtime、System Prompt + LLM Adapter、Agent Loop、DeepSeek 适配器、runtime-context、外部插件与 MCP、沙箱与路径闸门、Bash/文件工具 | 上下文投影与裁剪、四维执行预算、JSONL 持久化与崩溃恢复、预算停止后的 `/continue`、有界读取/搜索与大结果回读、可靠编辑与任务变更清单、结构化前台命令、验证记录与交付报告、请求 trace、项目上下文、编程任务 fixture、真实模型评测 |
 
 上表每一行都能在仓库根目录复现（全部离线，不联网）：
@@ -132,7 +132,7 @@ flowchart LR
 
 Loop 通过服务契约工作，不依赖具体模型或工具，底层未注入预算时没有固定次数上限；CLI 默认使用有限预算。每个已记录的 tool_call 都保证有配对结果（真实完成、`skipped` 或 `unknown`）。
 
-路径闸门检查词法路径、真实路径及尚未创建文件的父目录，拒绝软链越界。命令策略用于防止误操作，审批负责确认执行；这是应用层策略，不是操作系统隔离。**命令策略只做粗粒度形状检查**：按 shell 语义分词后拦下 `sudo`/`su` 与递归删除、`curl`/`wget` 管道进 shell、`..` 逃逸、越界路径、系统路径、UNC 形状，以及**段首为取网工具**的命令段（`curl`/`wget`/`nc`/`ssh`/`scp`/`rsync`/`ping`/`dig` 等，按工具名拦而不解析目标）。惰性参数不拦（注释形状的 `//` 与 `awk`/`sed` 的程序正文、`echo`/`printf` 参数里的 URL）。它是形状启发式而不是完备解析：嵌套执行（`bash -c`/`eval`/`$(...)`/反引号）、变量间接、保留字与子 shell 之后的命令位、`case` 臂体、包装命令（`env`/`timeout`/`nice`/`xargs`）后面的命令、非段首的 URL 操作数、`node -e`/`python -c` 的程序字符串、脚本文件内容、base64 解码后进 shell 与 here-doc 正文都不在覆盖内——逐行清单见[需求 R-20](docs/context-budget/REQUIREMENTS.md) 与诊断矩阵 `docs/context-budget/nx17-gate-probes.mjs` 的 `known gap` 组。**它也不宣称完整**：本地回环同样被拦（`curl http://localhost:8080/health` 一律拒绝），此后不再为它开新工作项。
+路径闸门检查词法路径、真实路径及尚未创建文件的父目录，拒绝软链越界。命令策略用于防止误操作，审批负责确认执行；这是应用层策略，不是操作系统隔离。**命令策略只做粗粒度形状检查**：按 shell 语义分词后拦下 `sudo`/`su` 与递归删除、`curl`/`wget` 管道进 shell、`..` 逃逸、越界路径、系统路径、UNC 形状，以及**段首为取网工具**的命令段（`curl`/`wget`/`nc`/`ssh`/`scp`/`rsync`/`ping`/`dig` 等，按工具名拦而不解析目标）。惰性参数不拦（注释形状的 `//`、`awk`/`sed` 的程序正文、`echo`/`printf` 参数里的 URL，以及引号内的 `..`——`grep -n ".."`、散文里的 `../` 自 NX-18 起按「token 是否为以 `..` 为分量的路径」判定）。它是形状启发式而不是完备解析：嵌套执行（`bash -c`/`eval`/`$(...)`/反引号）、变量间接、保留字与子 shell 之后的命令位、`case` 臂体、包装命令（`env`/`timeout`/`nice`/`xargs`）后面的命令、非段首的 URL 操作数、`node -e`/`python -c` 的程序字符串、脚本文件内容、base64 解码后进 shell 与 here-doc 正文都不在覆盖内——逐行清单见[需求 R-20](docs/context-budget/REQUIREMENTS.md) 与诊断矩阵 `docs/context-budget/nx17-gate-probes.mjs` 的 `known gap` 组。**它也不宣称完整**：本地回环同样被拦（`curl http://localhost:8080/health` 一律拒绝），此后不再为它开新工作项。
 
 ## 验证
 
