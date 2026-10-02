@@ -357,6 +357,40 @@ NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，
 
 **提交**：待本项收尾时回填。
 
+### T6 Biome 的收窄配置与处置
+
+**诊断（2026-10-02，草稿副本内只读，仓库一行未动）**。`npx biome check .` 给出 **545 errors / 124 warnings / 48 infos = 717**。仓库里**没有 `biome.json`**，因此没有任何排除项：其中 **196 条落在 `dist/`、14 条落在 `.eval-evidence/`**（两者都在 `.gitignore` 里），余下 **507 条（366 err / 117 warn / 24 info）分布在 250 个文件**，而**每一个文件**都至少有一条 `format` 诊断。这不是 250 个文件各有风格问题，是**一次全局配置分歧**：Biome 默认制表符／双引号／分号，仓库是 2 空格／单引号／无分号。
+
+**长行靠配置救不了**：Biome 2.5.14 拒绝 `lineWidth > 320`，而仓库有 **17 行超过 320**（最长 732，`src/core/event-validation.ts`）、131 行超 200、1219 行超 120。所以「修到绿」必然要重排约 2000 行。
+
+**修绿成本实测（草稿副本，两种修法各跑一遍）**：
+
+| 修法 | 触及文件 | 行数 | 剩余 | `pnpm check` | `pnpm test` |
+| --- | --- | --- | --- | --- | --- |
+| 安全 `--write` | 210 | −4928 / +7491 | 160 err | ✅ `93 files` | ❌ **fail 2** |
+| `--write --unsafe` | 211 | −4961 / +7523 | 12 err | ❌ **8 条 TS 错误** | ❌ 构建先失败 |
+
+**两条路都会打破仓库自己的回归套件，因为那里钉着机器不变量**：① `test/estimation.test.ts` 给 `src/core/token-estimator.ts` 钉了 SHA-256，重排即改字节，报错原文要求「re-run the NX-08c measurement and update the recorded conclusions and 核验日期」——**重排该文件等于作废一次实测结论**；② `test/decisions-doc.test.ts` 的三十行锚点随 `organizeImports` 位移而漂移（与 NX-21 咬过的那次同因）；③ unsafe 修法删掉 `!` 之后产生 8 处 `TS2532`／`TS2345`。
+
+**用户选定方向（2026-10-02）：收窄配置，不设门禁**——不重排既有代码，只把 Biome 调成与仓库风格不冲突，并把它真正能抓到的 21 条发现逐条修掉。
+
+**设计边界（写死，实施期不改）**：
+
+- **关掉 formatter 与 organizeImports，而不是「暂时忽略」**：这两项的判定在本仓库**不可满足**——`lineWidth` 上限 320 小于仓库最长行 732，而 `organizeImports` 一开就位移行号、直接打破 `DECISIONS.md` 锚点。这不是偷懒，是它们与既有不变量无法共存。
+- **`test/fixtures/**` 整体排除**：那里是**故意写坏的初始态**（`retry/initial/src/retry.mjs` 的未用参数就是待修缺陷），`pnpm fixtures:check` 的 16 项契约依赖它们保持坏。Biome 不得「修好」它们。
+- **只关掉与仓库刻意风格正面冲突的规则**：`noNonNullAssertion`（107 处；且 unsafe 修法会删 `!` 破坏类型）、`useTemplate`（46 处，刻意拼接）、`noControlCharactersInRegex`（ANSI 剥离，见 `src/plugins/cli.ts` 的 `\x1b` 正则）。**其余真实发现逐条修，不用关规则绕过。**
+- **`format` 脚本一并移除**：formatter 关掉之后 `biome format --write .` 是**静默空转**，留着比没有更糟。
+- **不加 CI 步骤、不加测试**（用户选定）。**代价必须写明**：没有门禁就会漂移，这一条同时记进 `AGENTS.md:21` 与 CHANGES，不靠读者自觉。
+- **不碰 `src/core/token-estimator.ts` 的任何一个字节**：它的哈希是 `test/estimation.test.ts` 的锚。上面的配置选择恰好使该文件**零诊断**（它只有 `noNonNullAssertion`／`organizeImports`／`format` 三类，全在关掉的范围内）——这是本方向能成立、而「修到绿」不能的**关键**。
+
+| 子步骤 | 内容 | 验收 | 提交边界 |
+| --- | --- | --- | --- |
+| T6-0 | TASKS 立项：本节 | `grep -cE '^\| T6-' docs/context-budget/TASKS.md` = 3；每行「验收」列至少含一个反引号命令或可判定的退出码／`grep` 判据；`git diff --stat` 只含 `docs/context-budget/TASKS.md` | 1 次 |
+| T6-1 | `biome.json` + `package.json`（移除 `format`）+ `AGENTS.md:21` + 9 个源码文件的逐条订正 | `pnpm lint` **0 诊断、退出 0**（修前 717 诊断含 545 错）；`pnpm check` → `syntax ok: 93 files`；`pnpm test` → `pass 211 / fail 0`（含 `decisions-doc` 与 `estimation` 两条不变量按名通过）；`git diff --stat` **不含** `src/core/token-estimator.ts`；**反例实跑**：把 `formatter.enabled` 与 `assist.organizeImports` 打开后 `biome check` 报 177 errors、`--write` 动 102 文件、`pnpm test` 变 `fail 2` 并点名那两条不变量，改回必须全绿（命令与输出记入 CHANGES） | 1 次 |
+| T6-2 | 口径订正与三份清单回填 | `grep -rn '尚未通过 Biome' README.md` 为空；`grep -c '待本项收尾时回填' docs/context-budget/TASKS.md` = 0（顺手删掉 NX-21 立项时遗留的占位提交行）；`sed -n '54,64p' README.md \| grep -c '^pnpm '` 仍 = 8（`lint` 不进零密钥八条）；`pnpm check`／`pnpm test` 的计数与实跑逐字一致；`pnpm eval:estimate` 仍退出 0；T6 在 TASKS 标 `done（2026-10-02，零付费）` 并链到本节 | 1 次 |
+
+**提交**：待本项收尾时回填。详细证据见 [CHANGES 的 T6 节](CHANGES.md#t6-biome-的收窄配置与处置)。
+
 其他待办，按依赖排序：
 
 **另有一条口径变化（2026-10-01，NX-32）：NX-19／NX-24／NX-26／NX-30 由「已完成」退回「已知缺口」。** 它们的机制随收缩一起删除，矩阵里原先的 `closed:` 组整组降级为 `known gap … reopened`（当前共 32 行已知缺口）。与下面的待办不同，**这几条不再排期**——按 D-16 的处置规则，只有 `.eval-evidence` 回放出现新拒绝、或实际使用中撞上才重开。
