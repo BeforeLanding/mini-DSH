@@ -79,11 +79,22 @@ try {
   console.log(`  ${refused ?? '（意外：竟然开成功了）'}`)
 
   heading('[3] 锁是谁的：这一步由操作者判断')
+  // NX-21 之前这里是一行裸的 fs.unlink——「入口」就是人手删文件。现在走 pnpm session:lock 背后的
+  // 同一对方法：inspectLock 只摆证据，removeStaleLock 要操作者把检视到的 token 原样递回来。
+  const inspection = await JsonlStore.inspectLock(runDirectory, sessionId)
   console.log(`  writer.lock = ${await fs.readFile(lockPath, 'utf8')}`)
+  console.log(`  入口报出的持有者：token=${inspection.token} pid=${inspection.pid}；pid 探针 ${inspection.pidStatus}；事件尾部 ${inspection.eventsTail}`)
   console.log('  它记着持有者的 pid，但 Harness 不替你猜——原话就是 verify stale locks explicitly。')
-  console.log('  于是这里做操作者会做的事：确认那个 pid 已经不存在，再显式删掉锁。')
-  console.log('  目前没有可脚本化的核验入口，也没有 /recover，这也是 NX-21 立项的原因。')
-  await fs.unlink(lockPath)
+  console.log('  入口只把证据摆出来：pid 存活只是线索（pid 复用下不等价于「持有者还在」），解除与否是操作者的判断。')
+  // 反例就在这一幕里演：token 不是刚检视到的那个就拒绝，否则删掉的可能是一把刚被新写入者拿到的活锁。
+  let wrongToken: string | undefined
+  try { await JsonlStore.removeStaleLock(runDirectory, sessionId, 'not-the-owner') }
+  catch (error) { wrongToken = error instanceof Error ? error.message : String(error) }
+  console.log(`  先用错 token 试一次：${JSON.stringify(wrongToken ?? null)}；锁仍在？${await exists(lockPath)}`)
+  await JsonlStore.removeStaleLock(runDirectory, sessionId, inspection.token!)
+  // 就地取值：下一幕重开会装上一把**新的**锁，到判定那一刻 lockPath 当然又存在了。
+  const removed = !(await exists(lockPath))
+  console.log(`  再用检视到的 token 显式移除；锁仍在？${!removed}`)
 
   try { store = await JsonlStore.open(runDirectory, sessionId) }
   catch (error) {
@@ -113,6 +124,9 @@ try {
   heading('[5] 判定')
   const checks: [string, boolean][] = [
     ['重开先被陈旧锁拒绝', /session writer lock exists/.test(refused ?? '')],
+    ['入口报出的 pid 探针指向一个已不存在的进程', inspection.pidStatus === 'not-found'],
+    ['错误 token 被拒、锁仍在', /ownership changed/.test(wrongToken ?? '')],
+    ['正确 token 显式移除（下一幕重开会装上新的锁）', removed],
     ['副作用文件仍在（它真的写过）', await exists(sideEffect)],
     ['恰好一条 unknown 结果，且就是那次 bash', unknowns.length === 1 && unknowns[0]?.type === 'tool/result' && unknowns[0].data.toolCallId === 'wedged'],
     ['被崩溃中断的 run 被封为 error', run?.status === 'error'],
