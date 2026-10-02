@@ -391,6 +391,31 @@ NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，
 
 **提交**：`c01f253`（T6-0 立项）、`b46dd79`（T6-1 配置与源码订正），以及本提交（T6-2 回填）。详细证据见 [CHANGES 的 T6 节](CHANGES.md#t6-biome-的收窄配置与处置)。
 
+### NX-18 目录逃逸的 token 级判定
+
+**问题（NX-17 期间发现；2026-10-02 按 D-16 的处置规则重开）**。`..` 是闸门保留的四条整串正则之一。整串正则的好处是廉价且稳定，代价是它**不区分「数据」与「代码」**：`echo "see ../docs for details"`、`grep -n ".." src/index.ts`、`git log --grep "../ fixes"` 三条全部被判 `.. path escape is blocked`——第一条里的 `../` 在双引号内是散文，后两条里的 `..` 是正则。它同时是用户「放宽不得削弱 `..`」条款点名保护的对象，所以 NX-17／NX-19／NX-24／NX-32 四轮都刻意没动它。
+
+**先把这条例外的价格算清（`.eval-evidence/` 回放，782 次真实模型 bash 调用，按各会话自己的 workspace 重放）**：含 `..` 的调用 **57 条，其中只有 1 条被拒**（`062d867579`）。**但那一条不是整串正则的错**——命令是 `cd src && … ; cat ../package.json; ls ../data`，闸门**不知道命令内部的 `cd` 改过目录**，`../package.json` 相对 workspace 根确实越界。**因此本轮修完它仍然被拒**，继续留在 `nx24-replay-probe.mjs` 的 `expected` 集合里，只把注记从「`..` 整串正则」改成真实原因（**闸门不看命令内的 `cd`**，属 D-16 撤掉的命令位置状态族）。把它与「清掉回放拒绝」分开写，是因为「登记一条缺口」与「这条缺口会不会被本轮关掉」是两件事。
+
+**新判据：token 级路径形状判定（整串正则退场）**。一个 token 判为 `..` 逃逸，当且仅当它的**去引号正文**同时满足三条：
+
+1. **不含空白**——含空白的 token 不是可寻址的路径。NX-24-5 已用同一条先例处理过前导斜杠（真实的根级目录名不以空白开头），本轮沿用而不是新立。`"see ../docs for details"` 与 `"../ fixes"` 栽在这条。
+2. **按 `[\\/=]` 切分后存在一个分量恰为 `..`**——判的是「路径分量」，不是「文本里出现过两个点」。`a..b`、`...`、`a/x../y` 因此都不算。`=` 一并计入分量边界，因为 `--file=../secret` 的取值同样是操作数，不计入就会**顺着这次放宽新开一个洞**。
+3. **正文含分隔符，或它在原串里是裸词**——这是本轮**唯一**的放宽：引号成词、且不含分隔符的 `".."`（`grep -n ".."` 的正则）放行，**裸 `..` 照旧拒绝**（`ls ..`、`cd ..` 不动）。放行的只有这一种形状，理由记在 PLAN 的 D-17。
+
+**必须保持被拒（用例逐条钉住）**：`echo ../secret`、`cat ../secret`、`cp ../a b`、`cat $MINI_DSH_TEST_ROOT/../etc/passwd`、`cat "../secret"`（引号成词但含分隔符）、`ls ..`、`cd .. && …`。
+
+**残险与不修的部分（写进 R-20 与 D-17，不用「已闭合」措辞）**：这是一次**有界的放宽**，「用引号包住裸 `..`」的形状（`cd ".." && cat x`）从此放行。判据本身是粗形状检查，真正的边界仍是 `utils/path.ts` 的 `resolveInside` 与人工审批——**两者都不是操作系统隔离**。另外 `--grep=..` 这类「`=` 后紧跟 `..` 且无分隔符」的惰性文本**仍被拒**：它与 `--dir=..` 在形状上无判据可用，按 NX-29 的口径处理——**没有可用的形状判据就不放宽**。
+
+| 子步骤 | 内容 | 验收 | 提交边界 |
+| --- | --- | --- | --- |
+| NX-18-0 | TASKS 立项：本节 | `grep -cE '^\| NX-18-' docs/context-budget/TASKS.md` = 4；每行「验收」列至少含一个反引号命令或可判定的退出码／`grep` 判据；**`pnpm test` → `pass 211 / fail 0`**（T6-0 的教训：新章里的锚点本身就是一条要跑的验证，本节的链接只指向既有标题）；`git diff --stat` 只含 `docs/context-budget/TASKS.md` | 1 次 |
+| NX-18-1 | `src/core/sandbox-runtime.ts`：删掉整串 `..` 正则，改为 token 级判定；同步 `:18` 与 `:62` 两处注释（「四个整串正则」→「三个」） | `pnpm check` → `syntax ok: 93 files`；`pnpm test` → `pass 211 / fail 0`（既有 deny 行全部仍绿）；`node docs/context-budget/nx17-gate-probes.mjs` 的 `kept: escape and system paths` 组无 `drift`；**回放**：`node docs/context-budget/nx24-replay-probe.mjs` 退出 0 且拒绝集合**一条不增**（仍 7 条，`062d867579` 在内） | 1 次 |
+| NX-18-2 | `test/core.test.ts` 扩表；`nx17-gate-probes.mjs` 把两行搬进契约组；`nx24-replay-probe.mjs` 订正注记 | `pnpm test` → `fail 0`；`node docs/context-budget/nx17-gate-probes.mjs` 输出 `no contract drift` 且 `known gap` 由 32 行降到 30 行；**反例实跑**：把判定还原成整串正则 → 新增的 allow 用例必须红并点名，改回必须绿（命令与输出记入 CHANGES） | 1 次 |
+| NX-18-3 | 口径订正与三份清单回填 | R-20 与 `src` 一致（整串正则四条→三条、`..` 并入 token 路径判定、边界句去掉 NX-18）；PLAN 新增 D-17；CHANGES 增 NX-18 节且命令与实际输出一致；`pnpm check`／`pnpm test`／`pnpm fixtures:check`／`pnpm eval:offline` 的计数与实跑逐字一致；`sed -n '54,64p' README.md \| grep -c '^pnpm '` 仍 = 8；`pnpm eval:estimate` 仍退出 0；NX-18 在 TASKS 标 `done（2026-10-02，零付费）` 并链到本节 | 1 次 |
+
+**提交**：待本项收尾时回填。
+
 其他待办，按依赖排序：
 
 **另有一条口径变化（2026-10-01，NX-32）：NX-19／NX-24／NX-26／NX-30 由「已完成」退回「已知缺口」。** 它们的机制随收缩一起删除，矩阵里原先的 `closed:` 组整组降级为 `known gap … reopened`（当前共 32 行已知缺口）。与下面的待办不同，**这几条不再排期**——按 D-16 的处置规则，只有 `.eval-evidence` 回放出现新拒绝、或实际使用中撞上才重开。
