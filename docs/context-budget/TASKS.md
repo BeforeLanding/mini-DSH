@@ -416,6 +416,20 @@ NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，
 
 **提交**：`8e36afd`（NX-18-0 立项）、`b9ca89f`（NX-18-1 判据替换）、`dfcfa1c`（NX-18-2 契约与矩阵），以及本提交（NX-18-3 回填）。详细证据见 [CHANGES 的 NX-18 节](CHANGES.md#nx-18-目录逃逸的-token-级判定)。
 
+## NX-27 Windows Git Bash 的 `/tmp`
+
+**问题（NX-24 回放实测；2026-10-02 由用户排期）**。Windows 上命令最终交给 Git Bash，Git Bash 把 `/tmp` 映射到用户临时目录；命令闸门却用 Windows `node:path` 直接解析 `/tmp/out.txt`，得到当前盘根下的 `D:\tmp\out.txt`，再按工作区外路径拒绝。782 次真实模型 bash 调用里有 4 条因此被误拒，最小复现是 `echo x > /tmp/out.txt`、`cat /tmp/out.txt` 与 `node tmp.mjs > /tmp/r.log`。
+
+**选定方向：映射挂载点，不按字符串无条件放行。** 仅在 `process.platform === 'win32'` 且 token 归一化后仍位于 POSIX `/tmp` 下时，把 `/tmp` 后的相对部分交给 `resolveInside(os.tmpdir(), relative)`；其他平台与其他根路径维持现状。这样判据与 Git for Windows 的实际挂载语义一致，同时复用既有的词法越界与真实路径／软链检查：`/tmp/../etc` 仍由 `..` 判据拒绝，`/tmp-link` 不冒充临时目录，临时目录里的链接若指向目录外仍报 `through a symlink`。该例外只属于 bash 命令闸门，不扩大文件工具的 workspace 根，也不把 `/tmp` 加进 `SandboxConfig`。
+
+**边界与代价**：Windows 上 bash 命令从此可读写用户临时目录，它不再受“仅工作区”这条粗形状判据限制；写入与执行仍走既有审批，`autoApprove` 评测则按其本来语义不询问。该闸门不是操作系统隔离，映射采用 Node 的 `os.tmpdir()` 作为 Git for Windows `/tmp` 的宿主目录；本项不探测任意 MSYS 挂载表，也不泛化到 `/var/tmp`、盘符以外的其他 POSIX 根。
+
+| 子步骤 | 内容 | 验收 | 提交边界 |
+| --- | --- | --- | --- |
+| NX-27-0 | TASKS 立项：本节（**done**） | `grep -cE '^\| NX-27-' docs/context-budget/TASKS.md` = 3；每行「验收」列至少含一个反引号命令或可判定的退出码；`pnpm test` 基线仍为 `pass 213 / fail 0`；`git diff --stat` 只含 `docs/context-budget/TASKS.md` | 1 次 |
+| NX-27-1 | `sandbox-runtime.ts` 加 Windows Git Bash `/tmp` → `os.tmpdir()` 映射；`core.test.ts` 钉住读、写、边界与软链（**todo**） | Windows 上 `echo x > /tmp/nx27.txt`、`cat /tmp/nx27.txt`、`node tmp.mjs > /tmp/nx27.log` 均 allow；`cat /tmp-link/x`、`cat /tmp/../etc/passwd` 与临时目录内指向外部的链接仍 deny；非 Windows 分支不放宽；`pnpm check`、`pnpm test`、`pnpm lint` 全部退出 0；反例把映射短路后至少 3 条 allow 用例变红 | 1 次 |
+| NX-27-2 | 同步 R-20／PLAN D-19／矩阵与回放探针，回填 CHANGES、PROGRESS、README 状态（**todo**） | `node docs/context-budget/nx17-gate-probes.mjs` 输出 `no contract drift`；`node docs/context-budget/nx24-replay-probe.mjs` 退出 0 且拒绝由 6 条降到 2 条，删除的集合恰为 4 个 NX-27 指纹；`pnpm check`、`pnpm test`、`pnpm lint`、`pnpm fixtures:check`、`pnpm eval:offline`、`pnpm eval:estimate` 全部退出 0；文档不再把 NX-27 列为 todo／已知边界 | 1 次 |
+
 其他待办，按依赖排序：
 
 **另有一条口径变化（2026-10-01，NX-32）：NX-19／NX-24／NX-26／NX-30 由「已完成」退回「已知缺口」。** 它们的机制随收缩一起删除，矩阵里原先的 `closed:` 组整组降级为 `known gap … reopened`（当前共 32 行已知缺口）。与下面的待办不同，**这几条不再排期**——按 D-16 的处置规则，只有 `.eval-evidence` 回放出现新拒绝、或实际使用中撞上才重开。
