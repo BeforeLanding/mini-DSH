@@ -87,23 +87,27 @@ $ pnpm test
 
 ### 反例实跑
 
-把 `formatter.enabled` 打开、`assist.organizeImports` 设回 `on`（即「顺手统一一下格式」那一步），其余不变：
+把 `formatter.enabled` 打开、`assist.organizeImports` 设回 `on`（即「顺手统一一下格式」那一步），其余不变。**在真实工作树上跑，跑完 `git restore .` 复原**：
 
 ```
 $ biome check .
-Checked 102 files in 109ms. No fixes applied.
-Found 177 errors.
+Checked 102 files in 119ms. No fixes applied.
+Found 175 errors.
 
 $ biome check --write .
-Checked 102 files in 532ms. Fixed 102 files.
+Checked 102 files in 347ms. Fixed 100 files.
+Found 1 error.
+Found 3 warnings.
 
 $ pnpm test
 ✖ the decision write-up keeps every code and test anchor pointing at something real
 ✖ pinned reference still matches the estimator and corpus it was measured against
-ℹ pass 209 / fail 2
+ℹ tests 211 / pass 209 / fail 2
 ```
 
-改回来即恢复全绿。**这组排除项是承重的，不是装饰**——这也正是 `AGENTS.md:21` 那句警告为什么要写明代价。
+改回来即恢复 `Checked 102 files / 0 诊断` 与 `pass 211 / fail 0`。**这组排除项是承重的，不是装饰**——这也正是 `AGENTS.md:21` 那句警告为什么要写明代价。
+
+（数字与上文「修绿成本实测」里的 177 errors / 102 files 略有出入，因为那张表是在**订正之前**的草稿副本上测得，这 2 条差异正是 T6-1 修掉的那几处发现。两处都按各自实际输出原样保留，不合并成一个数。）
 
 ### 两处只有真跑才会暴露的坑
 
@@ -124,7 +128,7 @@ $ pnpm test
 
 ### 提交
 
-`c01f253`（T6-0 立项），以及本提交（T6-1 配置与源码订正）。
+`c01f253`（T6-0 立项）、`b46dd79`（T6-1 配置与源码订正），以及本提交（T6-2 口径订正与回填）。
 
 ## NX-21 会话锁的陈旧核验入口与显式移除
 

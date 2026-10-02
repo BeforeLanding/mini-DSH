@@ -153,7 +153,7 @@ NX-05a 起提供可重复的 [编程任务 fixture](test/fixtures/coding/README.
 
 GitHub Actions 在推送到 `main`、提交 Pull Request 或手动触发时运行 CI，覆盖 Ubuntu / Windows 和 Node.js 22 / 24。工作流按 `package.json` 固定的 pnpm 版本安装依赖，使用 `--frozen-lockfile`，然后运行 `pnpm check` 和 `pnpm test`，无需 DeepSeek 或 Context7 密钥。
 
-`pnpm lint` 暂未作为 CI 门槛：当前代码尚未通过 Biome 的格式与规则检查，统一规范后可再加入。
+`pnpm lint` 不是 CI 门槛，但当前为绿（0 诊断）。`biome.jsonc` 有意关掉格式化与导入排序：Biome 的 `lineWidth` 上限是 320，而本仓库最长行是 732，格式化因此不可满足；导入排序会位移行号，打破 `DECISIONS.md` 的代码锚点与 `src/core/token-estimator.ts` 的钉版哈希。除这几类与仓库刻意写法冲突的规则外，其余检查全部保留。**因为没有门禁，它会随改动漂移**，改完代码请手动跑一次。
 
 若编码 Agent 的受限沙箱内出现 pnpm 版本引导失败或 Cordis `ERR_MODULE_NOT_FOUND`，先在正常用户终端核验 `pnpm --version` 与上述安装/检查命令。依赖目录可能存在但沙箱无法访问；确认实际安装问题后再修复，保持固定 pnpm 版本和锁文件校验。当前本地恢复结果见 [PROGRESS.md](PROGRESS.md)。
 

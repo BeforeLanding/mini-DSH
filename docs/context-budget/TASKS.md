@@ -355,8 +355,6 @@ NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，
 
 **提交**：`4fb4e7c`（NX-21-0 立项）、`90b7733`（NX-21-1 核心与脚本）、`2d35d28`（NX-21-2 测试与 DECISIONS 锚点）、`4551e62`（NX-21-3 第三幕），以及本提交（NX-21-4 回填）。详细证据见 [CHANGES 的 NX-21 节](CHANGES.md#nx-21-会话锁的陈旧核验入口与显式移除)。
 
-**提交**：待本项收尾时回填。
-
 ### T6 Biome 的收窄配置与处置
 
 **诊断（2026-10-02，草稿副本内只读，仓库一行未动）**。`npx biome check .` 给出 **545 errors / 124 warnings / 48 infos = 717**。仓库里**没有 `biome.json`**，因此没有任何排除项：其中 **196 条落在 `dist/`、14 条落在 `.eval-evidence/`**（两者都在 `.gitignore` 里），余下 **507 条（366 err / 117 warn / 24 info）分布在 250 个文件**，而**每一个文件**都至少有一条 `format` 诊断。这不是 250 个文件各有风格问题，是**一次全局配置分歧**：Biome 默认制表符／双引号／分号，仓库是 2 空格／单引号／无分号。
@@ -385,11 +383,13 @@ NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，
 
 | 子步骤 | 内容 | 验收 | 提交边界 |
 | --- | --- | --- | --- |
-| T6-0 | TASKS 立项：本节 | `grep -cE '^\| T6-' docs/context-budget/TASKS.md` = 3；每行「验收」列至少含一个反引号命令或可判定的退出码／`grep` 判据；`git diff --stat` 只含 `docs/context-budget/TASKS.md` | 1 次 |
-| T6-1 | `biome.json` + `package.json`（移除 `format`）+ `AGENTS.md:21` + 9 个源码文件的逐条订正 | `pnpm lint` **0 诊断、退出 0**（修前 717 诊断含 545 错）；`pnpm check` → `syntax ok: 93 files`；`pnpm test` → `pass 211 / fail 0`（含 `decisions-doc` 与 `estimation` 两条不变量按名通过）；`git diff --stat` **不含** `src/core/token-estimator.ts`；**反例实跑**：把 `formatter.enabled` 与 `assist.organizeImports` 打开后 `biome check` 报 177 errors、`--write` 动 102 文件、`pnpm test` 变 `fail 2` 并点名那两条不变量，改回必须全绿（命令与输出记入 CHANGES） | 1 次 |
-| T6-2 | 口径订正与三份清单回填 | `grep -rn '尚未通过 Biome' README.md` 为空；`grep -c '待本项收尾时回填' docs/context-budget/TASKS.md` = 0（顺手删掉 NX-21 立项时遗留的占位提交行）；`sed -n '54,64p' README.md \| grep -c '^pnpm '` 仍 = 8（`lint` 不进零密钥八条）；`pnpm check`／`pnpm test` 的计数与实跑逐字一致；`pnpm eval:estimate` 仍退出 0；T6 在 TASKS 标 `done（2026-10-02，零付费）` 并链到本节 | 1 次 |
+| T6-0 | TASKS 立项：本节（**done**，`c01f253`） | `grep -cE '^\| T6-' docs/context-budget/TASKS.md` = 3；每行「验收」列至少含一个反引号命令或可判定的退出码／`grep` 判据；`git diff --stat` 只含 `docs/context-budget/TASKS.md` | 1 次 |
+| T6-1 | `biome.jsonc` + `package.json`（移除 `format`）+ `AGENTS.md:21` + 9 个源码文件的逐条订正（**done**，`b46dd79`） | `pnpm lint` **0 诊断、退出 0**（修前 717 诊断含 545 错）；`pnpm check` → `syntax ok: 93 files`；`pnpm test` → `pass 211 / fail 0`（含 `decisions-doc` 与 `estimation` 两条不变量按名通过）；`git diff --stat` **不含** `src/core/token-estimator.ts`；**反例实跑**：把 `formatter.enabled` 与 `assist.organizeImports` 打开后 `biome check` 报 175 errors、`--write` 动 100 文件、`pnpm test` 变 `fail 2` 并点名那两条不变量，改回必须全绿（命令与输出记入 CHANGES） | 1 次 |
+| T6-2 | 口径订正与三份清单回填（**done**） | `grep -rn '尚未通过 Biome' README.md` 为空；`grep -cE '^\*\*提交\*\*：待本项收尾时回填。$' docs/context-budget/TASKS.md` = 0（顺手删掉 NX-21 立项时遗留的占位提交行）；`sed -n '54,64p' README.md \| grep -c '^pnpm '` 仍 = 8（`lint` 不进零密钥八条）；`pnpm check`／`pnpm test` 的计数与实跑逐字一致；`pnpm eval:estimate` 仍退出 0；T6 在 TASKS 标 `done（2026-10-02，零付费）` 并链到本节 | 1 次 |
 
-**提交**：待本项收尾时回填。详细证据见 [CHANGES 的 T6 节](CHANGES.md#t6-biome-的收窄配置与处置)。
+**配置落在 `biome.jsonc` 而非 `biome.json`**：2.5.14 的 `biome.json` 不接受 `//` 注释。更值得记的是**配置解析失败时 Biome 不报错，直接退回默认规则**——用 `.json` 写带注释的版本时 `pnpm lint` 会照常输出一整套默认规则的诊断，看上去像「配置生效了但代码不合规」。第一次跑就落进这个坑，靠「诊断条数与修前逐字相同」才发现。改用 `.jsonc` 既拿到注释（每条排除项就地带理由），也避开了静默失效。
+
+**提交**：`c01f253`（T6-0 立项）、`b46dd79`（T6-1 配置与源码订正），以及本提交（T6-2 回填）。详细证据见 [CHANGES 的 T6 节](CHANGES.md#t6-biome-的收窄配置与处置)。
 
 其他待办，按依赖排序：
 
@@ -406,7 +406,7 @@ NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，
 - **NX-20 路线图状态段整体陈旧 — done（2026-10-02，零付费）（NX-09 期间发现）**：`docs/INTERNSHIP_ROADMAP.md` 是**带日期的记录**，line 3 已把源码基线评估定为「历史证据保留」，因此不能只改其中一处而让全文自相矛盾。已核实陈旧点至少四处：顶部注记与 line 215 的「真实模型实验额度尚未在本次任务中设定或使用」（已被 NX-08 的约 $4.96 推翻）、line 194 的 M5 出口「旧 57 条回归」（现为 200 条）、line 213/215 的 M7 出口、line 233-239 §6 的「当前可以写…完成 57 条回归及 Windows/Linux × Node 22/24 CI」（且「Linux」与 README 实际使用的「Ubuntu/Windows」不一致）。处置须**按该文件自己的惯例加一条带日期的修订注记**，不静默改写正文历史。按 NX-17 的先例（改前发现的相邻缺陷另立待办，不塞进当前提交），NX-09 只立项、不修。**本次处置（2026-10-02）**：按该文件自己的惯例在页首加了一条带日期的状态修订注记，**正文一字未动**（`git diff --numstat` 为 9 行新增、0 行删除）。上面这段里的行号引用随注记插入而漂移，这正是新注记与 [NX-20 一节](#nx-20-路线图状态段的带日期修订注记) 一律改引**标题与引文**的原因。
 - **NX-21 会话锁的陈旧判定与操作者入口 — done（2026-10-02，零付费）（NX-10-5 期间发现）**：**本次处置**见 [NX-21 一节](#nx-21-会话锁的陈旧核验入口与显式移除)。方向定为**只补显式人工入口、不加 pid 存活判定**（PLAN 的持久化一节已写死「不仅凭 PID 自动移除」），形态定为**独立脚本** `pnpm session:lock <sessionId>`——因为 `src/plugins/cli.ts:38` 在建立 REPL **之前**就 `open`，斜杠命令在真正需要它的时刻根本不可达。检视只摆证据，解除要 `--remove --token <检视输出里的 token>`，token 对不上即拒；`open`／`close`／`quarantineTail` 一行未动。以下为发现时的原文，保留为历史。**原始记录（todo）**：`JsonlStore.open` 对任何已存在的 `writer.lock` 一律拒绝（`src/core/event-store.ts:40`），提示语要求「verify stale locks explicitly」，但仓库里**没有任何可脚本化的核验入口**——`quarantineTail` 要先抢同一把锁（`:17-20`），`src/plugins/cli.ts:36-40` 的启动恢复撞上崩溃过的会话直接抛错，也没有 `/recover`；锁体里写了 `{token, pid}`，但 pid 从不被读回用于存活判断。于是崩溃之后唯一的恢复路径是由人手工删掉那把锁，NX-10 的第三幕照实演示了这一步。**本次不修**（`src/` 一行未动，动它等于动既有锁语义）。设计前要先定方向：加 pid 存活判定（须处理 pid 复用与跨平台差异），还是只补一个显式的人工核验入口（CLI 子命令或写清的步骤）。
 - **NX-22 文档内锚点失效（登记四处，实际 6 处）— done（2026-10-02，零付费）（NX-11 期间发现）**：**本次处置**见 [NX-22 一节](#nx-22-文档内锚点的逐个校验与口径订正)：新增 `test/docs-links.test.ts` 把全仓锚点做成回归（修前恰好 6 条红、其余 160 余条全过），修掉 6 处并按 `NX-08-REPORT` 的成本表订正三处互相矛盾的数字。以下为发现时的原文，保留为历史。**原始记录（todo，四处）**：NX-11 把「相对链接与锚点目标逐个命中」做成可核对的检查时发现四处**仓库内**锚点指向不存在的标题——文件存在、锚点不存在，点击后停在页首。① `docs/context-budget/TASKS.md` 里两处 `#其他待办按依赖排序`（NX-10 的「已完成」条目里链向 NX-21）：「其他待办，按依赖排序：」在文件中是**正文**而不是标题，所以根本没有这个锚点；修法是把链接指到 NX-21 条目本身，或去掉链接。② `PROGRESS.md` 链 `CHANGES.md#nx-08f-4b-真实模型烟测--done2026-10-01付费约-003--…` 与 `…#nx-08f-4c-重跑烟测--done2026-10-01付费约-004--…`：CHANGES 的标题写的是 `付费约 $0.02` 与 `付费约 $0.03`，与链接里的 `003`／`004` 对不上。**②不只是锚点问题**：同一处 CHANGES 的 f-4b 标题写 `$0.02` 而紧邻正文写「成本：约 **$0.03**」，PROGRESS 的两条分别写 `$0.03`／`$0.04`——三个数字互相矛盾，**修之前要先定哪个是权威口径**（按价格页重算或按 NX-08g 的标注方式处理），属需要判断的那一类。按 NX-17 的先例，NX-11 只发现、不修：它既不属于本项范围，也不该把一条口径判断塞进文档回填的提交。
-- **T6 Biome 只读诊断与处置 — todo**：先诊断告警数量与类别、评估修绿成本，再由用户选择修到绿并设为门禁、或移除 Biome；选定前不修改 Biome、依赖或 CI 门禁。
+- **T6 Biome 只读诊断与处置 — done（2026-10-02，零付费）**：**本次处置**见 [T6 一节](#t6-biome-的收窄配置与处置)。诊断把「修到绿」的价格算出来了：Biome 的 `lineWidth` 上限 320 小于仓库最长行 732，**格式化不可满足**；两种 `--write` 各触及 210／211 个文件，且都会打破 `test/estimation.test.ts` 的钉版哈希与 `test/decisions-doc.test.ts` 的三十行锚点。用户据此选定**收窄配置、不设门禁**：新增 `biome.jsonc`（跟随 `.gitignore`、排除**故意写坏的** `test/fixtures/`、有意关闭 formatter 与 organizeImports、只关三条与刻意写法冲突的规则），逐条修掉它抓到的发现，`pnpm lint` 从 545 errors 变成 **0 诊断**。**既不是「移除 Biome」也不是「修到绿」**——`src/core/token-estimator.ts` 一个字节未动，这正是本方向能成立而修绿不能的关键。以下为发现时的原文，保留为历史。**原始记录（todo）**：先诊断告警数量与类别、评估修绿成本，再由用户选择修到绿并设为门禁、或移除 Biome；选定前不修改 Biome、依赖或 CI 门禁。
 
 ## 已完成
 
