@@ -228,6 +228,14 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 
 替代方案：① 整段跳过全部正文会放过 `bash <<EOF` 中真正执行的 `curl`；② 全部递归会保留 `cat <<EOF` 的现有误拒；③ 见到 here-doc 一律拒绝会把已观测的合法模型调用变成稳定过拒；④ 引入完整 shell parser 与 D-16 的收缩方向冲突，且仍需定义解释器与包装命令知识。选定的窄分流只增加「重定向—正文—消费者」这一条已观测语义。
 
+### D-19 Windows Git Bash 的 `/tmp` 挂载映射（NX-27）
+
+**这是 D-16 之后第三次由真实回放触发的局部修订**：782 次真实模型 bash 调用里 4 条使用 `/tmp`，全部在 Windows 被 `node:path` 错解成当前盘根下的 `D:\tmp` 后判为工作区外；Git for Windows 实际把同一 spelling 映射到用户临时目录。判据不能一边按 Bash 语义执行、一边按 Windows 根路径语义审批。
+
+选定「映射挂载点」而不是「字符串白名单」：仅在 Windows、且 POSIX 归一化后仍为 `/tmp` 或其后代时，取 `/tmp` 后的相对部分，以 `os.tmpdir()` 为根再次调用 `resolveInside`。因此 `/tmp/../etc` 仍由 token 级 `..` 判据拒绝，`/tmp-link` 不匹配，临时目录内指向外部的 junction／symlink 仍由真实路径检查拒绝。Linux/macOS 不走该例外，文件工具的 workspace 根与 `SandboxConfig` 均不改变。
+
+代价：Windows Bash 获得用户临时目录这一处工作区外读写能力；普通交互仍有审批，`autoApprove` 明确选择不询问。映射依赖 Git for Windows 的 `/tmp` → Windows 用户临时目录约定，不探测任意 MSYS 挂载表，也不扩展 `/var/tmp` 或其他 POSIX 根。命令闸门仍是粗形状策略而非操作系统隔离。
+
 ## 默认参数与行为
 
 ### 请求规模与估算

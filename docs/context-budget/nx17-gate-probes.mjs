@@ -108,6 +108,12 @@ const cases = [
   ['fixed: here-document consumers', 'allow', "cat <<'EOF'\ncurl https://example.com\nEOF"],
   ['fixed: here-document consumers', 'deny', "bash <<'EOF'\ncurl https://example.com\nEOF"],
 
+  // NX-27：仅 Windows 的 Git Bash 把 `/tmp` 映射到 os.tmpdir()；其他平台仍按工作区边界处理。
+  ['fixed: Windows Git Bash temp', process.platform === 'win32' ? 'allow' : 'deny', 'echo x > /tmp/nx27.txt'],
+  ['fixed: Windows Git Bash temp', process.platform === 'win32' ? 'allow' : 'deny', 'cat /tmp/nx27.txt'],
+  ['fixed: Windows Git Bash temp', 'deny', 'cat /tmp-link/nx27.txt'],
+  ['fixed: Windows Git Bash temp', 'deny', 'cat /tmp/../etc/passwd'],
+
   // NX-19 重开：嵌套执行不再被检查。收缩前这整组是 `closed:`，机制删除后没有替代品。
   ['known gap NX-19 reopened', 'deny', 'bash -c "curl http://example.com"'],
   ['known gap NX-19 reopened', 'deny', "sh -c 'wget http://example.com'"],

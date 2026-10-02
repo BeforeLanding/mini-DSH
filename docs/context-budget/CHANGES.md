@@ -2,6 +2,33 @@
 
 更新：2026-10-02。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-27 Windows Git Bash 的 `/tmp`
+
+### 现象、决策与实现
+
+Windows 上 Git for Windows 的 `cygpath -w /tmp` 指向用户临时目录，且 Git Bash 中 `/tmp` 可写；同一 token 交给 Windows `node:path` 却从当前盘根解析，例如得到 `D:\tmp\out.txt`。命令由前者执行、由后者审批，语义不一致使 `echo x > /tmp/out.txt`、`cat /tmp/out.txt` 与 `node tmp.mjs > /tmp/r.log` 全部误报 `path escapes the workspace`。
+
+实现选择映射而非白名单：`resolveGitBashTemp` 只在 Windows 且 POSIX 归一化后仍位于 `/tmp` 时，取其相对部分并以 `os.tmpdir()` 为根调用既有 `resolveInside`。因此普通临时文件放行，而 `/tmp-link` 不匹配、`/tmp/../etc` 先命中 `..` 判据、临时目录内指向外部的 junction 命中 `through a symlink`。其他平台与文件工具的 workspace 根没有变化。
+
+### 回放、测试与反例
+
+真实模型的 782 次 bash 调用回放中，拒绝从 **6 条降到 2 条**；消失的恰是 `7d13fdc54a`／`52e783f9c4`／`21c76e9675`／`11dc755c95` 四个 NX-27 指纹，留下 NX-29 的 `/missing` 与命令内 `cd` 导致的 `../package.json` 两条既有边界。矩阵新增 Windows／非 Windows 分支与两条反例，输出仍是 `no contract drift; 28 known gap(s) still open`。
+
+关闭映射分支并重建后，定向测试的三个子测试分别变红：`echo x > /tmp/nx27.txt`、`cat /tmp/nx27.txt`、`node tmp.mjs > /tmp/nx27.log` 均从 allow 退回 deny；向外 junction 的理由同时从 `through a symlink` 退化为普通 workspace escape。恢复后定向测试 4/4 通过。
+
+```
+pnpm check                                       # syntax ok: 93 files
+pnpm test                                        # tests 217 / pass 217 / fail 0
+pnpm lint                                        # Checked 102 files. No fixes applied.
+pnpm fixtures:check                              # 16 项：初始均失败、reference 均通过
+pnpm eval:offline                                # planned/executed/accepted 12/12/12
+pnpm eval:estimate                               # estimator/corpus matchesReference 均为 true
+node docs/context-budget/nx17-gate-probes.mjs    # no contract drift; 28 known gap(s) still open
+node docs/context-budget/nx24-replay-probe.mjs   # no unexpected deny: 2 条全部有归属
+```
+
+提交：`5c62097`（NX-27-0 立项）、`4670aca`（NX-27-1 映射与回归），以及本提交（NX-27-2 契约、回放与回填）。全程零付费模型调用。
+
 ## NX-25 here-doc 正文按消费者分流
 
 ### 现象、决策与实现

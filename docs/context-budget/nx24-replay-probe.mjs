@@ -13,7 +13,8 @@
 // 数字会凭空翻倍，且翻倍的那一半与闸门无关。
 //
 // 基线：NX-24 动手前（提交 76ebadc）为 782 次调用 / 32 条拒绝（23 条 `unset environment variable`、
-// 9 条 `path escapes the workspace`）。NX-24 之后为 9 条，NX-32 收缩后为 7 条，NX-25 后为 6 条
+// 9 条 `path escapes the workspace`）。NX-24 之后为 9 条，NX-32 收缩后为 7 条，NX-25 后为 6 条，
+// NX-27 后为 2 条
 // （见下表）——
 // 减少的两条是环境展开撤销的连带，不是修好了。`.eval-evidence/` 不入库，所以这个探针只在有历史
 // 证据的工作区里可跑。
@@ -34,12 +35,8 @@ import { SandboxRuntime } from '../../dist/src/core/sandbox-runtime.js'
 // 因此不再被拒，条目按上面的规则删除——它们降级为闸门矩阵里的 `known gap NX-24 reopened`，
 // 由 `nx17-gate-probes.mjs` 盯着，不在这里留一个宽松的断言。
 const expected = new Map([
-  ['7d13fdc54a', 'NX-27 写 /tmp（Git Bash 的 /tmp 与 node:path 不一致）'],
   ['96a488b3e0', 'NX-29 正则字面量 `/missing` 与绝对根路径 `/missing` 形状完全相同'],
   ['062d867579', 'NX-18 `cat ../package.json`：闸门不看命令内的 `cd`（命令先 `cd src`），相对 workspace 根确实越界'],
-  ['52e783f9c4', 'NX-27 写 /tmp'],
-  ['21c76e9675', 'NX-27 写 /tmp'],
-  ['11dc755c95', 'NX-27 写 /tmp'],
 ])
 
 function walk(directory, out = []) {
