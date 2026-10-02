@@ -9,13 +9,13 @@ const sandbox = new SandboxRuntime({ workspace, autoApprove: true })
 
 // [group, expected, command] — expected is the target contract, so a "known gap" row is one the gate
 // does not meet yet. **Gaps come in both directions and the direction is what the row says**:
-// over-blocking (expect allow, get deny) — NX-18 lazy `..` text, NX-25 here-doc bodies;
+// over-blocking (expect allow, get deny) — NX-25 here-doc bodies;
 // under-blocking (expect deny, get allow) — everything else below.
 //
 // **NX-32（2026-10-01）是一次有意的能力收缩，本矩阵因此比收缩前短得多。** 闸门删掉了整层启发式词法
 // （`$()`／反引号／`sh -c`／`eval` 的递归抽取、按引号语义的环境展开与 `for`／`NAME=` 绑定、保留字与
-// 算子之后的命令位前视、三种取网工具操作数模型与主机白名单），只留下四个整串正则、token 上的路径
-// 与 UNC 判定、以及**按段首工具名**的粗粒度出网拦。判据与代价见 PLAN 的 D-16 与需求 R-20。
+// 算子之后的命令位前视、三种取网工具操作数模型与主机白名单），只留下三个整串正则、token 上的 `..`
+// 分量与路径／UNC 判定、以及**按段首工具名**的粗粒度出网拦。判据与代价见 PLAN 的 D-16、D-17 与需求 R-20。
 //
 // 因此三处状态变了，逐条留证：
 //   - **NX-23 闭合**：裸 URL 规则随操作数模型一起删除，`--grep <url>` 这类数据不再被当成目标。
@@ -54,8 +54,16 @@ const cases = [
   ['kept: escape and system paths', 'deny', 'rm -rf src'],
   ['kept: escape and system paths', 'deny', 'cat \\\\server\\share\\secret'],
   ['kept: escape and system paths', 'deny', 'cat \\\\?\\C:\\Windows\\win.ini'],
-  // 环境展开撤销后，这一条仍被拒——靠的是**保留的 `..` 整串正则**，不是展开。
+  // 环境展开撤销后，这一条仍被拒——靠的是**保留的 `..` 判据**，不是展开（判据本身在 NX-18 从整串
+  // 正则换成了 token 级路径分量，这一行两轮都读到 ok）。
   ['kept: escape and system paths', 'deny', 'cat $MINI_DSH_TEST_ROOT/../etc/passwd'],
+  // NX-18 唯一放宽口的孪生行：裸 `..`、含分隔符的引号路径、选项取值里的 `..` 全部照旧拒绝。
+  ['kept: escape and system paths', 'deny', 'ls ..'],
+  ['kept: escape and system paths', 'deny', 'cat "../secret"'],
+  ['kept: escape and system paths', 'deny', 'cat --file=../secret'],
+  // NX-32 变量间接那组里的这一行，本轮改判成 `..`（`=` 成了分量边界）。**不是变量间接被支持了**：
+  // 它的孪生行 `Y=/etc; cat $Y/passwd` 仍留在下面的 `known gap` 组里——两条分开看。
+  ['kept: escape and system paths', 'deny', 'X=..; cat $X/secret'],
   // `//comment` 是 deny 的孪生行（它的 allow 兄弟在 `fixed: comment shape`）。
   ['kept: escape and system paths', 'deny', 'node -e "//comment"'],
   ['kept: escape and system paths', 'deny', 'for f in a /etc/passwd; do cat $f; done'],
@@ -87,8 +95,14 @@ const cases = [
   ['closed: NX-23 URL as data', 'allow', 'git log --grep "https://github.com/x"'],
   ['closed: NX-23 URL as data', 'allow', 'npm install --registry https://registry.npmjs.org'],
 
-  ['known gap NX-18', 'allow', 'echo "see ../docs for details"'],
-  ['known gap NX-18', 'allow', 'grep -n ".." src/index.ts'],
+  // NX-18：同样先在两行 `known gap NX-18` 里读到 met，再搬到这里。`..` 判据从整串正则改成 token 级
+  // 路径分量之后，惰性文本不再命中；判据本身与残险见 PLAN 的 D-17 与需求 R-20。
+  ['fixed: lazy dotdot text', 'allow', 'echo "see ../docs for details"'],
+  ['fixed: lazy dotdot text', 'allow', 'grep -n ".." src/index.ts'],
+  ['fixed: lazy dotdot text', 'allow', 'git log --grep "../ fixes"'],
+  // 分量判据不判子串的孪生行；`--grep=..` 是**刻意保留**的已知误拒（与 `--dir=..` 形状无判据可用）。
+  ['fixed: lazy dotdot text', 'allow', 'ls a/x../y'],
+  ['fixed: lazy dotdot text', 'deny', 'git log --grep=..'],
   // NX-25：here-doc 正文被当命令词（正文是数据还是脚本取决于消费它的命令）。注意它的理由串在本轮
   // 变了——正文里的 `curl` 现在按段首工具名命中，是粗粒度判据的连带过拦，不是修好了。
   ['known gap NX-25', 'allow', "cat <<'EOF'\ncurl https://example.com\nEOF"],
@@ -132,7 +146,8 @@ const cases = [
   ['known gap NX-32 url operand', 'deny', 'git clone https://example.com/x.git'],
   ['known gap NX-32 url operand', 'deny', 'echo "http://evil.example" | xargs curl'],
   ['known gap NX-32 url operand', 'deny', 'echo "http://evil.example" | cat > f'],
-  ['known gap NX-32 variable indirection', 'deny', 'X=..; cat $X/secret'],
+  // 变量间接那组原有两行，NX-18 之后只剩这一行：`X=..; cat $X/secret` 已搬到 `kept` 组，但它是被
+  // `..` 的分量边界**连带**拦下的，变量间接本身仍然不被看见——所以这行留着，两组不合并成一个结论。
   ['known gap NX-32 variable indirection', 'deny', 'Y=/etc; cat $Y/passwd'],
 ]
 

@@ -486,6 +486,14 @@ test('Sandbox blocks dangerous commands and allows ordinary workspace commands',
     "printf '\\\\n'",
     'echo "https://example.com" > notes.txt',
     'echo "https://example.com" || echo fallback',
+    // NX-18：`..` 改成 token 级路径分量判定后，这两类惰性文本不再被判成目录逃逸。
+    // 第一条里的 `../` 在双引号内是散文，后两条里的 `..` 是正则；三条都不含「分量恰为 `..` 的路径」。
+    'echo "see ../docs for details"',
+    'grep -n ".." src/index.ts',
+    'git log --grep "../ fixes"',
+    // 分量判据不判子串：这三个都不是分量 `..`，照旧放行（改前也不拒绝，孪生行防回归）。
+    'node --input-type=module -e "a..b"',
+    'ls a/x../y',
   ]
   for (const command of allow) {
     assert.equal(sandbox.inspectCommand(command).action, 'allow', command)
@@ -522,8 +530,20 @@ test('Sandbox blocks dangerous commands and allows ordinary workspace commands',
     'bash -c "rm -rf /"': /recursive delete/,
     'cat /etc/passwd': /system path is blocked/,
     'echo ../secret': /\.\. path escape is blocked/,
-    // 从 NX-24 组搬来：判定不再靠环境展开，而是靠**保留的 `..` 整串正则**——行为未变，机制变了。
+    // 从 NX-24 组搬来：判定不再靠环境展开，而是靠**保留的 `..` 判据**——行为未变，机制变了。
     'cat $MINI_DSH_TEST_ROOT/../etc/passwd': /\.\. path escape is blocked/,
+    // NX-18：这五条钉住本轮**没有**放宽的部分——裸 `..`、作为操作数的 `..`、选项取值里的 `..`、
+    // 以及引号成词但含分隔符的路径。上面 allow 表里那三条惰性文本是唯一的放宽口。
+    'ls ..': /\.\. path escape is blocked/,
+    'cd .. && cat x': /\.\. path escape is blocked/,
+    'cp ../a b': /\.\. path escape is blocked/,
+    'cat "../secret"': /\.\. path escape is blocked/,
+    'cat --file=../secret': /\.\. path escape is blocked/,
+    // NX-32 变量间接那组里，这一条改判成 `..`（`=` 是分量边界）——**不是**变量间接被支持了：
+    // 孪生行 `Y=/etc; cat $Y/passwd` 仍放行，两条分开记，不合并成一个「已覆盖」。
+    'X=..; cat $X/secret': /\.\. path escape is blocked/,
+    // 残险：`--grep=..` 与 `--dir=..` 在形状上无判据可用，按 NX-29 的口径不放宽（钉住这个已知误拒）。
+    'git log --grep=..': /\.\. path escape is blocked/,
     'curl -o /etc/cron http://localhost/x': /system path is blocked|path escapes the workspace/,
     'cp foo /usr/bin/evil': /system path is blocked|path escapes the workspace/,
     'echo hi > /etc/passwd': /system path is blocked|path escapes the workspace/,
