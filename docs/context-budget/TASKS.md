@@ -427,7 +427,7 @@ NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，
 | 子步骤 | 内容 | 验收 | 提交边界 |
 | --- | --- | --- | --- |
 | NX-27-0 | TASKS 立项：本节（**done**） | `grep -cE '^\| NX-27-' docs/context-budget/TASKS.md` = 3；每行「验收」列至少含一个反引号命令或可判定的退出码；`pnpm test` 基线仍为 `pass 213 / fail 0`；`git diff --stat` 只含 `docs/context-budget/TASKS.md` | 1 次 |
-| NX-27-1 | `sandbox-runtime.ts` 加 Windows Git Bash `/tmp` → `os.tmpdir()` 映射；`core.test.ts` 钉住读、写、边界与软链（**todo**） | Windows 上 `echo x > /tmp/nx27.txt`、`cat /tmp/nx27.txt`、`node tmp.mjs > /tmp/nx27.log` 均 allow；`cat /tmp-link/x`、`cat /tmp/../etc/passwd` 与临时目录内指向外部的链接仍 deny；非 Windows 分支不放宽；`pnpm check`、`pnpm test`、`pnpm lint` 全部退出 0；反例把映射短路后至少 3 条 allow 用例变红 | 1 次 |
+| NX-27-1 | `sandbox-runtime.ts` 加 Windows Git Bash `/tmp` → `os.tmpdir()` 映射；`core.test.ts` 钉住读、写、边界与软链（**done**） | Windows 上 `echo x > /tmp/nx27.txt`、`cat /tmp/nx27.txt`、`node tmp.mjs > /tmp/nx27.log` 均 allow；`cat /tmp-link/x`、`cat /tmp/../etc/passwd` 与临时目录内指向外部的链接仍 deny；非 Windows 分支不放宽；`pnpm check`、`pnpm test`、`pnpm lint` 全部退出 0；反例把映射短路后至少 3 条 allow 用例变红 | 1 次 |
 | NX-27-2 | 同步 R-20／PLAN D-19／矩阵与回放探针，回填 CHANGES、PROGRESS、README 状态（**todo**） | `node docs/context-budget/nx17-gate-probes.mjs` 输出 `no contract drift`；`node docs/context-budget/nx24-replay-probe.mjs` 退出 0 且拒绝由 6 条降到 2 条，删除的集合恰为 4 个 NX-27 指纹；`pnpm check`、`pnpm test`、`pnpm lint`、`pnpm fixtures:check`、`pnpm eval:offline`、`pnpm eval:estimate` 全部退出 0；文档不再把 NX-27 列为 todo／已知边界 | 1 次 |
 
 其他待办，按依赖排序：

@@ -567,6 +567,37 @@ test('Sandbox blocks dangerous commands and allows ordinary workspace commands',
   }
 })
 
+test('Sandbox maps Windows Git Bash /tmp to the user temp directory without opening other roots', async (context) => {
+  const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
+  const sandbox = new SandboxRuntime({ workspace: process.cwd(), autoApprove: true })
+  const gitBashTempCommands = [
+    'echo x > /tmp/nx27.txt',
+    'cat /tmp/nx27.txt',
+    'node tmp.mjs > /tmp/nx27.log',
+  ]
+  for (const command of gitBashTempCommands) {
+    await context.test(command, () => {
+      assert.equal(sandbox.inspectCommand(command).action, process.platform === 'win32' ? 'allow' : 'deny')
+    })
+  }
+
+  for (const command of ['cat /tmp-link/x', 'cat /tmp/../etc/passwd', 'cat /var/tmp/nx27.txt']) {
+    assert.equal(sandbox.inspectCommand(command).action, 'deny', command)
+  }
+
+  if (process.platform !== 'win32') return
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'nx27-'))
+  try {
+    await fs.symlink(process.cwd(), path.join(directory, 'escape'), 'junction')
+    const command = `cat /tmp/${path.basename(directory)}/escape/package.json`
+    const result = sandbox.inspectCommand(command)
+    assert.equal(result.action, 'deny')
+    assert.match(result.reason ?? '', /through a symlink/)
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true })
+  }
+})
+
 test('Sandbox gate reads quoted inline scripts as the shell does', async () => {
   const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
   const sandbox = new SandboxRuntime({ workspace: '/tmp/mini-dsh-workspace', autoApprove: true })

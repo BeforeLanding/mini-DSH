@@ -1,4 +1,5 @@
 import type { ApprovalRequest, SandboxConfig } from './contracts.js'
+import os from 'node:os'
 import path from 'node:path'
 import { resolveInside } from '../utils/path.js'
 
@@ -179,6 +180,18 @@ function isPathEscape(raw: string, body: string) {
   return /[\\/=]/.test(body) || raw === body
 }
 
+// Git for Windows mounts its POSIX `/tmp` at the Windows user temp directory. Feeding that spelling
+// directly to node:path instead resolves it from the current drive root (`D:\tmp`, for example), so
+// the workspace gate rejects a path that the shell can legitimately use. Translate only this one
+// observed mount point, then reuse the ordinary realpath/symlink boundary instead of string-whitelisting
+// every `/tmp` token. Other platforms already agree with node:path and keep the workspace-only rule.
+function resolveGitBashTemp(requested: string) {
+  if (process.platform !== 'win32' || !/^\/tmp(?:\/|$)/.test(requested)) return undefined
+  const normalized = path.posix.normalize(requested)
+  if (normalized !== '/tmp' && !normalized.startsWith('/tmp/')) return undefined
+  return resolveInside(os.tmpdir(), path.posix.relative('/tmp', normalized))
+}
+
 export class SandboxRuntime {
   workspace: string
   autoApprove: boolean
@@ -268,6 +281,9 @@ export class SandboxRuntime {
         // 误拒（实测 782 次真实 bash 调用里 5 条）。系统路径与出网检查已在上面执行，不受影响；
         // 单个 `/`（首个分量为空）与 `//etc`、`//home/…`（首个分量干净）不在此列，仍走 resolvePath。
         if (/^\/+/.test(token) && /\s/.test(token.replace(/^\/+/, '').split('/')[0])) continue
+        try {
+          if (resolveGitBashTemp(token) !== undefined) continue
+        } catch (error) { return deny(error instanceof Error ? error.message : String(error)) }
         try { this.resolvePath(token) } catch (error) { return deny(error instanceof Error ? error.message : String(error)) }
       }
     }
