@@ -9,8 +9,8 @@ const sandbox = new SandboxRuntime({ workspace, autoApprove: true })
 
 // [group, expected, command] — expected is the target contract, so a "known gap" row is one the gate
 // does not meet yet. **Gaps come in both directions and the direction is what the row says**:
-// over-blocking (expect allow, get deny) — NX-25 here-doc bodies;
-// under-blocking (expect deny, get allow) — everything else below.
+// All remaining known gaps are under-blocking (expect deny, get allow). NX-25's over-blocking row moved
+// into the contract groups after its data/shell here-document split met the target.
 //
 // **NX-32（2026-10-01）是一次有意的能力收缩，本矩阵因此比收缩前短得多。** 闸门删掉了整层启发式词法
 // （`$()`／反引号／`sh -c`／`eval` 的递归抽取、按引号语义的环境展开与 `for`／`NAME=` 绑定、保留字与
@@ -103,9 +103,10 @@ const cases = [
   // 分量判据不判子串的孪生行；`--grep=..` 是**刻意保留**的已知误拒（与 `--dir=..` 形状无判据可用）。
   ['fixed: lazy dotdot text', 'allow', 'ls a/x../y'],
   ['fixed: lazy dotdot text', 'deny', 'git log --grep=..'],
-  // NX-25：here-doc 正文被当命令词（正文是数据还是脚本取决于消费它的命令）。注意它的理由串在本轮
-  // 变了——正文里的 `curl` 现在按段首工具名命中，是粗粒度判据的连带过拦，不是修好了。
-  ['known gap NX-25', 'allow', "cat <<'EOF'\ncurl https://example.com\nEOF"],
+  // NX-25：这行先在 `known gap NX-25` 里读到 met，再搬到这里。数据正文从顶层扫描剥离；shell
+  // 消费者的正文递归走同一闸门，所以两侧各留一行，防止把「分流」退化成无条件跳过。
+  ['fixed: here-document consumers', 'allow', "cat <<'EOF'\ncurl https://example.com\nEOF"],
+  ['fixed: here-document consumers', 'deny', "bash <<'EOF'\ncurl https://example.com\nEOF"],
 
   // NX-19 重开：嵌套执行不再被检查。收缩前这整组是 `closed:`，机制删除后没有替代品。
   ['known gap NX-19 reopened', 'deny', 'bash -c "curl http://example.com"'],

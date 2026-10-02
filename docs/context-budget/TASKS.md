@@ -264,7 +264,7 @@ NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，
 
 ### NX-32 命令闸门的有意收缩与取消窗口
 
-**方向与前面几项相反：不是补边界，是撤回判据。** 取舍与代价见 [PLAN 的 D-16](PLAN.md#d-16-命令闸门的有意收缩nx-32)，现行契约见 [R-20](REQUIREMENTS.md#r-20-命令策略闸门nx-17nx-19nx-24nx-26nx-30nx-32)。立项依据：`docs/INTERNSHIP_ROADMAP.md` 的 NX 编号全集只到 NX-16——整条闸门收紧线**不在路线图内**，而路线图写明「M5～M7 加最小 M9 演示即可形成投递版本」；`sandbox-runtime.ts` 此时已长成 `src/` 里最大的单文件（576 行，占全部源码 14.6%），且它**在唯一没有审批兜底的 `autoApprove`（评测跑用的就是它，`test/coding-fixtures.test.ts:62,377`）里也拦不住**——`node -e` 程序字符串本就不在覆盖内，实测里模型自写 `node -e` 探针 75 次。
+**方向与前面几项相反：不是补边界，是撤回判据。** 取舍与代价见 [PLAN 的 D-16](PLAN.md#d-16-命令闸门的有意收缩nx-32)，现行契约见 [R-20](REQUIREMENTS.md#r-20-命令策略闸门nx-17nx-19nx-24nx-25nx-26nx-30nx-32)。立项依据：`docs/INTERNSHIP_ROADMAP.md` 的 NX 编号全集只到 NX-16——整条闸门收紧线**不在路线图内**，而路线图写明「M5～M7 加最小 M9 演示即可形成投递版本」；`sandbox-runtime.ts` 此时已长成 `src/` 里最大的单文件（576 行，占全部源码 14.6%），且它**在唯一没有审批兜底的 `autoApprove`（评测跑用的就是它，`test/coding-fixtures.test.ts:62,377`）里也拦不住**——`node -e` 程序字符串本就不在覆盖内，实测里模型自写 `node -e` 探针 75 次。
 
 | 子步骤 | 内容 | 验收 | 提交边界 |
 | --- | --- | --- | --- |
@@ -428,8 +428,8 @@ NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，
 
 | 子步骤 | 行为与状态 | 验收 | 预计提交 |
 |---|---|---|---:|
-| NX-25-0 | 立项、PLAN 决策与 R-20 契约（**in progress**） | `grep -cE '^\| NX-25-' docs/context-budget/TASKS.md` = 4；PLAN 新增 D-18，明确消费者闭集、配对语义、16 份／256 KiB／3 层上限与替代方案；R-20 不再把全部 here-doc 正文列为边界 | 1 次 |
-| NX-25-1 | 识别、剥离与 shell 消费者递归（todo） | `cat`／`node` 数据正文里的 `curl`、`/etc`、`a:\\tb` 放行；`bash`／`sh`／路径前缀 shell 正文里的 `curl`、`rm -rf`、系统路径拒绝；`<<WORD`／`<< WORD`／引号定界符／`<<-`／多份正文与正文后的命令均有回归；矩阵 NX-25 先读到 `met` 再搬组 | 1 次 |
+| NX-25-0 | 立项、PLAN 决策与 R-20 契约（**done**，`f04251d`） | `grep -cE '^\| NX-25-' docs/context-budget/TASKS.md` = 4；PLAN 新增 D-18，明确消费者闭集、配对语义、16 份／256 KiB／3 层上限与替代方案；R-20 不再把全部 here-doc 正文列为边界 | 1 次 |
+| NX-25-1 | 识别、剥离与 shell 消费者递归（**done**） | `cat`／`node` 数据正文里的 `curl`、`/etc`、`a:\\tb` 放行；`bash`／`sh`／路径前缀 shell 正文里的 `curl`、`rm -rf`、系统路径拒绝；`<<WORD`／`<< WORD`／引号定界符／`<<-`／多份正文与正文后的命令均有回归；矩阵 NX-25 先读到 `met` 再搬组 | 1 次 |
 | NX-25-2 | 失败闭合与宽度上限（todo） | 缺终止词、超过 16 份、累计正文超过 256 KiB、递归超过 3 层分别以独立理由拒绝；边界值放行；关掉每个守卫时对应反例翻面 | 1 次 |
 | NX-25-3 | 回放、全量验证与文档回填（todo） | `nx24-replay-probe.mjs` 的 NX-25／NX-28 条目按实测移出拒绝集合且其余集合不漂移；README／PROGRESS／CHANGES／TASKS 与现行边界一致；`pnpm check`、`pnpm test`、`pnpm lint`、`pnpm fixtures:check`、`pnpm eval:offline`、`pnpm eval:estimate` 全绿 | 1 次 |
 - **NX-27 Git Bash 的 `/tmp` 与 `node:path` 不一致 — todo（NX-24 期间回放实测）**：win32 上 `path.resolve('/tmp/out.txt')` 得到 `D:\tmp\out.txt`，而 Git Bash 的 `/tmp` 是真实的可写临时目录，于是 **任何 `/tmp/...` 都被判 `path escapes the workspace`**（实测 `echo x > /tmp/out.txt`、`cat /tmp/out.txt`、`node tmp.mjs > /tmp/r.log` 全拒；782 次调用里 2 条因此被拒）。机制与词法无关，是「闸门的路径语义」与「执行它的 shell 的挂载表」不一致，须先定是把 bash 的挂载点映射进闸门、还是把 `/tmp` 显式列入允许的可写位置。

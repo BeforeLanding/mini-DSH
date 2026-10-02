@@ -30,6 +30,128 @@ const networkCommands = new Set([
   'ping', 'dig', 'nslookup', 'host',
 ])
 
+const hereDocumentShells = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh'])
+
+type HereDocumentRedirect = {
+  delimiter: string
+  stripTabs: boolean
+  shellConsumer: boolean
+}
+
+type HereDocumentSplit = {
+  commandText: string
+  shellBodies: string[]
+  malformed: boolean
+}
+
+function segmentCommandWord(line: string, redirectStart: number) {
+  let segmentStart = 0
+  let quote: "'" | '"' | undefined
+  let escaped = false
+  for (let index = 0; index < redirectStart; index++) {
+    const char = line[index]
+    if (escaped) { escaped = false; continue }
+    if (char === '\\' && quote !== "'") { escaped = true; continue }
+    if (quote) {
+      if (char === quote) quote = undefined
+      continue
+    }
+    if (char === "'" || char === '"') { quote = char; continue }
+    if (/[|;&]/.test(char)) segmentStart = index + 1
+  }
+  const segment = line.slice(segmentStart, redirectStart)
+  const word = segment.match(/"(?:[^"\\]|\\.)*"|'[^']*'|[^\s|;&<>]+/)?.[0] ?? ''
+  return word.replace(/^["']|["']$/g, '')
+}
+
+function hereDocumentRedirects(line: string): HereDocumentRedirect[] | undefined {
+  const redirects: HereDocumentRedirect[] = []
+  let quote: "'" | '"' | undefined
+  let escaped = false
+  for (let index = 0; index < line.length; index++) {
+    const char = line[index]
+    if (escaped) { escaped = false; continue }
+    if (char === '\\' && quote !== "'") { escaped = true; continue }
+    if (quote) {
+      if (char === quote) quote = undefined
+      continue
+    }
+    if (char === "'" || char === '"') { quote = char; continue }
+    if (char === '#' && (index === 0 || /[\s|;&]/.test(line[index - 1]))) break
+    if (char !== '<' || line[index + 1] !== '<' || line[index + 2] === '<') continue
+
+    const redirectStart = index
+    index += 2
+    const stripTabs = line[index] === '-'
+    if (stripTabs) index++
+    while (line[index] === ' ' || line[index] === '\t') index++
+    if (index >= line.length || /[|;&<>\r\n]/.test(line[index])) return undefined
+
+    let delimiter = ''
+    let delimiterQuote: "'" | '"' | undefined
+    let delimiterEscaped = false
+    for (; index < line.length; index++) {
+      const delimiterChar = line[index]
+      if (delimiterEscaped) { delimiter += delimiterChar; delimiterEscaped = false; continue }
+      if (delimiterChar === '\\' && delimiterQuote !== "'") { delimiterEscaped = true; continue }
+      if (delimiterQuote) {
+        if (delimiterChar === delimiterQuote) delimiterQuote = undefined
+        else delimiter += delimiterChar
+        continue
+      }
+      if (delimiterChar === "'" || delimiterChar === '"') { delimiterQuote = delimiterChar; continue }
+      if (/[\s|;&<>\r\n]/.test(delimiterChar)) break
+      delimiter += delimiterChar
+    }
+    if (delimiterQuote || delimiterEscaped || !delimiter) return undefined
+
+    const consumer = segmentCommandWord(line, redirectStart).replace(/\\/g, '/')
+    redirects.push({ delimiter, stripTabs, shellConsumer: hereDocumentShells.has(path.posix.basename(consumer)) })
+    index--
+  }
+  return redirects
+}
+
+function splitHereDocuments(command: string): HereDocumentSplit {
+  let cursor = 0
+  let commandText = ''
+  const shellBodies: string[] = []
+  while (cursor < command.length) {
+    const lineEnd = command.indexOf('\n', cursor)
+    const afterLine = lineEnd < 0 ? command.length : lineEnd + 1
+    const line = command.slice(cursor, lineEnd < 0 ? command.length : lineEnd)
+    const redirects = hereDocumentRedirects(line)
+    commandText += command.slice(cursor, afterLine)
+    cursor = afterLine
+    if (redirects === undefined) return { commandText, shellBodies, malformed: true }
+    if (redirects.length === 0) continue
+
+    for (const redirect of redirects) {
+      const bodyStart = cursor
+      let bodyEnd = -1
+      while (cursor <= command.length) {
+        const candidateEnd = command.indexOf('\n', cursor)
+        const candidateAfter = candidateEnd < 0 ? command.length : candidateEnd + 1
+        const rawCandidate = command.slice(cursor, candidateEnd < 0 ? command.length : candidateEnd).replace(/\r$/, '')
+        const candidate = redirect.stripTabs ? rawCandidate.replace(/^\t+/, '') : rawCandidate
+        if (candidate === redirect.delimiter) {
+          bodyEnd = cursor
+          cursor = candidateAfter
+          break
+        }
+        if (candidateEnd < 0) break
+        cursor = candidateAfter
+      }
+      if (bodyEnd < 0) return { commandText, shellBodies, malformed: true }
+      if (redirect.shellConsumer) {
+        const body = command.slice(bodyStart, bodyEnd)
+        shellBodies.push(redirect.stripTabs ? body.replace(/^\t/gm, '') : body)
+      }
+    }
+  }
+  return { commandText, shellBodies, malformed: false }
+}
+
 // `..` 逃逸的判据是 **token 级**的（NX-18）：问「这个 token 是不是一个以 `..` 为分量的路径」，而不是
 // 「整串文本里有没有出现过两个点」。三条同时成立才算：
 //   ① 去引号正文**不含空白**——含空白的 token 不是可寻址路径。这条先例来自 NX-24-5（真实的根级目录名
@@ -75,8 +197,16 @@ export class SandboxRuntime {
   }
   #inspect(command: string): { action: 'allow' | 'deny'; reason: string | undefined } {
     const deny = (reason: string): { action: 'deny'; reason: string } => ({ action: 'deny', reason })
-    // 三个整串正则。它们不依赖分词，也不区分「数据」与「代码」——这正是它们**廉价且稳定**的原因，
-    // 代价是会把引号里的同形文本一起拒掉（NX-25 就是这么来的，已登记、不修）。
+    const hereDocuments = splitHereDocuments(command)
+    if (!hereDocuments.malformed) {
+      command = hereDocuments.commandText
+      for (const body of hereDocuments.shellBodies) {
+        const result = this.#inspect(body)
+        if (result.action === 'deny') return { action: 'deny', reason: `in shell here-document: ${result.reason}` }
+      }
+    }
+    // 三个整串正则。它们不依赖分词，也不区分「数据」与「代码」——这正是它们**廉价且稳定**的原因。
+    // D-18 只在到达这里之前剥离非 shell 的 here-doc 数据正文；普通引号里的同形文本仍承受这项代价。
     // `..` 原先是第四条，已按 NX-18 改成下面的 token 级判定：它承受的是同一句代价，但恰好有一条
     // 可用的形状判据（路径分量），另三条没有——所以只有它被放出来，另三条留在原状。
     if (/\b(?:sudo|su)\b/.test(command)) return deny('sudo/su is blocked')

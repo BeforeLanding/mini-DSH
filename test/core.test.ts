@@ -595,6 +595,42 @@ test('Sandbox gate reads quoted inline scripts as the shell does', async () => {
   assert.equal(sandbox.inspectCommand('echo "x\\" /etc/passwd"').action, 'allow')
 })
 
+test('Sandbox distinguishes here-document data from shell input', async () => {
+  const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
+  const sandbox = new SandboxRuntime({ workspace: '/tmp/mini-dsh-workspace', autoApprove: true })
+
+  const dataDocuments = [
+    "cat <<'EOF'\ncurl https://example.com\n/etc/passwd\nEOF",
+    'cat << EOF\nrm -rf /\nEOF',
+    'node --input-type=module <<"JS"\nconst sample = String.raw`a:\\tb\\tc`\nJS',
+    'cat <<-EOF\n\tcurl https://example.com\n\tEOF',
+    'cat <<A <<B\ncurl example.com\nA\n/etc/passwd\nB',
+    'cat <<<"curl example.com"',
+    'echo "<<EOF"; curl example.com',
+    'cat <<EOF\ncurl example.com\nEOF\necho done',
+  ]
+  for (const command of dataDocuments) {
+    const expected = command === 'echo "<<EOF"; curl example.com' ? 'deny' : 'allow'
+    assert.equal(sandbox.inspectCommand(command).action, expected, command)
+  }
+
+  const shellDocuments = {
+    "bash <<'EOF'\ncurl https://example.com\nEOF": /in shell here-document: network tool/,
+    'sh <<EOF\nrm -rf /\nEOF': /in shell here-document: recursive delete/,
+    '/bin/bash <<EOF\ncat /etc/passwd\nEOF': /in shell here-document: system path/,
+    'zsh <<-EOF\n\tcurl example.com\n\tEOF': /in shell here-document: network tool/,
+  }
+  for (const [command, pattern] of Object.entries(shellDocuments)) {
+    const result = sandbox.inspectCommand(command)
+    assert.equal(result.action, 'deny', command)
+    assert.match(result.reason ?? '', pattern, command)
+  }
+
+  // The command line remains visible even though its body is data.
+  assert.match(sandbox.inspectCommand('curl <<EOF\nhello\nEOF').reason ?? '', /network tool/)
+  assert.match(sandbox.inspectCommand('cat <<EOF; curl example.com\nhello\nEOF').reason ?? '', /network tool/)
+})
+
 test('Sandbox approval auto-approves or throws when the user rejects', async () => {
   const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
 
