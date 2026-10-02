@@ -89,7 +89,7 @@ export class SessionRuntime {
     latestRun(id: string): RunState | undefined {
         const events = this.visibleEvents(id)
         const begin = [...events].reverse().find(e => e.type === 'run/start')
-        if (!begin || begin.type !== 'run/start') return undefined
+        if (begin?.type !== 'run/start') return undefined
         const end = [...events].reverse().find(e => e.type === 'run/finish' && e.data.state.runId === begin.data.state.runId)
         if (end?.type === 'run/finish') {
             const observed = this.#terminalCommits.get(begin.data.state.runId)

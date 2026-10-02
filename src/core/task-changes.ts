@@ -10,7 +10,7 @@ export class TaskChanges {
     if (!exec.sessionId) return undefined
     if (!sessions) throw new Error('session service is required for tracked edits')
     const state = sessions.latestRun(exec.sessionId)
-    if (!state || state.status !== 'running') throw new Error('tracked file tools require an active run')
+    if (state?.status !== 'running') throw new Error('tracked file tools require an active run')
     return new TaskChanges(sessions, exec.sessionId, state, maxFiles)
   }
   private events() { return this.sessions.confirmedEvents(this.sessionId).filter(event => event.taskId === this.scope.taskId) }

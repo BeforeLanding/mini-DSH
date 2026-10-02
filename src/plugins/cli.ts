@@ -60,8 +60,8 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
     let approval: ((answer: string) => void) | undefined
     let queue = Promise.resolve()
     const prompt = () => { if (!closed) { rl.setPrompt('User > '); rl.prompt() } }
-    const escape = (chunk: Buffer | string) => { const bytes = Buffer.from(chunk); if (bytes.length === 1 && bytes[0] === 0x1b) controller?.abort() }
-    input.on('data', escape)
+    const onKey = (chunk: Buffer | string) => { const bytes = Buffer.from(chunk); if (bytes.length === 1 && bytes[0] === 0x1b) controller?.abort() }
+    input.on('data', onKey)
     print('mini-dsh — a local agent Harness')
     print('Commands: /tools /models /model /history /prompt /reset /continue /budget [JSON] /changes [fileOffset] /diff [fileOffset] [byteOffset] /report [fileOffset] [verificationOffset] [byteOffset] /trace [requestOffset] [byteOffset] /exit')
     print(`Sandbox workspace: ${workspace}`)
@@ -227,7 +227,7 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
     rl.on('close', () => { closed = true; approval?.('n'); void queue.then(() => ctx.root.fiber.dispose()).catch(error => print(`[DisposeError] ${String(error)}`)) })
     prompt()
     return async () => {
-      closed = true; disposeApprover(); approval?.('n'); controller?.abort(); input.off('data', escape); rl.close()
+      closed = true; disposeApprover(); approval?.('n'); controller?.abort(); input.off('data', onKey); rl.close()
       await queue; await ctx.sessions.flush(session.id); await store?.close()
     }
   }, 'run cli')

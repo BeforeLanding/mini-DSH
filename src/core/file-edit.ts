@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
+import type { FileHandle } from 'node:fs/promises'
 
 export interface FileSnapshot { text: string | null; hash: string; mode?: number; location?: string }
 export const fingerprint = (text: string | null) => text === null ? 'missing' : createHash('sha256').update(text, 'utf8').digest('hex')
@@ -21,7 +22,7 @@ async function canonicalLocation(target: string): Promise<string> {
 export async function snapshot(target: string, maxBytes: number, signal: AbortSignal): Promise<FileSnapshot> {
   signal.throwIfAborted()
   const location = await canonicalLocation(target)
-  let handle
+  let handle: FileHandle | undefined
   try { handle = await fs.open(target, 'r') }
   catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { text: null, hash: 'missing', location }; throw error }
   try {
@@ -89,7 +90,7 @@ export async function commitFile(resolve: () => string, before: FileSnapshot, te
   await fs.mkdir(path.dirname(target), { recursive: true })
   if (await canonicalLocation(resolve()) !== target) throw new Error('file path changed before write')
   const temporary = path.join(path.dirname(target), `.mini-dsh-edit-${randomUUID()}.tmp`)
-  let handle
+  let handle: FileHandle | undefined
   let committed = false
   try {
     handle = await fs.open(temporary, 'wx', before.mode === undefined ? 0o666 : before.mode & 0o777)
@@ -106,6 +107,9 @@ export async function commitFile(resolve: () => string, before: FileSnapshot, te
   } finally {
     await handle?.close()
     // A cleanup failure after rename must not turn a committed edit into a failed edit.
+    // 这里是 finally 里**唯一**会抛出的路径，且只在 rename 从未成功（committed 为假）时才走：
+    // 那种情况下没有「已被吞掉的原始异常」需要保护。规则按形状报警，此处按语义逐行豁免。
+    // biome-ignore lint/correctness/noUnsafeFinally: 仅在尚未提交时抛出，见上一行
     try { await fs.rm(temporary, { force: true }) } catch (error) { if (!committed) throw error }
   }
 }

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  // 尊重 .gitignore：dist/、.eval-evidence/、.demo-runs/ 与 node_modules/ 都不参与检查。
+  // 这些是产物与证据，不是源码。此前没有配置文件，Biome 连它们一起报——初始 717 条诊断里
+  // 有 210 条来自这里。
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  // test/fixtures/ 是**故意写坏的初始态**（例如 retry/initial/src/retry.mjs 的未用参数就是待修
+  // 缺陷本身），pnpm fixtures:check 的 16 项契约依赖它们保持坏。Biome 不得「修好」它们。
+  "files": { "includes": ["**", "!test/fixtures"] },
+  // 格式化在本仓库不可满足：Biome 的 lineWidth 上限是 320，而仓库最长行是 732
+  // （src/core/event-validation.ts），另有 17 行超过 320、1219 行超过 120。打开它就意味着重排
+  // 约 2000 行，并且会打破下面那两条机器不变量。故关闭，而不是「暂时忽略」。
+  "formatter": { "enabled": false },
+  // 同理关闭导入排序：它会位移行号，而 DECISIONS.md 的三十行代码锚点钉的正是行号，由
+  // test/decisions-doc.test.ts 逐条校验。NX-21 期间一次 45 行的插入就已经把 append 的锚点从
+  // :52 顶到 :97。
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      // 只关掉与仓库刻意写法正面冲突的规则，其余发现逐条修，不靠关规则绕过。
+      "style": {
+        // 107 处非空断言：strict 下这是有意的收敛写法，而 --unsafe 的「修复」是直接删掉 `!`，
+        // 会立刻产生 8 条 TS2532/TS2345。
+        "noNonNullAssertion": "off",
+        // 46 处字符串拼接，刻意不用模板串。
+        "useTemplate": "off"
+      },
+      "suspicious": {
+        // src/plugins/cli.ts 用 \x1b 正则剥离 ANSI 转义序列，控制字符在此是必需而非笔误。
+        "noControlCharactersInRegex": "off"
+      }
+    }
+  }
+}

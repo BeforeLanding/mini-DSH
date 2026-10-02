@@ -18,7 +18,7 @@
 - 启动：复制 `.env.example` 为 `.env`，填写 `DEEPSEEK_API_KEY`，运行 `pnpm start`；不得覆盖已有 `.env`。
 - 必需检查：`pnpm check`（strict 类型、构建及产物语法）和 `pnpm test`（核心及 Cordis 集成）。测试不需要模型 API Key；集成测试实际执行 Bash。
 - CI 覆盖 Ubuntu / Windows、Node.js 22 / 24。
-- `pnpm lint` 当前不是 CI 门槛；不要用 `lint:fix` 或 `format` 顺带重排无关代码。
+- `pnpm lint` 不是 CI 门槛，但当前应为绿（T6 之后 0 诊断）。`biome.jsonc` 有意关掉格式化与导入排序：这两项的判定在本仓库不可满足（Biome 的 `lineWidth` 上限 320 小于仓库最长行 732），而导入排序一开就位移行号，会打破 `DECISIONS.md` 的代码锚点与 `src/core/token-estimator.ts` 的钉版哈希。**不要为了「顺手统一格式」把它们打开。** 不要用 `lint:fix` 顺带改动无关代码。
 - 若 pnpm 引导受限，可用 `node scripts/build.js`、`node scripts/check-syntax.js` 和 `node --test dist/test/*.test.js` 执行同一检查，并注明替代命令及环境限制。
 - 沙箱内 pnpm 引导或依赖导入失败时，先在正常用户权限下核验版本/导入，再判断是否缺包；必要时请求该命令的沙箱提权。保持固定版本及校验，不以降级、跳过签名或修改锁文件绕过环境限制。
 

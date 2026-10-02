@@ -23,7 +23,6 @@
     "check": "pnpm build && node scripts/check-syntax.js",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "format": "biome format --write .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "node scripts/build.js"
   },

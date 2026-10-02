@@ -256,7 +256,7 @@ test('the sequence fixture declares its stages in file-name order and passes acc
       // 阶段顺序由文件名前缀承载：每一阶段自己声明它是第几个，与目录项返回顺序无关。
       // 前缀是两位零填充，所以补零而不是拼一个 `0`——后者在第 10 阶段会拼出 `# 010 `，而正确的标题是
       // `# 10 `。这样写对 1～99 阶段都成立，不依赖「恰好不超过 9 个阶段」这个前提。
-      fixture.tasks.forEach((task, at) => assert.match(task.split('\n')[0], new RegExp(`^# ${String(at + 1).padStart(2, '0')} `), `${id} stage ${at + 1}`))
+      fixture.tasks.forEach((task, at) => { assert.match(task.split('\n')[0], new RegExp(`^# ${String(at + 1).padStart(2, '0')} `), `${id} stage ${at + 1}`) })
       const initial = await fixture.evaluate()
       assert.equal(initial.passed, false)
       assert.equal(initial.exitCode, 1, initial.output)
@@ -281,11 +281,15 @@ test('the sequence acceptance requires a line number instead of one exact error 
     // rejectsWithLineNumber 用例。
     const parser = path.join(fixture.workspace, 'src', 'plan-parse.mjs')
     const reference = await fs.readFile(parser, 'utf8')
+    // 下面三处的 `${…}` **必须**是字面量：它们是被替换进 fixture 源码的查找目标，写成模板串会被就地求值。
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: 查找目标必须是字面量
     const message = '`line ${line}: ${detail}`'
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: 同上，这段文本要原样写进源码
     const reworded = reference.replace(message, () => '`parse failed at line ${line}: ${detail}`')
     assert.notEqual(reworded, reference, 'the message under test must be the one the reference throws')
     await fs.writeFile(parser, reworded)
     assert.equal((await fixture.evaluate()).passed, true)
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: 同上
     await fs.writeFile(parser, reference.replace(message, () => '`${detail}`'))
     const noLineNumber = await fixture.evaluate()
     assert.equal(noLineNumber.passed, false)
@@ -305,7 +309,7 @@ test('the blind fixture drops the public check and stops pointing its stages at 
   const other = await createFixture('pipeline')
   try {
     assert.equal(fixture.tasks.length, other.tasks.length, 'blind must ship exactly the stages pipeline ships')
-    fixture.tasks.forEach((task, at) => assert.match(task.split('\n')[0], new RegExp(`^# ${String(at + 1).padStart(2, '0')} `), `blind stage ${at + 1}`))
+    fixture.tasks.forEach((task, at) => { assert.match(task.split('\n')[0], new RegExp(`^# ${String(at + 1).padStart(2, '0')} `), `blind stage ${at + 1}`) })
 
     // 1. 工作区里没有公开检查，且模型看得见的内容一处都不提它。工作区是 initial/ 的整份复制，因此遍历它
     //    等价于遍历 initial/，不必自己去推算 fixture 目录的位置。

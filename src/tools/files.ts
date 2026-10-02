@@ -3,6 +3,7 @@ import type { ToolDefinition, Arguments, Execution } from '../core/contracts.js'
 import path from 'node:path'
 import { positiveLimit, readTextRange } from '../core/bounded-text.js'
 import { searchFiles } from '../core/bounded-search.js'
+import type { FileSnapshot } from '../core/file-edit.js'
 import { snapshot, checkHash, replaceUnique, unifiedDiff, commitFile, validateText, fingerprint, FileSizeLimit } from '../core/file-edit.js'
 import { TaskChanges, taskChanges } from '../core/task-changes.js'
 import { taskReport } from '../core/task-verification.js'
@@ -23,7 +24,7 @@ export function matchFilePattern(filename: string, pattern = '') {
         if (pattern[index + 1] === '/') { expression += '(?:.*/)?'; index++ }
         else expression += '.*'
       } else expression += '[^/]*'
-    } else expression += char.replace(/[\^$+?.()|{}\[\]\\]/g, '\\$&')
+    } else expression += char.replace(/[\^$+?.()|{}[\]\\]/g, '\\$&')
   }
   return new RegExp(`^(?:${pattern.includes('/') ? '' : '(?:.*/)?'}${expression})$`).test(normalized)
 }
@@ -126,7 +127,7 @@ export function apply(ctx: Context, config: FilesConfig = {}) {
       parameters: parameters({ path: string, startLine: { type: 'integer', minimum: 1 }, maxLines: { type: 'integer', minimum: 1, maximum: limits.maxLines } }, ['path']),
       async execute(args, exec) {
         const target = resolve(args.path)
-        let before
+        let before: FileSnapshot | undefined
         try { before = await snapshot(target, maxEditBytes, exec.signal) }
         catch (error) { if (!(error instanceof FileSizeLimit)) throw error }
         if (before?.text === null) throw new Error('file does not exist')

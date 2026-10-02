@@ -2,6 +2,130 @@
 
 更新：2026-10-02。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## T6 Biome 的收窄配置与处置
+
+### 现象与根因
+
+`pnpm lint` 从未绿过。仓库里**没有 `biome.json`**，于是 Biome 以默认规则运行——制表符、双引号、分号、导入排序——而全仓库的既有风格是 2 空格、单引号、无分号。结果不是「有些文件不合规」，而是**每一个源码文件都不合规**：250 个有诊断的文件里，**每一个**都至少有一条 `format` 告警。这是一次**全局配置分歧**，被当成了 250 个独立问题。
+
+**没有排除项让噪声又翻了一倍**：初始 717 条诊断里，**196 条落在 `dist/`、14 条落在 `.eval-evidence/`**——构建产物与评测证据，两者都在 `.gitignore` 里。真实属于源码的是 **507 条（366 err / 117 warn / 24 info）**。
+
+**长行靠配置救不了。** Biome 2.5.14 拒绝 `lineWidth > 320`，而仓库有 **17 行超过 320**（最长 732，`src/core/event-validation.ts`）、131 行超 200、1219 行超 120。所以「修到绿」不是翻一个开关，是**必然要重排约 2000 行**。
+
+### 修绿成本实测（草稿副本，两种修法各跑一遍）
+
+配置取最贴近现有风格的 `space/2/single/asNeeded/lineWidth 320`：
+
+| 修法 | 触及文件 | 行数 | 剩余 | `pnpm check` | `pnpm test` |
+| --- | --- | --- | --- | --- | --- |
+| 安全 `--write` | 210 | −4928 / +7491 | 160 err | ✅ `syntax ok: 93 files` | ❌ **fail 2** |
+| `--write --unsafe` | 211 | −4961 / +7523 | 12 err | ❌ **8 条 TS2532/TS2345** | ❌ 构建先失败 |
+
+**两条路都会打破仓库自己的回归套件，因为那里钉着机器不变量**：
+
+1. **`test/estimation.test.ts` 给 `src/core/token-estimator.ts` 钉了 SHA-256**。重排即改字节，报错原文是「re-run the NX-08c measurement and update the recorded conclusions and 核验日期」——**重排这个文件等于作废一次实测结论**。
+2. **`test/decisions-doc.test.ts` 校验 `DECISIONS.md` 的三十行代码锚点**。`organizeImports` 一开就位移行号，锚点随之漂移（报 `event-store.ts:97 附近找不到 append`）——与 NX-21 咬过的那次同因。
+3. **unsafe 修法删掉 `!`**（`noNonNullAssertion` 的「修复」就是删除），立刻产生 8 条 `TS2532`／`TS2345`。
+
+### 交付物
+
+**用户选定方向：收窄配置，不设门禁**——不重排既有代码，只把 Biome 调成与仓库风格不冲突，并把它真正抓到的发现逐条修掉。
+
+**`biome.jsonc`**（新增；用 `.jsonc` 而非 `.json` 是为了让每条排除项**就地带上理由**）：
+
+- `vcs.useIgnoreFile: true` —— 让排除表跟着 `.gitignore` 走，`dist/`、`.eval-evidence/`、`.demo-runs/` 自动出局。
+- `files.includes: ["**", "!test/fixtures"]` —— `test/fixtures/` 是**故意写坏的初始态**（`retry/initial/src/retry.mjs` 的未用参数就是待修缺陷本身），`pnpm fixtures:check` 的 16 项契约依赖它们保持坏。**Biome 不得「修好」它们。**
+- `formatter.enabled: false`、`assist.enabled: false` —— 见上：判定不可满足，且会打破上面两条不变量。**这是有意关闭，不是「暂时忽略」。**
+- 只关三条与仓库刻意写法正面冲突的规则：`style/noNonNullAssertion`（107 处）、`style/useTemplate`（46 处）、`suspicious/noControlCharactersInRegex`（`src/plugins/cli.ts` 剥离 ANSI 用的 `\x1b` 正则）。**其余发现逐条修，不用关规则绕过。**
+
+**`package.json`**：移除 `format` 脚本。formatter 关掉之后 `biome format --write .` 是**静默空转**，留着比没有更糟。`lint` 与 `lint:fix` 保留（后者现在只应用 lint 修复，不再动格式）。
+
+**`AGENTS.md:21`** 由「`pnpm lint` 当前不是 CI 门槛；不要用 `lint:fix` 或 `format` 顺带重排无关代码」改写为：不是 CI 门槛但**当前应为绿**，并写明「**不要为了顺手统一格式把它们打开**」及其代价。
+
+**9 个源码文件逐条订正（+26 / −18 行）**：
+
+| 文件 | 订正 |
+| --- | --- |
+| `src/core/agent-loop-runtime.ts` | 删未使用的 `estimateInput` 导入 |
+| `src/core/file-edit.ts` | 两处 `let handle` 补 `FileHandle \| undefined`；`noUnsafeFinally` **逐行豁免**并写明理由 |
+| `src/core/session-runtime.ts` | `if (!begin \|\| begin.type !== …)` → `begin?.type !== …` |
+| `src/core/task-changes.ts` | `if (!state \|\| state.status !== …)` → `state?.status !== …` |
+| `src/plugins/cli.ts` | `escape` → `onKey`（三处），不再遮蔽全局 `escape` |
+| `src/tools/files.ts` | 补 `FileSnapshot` 类型导入与 `let before: FileSnapshot \| undefined`；字符类里去掉多余转义 |
+| `test/bash-verification.test.ts` | 解构里删掉未使用的 `session` |
+| `test/coding-fixtures.test.ts` | 两处 `forEach` 箭头体补花括号（不再返回 `assert.match` 的值）；三处**必须**是字面 `${…}` 的字符串逐行豁免 |
+| `test/integration.test.ts` | `escape` → `escaped`（三处） |
+
+**`noUnsafeFinally` 为何豁免而不重构**：`file-edit.ts` 的 `finally` 里那个 `throw` 是该块**唯一**的抛出路径，且只在 `rename` 从未成功（`committed` 为假）时才走——那种情况下没有「已被吞掉的原始异常」需要保护。规则按**形状**报警，此处按**语义**豁免；重构恢复路径的风险大于收益。
+
+**为什么本方向能成立而「修到绿」不能**：`src/core/token-estimator.ts` 在关掉 formatter／organizeImports／noNonNullAssertion 之后**零诊断**，因而**字节不动**，钉版哈希自然保住。这正是这组配置选择的落点。
+
+### 实测证据
+
+```
+$ pnpm lint                      # 修前：545 errors / 124 warnings / 48 infos
+$ biome check .
+Checked 102 files in 102ms. No fixes applied.
+exit=0                           # 0 诊断
+
+$ pnpm check
+syntax ok: 93 files
+
+$ pnpm test
+ℹ tests 211
+ℹ pass 211
+ℹ fail 0
+```
+
+三条机器不变量按名通过：
+
+```
+✔ the decision write-up keeps every code and test anchor pointing at something real
+✔ every in-repository markdown anchor points at a real heading
+✔ pinned reference still matches the estimator and corpus it was measured against
+```
+
+### 反例实跑
+
+把 `formatter.enabled` 打开、`assist.organizeImports` 设回 `on`（即「顺手统一一下格式」那一步），其余不变：
+
+```
+$ biome check .
+Checked 102 files in 109ms. No fixes applied.
+Found 177 errors.
+
+$ biome check --write .
+Checked 102 files in 532ms. Fixed 102 files.
+
+$ pnpm test
+✖ the decision write-up keeps every code and test anchor pointing at something real
+✖ pinned reference still matches the estimator and corpus it was measured against
+ℹ pass 209 / fail 2
+```
+
+改回来即恢复全绿。**这组排除项是承重的，不是装饰**——这也正是 `AGENTS.md:21` 那句警告为什么要写明代价。
+
+### 两处只有真跑才会暴露的坑
+
+1. **`biome.json`（`.json`）不接受 `//` 注释**——2.5.14 报 parse error。改用 `biome.jsonc` 才有注释。
+2. **更危险的是：配置解析失败时 Biome 不报错，直接退回默认规则**。用 `.json` 写带注释的版本时，`pnpm lint` 会**照常输出一整套默认规则的诊断**，看上去「配置生效了但代码不合规」。第一次跑就落进这个坑，靠「诊断条数与修前逐字相同」才发现。**这是本项最值得记的一条**：配置文件写错不会红，只会静默失效。
+
+### 未做与代价
+
+- **不加 CI 步骤、不加测试**（用户选定）。**代价要写明**：没有门禁就会漂移。补偿是两处——`biome.jsonc` 的每条排除项带理由，`AGENTS.md:21` 写明「不要为了顺手统一格式把它们打开」及其代价。
+- **`src/core/token-estimator.ts` 一个字节未动**（`git diff --stat` 可证）。
+- 未纳入 `pnpm lint` 进 README 的零密钥八条（那八条是装配／回归／任务集／评测／演示，lint 不属这一族，且会打破「八条」计数）。
+
+### 验收
+
+`pnpm lint` 0 诊断退出 0；`pnpm check` `syntax ok: 93 files`；`pnpm test` `pass 211 / fail 0`；`pnpm fixtures:check` 16 项；`pnpm eval:offline` 12/12；`pnpm eval:estimate` 退出 0（证明未碰 estimation corpus）。全部零付费、不出网。
+
+**一处流程失误，如实记录**：T6-0 只跑了立项的验收（`grep` 计数与 diff 范围），**没有跑 `pnpm test`**，而立项一节里链向本节的锚点此时还不存在——`test/docs-links.test.ts` 因此在一个提交的时间里是红的。本提交补上本节后转绿。教训：**文档里的新锚点本身就是一条要跑的验证**。
+
+### 提交
+
+`c01f253`（T6-0 立项），以及本提交（T6-1 配置与源码订正）。
+
 ## NX-21 会话锁的陈旧核验入口与显式移除
 
 ### 现象与根因

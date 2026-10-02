@@ -67,7 +67,7 @@ test('verification rejects invalid scopes, limits and approval and cannot execut
 
 test('timeout and cancellation record real command outcomes while failed result persistence remains unknown', async () => {
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'bash-verification-cancel-'))
-  const { root, session, exec, report } = await boot(workspace, { timeoutMs: 800 })
+  const { root, exec, report } = await boot(workspace, { timeoutMs: 800 })
   try {
     const timed = await root.tools.execute('bash', { command: 'printf partial; sleep 4', verification: { files: ['a'] } }, exec)
     assert.equal(timed.isError, true)
