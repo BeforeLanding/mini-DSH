@@ -46,7 +46,7 @@
 
 | 类型 | 锚点 | 它钉住什么 |
 | --- | --- | --- |
-| 代码 | `src/core/event-store.ts:52` | `append` 只把新的一行推进写入队列并按 `seq` 校验，从不回写已有行 |
+| 代码 | `src/core/event-store.ts:97` | `append` 只把新的一行推进写入队列并按 `seq` 校验，从不回写已有行 |
 | 代码 | `src/core/session-runtime.ts:76` | `visibleEvents` 是「最后一次 `session/reset` 之后」的切片，reset 是视图边界而非删除 |
 | 代码 | `src/core/session-runtime.ts:212` | `clear` 追加一条 `session/reset` 事件，文件里一行不少 |
 | 代码 | `src/core/context-runtime.ts:71` | 裁剪只从 `selected` 里剔除，作为参数的 `events` 原数组不参与 |
