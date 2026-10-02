@@ -15,8 +15,8 @@ import { resolveInside } from '../utils/path.js'
 // 早已写明 `node -e`／`python -c` 的程序字符串不在覆盖内，而实测里模型自己写 `node -e` 探针有 75 次。
 //
 // 因此这里只保留**少量、稳定、无误判**的判据，其余一律撤回并登记为已知缺口（见 R-20 与矩阵）：
-//   ① 四个整串正则：`sudo`／`su`、递归删除、`curl|wget` 管道进 shell、`..` 逃逸
-//   ② token 上的反斜杠 UNC、盘符与绝对路径、系统路径，以及对工作区外路径与软链的解析
+//   ① 三个整串正则：`sudo`／`su`、递归删除、`curl|wget` 管道进 shell
+//   ② token 上的 `..` 路径分量、反斜杠 UNC、盘符与绝对路径、系统路径，以及对工作区外路径与软链的解析
 //   ③ 出网：**按工具拦**——命令段的首个词是取网工具即拒，不看目标、不做操作数模型
 // 真正的边界不在这里：工作区与软链由 `utils/path.ts` 的 `resolveInside` 守住（文件工具与 bash 的
 // cwd 直接调它，不经本文件），危险操作由人工审批守住。两者都不是操作系统隔离。
@@ -29,6 +29,22 @@ const networkCommands = new Set([
   'curl', 'wget', 'ssh', 'sftp', 'scp', 'rsync', 'nc', 'netcat', 'ncat', 'telnet',
   'ping', 'dig', 'nslookup', 'host',
 ])
+
+// `..` 逃逸的判据是 **token 级**的（NX-18）：问「这个 token 是不是一个以 `..` 为分量的路径」，而不是
+// 「整串文本里有没有出现过两个点」。三条同时成立才算：
+//   ① 去引号正文**不含空白**——含空白的 token 不是可寻址路径。这条先例来自 NX-24-5（真实的根级目录名
+//      不以空白开头），本次沿用而不是新立，于是 `echo "see ../docs for details"` 放行。
+//   ② 按 `[\\/=]` 切分后**存在一个分量恰为 `..`**——判分量而不判子串：`a..b`、`...`、`a/x../y` 都不算。
+//      `=` 一并计入边界，否则 `--file=../secret` 会因「分量是 `--file=..`」被放过去，顺着这次放宽新开一个洞。
+//   ③ 正文含分隔符，**或**它在原串里是**裸词**。这是本轮唯一的放宽：只放过引号成词且无分隔符的 `..`
+//      （真实语料里那是正则，如 `grep -n ".." src/index.ts`），裸 `..`（`ls ..`、`cd ..`）照旧拒绝。
+// 已知不修的相邻形状：`--grep=..` 这类「`=` 后紧跟 `..` 且无分隔符」的惰性文本仍被拒——它与 `--dir=..`
+// 在形状上无判据可用，按 NX-29 的口径处理：**没有可用的形状判据就不放宽**。判据与残险见 R-20 与 PLAN 的 D-17。
+function isPathEscape(raw: string, body: string) {
+  if (/\s/.test(body)) return false
+  if (!body.split(/[\\/=]/).includes('..')) return false
+  return /[\\/=]/.test(body) || raw === body
+}
 
 export class SandboxRuntime {
   workspace: string
@@ -59,12 +75,13 @@ export class SandboxRuntime {
   }
   #inspect(command: string): { action: 'allow' | 'deny'; reason: string | undefined } {
     const deny = (reason: string): { action: 'deny'; reason: string } => ({ action: 'deny', reason })
-    // 四个整串正则。它们不依赖分词，也不区分「数据」与「代码」——这正是它们**廉价且稳定**的原因，
-    // 代价是会把引号里的同形文本一起拒掉（NX-18／NX-25 就是这么来的，已登记、不修）。
+    // 三个整串正则。它们不依赖分词，也不区分「数据」与「代码」——这正是它们**廉价且稳定**的原因，
+    // 代价是会把引号里的同形文本一起拒掉（NX-25 就是这么来的，已登记、不修）。
+    // `..` 原先是第四条，已按 NX-18 改成下面的 token 级判定：它承受的是同一句代价，但恰好有一条
+    // 可用的形状判据（路径分量），另三条没有——所以只有它被放出来，另三条留在原状。
     if (/\b(?:sudo|su)\b/.test(command)) return deny('sudo/su is blocked')
     if (/\brm\s+(?:(?:-[A-Za-z]*r[A-Za-z]*|--recursive)\b|[^;&|\n]*\s(?:-[A-Za-z]*r[A-Za-z]*|--recursive)\b)/i.test(command)) return deny('recursive delete is blocked')
     if (/\b(?:curl|wget)\b[^\n]*\|\s*(?:\S*\/)?(?:sh|bash|zsh)\b/.test(command)) return deny('piping curl/wget into a shell is blocked')
-    if (/(?:^|[\s"'=])(?:[^\s"']*[\\/])?\.\.(?:[\\/]|[\s"']|$)/.test(command)) return deny('.. path escape is blocked')
     // 双引号按 shell 语义识别 \"：否则内联脚本（node -e "…"）里的转义引号会提前闭合引号，
     // 把注释和字符串碎片暴露成独立 token，闸门就会去检查 shell 根本看不到的“路径”。
     const tokens = [...command.matchAll(/"(?:[^"\\]|\\.)*"|'[^']*'|[^\s|;&<>]+/g)]
@@ -83,6 +100,8 @@ export class SandboxRuntime {
       // 必须在所有 continue 之前更新：下面每条 continue 都会跳过循环末尾，写在那里会少记一个 token。
       previousEnd = start + raw.length
       const token = raw.replace(/^["']|["']$/g, '')
+      // `..` 逃逸排在最前：整串正则时代它也是最先求值的那条判据，这样保留「有 `..` 时理由就是 `..`」。
+      if (isPathEscape(raw, token)) return deny('.. path escape is blocked')
       // 段首是取网工具即记下出网，**不去看它后面跟的是什么**。判定放在路径检查之前求值、之后裁决，
       // 这样 `wget -O /etc/passwd http://localhost/x` 的理由仍是系统路径而不是出网。
       if (atSegmentStart && networkCommands.has(path.posix.basename(token))) egress = true
