@@ -429,8 +429,8 @@ NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，
 | 子步骤 | 行为与状态 | 验收 | 预计提交 |
 |---|---|---|---:|
 | NX-25-0 | 立项、PLAN 决策与 R-20 契约（**done**，`f04251d`） | `grep -cE '^\| NX-25-' docs/context-budget/TASKS.md` = 4；PLAN 新增 D-18，明确消费者闭集、配对语义、16 份／256 KiB／3 层上限与替代方案；R-20 不再把全部 here-doc 正文列为边界 | 1 次 |
-| NX-25-1 | 识别、剥离与 shell 消费者递归（**done**） | `cat`／`node` 数据正文里的 `curl`、`/etc`、`a:\\tb` 放行；`bash`／`sh`／路径前缀 shell 正文里的 `curl`、`rm -rf`、系统路径拒绝；`<<WORD`／`<< WORD`／引号定界符／`<<-`／多份正文与正文后的命令均有回归；矩阵 NX-25 先读到 `met` 再搬组 | 1 次 |
-| NX-25-2 | 失败闭合与宽度上限（todo） | 缺终止词、超过 16 份、累计正文超过 256 KiB、递归超过 3 层分别以独立理由拒绝；边界值放行；关掉每个守卫时对应反例翻面 | 1 次 |
+| NX-25-1 | 识别、剥离与 shell 消费者递归（**done**，`c214059`） | `cat`／`node` 数据正文里的 `curl`、`/etc`、`a:\\tb` 放行；`bash`／`sh`／路径前缀 shell 正文里的 `curl`、`rm -rf`、系统路径拒绝；`<<WORD`／`<< WORD`／引号定界符／`<<-`／多份正文与正文后的命令均有回归；矩阵 NX-25 先读到 `met` 再搬组 | 1 次 |
+| NX-25-2 | 失败闭合与宽度上限（**done**） | 缺终止词、超过 16 份、累计正文超过 256 KiB、递归超过 3 层分别以独立理由拒绝；边界值放行；关掉每个守卫时对应反例翻面 | 1 次 |
 | NX-25-3 | 回放、全量验证与文档回填（todo） | `nx24-replay-probe.mjs` 的 NX-25／NX-28 条目按实测移出拒绝集合且其余集合不漂移；README／PROGRESS／CHANGES／TASKS 与现行边界一致；`pnpm check`、`pnpm test`、`pnpm lint`、`pnpm fixtures:check`、`pnpm eval:offline`、`pnpm eval:estimate` 全绿 | 1 次 |
 - **NX-27 Git Bash 的 `/tmp` 与 `node:path` 不一致 — todo（NX-24 期间回放实测）**：win32 上 `path.resolve('/tmp/out.txt')` 得到 `D:\tmp\out.txt`，而 Git Bash 的 `/tmp` 是真实的可写临时目录，于是 **任何 `/tmp/...` 都被判 `path escapes the workspace`**（实测 `echo x > /tmp/out.txt`、`cat /tmp/out.txt`、`node tmp.mjs > /tmp/r.log` 全拒；782 次调用里 2 条因此被拒）。机制与词法无关，是「闸门的路径语义」与「执行它的 shell 的挂载表」不一致，须先定是把 bash 的挂载点映射进闸门、还是把 `/tmp` 显式列入允许的可写位置。
 - **NX-28 引号成词的正文以 `<字母>:\` 开头被判为盘符路径 — todo（NX-24 期间 bisect 定位）**：`:377` 的 `^(?:/|[A-Za-z]:[\\/])` 认盘符，于是被单引号成词的一段 JS 测试数据 `'a:\tb\tc\n'`（写在 `node --input-type=module <<'EOF'` 正文里的 `parseDeps('a:\tb\tc\n')`）被当成 `a:\` 盘符路径、经 `resolvePath` 判越界。与族④（前导斜杠）同属「引号成词的正文被当成路径」，但触发的是盘符那条臂，加「首分量含空白」判据**盖不住它**（首分量 `tb` 不含空白）。它在本次证据里只出现于 here-doc 正文，故随 NX-25 一并核实。

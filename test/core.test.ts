@@ -631,6 +631,33 @@ test('Sandbox distinguishes here-document data from shell input', async () => {
   assert.match(sandbox.inspectCommand('cat <<EOF; curl example.com\nhello\nEOF').reason ?? '', /network tool/)
 })
 
+test('Sandbox bounds here-document parsing and fails closed', async () => {
+  const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
+  const sandbox = new SandboxRuntime({ workspace: '/tmp/mini-dsh-workspace', autoApprove: true })
+
+  assert.match(sandbox.inspectCommand('cat <<EOF\nunterminated').reason ?? '', /here-document is not terminated/)
+  assert.match(sandbox.inspectCommand('cat <<').reason ?? '', /delimiter is malformed/)
+
+  const documents = (count: number) => [
+    `cat ${Array.from({ length: count }, (_, index) => `<<E${index}`).join(' ')}`,
+    ...Array.from({ length: count }, (_, index) => `E${index}`),
+  ].join('\n')
+  assert.equal(sandbox.inspectCommand(documents(16)).action, 'allow')
+  assert.match(sandbox.inspectCommand(documents(17)).reason ?? '', /more than 16 here-documents/)
+
+  const body = (size: number) => `cat <<EOF\n${'x'.repeat(size - 1)}\nEOF`
+  assert.equal(sandbox.inspectCommand(body(256 * 1024)).action, 'allow')
+  assert.match(sandbox.inspectCommand(body(256 * 1024 + 1)).reason ?? '', /exceed 262144 bytes/)
+
+  const nested = (depth: number) => {
+    const headers = Array.from({ length: depth }, (_, index) => `bash <<E${index}`)
+    const terminators = Array.from({ length: depth }, (_, index) => `E${depth - index - 1}`)
+    return [...headers, 'echo safe', ...terminators].join('\n')
+  }
+  assert.equal(sandbox.inspectCommand(nested(3)).action, 'allow')
+  assert.match(sandbox.inspectCommand(nested(4)).reason ?? '', /nesting exceeds 3 levels/)
+})
+
 test('Sandbox approval auto-approves or throws when the user rejects', async () => {
   const { SandboxRuntime } = await import('../src/core/sandbox-runtime.js')
 

@@ -31,6 +31,9 @@ const networkCommands = new Set([
 ])
 
 const hereDocumentShells = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh'])
+const maxHereDocuments = 16
+const maxHereDocumentBytes = 256 * 1024
+const maxHereDocumentDepth = 3
 
 type HereDocumentRedirect = {
   delimiter: string
@@ -41,8 +44,10 @@ type HereDocumentRedirect = {
 type HereDocumentSplit = {
   commandText: string
   shellBodies: string[]
-  malformed: boolean
+  error?: string
 }
+
+type HereDocumentBudget = { count: number; bodyBytes: number }
 
 function segmentCommandWord(line: string, redirectStart: number) {
   let segmentStart = 0
@@ -78,7 +83,7 @@ function hereDocumentRedirects(line: string): HereDocumentRedirect[] | undefined
     }
     if (char === "'" || char === '"') { quote = char; continue }
     if (char === '#' && (index === 0 || /[\s|;&]/.test(line[index - 1]))) break
-    if (char !== '<' || line[index + 1] !== '<' || line[index + 2] === '<') continue
+    if (char !== '<' || line[index - 1] === '<' || line[index + 1] !== '<' || line[index + 2] === '<') continue
 
     const redirectStart = index
     index += 2
@@ -112,7 +117,7 @@ function hereDocumentRedirects(line: string): HereDocumentRedirect[] | undefined
   return redirects
 }
 
-function splitHereDocuments(command: string): HereDocumentSplit {
+function splitHereDocuments(command: string, budget: HereDocumentBudget): HereDocumentSplit {
   let cursor = 0
   let commandText = ''
   const shellBodies: string[] = []
@@ -123,8 +128,10 @@ function splitHereDocuments(command: string): HereDocumentSplit {
     const redirects = hereDocumentRedirects(line)
     commandText += command.slice(cursor, afterLine)
     cursor = afterLine
-    if (redirects === undefined) return { commandText, shellBodies, malformed: true }
+    if (redirects === undefined) return { commandText, shellBodies, error: 'here-document delimiter is malformed' }
     if (redirects.length === 0) continue
+    budget.count += redirects.length
+    if (budget.count > maxHereDocuments) return { commandText, shellBodies, error: `more than ${maxHereDocuments} here-documents are blocked` }
 
     for (const redirect of redirects) {
       const bodyStart = cursor
@@ -142,14 +149,18 @@ function splitHereDocuments(command: string): HereDocumentSplit {
         if (candidateEnd < 0) break
         cursor = candidateAfter
       }
-      if (bodyEnd < 0) return { commandText, shellBodies, malformed: true }
+      if (bodyEnd < 0) return { commandText, shellBodies, error: 'here-document is not terminated' }
+      const body = command.slice(bodyStart, bodyEnd)
+      budget.bodyBytes += Buffer.byteLength(body)
+      if (budget.bodyBytes > maxHereDocumentBytes) {
+        return { commandText, shellBodies, error: `here-document bodies exceed ${maxHereDocumentBytes} bytes` }
+      }
       if (redirect.shellConsumer) {
-        const body = command.slice(bodyStart, bodyEnd)
         shellBodies.push(redirect.stripTabs ? body.replace(/^\t/gm, '') : body)
       }
     }
   }
-  return { commandText, shellBodies, malformed: false }
+  return { commandText, shellBodies }
 }
 
 // `..` 逃逸的判据是 **token 级**的（NX-18）：问「这个 token 是不是一个以 `..` 为分量的路径」，而不是
@@ -195,15 +206,17 @@ export class SandboxRuntime {
     if (typeof command !== 'string' || !command.trim()) return { action: 'deny' as const, reason: 'command is required' }
     return this.#inspect(command)
   }
-  #inspect(command: string): { action: 'allow' | 'deny'; reason: string | undefined } {
+  #inspect(command: string, hereDocumentDepth = 0, hereDocumentBudget: HereDocumentBudget = { count: 0, bodyBytes: 0 }): { action: 'allow' | 'deny'; reason: string | undefined } {
     const deny = (reason: string): { action: 'deny'; reason: string } => ({ action: 'deny', reason })
-    const hereDocuments = splitHereDocuments(command)
-    if (!hereDocuments.malformed) {
-      command = hereDocuments.commandText
-      for (const body of hereDocuments.shellBodies) {
-        const result = this.#inspect(body)
-        if (result.action === 'deny') return { action: 'deny', reason: `in shell here-document: ${result.reason}` }
-      }
+    const hereDocuments = splitHereDocuments(command, hereDocumentBudget)
+    if (hereDocuments.error) return deny(hereDocuments.error)
+    command = hereDocuments.commandText
+    if (hereDocuments.shellBodies.length > 0 && hereDocumentDepth >= maxHereDocumentDepth) {
+      return deny(`shell here-document nesting exceeds ${maxHereDocumentDepth} levels`)
+    }
+    for (const body of hereDocuments.shellBodies) {
+      const result = this.#inspect(body, hereDocumentDepth + 1, hereDocumentBudget)
+      if (result.action === 'deny') return { action: 'deny', reason: `in shell here-document: ${result.reason}` }
     }
     // 三个整串正则。它们不依赖分词，也不区分「数据」与「代码」——这正是它们**廉价且稳定**的原因。
     // D-18 只在到达这里之前剥离非 shell 的 here-doc 数据正文；普通引号里的同形文本仍承受这项代价。
