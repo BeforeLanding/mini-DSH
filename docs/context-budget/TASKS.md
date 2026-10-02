@@ -315,7 +315,7 @@ NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，
 | --- | --- | --- | --- |
 | NX-22-0 | TASKS 立项：子步骤表，并把「四处」订正为 6 处（**done**） | `grep -cE '^\| NX-22-' docs/context-budget/TASKS.md` = 5；每行「验收」列至少含一个反引号命令或 `grep` 判据；`git diff --stat` 只含 `docs/context-budget/TASKS.md` | 1 次 |
 | NX-22-1 | 新增 `test/docs-links.test.ts` 并取**修前红**证据 | 测试按 github-slugger 语义逐个校验全仓相对 md 锚点；实跑结果**恰好 6 条失败**、其余去重锚点对（约 90 对）全部通过——**这同时证明无假阳性**；命令与逐条失败输出记入 CHANGES | 1 次 |
-| NX-22-2 | 修 6 处锚点与三处成本数字 | `pnpm test` 全绿；**反例实跑**：把任一条已修好的锚点改坏后 `pnpm test` 必须红、改回必须绿（命令与输出记入 CHANGES）；`grep -c '付费约 \$0\.0[34]' PROGRESS.md` = 0；CHANGES 的 f-4b 正文与标题数字一致 | 1 次 |
+| NX-22-2 | 修 6 处锚点与三处成本数字 | `pnpm test` 全绿（205/205）；**反例实跑**：把任一条已修好的锚点改坏后 `pnpm test` 必须红、改回必须绿（命令与输出记入 CHANGES）；`grep -c '付费约 \$0\.04' PROGRESS.md` = 0，且 PROGRESS 两条的数字与 CHANGES 的 f-4b／f-4c 两个标题**逐字一致**（注意修好后 `$0.03` 仍会出现一次，判据不能写成「不含 `$0.03`」）；CHANGES 的 f-4b **正文**与标题数字一致 | 1 次 |
 | NX-22-3 | 订正 `NX-08-REPORT.md` 的 fixture 计数 | 该行 `fixtures:check` 读数与 `pnpm fixtures:check` 实测（16 项、初始 0/16、参考 16/16）一致；`git diff --stat` 只含 `docs/context-budget/NX-08-REPORT.md` | 1 次 |
 | NX-22-4 | TASKS/CHANGES/PROGRESS 回填与计数同步 | 各行置 `done` 并记提交号；CHANGES 增 NX-22 节且命令与实际输出一致；`pnpm test` 新增 1 条使用例数 204 → 205，README／PROGRESS／`test/fixtures/coding/README.md` 的计数与实跑一致 | 1 次 |
 
