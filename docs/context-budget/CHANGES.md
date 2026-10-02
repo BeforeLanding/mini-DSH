@@ -120,7 +120,7 @@ exit=0    # ls 只剩 events.jsonl
 
 `pnpm check` **93 文件**、`pnpm test` **211/211**（199 → 205 → 211 的第三次增长即本次 6 条）、`pnpm demo:unknown` 退出 0（判定 9 条全 ✓）、`pnpm fixtures:check` 16 项（初始 0/16、参考 16/16）、`pnpm eval:offline` 12/12、`pnpm eval:estimate` 退出 0。零付费、无网络、无 tag、未触碰生产 ECS。
 
-**CI**：见本节的追记（提交后回填 run 号与 attempt 数）。
+**CI**：本次推送（`4fb4e7c`…`1081781`）的 [CI 36987638064](https://github.com/BeforeLanding/mini-DSH/actions/runs/36987638064) 在 Ubuntu／Windows × Node 22／24 四组合**全部 success**，**attempt=1**，无重跑。本次含 `src/` 与 `test/` 改动，因此触发；此前 `b8f9bc4` 那次纯文档推送按 OPS 的 `paths` 过滤不触发，是预期行为。
 
 ### 提交
 
