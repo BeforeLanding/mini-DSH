@@ -9,6 +9,18 @@ export interface EventStore {
   read(): Promise<SessionEvent[]>
   close(): Promise<void>
 }
+// NX-21：崩溃之后「这把锁还是不是陈旧的」由操作者判断，但仓库此前没有可脚本化的核验入口，只能由人
+// 手删文件。这个形状是交给操作者的**证据**，不是结论：pidStatus 只是线索（见 processStatus 的注释），
+// eventsTail 只说明销锁之后还需不需要先隔离尾部。判定与解除都留在人那边。
+export interface LockInspection {
+  present: boolean
+  ownerReadable: boolean
+  token?: string
+  pid?: number
+  modifiedAt?: string
+  pidStatus: 'alive' | 'not-found' | 'inconclusive'
+  eventsTail: 'complete' | 'incomplete' | 'missing'
+}
 export class JsonlStore implements EventStore {
   #queue: Promise<void> = Promise.resolve()
   #closed = false
@@ -31,6 +43,39 @@ export class JsonlStore implements EventStore {
       try { await file.truncate(prefix.length); await file.sync() } finally { await file.close() }
       return backup
     } finally { await lock.close(); await fs.unlink(lockPath) }
+  }
+  // 纯读：与 open 不同，这里**不 mkdir**，核验不能有副作用——目录不存在就是「无锁」。
+  static async inspectLock(directory: string, sessionId: string): Promise<LockInspection> {
+    if (!/^[a-f0-9-]{36}$/.test(sessionId)) throw new Error('invalid session id')
+    const dir = path.resolve(directory, sessionId)
+    const inspection: LockInspection = { present: false, ownerReadable: false, pidStatus: 'inconclusive', eventsTail: await tailState(path.join(dir, 'events.jsonl')) }
+    const stat = await fs.stat(path.join(dir, 'writer.lock')).catch(() => undefined)
+    if (!stat?.isFile()) return inspection
+    inspection.present = true
+    inspection.modifiedAt = stat.mtime.toISOString()
+    let owner: unknown
+    try { owner = JSON.parse(await fs.readFile(path.join(dir, 'writer.lock'), 'utf8')) } catch { return inspection }
+    if (!isRecord(owner)) return inspection
+    const token = owner.token, pid = owner.pid
+    if (typeof token === 'string' && typeof pid === 'number') {
+      inspection.ownerReadable = true
+      inspection.token = token
+      inspection.pid = pid
+      inspection.pidStatus = processStatus(pid)
+    }
+    return inspection
+  }
+  // 移除必须由操作者显式表达：他把检视里看到的那个 token 原样递回来，这里才动手。检视与移除之间若有
+  // 新写入者拿到锁，token 对不上就拒绝——否则删掉的是一把**活锁**，两个写入者会撞进同一份日志。
+  // 与 close() 的 ownership 检查同一套语义。它不读 pid、不做任何存活判断（PLAN 的持久化一节）。
+  static async removeStaleLock(directory: string, sessionId: string, token: string) {
+    if (!/^[a-f0-9-]{36}$/.test(sessionId)) throw new Error('invalid session id')
+    const lockPath = path.join(path.resolve(directory, sessionId), 'writer.lock')
+    const text = await fs.readFile(lockPath, 'utf8').catch(error => { throw new Error('session writer lock is gone; nothing to remove', { cause: error }) })
+    let owner: unknown
+    try { owner = JSON.parse(text) } catch { owner = undefined }
+    if (!isRecord(owner) || owner.token !== token) throw new Error('writer lock ownership changed')
+    await fs.unlink(lockPath)
   }
   static async open(directory: string, sessionId: string) {
     if (!/^[a-f0-9-]{36}$/.test(sessionId)) throw new Error('invalid session id')
@@ -78,6 +123,28 @@ export class JsonlStore implements EventStore {
   }
 }
 export const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value)
+const errnoOf = (error: unknown): unknown => (error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined)
+// pid 生存探针，**只作线索**：pid 复用意味着 alive 不能证明「持有者还在」，not-found 也不能证明「持有者
+// 一定不在」（容器／命名空间里那个 pid 未必是本机的）。pid ≤ 0 一律 inconclusive——win32 上
+// process.kill(0, 0) 会成功，直接问会拿到一个假的 alive。EPERM 表示进程存在但无权发信号，归入 alive。
+function processStatus(pid: number): LockInspection['pidStatus'] {
+  if (!Number.isInteger(pid) || pid <= 0) return 'inconclusive'
+  try { process.kill(pid, 0); return 'alive' }
+  catch (error) { const code = errnoOf(error); return code === 'ESRCH' ? 'not-found' : code === 'EPERM' ? 'alive' : 'inconclusive' }
+}
+// events.jsonl 的尾部状态决定「销完锁还要不要先隔离」。只看最后一个字节，口径与 decodeLog 一致：
+// 末字节不是换行就是半条记录（空文件与缺文件分别按 complete／missing）。
+async function tailState(eventsPath: string): Promise<LockInspection['eventsTail']> {
+  const handle = await fs.open(eventsPath, 'r').catch(() => undefined)
+  if (!handle) return 'missing'
+  try {
+    const size = (await handle.stat()).size
+    if (!size) return 'complete'
+    const last = new Uint8Array(1)
+    await handle.read(last, 0, 1, size - 1)
+    return last[0] === 10 ? 'complete' : 'incomplete'
+  } finally { await handle.close() }
+}
 export function decodeLog(bytes: Uint8Array, sessionId: string) {
   if (bytes.length && bytes[bytes.length - 1] !== 10) throw new Error('incomplete JSONL tail; preserve and quarantine before recovery')
   let text: string

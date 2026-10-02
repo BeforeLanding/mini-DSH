@@ -19,6 +19,7 @@
     "demo:fix": "pnpm build && node dist/scripts/demo-fix.js",
     "demo:resume": "pnpm build && node dist/scripts/demo-resume.js",
     "demo:unknown": "pnpm build && node dist/scripts/demo-unknown.js",
+    "session:lock": "pnpm build && node dist/scripts/session-lock.js",
     "check": "pnpm build && node scripts/check-syntax.js",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
