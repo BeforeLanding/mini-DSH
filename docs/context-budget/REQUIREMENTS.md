@@ -133,8 +133,8 @@ Bash 返回 command、经过路径闸门的 cwd、status、exitCode/signal、dur
 
 验收：成功/非零/信号/启动失败，两流及 Unicode 截断，合法子目录/越界/软链/审批换址，拒批无副作用，超时/取消部分日志和子进程清理，引用回读/重启/隔离/存储失败，模拟模型与 JSONL 恢复闭环。
 
-### R-20 命令策略闸门（NX-17、NX-19、NX-24、NX-26、NX-30、NX-32）
-**NX-32（2026-10-01）是一次有意的能力收缩，本条的现行正文是收缩后的版本。** 闸门只保留**少量、稳定、无误判**的判据；被删掉的机制连同各自的验收写在下面「既往」一段，作为历史保留。**NX-18（2026-10-02）对其中一条做了局部修订**：`..` 判据从整串正则换成 token 级路径分量判定，本节已并入该变化（PLAN 的 D-17 记录判据与残险）。
+### R-20 命令策略闸门（NX-17、NX-19、NX-24、NX-25、NX-26、NX-30、NX-32）
+**NX-32（2026-10-01）是一次有意的能力收缩，本条的现行正文是收缩后的版本。** 闸门只保留**少量、稳定、无误判**的判据；被删掉的机制连同各自的验收写在下面「既往」一段，作为历史保留。其后只有两次由真实回放触发的局部修订：**NX-18（2026-10-02）**把 `..` 判据从整串正则换成 token 级路径分量判定；**NX-25（2026-10-02）**把 here-doc 正文按消费者分流（PLAN 的 D-17／D-18 记录判据与残险）。
 
 闸门在 Bash 执行前做**粗粒度形状检查**，只有四条判据：
 
@@ -149,7 +149,9 @@ Bash 返回 command、经过路径闸门的 cwd、status、exitCode/signal、dur
 
 验收：`..` 的六种路径形状（裸 `..`、`echo ../secret`、`cp ../a b`、`cat $MINI_DSH_TEST_ROOT/../etc/passwd`、引号成词但含分隔符的 `"../secret"`、选项取值 `--file=../secret`）与系统路径、工作区外路径、软链、递归删除、`sudo` 仍被拒绝；**NX-18 起 `echo "see ../docs for details"`、`grep -n ".." src/index.ts`、`git log --grep "../ fixes"` 被放行**（`test/core.test.ts` 逐条钉住，孪生行钉住 `--grep=..` 这一已知误拒）；归一化后仍越界的双斜杠路径、UNC 路径仍被拒绝；注释形状的 `//`、带转义引号的内联脚本、被引号成词的 `awk`／`sed` 正文被放行；段首为取网工具的段被拒绝（含 `/usr/bin/curl example.com`、`true && curl example.com`、`echo a; curl example.com`），工具词出现在实参位置（`echo curl example.com`、`grep -n "curl" src/index.ts`）被放行；`wget -O /etc/passwd http://localhost/x` 的理由必须是**系统路径**而不是出网（出网裁决排在路径检查之后）。另加（NX-32）：`SandboxConfig` 不再有 `allowHosts` 字段。
 
-已知覆盖边界：**出网与路径判定都是形状启发式，不是完备解析。** 收缩后以下结构性一律不在覆盖内，且全部在 `nx17-gate-probes.mjs` 的 `known gap` 组里逐行可见：嵌套执行（`bash -c "curl x"`、`eval`、`$(...)`、反引号 —— NX-19 重开）、变量间接（`X=/etc/passwd; cat $X`、`$MINI_DSH_UNSET_VAR` —— NX-24 重开）、保留字与子 shell／分组之后的命令词（NX-26／NX-30 重开）、`case … in X)` 的臂体（NX-30 剩余半）、包装命令（`env`／`timeout`／`nice`／`xargs`／`find -exec`）与进程替换 `<(curl x)`（NX-31）、非段首的 URL 操作数（`git clone <url>`、`| xargs curl` —— NX-32 新登记）、`node -e`／`python -c` 程序字符串、脚本文件内容、管道解码后再执行（`echo <base64> | base64 -d | sh`）、here-doc 正文（NX-25）。此外 `..` 判定已按 NX-18 改为 token 级路径分量，仍留两条残险——`--grep=..` 这类「`=` 后紧跟 `..` 且无分隔符」的惰性文本仍被拒（与 `--dir=..` 在形状上无判据可用，按 NX-29 的口径不放宽），且**引号包住裸 `..`**（`cd ".." && …`）从此放行；Git Bash 的 `/tmp` 与 `node:path` 解析不一致（NX-27）；被引号成词的正文以 `<字母>:\` 开头会被当成盘符路径（NX-28）；正则字面量与绝对根路径形状完全相同（NX-29）。
+here-doc 的现行契约：识别 `<<[-]?WORD` 及带引号定界符；非 shell 消费者的正文作为数据跳过，`sh`／`bash`／`zsh`／`dash`／`ksh` 的正文递归检查。命令行、消费者本身与正文之外的后续命令仍照常检查；缺终止词、超过 16 份／256 KiB／3 层上限时拒绝。验收至少覆盖 `cat <<'EOF'` 正文中的取网词与路径形状放行、`bash <<'EOF'` 正文中的取网工具与危险命令拒绝、`<<-`、多份正文、同行后续命令及三条独立上限理由。
+
+已知覆盖边界：**出网与路径判定都是形状启发式，不是完备解析。** 收缩后以下结构性一律不在覆盖内，且全部在 `nx17-gate-probes.mjs` 的 `known gap` 组里逐行可见：嵌套执行（`bash -c "curl x"`、`eval`、`$(...)`、反引号 —— NX-19 重开；只有 D-18 的 shell here-doc 例外）、变量间接（`X=/etc/passwd; cat $X`、`$MINI_DSH_UNSET_VAR` —— NX-24 重开）、保留字与子 shell／分组之后的命令词（NX-26／NX-30 重开）、`case … in X)` 的臂体（NX-30 剩余半）、包装命令（`env`／`timeout`／`nice`／`xargs`／`find -exec`）与进程替换 `<(curl x)`（NX-31）、非段首的 URL 操作数（`git clone <url>`、`| xargs curl` —— NX-32 新登记）、`node -e`／`python -c` 程序字符串、脚本文件内容、管道解码后再执行（`echo <base64> | base64 -d | sh`），以及非 shell 消费者拿到 here-doc 后如何解释数据。此外 `..` 判定已按 NX-18 改为 token 级路径分量，仍留两条残险——`--grep=..` 这类「`=` 后紧跟 `..` 且无分隔符」的惰性文本仍被拒（与 `--dir=..` 在形状上无判据可用，按 NX-29 的口径不放宽），且**引号包住裸 `..`**（`cd ".." && …`）从此放行；Git Bash 的 `/tmp` 与 `node:path` 解析不一致（NX-27）；正则字面量与绝对根路径同形（NX-29）。NX-28 已由 here-doc 数据正文剥离连带闭合，不另改盘符判据。
 
 **处置规则：此后不再为闸门开新工作项。** 判据是「粗形状防误操作」；真正的边界是工作区路径闸门（`utils/path.ts` 的 `resolveInside`，本项一行未动）与人工审批——**两者都不是操作系统隔离**。只有 `.eval-evidence` 回放（782 次真实调用，见 `nx24-replay-probe.mjs`）里出现新的拒绝、或实际使用中撞上，才重开。
 
