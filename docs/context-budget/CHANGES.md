@@ -10,6 +10,10 @@ PLAN D-21 与 REQUIREMENTS R-22 显式修订 D-02／R-03 的“当前 task 所�
 
 验收：`git diff --check` 退出 0。`pnpm test` 在引导阶段失败，原始输出为 `[ERROR] GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed`，没有执行测试；后续步骤须用仓库允许的 Node 替代命令或恢复 pnpm 后再验证，不将此次失败记为测试通过。
 
+### NX-34-1 事件词汇与纯规划器
+
+新增 `context/summary-start`、`context/summary-end`、`context/summary` 事件契约与运行时校验；新增纯 `planCompaction`／`planIsLive`，规划从原始用户请求之后开始，保持工具调用与结果闭合，并保证同一日志确定地产生同一计划。新增两条零模型测试。`node scripts/build.js` 因工作区依赖不完整失败：`@deepseek-ai/cosmokit`、`@standard-schema/spec`、`undici-types` 缺失；不是本步骤 TypeScript 诊断。`git diff --check` 退出 0。
+
 ## NX-33 大工具结果的尾部窗口
 
 ### 行为、边界与实现
