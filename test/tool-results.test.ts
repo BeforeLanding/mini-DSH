@@ -74,6 +74,100 @@ async function bootResults(workspace: string) {
   return root
 }
 
+test('truncated tool results keep a tail window whose middle is recoverable through the ref', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'result-tail-'))
+  const root = await bootResults(workspace)
+  const original = 'A'.repeat(100) + 'MIDDLE' + 'B'.repeat(100) + 'TAIL-SENTINEL'
+  try {
+    await root.plugin(toolResults, { maxPreviewBytes: 128, maxReadBytes: 7 })
+    await root.plugin(bash)
+    root.tools.register({ name: 'large-text', execute() { return original } })
+    const generic = await root.tools.execute('large-text', {}, { sessionId: 's' })
+    const value = generic.value as { ref: string; preview: string; tail?: string; omittedBytes?: number; resumeOffset?: number }
+    const command = await root.tools.execute('bash', { command: `node -e 'process.stdout.write(${JSON.stringify(original)})'` }, { sessionId: 's' })
+    const stream = (command.value as CommandResult).stdout
+    for (const item of [{ text: value.preview, tail: value.tail, omittedBytes: value.omittedBytes, resumeOffset: value.resumeOffset, ref: value.ref }, stream]) {
+      assert.ok(original.startsWith(item.text)); assert.ok(!item.text.includes('TAIL-SENTINEL'))
+      assert.ok(item.tail?.endsWith('TAIL-SENTINEL'))
+      assert.equal(item.omittedBytes, Buffer.byteLength(original) - Buffer.byteLength(item.text) - Buffer.byteLength(item.tail!))
+      assert.equal(item.resumeOffset, Buffer.byteLength(item.text))
+      let middle = '', offset = item.resumeOffset!, remaining = item.omittedBytes!
+      while (remaining > 0) {
+        const page = await root.tools.execute('read_tool_result', { ref: item.ref, offset, maxBytes: Math.min(7, remaining) }, { sessionId: 's' })
+        assert.equal(page.isError, false)
+        const data = page.value as { content: string; nextOffset: number }
+        middle += data.content; remaining -= Buffer.byteLength(data.content); offset = data.nextOffset
+      }
+      assert.equal(item.text + middle + item.tail, original)
+    }
+    assert.ok(root.tools.renderResult(generic).includes('TAIL-SENTINEL'))
+  } finally { await root.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
+})
+
+test('tail windows stay inside UTF-8 boundaries and never appear without truncation', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'result-utf8-tail-'))
+  const root = await bootResults(workspace)
+  try {
+    await root.plugin(toolResults, { maxPreviewBytes: 32 })
+    await root.plugin(bash)
+    let output = '中'.repeat(40)
+    root.tools.register({ name: 'utf8-text', execute() { return output } })
+    const generic = await root.tools.execute('utf8-text', {}, { sessionId: 's' })
+    const value = generic.value as { ref: string; preview: string; tail?: string; omittedBytes?: number; resumeOffset?: number }
+    const command = await root.tools.execute('bash', { command: `node -e 'process.stdout.write(${JSON.stringify(output)})'` }, { sessionId: 's' })
+    const stream = (command.value as CommandResult).stdout
+    const decoder = new TextDecoder('utf-8', { fatal: true })
+    for (const item of [{ text: value.preview, tail: value.tail, omittedBytes: value.omittedBytes, resumeOffset: value.resumeOffset, ref: value.ref }, stream]) {
+      decoder.decode(Buffer.from(item.text)); decoder.decode(Buffer.from(item.tail!))
+      const middle = await root.tools.execute('read_tool_result', { ref: item.ref, offset: item.resumeOffset, maxBytes: item.omittedBytes }, { sessionId: 's' })
+      assert.equal(middle.isError, false)
+      const text = (middle.value as { content: string }).content
+      decoder.decode(Buffer.from(text))
+      assert.equal(item.text + text + item.tail, output)
+    }
+    output = 'x'.repeat(32)
+    const small = await root.tools.execute('utf8-text', {}, { sessionId: 's' })
+    assert.equal((small.value as { tail?: string; ref?: string; previewTruncated?: boolean } | null)?.tail, undefined)
+    assert.equal((small.value as { ref?: string } | null)?.ref, undefined)
+    assert.equal((small.value as { previewTruncated?: boolean } | null)?.previewTruncated, undefined)
+    output += 'y'
+    const boundary = await root.tools.execute('utf8-text', {}, { sessionId: 's' })
+    assert.equal((boundary.value as { tail?: string }).tail, undefined)
+    assert.ok((boundary.value as { ref?: string }).ref)
+    const smallStream = await root.tools.execute('bash', { command: `node -e 'process.stdout.write("x".repeat(16))'` }, { sessionId: 's' })
+    assert.equal((smallStream.value as CommandResult).stdout.tail, undefined)
+    assert.equal((smallStream.value as CommandResult).stdout.ref, undefined)
+    const edgeStream = await root.tools.execute('bash', { command: `node -e 'process.stdout.write("x".repeat(17))'` }, { sessionId: 's' })
+    assert.equal((edgeStream.value as CommandResult).stdout.tail, undefined)
+    const tiny = await bootResults(workspace)
+    try {
+      await tiny.plugin(toolResults, { maxPreviewBytes: 8 })
+      tiny.tools.register({ name: 'tiny-text', execute() { return 'abcdefghijk' } })
+      const result = await tiny.tools.execute('tiny-text', {}, { sessionId: 'tiny' })
+      assert.equal((result.value as { tail?: string }).tail, 'k')
+    } finally { await tiny.fiber.dispose() }
+  } finally { await root.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
+})
+
+test('Bash streams carry head and tail windows without duplicating the middle', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'result-dual-tail-'))
+  const root = await bootResults(workspace)
+  try {
+    await root.plugin(toolResults, { maxPreviewBytes: 32 })
+    await root.plugin(bash)
+    const result = await root.tools.execute('bash', { command: `node -e 'process.stdout.write("o".repeat(100));process.stderr.write("e".repeat(100))'` }, { sessionId: 's' })
+    const { stdout, stderr } = result.value as CommandResult
+    assert.notEqual(stdout.ref, stderr.ref)
+    for (const stream of [stdout, stderr]) {
+      assert.ok(stream.ref); assert.equal(stream.previewTruncated, true)
+      assert.ok(Buffer.byteLength(stream.text) <= 16)
+      assert.ok(Buffer.byteLength(stream.tail!) <= 4)
+      assert.ok(Buffer.byteLength(stream.text) + Buffer.byteLength(stream.tail!) < stream.bytes)
+      assert.equal(stream.omittedBytes, stream.bytes - Buffer.byteLength(stream.text) - Buffer.byteLength(stream.tail!))
+    }
+  } finally { await root.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
+})
+
 test('Cordis model reads a large Bash log via its persistent ref while events retain only previews', async () => {
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'result-integration-'))
   const root = await bootResults(workspace)

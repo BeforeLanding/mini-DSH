@@ -13,6 +13,14 @@ export function utf8Prefix(bytes: Buffer, maxBytes: number): Buffer {
   return bytes.subarray(0, end)
 }
 
+export const PREVIEW_TAIL_DIVISOR = 8
+
+export function utf8Suffix(bytes: Buffer, maxBytes: number): Buffer {
+  let start = Math.max(0, bytes.length - maxBytes)
+  while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) start++
+  return bytes.subarray(start)
+}
+
 export interface ResultStoreConfig { directory: string; maxCaptureBytes?: number; maxStoreBytes?: number; maxFiles?: number; maxReadBytes?: number }
 
 export class ToolResultStore {

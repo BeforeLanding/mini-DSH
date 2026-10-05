@@ -7,8 +7,8 @@
 | 子步骤 | 行为与状态 | 验收 | 预计提交 |
 |---|---|---|---:|
 | NX-33-0 | 立项、D-20 与 R-15 契约（**done**） | PLAN 两条截断路径、尾部预算和中段省略规则已写明；R-15 保留现有回读与事件契约；`git diff --check` 退出 0 | 1 次 |
-| NX-33-1 | 通用结果与 Bash 流的尾部窗口、工具描述及测试（**todo**） | 三条新增测试覆盖中段回读、UTF-8／边界、双流；既有 eval 断言逐字保留并增加尾部哨兵断言；`pnpm check`、`pnpm test` | 1 次 |
-| NX-33-2 | README／PLAN／CHANGES／PROGRESS／TASKS 回填与全量验收（**todo**） | 实测源码及文档活锚点；`pnpm check`、`pnpm test`、`pnpm lint`、`pnpm fixtures:check`、`pnpm eval:offline`、`pnpm eval:estimate`；CHANGES 只追加 NX-33 节 | 1 次 |
+| NX-33-1 | 通用结果与 Bash 流的尾部窗口、工具描述及测试（**done**） | 新增三条测试；既有 eval 断言逐字保留并增加尾部哨兵断言；`pnpm check` 为 `syntax ok: 93 files`，`pnpm test` 为 220/220 | 1 次 |
+| NX-33-2 | README／PLAN／CHANGES／PROGRESS／TASKS 回填与全量验收（**in_progress**） | 实测源码及文档活锚点；`pnpm check`、`pnpm test`、`pnpm lint`、`pnpm fixtures:check`、`pnpm eval:offline`、`pnpm eval:estimate`；CHANGES 只追加 NX-33 节 | 1 次 |
 
 ## 待办
 

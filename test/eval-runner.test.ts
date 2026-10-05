@@ -267,11 +267,12 @@ test('the bounded tool-output switch truncates a large result while the unbounde
   const streamText = (content: string) => (JSON.parse(content) as { stdout: { text: string } }).stdout.text
 
   // 有界：结果被截成 8 KiB 预览 + 落盘引用，末尾哨兵留在存储里而不是历史里。
-  const projected = JSON.parse(await capturedResult({ bounded: true })) as { stdout: { text: string; previewTruncated?: boolean; ref?: string } }
+  const projected = JSON.parse(await capturedResult({ bounded: true })) as { stdout: { text: string; tail?: string; previewTruncated?: boolean; ref?: string } }
   assert.equal(projected.stdout.previewTruncated, true)
   assert.ok(projected.stdout.ref, 'a truncated stream must carry a ref back to the stored result')
   assert.ok(!projected.stdout.text.includes('SENTINEL-END'), 'the preview must not carry the tail of a large result')
   assert.ok(Buffer.byteLength(projected.stdout.text) <= 8192, `preview was ${Buffer.byteLength(projected.stdout.text)} bytes`)
+  assert.ok(projected.stdout.tail?.includes('SENTINEL-END'))
 
   // 无界：同一段输出逐字进入历史，没有 previewTruncated 也没有 ref——这正是 NX-07 之前的行为，也是对照 B
   // 的基线臂。它同样说明「无界」不是把插件拆掉，而是把预览上限抬到任何单条结果都装得下。

@@ -4,7 +4,7 @@ import { positiveLimit } from './bounded-text.js'
 import { utf8Prefix } from './tool-result-store.js'
 
 export interface CommandStream {
-  text: string; bytes: number; truncated: boolean
+  text: string; bytes: number; truncated: boolean; tail?: string; omittedBytes?: number; resumeOffset?: number
   ref?: string; storedBytes?: number; storageTruncated?: boolean; previewTruncated?: boolean; storageError?: string
 }
 export interface CommandResult {

@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { ToolResultStore, utf8Prefix, type ResultStoreConfig } from '../core/tool-result-store.js'
+import { ToolResultStore, utf8Prefix, utf8Suffix, PREVIEW_TAIL_DIVISOR, type ResultStoreConfig } from '../core/tool-result-store.js'
 import { positiveLimit } from '../core/bounded-text.js'
 import type { CommandResult, CommandStream } from '../core/command-runner.js'
 
@@ -11,6 +11,7 @@ export function apply(ctx: Context, config: ToolResultsConfig = {}) {
   const directory = config.directory ?? '.mini-dsh/tool-results'
   const store = new ToolResultStore({ ...config, directory: ctx.sandbox.resolvePath(directory) })
   const maxPreviewBytes = positiveLimit(config.maxPreviewBytes, 16 * 1024, 'maxPreviewBytes')
+  const tailLimit = Math.max(1, Math.floor(maxPreviewBytes / PREVIEW_TAIL_DIVISOR))
   ctx.effect(() => ctx.tools.setResultProjection(async (tool, result, execution) => {
     if (tool === 'read_tool_result' || !execution.sessionId) return result
     if (tool === 'bash' && (result.value as CommandResult | null)?.type === 'command') {
@@ -18,11 +19,14 @@ export function apply(ctx: Context, config: ToolResultsConfig = {}) {
       const project = async (stream: CommandStream): Promise<CommandStream> => {
         const bytes = Buffer.from(stream.text)
         if (bytes.length <= limit) return stream
-        const preview = utf8Prefix(bytes, limit).toString('utf8')
+        const head = utf8Prefix(bytes, limit)
+        const preview = head.toString('utf8')
+        const tail = utf8Suffix(bytes.subarray(head.length), tailLimit)
+        const omittedBytes = bytes.length - head.length - tail.length
         try {
           ctx.sandbox.resolvePath(directory)
           const saved = await store.save(execution.sessionId!, stream.text, execution.signal)
-          return { ...stream, text: preview, previewTruncated: true, ref: saved.ref,
+          return { ...stream, text: preview, ...(omittedBytes > 0 ? { tail: tail.toString('utf8'), omittedBytes, resumeOffset: head.length } : {}), previewTruncated: true, ref: saved.ref,
             storedBytes: saved.bytes, storageTruncated: saved.truncated }
         } catch (error) {
           return { ...stream, text: preview, previewTruncated: true,
@@ -39,12 +43,16 @@ export function apply(ctx: Context, config: ToolResultsConfig = {}) {
     if (bytes.length <= maxPreviewBytes) return result
     ctx.sandbox.resolvePath(directory)
     const saved = await store.save(execution.sessionId, text, execution.signal)
-    const preview = utf8Prefix(bytes, maxPreviewBytes).toString('utf8')
-    return { ...result, value: { ...saved, preview }, content: [{ type: 'text', text: `${preview}\n[tool_result ${JSON.stringify({ ...saved, originalBytes: bytes.length })}; use read_tool_result with ref and offset=0]` }] }
+    const head = utf8Prefix(bytes, maxPreviewBytes)
+    const preview = head.toString('utf8')
+    const tail = utf8Suffix(bytes.subarray(head.length), tailLimit)
+    const omittedBytes = bytes.length - head.length - tail.length
+    const window = omittedBytes > 0 ? { tail: tail.toString('utf8'), omittedBytes, resumeOffset: head.length } : {}
+    return { ...result, value: { ...saved, preview, ...window }, content: [{ type: 'text', text: `${preview}\n[tool_result ${JSON.stringify({ ...saved, originalBytes: bytes.length, ...window })}; use read_tool_result with ref and offset=0]` }] }
   }), 'register tool result projection')
   ctx.effect(() => ctx.tools.register({
     name: 'read_tool_result',
-    description: 'Read a stored tool result from this session using its ref. UTF-8 byte offset starts at 0; use nextOffset until eof. captureTruncated means collection was bounded. References survive restart while result files remain.',
+    description: 'Read a stored tool result from this session using its ref. Truncated results may include text (head), tail (end), omittedBytes (missing middle) and resumeOffset (middle start). UTF-8 byte offset starts at 0; use nextOffset until eof. captureTruncated means collection was bounded. References survive restart while result files remain.',
     parameters: { type: 'object', properties: { ref: { type: 'string' }, offset: { type: 'integer', minimum: 0 }, maxBytes: { type: 'integer', minimum: 1, maximum: store.maxReadBytes } }, required: ['ref'] },
     async execute(args, execution) {
       ctx.sandbox.resolvePath(directory)
