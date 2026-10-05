@@ -2,6 +2,14 @@
 
 更新：2026-10-02。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-34 上下文压缩
+
+### NX-34-0 立项与契约修订
+
+PLAN D-21 与 REQUIREMENTS R-22 显式修订 D-02／R-03 的“当前 task 所有 run 原文进入请求”契约。用户确认：当前 task 的原始 `user/message` 留在可压缩段之前，压缩其后的连续、协议闭合历史，frame 放在该段原位置。TASKS 列出八个独立验收与提交边界。README 的两处 NX-33 基线测试数由 217 订正为实测 220。此步没有修改 `src/`。
+
+验收：`git diff --check` 退出 0。`pnpm test` 在引导阶段失败，原始输出为 `[ERROR] GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed`，没有执行测试；后续步骤须用仓库允许的 Node 替代命令或恢复 pnpm 后再验证，不将此次失败记为测试通过。
+
 ## NX-33 大工具结果的尾部窗口
 
 ### 行为、边界与实现

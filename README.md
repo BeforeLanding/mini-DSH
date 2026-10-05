@@ -27,7 +27,7 @@
 | 提交范围 | `0a95a7f`～`c5fc9c4`（共 11 个） | `43e3829` 起 |
 | 语言 | 纯 JavaScript | TypeScript（tsc strict / NodeNext），Node 执行 `dist` 产物 |
 | 工具 | 6 个：`bash` + `read_file`／`write_file`／`edit_file`／`glob`／`grep` | 11 个：`tools/` 的 9 个（上列 6 个再加 `task_changes`／`request_trace`／`task_report`）与插件提供的 2 个（`project_context`／`read_tool_result`） |
-| 测试 | 22 条（`core.test.js` 20 + `integration.test.js` 2） | 217 条；另有 16 项编程 fixture 基线、离线评测入口与三条演示 |
+| 测试 | 22 条（`core.test.js` 20 + `integration.test.js` 2） | 220 条；另有 16 项编程 fixture 基线、离线评测入口与三条演示 |
 | 已有能力 | 基础配置、Session Event Log、Tool Runtime、System Prompt + LLM Adapter、Agent Loop、DeepSeek 适配器、runtime-context、外部插件与 MCP、沙箱与路径闸门、Bash/文件工具 | 上下文投影与裁剪、四维执行预算、JSONL 持久化与崩溃恢复、预算停止后的 `/continue`、有界读取/搜索与大结果回读、可靠编辑与任务变更清单、结构化前台命令、验证记录与交付报告、请求 trace、项目上下文、编程任务 fixture、真实模型评测 |
 
 上表每一行都能在仓库根目录复现（全部离线，不联网）：
@@ -56,7 +56,7 @@ git log --oneline --reverse | sed -n '12p'                # 43e3829：分界之�
 ```powershell
 pnpm install --frozen-lockfile
 pnpm check            # syntax ok: 93 files
-pnpm test             # tests 217 / pass 217 / fail 0 / skipped 0
+pnpm test             # tests 220 / pass 220 / fail 0 / skipped 0
 pnpm fixtures:check   # 16 项：初始全部失败、参考解全部通过
 pnpm eval:offline     # planned 12 / executed 12 / accepted 12
 pnpm demo:fix         # 退出码 0：项目规则 → 定位 → 修改 → 失败测试 → 再修复 → diff 与证据
