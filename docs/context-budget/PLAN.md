@@ -236,6 +236,14 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 
 代价：Windows Bash 获得用户临时目录这一处工作区外读写能力；普通交互仍有审批，`autoApprove` 明确选择不询问。映射依赖 Git for Windows 的 `/tmp` → Windows 用户临时目录约定，不探测任意 MSYS 挂载表，也不扩展 `/var/tmp` 或其他 POSIX 根。命令闸门仍是粗形状策略而非操作系统隔离。
 
+### D-20 大工具结果的尾部窗口（NX-33）
+
+当通用结果超过 `maxPreviewBytes`，或 Bash 单条流超过 `floor(maxPreviewBytes / 2)` 时，保留原有截断触发、纯前缀 `text` 长度和结果存储／回读契约。另从原文末尾取最多 `floor(maxPreviewBytes / 8)` 字节的 UTF-8 完整字符，预算取模块常量，不增加配置项。Bash 两条流分别计算，共用同一尾部预算。
+
+只有前缀与尾部之间确有字节被省略时，才附加 `tail`、`omittedBytes = 原文字节数 - text 字节数 - tail 字节数`、`resumeOffset = text 字节数`；模型可从该偏移用 `read_tool_result` 回读中段。若原文只比触发阈值多一点、前缀与尾部已覆盖全文，则保留既有 `text`／`ref`／`previewTruncated` 形态，不附加新字段。`text`、默认预览大小、采集和预算阈值、`ref`、`storedBytes`、`truncated` 均不改变。
+
+取舍：把首尾拼入同一个 `text` 会破坏纯前缀契约及 NX-08f 对照 B 的现有断言；仅保留前缀又让尾部的失败摘要需要额外一次回读。独立字段保持原契约，同时让尾部直接可见。请求载荷因此增大，旧对照 B 记录不再逐字对应现行构建；是否重跑实验另行预注册与授权。
+
 ## 默认参数与行为
 
 ### 请求规模与估算
