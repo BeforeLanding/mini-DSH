@@ -1,14 +1,14 @@
 # 任务清单
 
-更新：2026-10-02。每项只保留当前状态和证据入口；行为、边界、逐步提交与完整验收记录见 [CHANGES](CHANGES.md)。状态：`todo`、`in_progress`、`blocked`、`done`。
+更新：2026-10-05。每项只保留当前状态和证据入口；行为、边界、逐步提交与完整验收记录见 [CHANGES](CHANGES.md)。状态：`todo`、`in_progress`、`blocked`、`done`。
 
 ### NX-33 大工具结果的尾部窗口
 
 | 子步骤 | 行为与状态 | 验收 | 预计提交 |
 |---|---|---|---:|
-| NX-33-0 | 立项、D-20 与 R-15 契约（**done**） | PLAN 两条截断路径、尾部预算和中段省略规则已写明；R-15 保留现有回读与事件契约；`git diff --check` 退出 0 | 1 次 |
-| NX-33-1 | 通用结果与 Bash 流的尾部窗口、工具描述及测试（**done**） | 新增三条测试；既有 eval 断言逐字保留并增加尾部哨兵断言；`pnpm check` 为 `syntax ok: 93 files`，`pnpm test` 为 220/220 | 1 次 |
-| NX-33-2 | README／PLAN／CHANGES／PROGRESS／TASKS 回填与全量验收（**in_progress**） | 实测源码及文档活锚点；`pnpm check`、`pnpm test`、`pnpm lint`、`pnpm fixtures:check`、`pnpm eval:offline`、`pnpm eval:estimate`；CHANGES 只追加 NX-33 节 | 1 次 |
+| NX-33-0 | 立项、D-20 与 R-15 契约（**done**，`0db8f8d`） | PLAN 两条截断路径、尾部预算和中段省略规则已写明；R-15 保留现有回读与事件契约；`git diff --check` 退出 0 | 1 次 |
+| NX-33-1 | 通用结果与 Bash 流的尾部窗口、工具描述及测试（**done**，`60d76a4`） | 新增三条测试；既有 eval 断言逐字保留并增加尾部哨兵断言；`pnpm check` 为 `syntax ok: 93 files`，`pnpm test` 为 220/220 | 1 次 |
+| NX-33-2 | README／PLAN／CHANGES／PROGRESS／TASKS 回填与全量验收（**done**） | 活锚点实测并订正；`pnpm check` 93 文件、`pnpm test` 220/220、`pnpm lint` 102 文件 0 诊断、16 项 fixture、离线评测 12/12、估算器与语料钉版均通过；CHANGES 只追加 NX-33 节 | 1 次 |
 
 ## 待办
 

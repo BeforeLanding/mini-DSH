@@ -385,7 +385,7 @@ e0 只固化了驱动与布局，没有 fixture 声明 `TASKS/`。`pipeline` 是
 
 **自变量是唯一的：工具输出是否有界。** 其余（模型、prompt、初始状态、验收器、单次 run 预算、**输入目标 65,536**）两臂完全一致。两臂都开「现有裁剪」，即 `armPolicy` 对它们都返回 `evalPolicy`。
 
-**实现方式：同一插件的不同配置，而不是装 / 不装。** `src/plugins/tool-results.ts` 在 `apply()` 里无条件注册 `read_tool_result`（`:45-53`）；`tools.schemas()` 每次请求都把工具表交给模型，`token-estimator.ts:10` 又把它计入输入估算。装 / 不装会让两臂的 `tools` 数组相差一个条目——既改变模型看到的能力，也改变估算，被比较的就不只是有界性，违反 R-21 的「两臂共用同一 prompt 与工具」。因此两臂**都**装载该插件，只改 `maxPreviewBytes`：
+**实现方式：同一插件的不同配置，而不是装 / 不装。** `src/plugins/tool-results.ts` 在 `apply()` 里无条件注册 `read_tool_result`（`:53-61`）；`tools.schemas()` 每次请求都把工具表交给模型，`token-estimator.ts:10` 又把它计入输入估算。装 / 不装会让两臂的 `tools` 数组相差一个条目——既改变模型看到的能力，也改变估算，被比较的就不只是有界性，违反 R-21 的「两臂共用同一 prompt 与工具」。因此两臂**都**装载该插件，只改 `maxPreviewBytes`：
 
 - **有界臂**：走生产默认（`positiveLimit` 的 16 KiB 预览；bash 每条流截到 `maxPreviewBytes/2` = 8 KiB），超出部分落盘并返回 `ref`，模型可用 `read_tool_result` 分页回读。
 - **无界臂**：`maxPreviewBytes` 抬到 `UNBOUNDED_PREVIEW_BYTES = 64 MiB`（`scripts/eval-fixture.ts`）。bash 单流采集上限 8 MiB、经 `JSON.stringify` 转义后最坏约翻倍，因此任何单条结果都装得下，不会走截断分支、也不产生 `ref`。这是 NX-07 之前的行为。

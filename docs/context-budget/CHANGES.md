@@ -2,6 +2,74 @@
 
 更新：2026-10-02。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
 
+## NX-33 大工具结果的尾部窗口
+
+### 行为、边界与实现
+
+通用工具结果超过 `maxPreviewBytes`、或 Bash 单条流超过 `floor(maxPreviewBytes / 2)` 时，`text` 仍是原长度的纯前缀。仅当前缀与尾部之间确有中段省略时，结果增加 `tail`、`omittedBytes` 与 `resumeOffset`；尾部预算固定为 `floor(maxPreviewBytes / 8)`，并由 `utf8Suffix` 向前跳过 UTF-8 续字节。小结果不落盘、不产生引用或新字段；只比阈值多、前缀加尾部已覆盖全文的结果仍保持既有形态。通用结果与 Bash 两条流共用规则，Bash 的 stdout／stderr 分别存储并保留不同引用。
+
+本项没有增加配置项，没有降低或提高任何预览、采集、上下文或执行预算阈值，也没有改变 `text`、`previewTruncated`、`ref`、`storedBytes` 或 `truncated` 的既有语义。`read_tool_result` 的描述补充了首尾字段和中段起点，模型可从 `resumeOffset` 开始分页回读，直到最后一页与 `tail` 接上。
+
+`text` 字节数保持不变，但模型请求载荷会因 `tail` 等字段变大。因此 NX-08f 对照 B 有界臂的历史记录不再逐字对应现行构建；其「未观测到处理生效」结论的性质不变。本项没有重跑 `.eval-evidence`，按 R-21，任何重跑仍需另行预告、预注册与授权。
+
+### 测试与行号核查
+
+新增三条测试：`truncated tool results keep a tail window whose middle is recoverable through the ref`、`tail windows stay inside UTF-8 boundaries and never appear without truncation`、`Bash streams carry head and tail windows without duplicating the middle`。`test/eval-runner.test.ts` 的四条既有前缀契约断言逐字保留，只新增尾部哨兵断言。
+
+`CommandStream` 三个字段加在原第一行，源码 `spawn` 在改前与改后都实测为 `src/core/command-runner.ts:56`；PLAN／TASKS 中遗留的活锚点 `:51` 另作独立提交修正。`read_tool_result` 注册实测位于 `src/plugins/tool-results.ts:53-61`，PLAN 活锚点由 `:45-53` 更新；全仓检索的其余同类行号只出现在 CHANGES 历史小节，按追加式留档规则保持原样。
+
+### 验收
+
+全量 `pnpm test` 首跑为 `tests 220 / pass 219 / fail 1`：当时 PROGRESS 已新增指向本节的链接、但本节尚未追加，唯一失败是 `docs-links.test.ts` 报 `PROGRESS.md:7` 的 NX-33 锚点不存在。追加本节后重跑；最终结果记在下方。该失败没有涉及运行时代码或尾部窗口行为。
+
+```
+pnpm check
+$ pnpm build && node scripts/check-syntax.js
+$ node scripts/build.js
+syntax ok: 93 files
+
+pnpm test
+$ pnpm build && node --test dist/test/*.test.js
+$ node scripts/build.js
+ℹ tests 220
+ℹ suites 0
+ℹ pass 220
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+
+pnpm lint
+$ biome check .
+Checked 102 files in 134ms. No fixes applied.
+
+pnpm fixtures:check
+$ pnpm build && node dist/scripts/check-coding-fixtures.js
+$ node scripts/build.js
+16 条逐 fixture JSON：boundary/options/interface/normalize/dedupe/pagination/query/retry/merge/csv/inventory/summary/pipeline/audit/repair/blind；每条均为 initial.passed=false、reference.passed=true、expected=true，退出码 0
+
+pnpm eval:offline
+$ pnpm build && node dist/scripts/eval-offline.js
+$ node scripts/build.js
+"planned": 12,
+"executed": 12,
+"completed": 12,
+"accepted": 12,
+"rejected": 0,
+
+pnpm eval:estimate
+$ pnpm build && node dist/scripts/eval-estimate.js
+$ node scripts/build.js
+"estimator": { "file": "src/core/token-estimator.ts", "sha256": "5147905a6feac08718f5d180365f0c1e3ea9ad3b58a4c3da3747c1d65b0aed0f", "matchesReference": true },
+"corpus": { "samples": 40, "sha256": "9e3aceb547a46801080d78e11f63bcc1571ad96df6149af5d0836a7e69549c5e", "matchesReference": true }
+```
+
+环境记录：NX-33-1 首次在沙箱内启动 `pnpm check` 时，pnpm 自身引导报 `[ERROR] GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed`；正常用户权限下实测 `pnpm --version` 为 `11.22.0`，随后上述全部验收均使用该固定版本并退出 0。除这次环境引导失败和上文已解释的文档锚点首跑失败外，没有跳过项；未调用真实模型或付费 API。
+
+### 提交
+
+`0db8f8d`（NX-33-0 立项）、`60d76a4`（NX-33-1 实现与测试）、`218a153`（评审确认后独立修正遗留活锚点），以及本提交（NX-33-2 回填与全量验收）。实现命名、尾部预算比例与触发规则均未偏离方案；唯一追加的提交边界来自方案基线把 `command-runner.ts` 的既有 `spawn` 行误记为 `:51`，实测原始 HEAD 与实现后均为 `:56`。
+
 ## NX-27 Windows Git Bash 的 `/tmp`
 
 ### 现象、决策与实现
