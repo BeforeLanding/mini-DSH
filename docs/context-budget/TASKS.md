@@ -182,7 +182,7 @@ NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，
 
 **done（2026-10-01，零付费）。方向是「加强」而非「放宽」**：NX-17 把误拒的惰性形状放行，本轮把**能真正取网、而闸门当前放行**的形状判为拒绝。诊断矩阵 `docs/context-budget/nx17-gate-probes.mjs:43-46` 已登记其中四条（`known gap NX-19`），本轮把它们搬进约定组。**NX-17 记为「未放宽」的规则本次一行不动**——`..` 整串正则、系统路径、工作区外路径、递归删除、`sudo` 与「惰性输出接进管道」的处理全部保持。
 
-**为什么不是「见到 `$(` 就拒」**：`src/tools/bash.ts:53` 把模型给的整串命令交给 `bash -lc`（`src/core/command-runner.ts:51` 是 `spawn(exe, ['-lc', command])`），所以 `$(...)`、反引号与 shell 的 `-c` 参数是**真的会被执行**的文本，而顶层分词恰恰看不见它们。判据取「这段文本会不会被执行」，把这类片段抽出来**递归检查**；按出现位置拒绝会误伤 `echo "$(date)"`。递归保留 allowHosts 语义——`bash -c "curl http://localhost/health"` 必须放行。
+**为什么不是「见到 `$(` 就拒」**：`src/tools/bash.ts:53` 把模型给的整串命令交给 `bash -lc`（`src/core/command-runner.ts:56` 是 `spawn(exe, ['-lc', command])`），所以 `$(...)`、反引号与 shell 的 `-c` 参数是**真的会被执行**的文本，而顶层分词恰恰看不见它们。判据取「这段文本会不会被执行」，把这类片段抽出来**递归检查**；按出现位置拒绝会误伤 `echo "$(date)"`。递归保留 allowHosts 语义——`bash -c "curl http://localhost/health"` 必须放行。
 
 **本次唯一的净放宽**：`curl -o out.txt http://localhost/x` 这类今日被误拒（既有「裸主机名操作数」规则把 `-o` 的**取值**当成了主机；实测 `wget -O page.html`、`curl -sS -o out.json` 同样）。它违背 `CHANGES.md:855` 已记录的意图，且不先修就会把同类误报复制到 `ssh -i`／`scp`／`rsync`，因此**独立成一步、排在清单扩展之前**。
 
