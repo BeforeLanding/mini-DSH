@@ -27,7 +27,7 @@
 | 提交范围 | `0a95a7f`～`c5fc9c4`（共 11 个） | `43e3829` 起 |
 | 语言 | 纯 JavaScript | TypeScript（tsc strict / NodeNext），Node 执行 `dist` 产物 |
 | 工具 | 6 个：`bash` + `read_file`／`write_file`／`edit_file`／`glob`／`grep` | 12 个：`tools/` 的 9 个（上列 6 个再加 `task_changes`／`request_trace`／`task_report`）与插件提供的 3 个（`project_context`／`read_tool_result`／`read_history`） |
-| 测试 | 22 条（`core.test.js` 20 + `integration.test.js` 2） | 260 条；另有 16 项编程 fixture 基线、离线评测入口与四条演示 |
+| 测试 | 22 条（`core.test.js` 20 + `integration.test.js` 2） | 269 条；另有 16 项编程 fixture 基线、离线评测入口与四条演示 |
 | 已有能力 | 基础配置、Session Event Log、Tool Runtime、System Prompt + LLM Adapter、Agent Loop、DeepSeek 适配器、runtime-context、外部插件与 MCP、沙箱与路径闸门、Bash/文件工具 | 上下文投影与裁剪、四维执行预算、JSONL 持久化与崩溃恢复、预算停止后的 `/continue`、有界读取/搜索与大结果回读、可靠编辑与任务变更清单、结构化前台命令、验证记录与交付报告、请求 trace、项目上下文、编程任务 fixture、真实模型评测 |
 
 上表每一行都能在仓库根目录复现（全部离线，不联网）：
@@ -56,7 +56,7 @@ git log --oneline --reverse | sed -n '12p'                # 43e3829：分界之�
 ```powershell
 pnpm install --frozen-lockfile
 pnpm check            # syntax ok: 105 files
-pnpm test             # tests 260 / pass 260 / fail 0 / skipped 0
+pnpm test             # tests 269 / pass 269 / fail 0 / skipped 0
 pnpm fixtures:check   # 16 项：初始全部失败、参考解全部通过
 pnpm eval:offline     # planned 12 / executed 12 / accepted 12
 pnpm demo:fix         # 退出码 0：项目规则 → 定位 → 修改 → 失败测试 → 再修复 → diff 与证据
@@ -107,7 +107,7 @@ project-context 插件可通过 `limits` 配置 `maxFileBytes`（默认 16 KiB�
 
 `demo:unknown` 起一个子进程执行一条写下真实副作用文件后阻塞的命令，等文件出现后按进程树杀掉它，因此留在磁盘上的残局是真的。它同时演示崩溃之后绕不开的一步：崩溃留下的 `writer.lock` 会让 `JsonlStore.open` 直接拒绝（`session writer lock exists; verify stale locks explicitly`），而 `quarantineTail` 也要先抢同一把锁，所以**销掉这把锁是恢复的唯一路径**。这一步此前只能由人手删文件（CLI 起不来，进程内命令在真正需要它时不可达），现在走 `pnpm session:lock <sessionId>`：它只把证据摆出来（锁体的 token 与 pid、pid 存活探针、锁文件时间、`events.jsonl` 尾部是否完整），**解除与否由操作者判断**，且必须显式给出 `--remove --token <检视里看到的那个 token>`——token 对不上会被拒，免得删掉一把刚被新写入者拿到的活锁。演示照实走一遍，包括**先用错 token 试一次**。
 
-`demo:compact` 播一条**单任务**长会话——既有裁剪只移除已结束的旧任务、当前 task 恒受保护，所以真正撑爆上下文的正是这种会话。它先合成一条压不动的大工具结果，再走一遍真正的 `/compact` 路径（`AgentLoopRuntime.compact`，摘要由脚本化模型写），然后逐条核对：投影确实变小了；frame 紧跟在原始用户请求之后，而原始请求原样保留；被替换的三条事件一条没删、长度不变；约束原文与那条工具结果都能用 `read_history` 按 seq 逐字读回来。**摘要调用只花一次模型调用，主循环一次都没跑。**
+`demo:compact` 播一条**单任务**长会话——既有裁剪只移除已结束的旧任务、当前 task 恒受保护，所以真正撑爆上下文的正是这种会话。它先合成一条压不动的大工具结果，再走一遍真正的 `/compact` 路径（`AgentLoopRuntime.compact`，摘要由脚本化模型写），然后逐条核对：投影确实变小了；frame 紧跟在原始用户请求之后，而原始请求原样保留；被替换的三条事件一条没删、长度不变；约束原文与那条工具结果都能用 `read_history` 按 seq 逐字读回来（分页游标是 `(nextSeq, nextOffset)` 一对，一条事件大于一页时也一个字节不丢）。**摘要调用只花一次模型调用，主循环一次都没跑。**
 
 四条演示的事件日志落在 `.demo-runs/`，与 `.eval-evidence/`（真实模型证据）分开存放，两者都不入库。
 
@@ -145,7 +145,7 @@ pnpm check
 pnpm test
 ```
 
-当前 260 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读及尾部窗口、上下文压缩、可靠编辑/任务变更、结构化命令、here-doc、Windows Git Bash 临时目录、验证报告、请求 trace、文档锚点与会话锁核验回归测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
+当前 269 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读及尾部窗口、上下文压缩、可靠编辑/任务变更、结构化命令、here-doc、Windows Git Bash 临时目录、验证报告、请求 trace、文档锚点与会话锁核验回归测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
 
 NX-05a 起提供可重复的 [编程任务 fixture](test/fixtures/coding/README.md)，NX-05b 扩展到 12 项，覆盖边界修复、功能扩展、跨文件接口修改、去重、分页、查询重试、合并、CSV、库存与汇总等；此后又加入多阶段序列 `pipeline`、单任务 `audit`、演示夹具 `repair`，以及 `pipeline` 的无公开检查变体 `blind`，**当前注册表共 16 项 = 筛查 12 项（上列，冻结）+ 这 4 项**（`blind` 与 `pipeline` 是同一套任务，只差工作区里有没有公开 `check.mjs`）。运行 `pnpm fixtures:check` 核验全部 16 项的初始失败/参考通过基线；`pnpm test` 还覆盖模拟模型经真实文件/Bash 工具完成失败→修改→重跑的流程。每次使用新临时工作区，独立验收器保留在工作区外；模拟结果不代表真实模型编程成功率。
 

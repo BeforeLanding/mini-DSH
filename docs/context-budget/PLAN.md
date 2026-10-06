@@ -250,11 +250,13 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 
 默认 `compactionBudgetTokens = inputTargetTokens`（65,536）、`compactionRatio = 0.8`、`retainRatio = 0.16`、`compactionMaxTokens = 8192`、`maxSummaryFailures = 2`、`maxOverflowRetries = 1`，`auto = true`。压缩预算不能默认取 1M 的 `contextWindowTokens`，否则 80% 阈值在 65,536 输入目标之前永远到不了。默认配置下 0.8 实际等价于“裁剪救不了”；只有显式调整压缩预算时才有独立意义。摘要调用计入 run 的请求数、主动时间与 token，预留输出走现有预算机制；预算不足依现有 `token_budget` 停止。三入口是自动压力、溢出兜底及 CLI `/compact`；后者不受失败闩影响。压缩不是模型可调用的工具。
 
-纯规划器只读事件，摘要尝试在付费调用前记录开始事件，结果以结束事件闭合；失败闩从当前 run 日志折叠。恢复只读已记录的摘要，不重新调用模型，未闭合尝试追加 `unclosed`。模型若缺事实，可用有界、session 隔离的 `read_history` 按事件号读回。摘要调用使用主循环的 system 和 tool schema，原样重放遮蔽段；DeepSeek 当前适配器未显式实现前缀缓存，因此缓存收益尚未兑现。与参考实现不同，本仓库的 `beginRun` 排斥同 session 并发 run，不需完整的 after-await 计划重校验；写 applied 前仍复查取消和主动预算。摘要可能遗漏或捏造事实，事件号与回读入口让事实可核对，却不保证模型一定主动核对。
+纯规划器只读事件，摘要尝试在付费调用前记录开始事件，结果以结束事件闭合；失败闩从当前 run 日志折叠。恢复只读已记录的摘要，不重新调用模型；未闭合的尝试按事实补结束事件——已经写下摘要的补 `applied`，连正文都没有的才补 `unclosed`。模型若缺事实，可用有界、session 隔离的 `read_history` 按事件号读回。摘要调用使用主循环的 system 和 tool schema，原样重放遮蔽段；DeepSeek 当前适配器未显式实现前缀缓存，因此缓存收益尚未兑现。与参考实现不同，本仓库的 `beginRun` 排斥同 session 并发 run，不需完整的 after-await 计划重校验；写 applied 前仍复查取消和主动预算。摘要可能遗漏或捏造事实，事件号与回读入口让事实可核对，却不保证模型一定主动核对。
 
 **`resolveBudget` 的两档放宽（NX-34-4）。** `compactionRatio` 与 `retainRatio` 是比率，0.8 存不进「非负安全整数」这条统一契约，因此为这两个键开一个**分数集**（要求 `0 < v ≤ 1`）、为 `auto` 开一个**布尔集**，其余键仍是安全整数。这是有意的契约放宽，代价是 `resolveBudget` 的判定从一档变两档；越过域的值（0、负数、>1、NaN、Infinity、非布尔）仍逐条拒绝。`compactionBudgetTokens` **不进** `CLI_BUDGET`：它默认取 `inputTargetTokens`，写死成 65,536 会让调整输入目标时压缩阈值不再跟着走。
 
 **`/compact` 的维护型 run（NX-34-4）。** R-22 要求摘要请求计入同一 run，而 `beginRun` 的三道续跑守卫（任务已完成／未知工具结果／配置未变的 `context_overflow`）恰在「任务刚做完」时把 `/compact` 拒之门外——那一刻正是最该压缩的时候。`beginMaintenanceRun` 因此**复用当前 task**（另开任务只会把旧历史变成可免费裁剪的旧任务，那就不需要压缩了），保留与「这段 run 能否安全记账」有关的三道检查，跳过为续跑工作设的三道守卫。它**不写 `previousRunId`**；配套地 `beginRun(continuing)` 改为从「最后一条非维护型 run」取 previous——否则一次 `/compact` 会让 `beginRun` 看着那条 `completed` 报 `task already completed`，把「预算停止后还能续跑」打掉。
+
+**回读游标与区间归属（NX-34-8…-10）。** `read_history` 的分页游标是 `(nextSeq, nextOffset)` 一对，`offset` 量的是该条事件**渲染文本**里的 UTF-8 字节偏移——单条事件大于一页时也一个字节不丢。**只跟 `nextSeq` 会原地打转**，这是工具契约的一部分，写在描述里而不假装服务端能兜住。压缩区间**必须落在当前 task 内部**（§7 原本就这么写，但实现直到 NX-34-10 才真的收这一步）：规划器先把可见面收进当前 task，否则会在已被裁剪、已经不在请求里的旧任务上规划出一段「压了等于没压」的区间——摘要落成 `applied` 而投影不生效。保护集只保当前 task 的**第一条** `user/message`，后续用户消息允许被遮蔽。摘要调用返回 `complete === false` 时按 **`summary-failed`** 处理，不落 `applied`：截断的摘要丢的正是排在八节后面的 Pending Work 与 Next Step。以上四条都由 NX-34-8…-10 的测试钉住。
 
 ## 默认参数与行为
 
@@ -317,7 +319,7 @@ NX-07 集成补充：搜索也默认忽略 .mini-dsh；read/search 的 maxOutput
 - 上列四项是**覆盖值**，其余参数取「默认参数与行为」的文档值；评测侧由 `evalPolicy = {...CLI_BUDGET, ...singleRunBudget}` 组装（NX-08d0-1），模型窗口按端点显式声明，官方端点取 1,000,000。只传这四项会让投影失去输入目标与窗口：`ContextBudgetRuntime` 对两者均未配置时恒判可容纳，裁剪与 `context_overflow` 全部失效。
 - 入口按**阶段**选择批次（NX-08e2-2）：`scripts/eval-screening.ts` 接受 `--phase`（默认 `screening`），默认清单取该阶段的注册表而非全部 fixture，`--tasks` 只能在其内部取子集（跨阶段取任务会让计划任务数超过该阶段上限）。`--plan-only` 在建立目录、发出请求之前打印计划、上限、模型、输入目标与证据目录，供人在花钱前核对——输入目标就是两臂的差异所在，预演里看得见。
 - 对照有效性条件（2026-09-30 修正）：两臂要产生差异必须**同时**满足两个条件——**会话组成**上存在已结束且可裁剪的旧任务，**规模**上这些旧任务的累计估算输入足以让 `fits` 为假。原表述只写了规模条件（「历史超过输入目标 65,536」），据此推出的「构造更大的任务」不成立，理由如下。
-- 裁剪的触发条件是会话组成，不是任务规模。`ContextBudgetRuntime.groupHistory` 按 `taskId` 分组，只有 `taskId === currentTaskId` 的组被标 `protected`（`src/core/context-runtime.ts:29`），`project()` 的循环只移除 `!protected && complete` 的组（同文件 `:68-70`）。而新的 `agent.send()` 一律分配新 `taskId`，只有 `/continue` 才复用旧 taskId（`src/core/session-runtime.ts:156`）。因此**当前 task 无论多大都不会被裁剪，`/continue` 的续跑段同样恒受保护**（R-12 与 `test/continue.test.ts` 的「完整当前过程跨续跑保留」）。能够被裁剪的只有**同一会话中更早结束的其它任务**。
+- 裁剪的触发条件是会话组成，不是任务规模。`ContextBudgetRuntime.groupHistory` 按 `taskId` 分组，只有 `taskId === currentTaskId` 的组被标 `protected`（`src/core/context-runtime.ts:29`），`project()` 的循环只移除 `!protected && complete` 的组（同文件 `:68-70`）。而新的 `agent.send()` 一律分配新 `taskId`，只有 `/continue` 才复用旧 taskId（`src/core/session-runtime.ts:157`）。因此**当前 task 无论多大都不会被裁剪，`/continue` 的续跑段同样恒受保护**（R-12 与 `test/continue.test.ts` 的「完整当前过程跨续跑保留」）。能够被裁剪的只有**同一会话中更早结束的其它任务**。
 - 由此，`scripts/eval-fixture.ts` 现有驱动每个 fixture 只建一个 session、只发一次 `agent.send()`（`:42-50`），会话里永远只有一个 task，`removedTaskIds` 恒为空是**结构性必然**，与任务规模无关。筛查跑 12 个 fixture 全部 `removedTaskIds` 为空，不能据此推断任务「太小」。
 - 因此 NX-08e 的前置是让评测驱动产出**多任务会话**（同一 session 内多个 `taskId`），而不是放大单个任务。对照 A 采用同仓库、后阶段依赖前阶段产物的多阶段任务序列。（对照 B 不受此限制：有界工具输出改变的是当前 task 内部的历史规模，单任务下就会让一臂 `context_overflow`、另一臂完成，两臂可直接分辨。）
 - 实测数值分列，不可混用：筛查跑 12 个 fixture 的最大估算输入为 17,220（`CHANGES.md` 的 NX-08d 节）；NX-08d0-3 的 `merge` 烟测在 9 次请求后达到 27,147（`CHANGES.md` 的 NX-08d0-3 节）。后者是单 fixture 重复两次烟测得到的数，不是 12 个 fixture 的最大值。

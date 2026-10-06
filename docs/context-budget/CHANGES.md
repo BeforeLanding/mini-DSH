@@ -399,7 +399,134 @@ pnpm eval:estimate    # estimator.matchesReference true；corpus.matchesReferenc
   但加缓存是独立改动，会污染本项的可回退边界——只在文档里如实写「红利尚未兑现」。
 - **不改 `token-estimator.ts`、不动 `biome.jsonc`、不引入向量检索／长期记忆／自动重试／自动模型切换**。
 - **未修 `planCompaction` 保护集偏严**（见 NX-34-5 一节）：实践不可达，改它要动已交付并有测试的代码，
-  留给用户决定是否单开一项。
+  留给用户决定是否单开一项。（**这条在 NX-34-10 被推翻并修掉了**：它并非「实践不可达」，见该节。）
+
+### NX-34-8 `read_history` 的字节游标分页
+
+外部复审指出「超大单条事件无法逐字回读」。核实时又发现**第二条、更常见**的丢字节路径。两条都由实测复现，
+**都会给出 `eof=true`**，调用方连「我丢了东西」都无从知道：
+
+1. **超大事件**：单条事件大于一页时只给有界前缀，`nextSeq` 却已越过它，且 `maxBytes` 受部署上限封顶——
+   被截掉的后半段再没有入口。实测：40 000 字符的 `user/message`、`maxBytes=1024`，一页之后 `eof=true`，
+   尾部标记取不回来。
+2. **普通页面上的静默丢字节**（复审没提，我也漏了）：正文先打包，再把页末那句「继续读」的提示语
+   **事后裁剪进正文**。停在一条短事件之前时预算可能只剩几十字节，裁剪会吃掉上一页最后一条事件的尾巴，
+   而 `nextSeq` 已经越过它。实测：三条 150 字符的消息、`maxBytes=200`，三页之后 `eof=true`，
+   但 `A` 只回来 **112/150**。既有分页用例抓不住它——它断言每页出现 `[seq]` 表头，而表头在事件开头，
+   被裁掉的正是尾部。
+
+**改法是「先留后装」**：按区间上界（`end` 与 `Number.MAX_SAFE_INTEGER`）先算出提示语的字节上界 `reserve`，
+正文装完**不再裁剪**。整条装得下就装；装不下且本页已空时给 `utf8Prefix(剩余, limit - reserve)`，
+游标**停在它身上**、`nextOffset` 指向断点；装不下但本页已有内容时停在它之前，下一页从头读它。
+一条改动同时治好两条路径，页面字节数仍然**恒 ≤ 预算**（现在是算出来的，不是裁出来的）。
+
+游标随之从单个 `nextSeq` 变成 `(nextSeq, nextOffset)` 一对，与 `read_tool_result` 的 `(ref, offset)` 同形：
+`offset` 量的是 `from` 那条事件**渲染文本**里的 UTF-8 字节偏移，`nextSeq` 前进时归零，`eof` 时为 0。
+校验沿用既有措辞（`offset must be a nonnegative safe integer`、`offset must be a UTF-8 character boundary
+inside event N`），`offset` 等于事件文本长度时归一化成「下一条事件、偏移 0」。裁剪复用 `utf8Prefix`，不新写助手。
+
+**进展不变量由「`nextSeq` 必前进」改述为「游标按字典序前进」**，代价如实写进函数注释、工具描述与测试：
+**只跟 `nextSeq`、把 `offset` 丢掉的调用方会在超大事件上原地打转**——服务端区分不了「正确续读」与
+「从头重读同一条事件」，只能靠这对字段名和页末提示语挡住，不假装这是服务端兜得住的事。
+工具 schema 露出 `offset`（`minimum: 0`），描述写明「游标是一对，`nextSeq` 前进时 `nextOffset` 归零，
+事件不会丢字节」。预算小到装不下那句提示语时明确报错
+（`maxBytes cannot fit the continuation notice; raise it above N`），不再悄悄少给。
+
+**测试**（`test/history-read.test.ts`，8 → 10 条）：
+
+- `the read-back pages forward with the (seq, offset) cursor until eof and reassembles byte for byte`——
+  **以「一页装得下的整页读」为真值**，把各页的续读提示语剥掉后拼接，必须与之**逐字节相等**。
+  这条断言就是能抓住上面第 2 条的那条：旧实现下它会少掉被裁的那几十个字节。
+- `an event larger than one page is recovered in full across several pages`——超大事件分页到 `eof`，
+  `q` 的个数等于原始长度，尾部标记恰好出现一次，每页 ≤ 预算，调用次数有上界（不得打转）。
+- `multi-byte characters survive paging without being split into replacement characters`——中文与 emoji
+  跨页，任何一页都不含 `�`，重装仍逐字节相等。
+- `an offset must land on a character boundary inside the event it addresses`——边界、续字节、越界、
+  等于长度时的归一化。
+- 原「超大事件只给前缀并点名 raise maxBytes」那条被整体重写——它固定的正是要修掉的丢尾行为。
+
+演示脚本跟游标取页、并剥掉插在页间的提示语；旁白里那句「一页绝不在中途把事件劈成两半」按新语义改写。
+
+### NX-34-9 截断摘要按失败处理、恢复补齐括号、`/compact` 只报本次
+
+三条都是「日志说了一套、实际是另一套」的不一致：
+
+1. **截断的摘要被当成成功**（`src/core/compaction-runtime.ts`）：代码已经记下 `response.complete === false`，
+   却没有据此判定，只要正文非空且更短就照样写成 `applied`。截断的摘要缺的正是排在八节后面的
+   Pending Work / Next Step / Critical Context——拿它当成功等于把「模型没写完」伪装成压缩成功，
+   而那正是 §13.3「约束丢失」要防的。主循环早把 `complete=false` 升级成停止原因
+   （`agent-loop-runtime.ts` 的 `output_limit`／`error`），压缩这一侧对齐为 **`summary-failed`**
+   （§5.1 闭集里唯一说得通的一项，计入失败闩）。
+2. **异常路径丢掉供应商已经返回的用量**：`catch` 分支统一改用估算值。照主循环改用
+   `error instanceof ModelStreamError ? error.partial : …`，`settle(partial.usage ?? estimateUsage(...))`。
+   同时**补齐方案 §8.1 要求的 `onContent`／`onReasoning`**（上一轮漏传）：接上 `StreamJournal` 之后，
+   非 `ModelStreamError` 的抛出有了可退的 `journal.content`，崩溃窗口里也留下「模型说到哪」的 `model/fragment`。
+   这是本节的**自主追加**（复审只提了 `partial.usage` 那一半），理由是它和上面同属一段代码，且主循环本来就是这么做的。
+3. **恢复留下未闭合的括号**（`src/core/session-runtime.ts`）：上一轮对「已经写下 `context/summary` 的尝试」
+   直接跳过，理由是补 `declined` 会让日志自相矛盾。复审指出这偏离了 §9.1「每个未闭合 `start` 都要闭合」。
+   现在**按事实补 `applied`**：括号必然闭合，结论又与日志一致，两条不变量同时成立。上一轮的理由在这个写法下不成立。
+4. **CLI `/compact` 回显上一次的结果**（`src/plugins/cli.ts`）：原实现在全会话里反查最近一条
+   `summary`／`summary-end`，本次若是 `skipped`（一条事件都不写），就会把上一次的原因与统计再报一遍。
+   改为只看本次尝试新写的事件，判据是 **`summary-start`** 而**不是**「有没有新事件」——维护型 run 自己就会写
+   `run/start` 与 `run/finish`；确实没得压时报「没有可压缩段」，预算未配置时另说。
+
+**测试**：
+
+- `a truncated summary is a failure, never a smaller summary that happens to fit`——`complete=false` 时
+  decline `summary-failed`，不落 `context/summary`，`model/end.complete=false` 仍在日志里可解释。
+- `a failed call keeps the partial usage and the text the provider already returned`——用量来源是
+  `provider` 而非 `estimated`，计数值等于供应商报的数，`model/fragment` 留下了那半段正文。
+- `a recorded summary gets an applied end on recovery, not an unclosed one`（改写自 NX-34-6 的那条）——
+  补的是 `applied`、`startSeq`／`taskId`／`runId` 沿用原事件、投影逐条相等、再恢复一次不补第二条。
+- `CLI /compact reports only this attempt and says so when there is nothing to compact`——第二次
+  `/compact` 报「没有可压缩段」，且 `[Compact] replaced` 全场只出现一次。
+
+### NX-34-10 门牌号取传递并集、保护集与区间都对齐 §6.1／§7
+
+1. **门牌号只展开一层**（`coveredSeqs`）：第三次压缩手里的 `shadowedSeqs` 里躺的是第二份摘要的 seq，
+   展开它得到的是**第一份摘要的 seq** 而不是最初那批原文。实测：连续三次压缩后第三个 frame 的 `from`
+   是 **7**（第一份摘要自己），应为 **4**（最早的原始事件）——最初的范围就此从门牌号里消失，
+   而门牌号的全部意义就是让「丢了什么」可寻址。改为**递归到不动点**，摘要自身的 seq 不进集合，
+   `seen` 兼作防环。
+2. **保护集比方案更严**（`planCompaction` 与 `surfaceSeqs` 把**任何** `user/message` 都当保护集）：
+   方案 §6.1 规则 1 与 §7.2 写的是只有当前 task 的**第一条**永不遮蔽、后续**允许**被遮蔽。
+   两处一起收窄——规划器只挡 `unknown` 工具组，投影侧只挡**本组事件里的第一条** `user/message`。
+   两侧口径必须一致，否则日志说 `applied`、投影却不生效。既有用例（遮蔽 `[1,2,3]` 而 1 是第一条）
+   仍然成立，无需改。上一轮把它记为「实践不可达、留给用户决定」，**这个判断是错的**：见下一条。
+3. **收窄 2 之后暴露出一处方案早就写明、却从未被执行的约束**：§7 说「区间落在当前 task 内部不是
+   退而求其次，**它就是本项的定义**」，而规划器实际是在**整份可见日志**上规划，会把**已被裁剪、
+   已经不在请求里**的旧任务也划进区间。后果不是「压多了」，而是：摘要照样落成 `applied`，投影却因为
+   那些 seq 根本不在请求里而不生效——**白花一次模型调用，还写坏日志**。实测表现是
+   `test/context.test.ts` 的容量用例多出一次调用（`calls` 3 ≠ 2），因为旧的过严保护集恰好掩盖了它。
+   现在规划前先把可见面**收进当前 task**（最后一条带 `taskId` 的事件所属的那个）；合成日志没有 `taskId`
+   时退回整份可见集，行为与原来一致。
+4. 顺带补上第二条 `user/message` 的用例：`only the first user/message is protected; a later one inside the
+   range may be shadowed`、`surfaceSeqs accepts a summary over a later user/message but not over the original
+   request`、`the plan never leaves the current task, even when an older task is still visible`
+   （第三条在旧代码下会返回含旧任务的区间）、以及
+   `a third compaction still addresses the earliest originals, not the first summary`（第一条）。
+
+#### NX-34-8…-10 的六条验收命令原始输出
+
+```
+pnpm check            # syntax ok: 105 files
+pnpm test             # tests 269 / pass 269 / fail 0 / skipped 0
+pnpm lint             # Checked 114 files in 44ms. No fixes applied.
+pnpm fixtures:check   # 16 项：初始全部失败、参考解全部通过（退出码 0）
+pnpm eval:offline     # planned 12 / executed 12 / accepted 12 / rejected 0 / aborted null
+pnpm eval:estimate    # estimator.matchesReference true；corpus.matchesReference true
+```
+
+另跑 `pnpm demo:compact # 退出码 0`（九项判定全 ✓）。
+
+#### 未做与代价（本轮）
+
+- 三条提交均在**本地**，**未推送**。
+- `read_history` 的游标语义变化是**工具契约**变化：模型必须带回 `nextOffset`。这一点在工具描述里写明，
+  但不做服务端强制（做不到）。`CHANGES.md` 第 213–218 行「分页规则」记的是旧的丢字节规则，按
+  「既有小节一字不改」的约定不回去改它，**以本节为准**。
+- 仍**不改裁剪语义**、`context_overflow` 仍是最后的停止原因、不加前缀缓存、不动
+  `token-estimator.ts`／`biome.jsonc`，不引入向量检索／长期记忆／自动重试／自动模型切换。
 
 ## NX-33 大工具结果的尾部窗口
 

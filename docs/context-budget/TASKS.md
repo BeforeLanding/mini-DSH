@@ -14,6 +14,9 @@
 | NX-34-5 | `read_history`（**done**） | 原文逐字回读、分页、隔离与上限 | 1 次 |
 | NX-34-6 | 恢复时闭合未完尝试（**done**） | `unclosed` 落盘且恢复不调模型 | 1 次 |
 | NX-34-7 | 三类 fixture、CLI `/compact`、演示与文档（**done**） | 六条验收命令及 `pnpm demo:compact` 实跑；活锚点与计数复核 | 1 次 |
+| NX-34-8 | 复审修复：`read_history` 字节游标分页（**done**） | 分页重装与「整页读」逐字节相等；超大事件全量取回；多字节不劈；全量 269/269 | 1 次 |
+| NX-34-9 | 复审修复：截断摘要按失败、恢复补 `applied`、`/compact` 只报本次（**done**） | `complete=false` 落 `summary-failed`；部分 usage 来源为 `provider`；恢复闭合后投影逐条相等 | 1 次 |
+| NX-34-10 | 复审修复：门牌号传递并集、保护集与区间对齐 §6.1／§7（**done**） | 三次压缩门牌号仍指向最早原文；后续 `user/message` 可遮蔽；区间不越出当前 task | 1 次 |
 
 ### NX-33 大工具结果的尾部窗口
 
@@ -75,7 +78,7 @@ NX-08e 开跑前必须先解决其前置条件（2026-09-30 修正）：裁剪�
 | NX-08d0-2 | run 结论分类与显式分子分母 | 拒绝但可解、不可行、基础设施失败三类各自进入正确的分子/分母口径 | 1 次 |
 | NX-08d0-3 | 逐 run 证据落盘与 `pnpm eval:screening` 真实适配器入口 | 烟测 1 个任务：模型名被接受、回显 `model`、原始 usage 与 `reasoning_tokens` 记录、会话与结果 JSONL 可读回 | 1 次 |
 | NX-08d0-4 | d0 文档回填与烟测结论 | 文档记录的命令与实际执行一致 | 1 次 |
-| NX-08e0-1 | 修正对照触发条件与需求（文档） | 前置条件改为「会话组成 + 规模」，每处结论可在 `context-runtime.ts:29,68-70`、`session-runtime.ts:156`、`eval-fixture.ts:42-50` 找到依据；27,147 与 17,220 分列；新增 R-21 | 1 次 |
+| NX-08e0-1 | 修正对照触发条件与需求（文档） | 前置条件改为「会话组成 + 规模」，每处结论可在 `context-runtime.ts:29,68-70`、`session-runtime.ts:157`、`eval-fixture.ts:42-50` 找到依据；27,147 与 17,220 分列；新增 R-21 | 1 次 |
 | NX-08e0-2 | 评测驱动支持同一会话内的任务序列 | 描述符支持 `TASKS/*.md` 布局且与 `TASK.md` 互斥；驱动按序 `send` 并逐阶段记录；新增用例证明第三个任务的 `removedTaskIds` 非空且原始事件一条未少；`pnpm eval:offline` 仍 12/12 | 1 次 |
 | NX-08e0-3 | 离线量化裁剪触发所需的旧任务规模 | 诊断探针给出「第几次任务开始触发裁剪」的具体数值（实测：固定开销 1,909；每阶段 2,000/8,000/32,000 token 分别在 31/8/2 个阶段触发）；结论回填 PLAN/TASKS/PROGRESS；不调用真实模型 | 1 次 |
 | NX-08e1-1 | 新增多阶段依赖 fixture 并让注册表区分筛查批次 | `pipeline` 六阶段：初始失败（退出码 1、AssertionError）、参考解六个阶段全绿、`verify.mjs` 用另一组输入通过；注册表拆出 `screeningIds`/`sequenceIds`，`pnpm fixtures:check` 13 项初始 0/13 参考 13/13、`pnpm eval:offline` 仍 12/12 | 1 次 |
@@ -493,7 +496,7 @@ NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，
 - **NX-08e1-3 fixture 契约与基线回填 — done**：PLAN 记录 fixture 契约与阶段数依据，TASKS/PROGRESS 同步计数与下一步；同时记下模拟适配器流量下序列峰值仅 13,614、不足以判断阶段数是否够这一负面事实。本批三个提交一次性推送，[CI 36693778212](https://github.com/BeforeLanding/mini-DSH/actions/runs/36693778212) 在 tip `c554bab` 上四组 success、attempt=1——**只有 tip 的 run，没有逐提交证据**。[详细证据](CHANGES.md#nx-08e1-3-fixture-契约与基线回填)。
 - **NX-08e0-3 离线量化裁剪触发所需的旧任务规模 — done**：诊断探针 `docs/context-budget/nx08e-prune-probe.mjs` 给出实测换算——固定开销 1,909 token，每阶段 2,000／8,000／32,000 token 分别在**第 31／8／2 个阶段**触发裁剪，触发后进入「每新增一个阶段就丢掉最旧的一个」的滚动状态。据此，与现有 fixture 真实峰值（17,220／27,147）同量级的阶段约需 3～4 个才能越过 65,536。不调真实模型。[详细证据](CHANGES.md#nx-08e0-3-离线量化裁剪触发所需的旧任务规模)。
 - **NX-08e0-2 评测驱动支持同一会话内的任务序列 — done**：`readTaskSequence` 支持 `TASKS/*.md` 布局（按文件名排序）并与 `TASK.md` 互斥，`TASKS/` 无 `.md` 时报错而不静默退回单任务；`runFixtureTask` 按 `fixture.tasks` 顺序在同一 session 内 `send`，`RunOutcome` 增加 `tasks` 逐阶段明细、`counters` 改为各阶段之和、`status` 取最后一个阶段，非 `BudgetStop` 的基础设施失败中止后续阶段；`task` 字段由 `tasks` 取代。提交 `18a50cc`，[CI 36690199979](https://github.com/BeforeLanding/mini-DSH/actions/runs/36690199979) 在该 SHA 上四组 success、attempt=1；[详细证据](CHANGES.md#nx-08e0-2-评测驱动支持同一会话内的任务序列)。
-- **NX-08e0-1 修正对照触发条件与需求（文档）— done**：把 NX-08e 前置从「规模问题」改为「会话组成 + 规模」，逐条给出 `context-runtime.ts:29,68-70`、`session-runtime.ts:156`、`eval-fixture.ts:42-50` 的依据；更正 27,147 的来源标注并与之 17,220 分列；CHANGES 三处加带日期的修正注记、原始数值保留；REQUIREMENTS 新增 R-21。提交 `a46d1fc`；[详细证据](CHANGES.md#nx-08e0-1-修正对照触发条件与需求文档)。
+- **NX-08e0-1 修正对照触发条件与需求（文档）— done**：把 NX-08e 前置从「规模问题」改为「会话组成 + 规模」，逐条给出 `context-runtime.ts:29,68-70`、`session-runtime.ts:157`、`eval-fixture.ts:42-50` 的依据；更正 27,147 的来源标注并与之 17,220 分列；CHANGES 三处加带日期的修正注记、原始数值保留；REQUIREMENTS 新增 R-21。提交 `a46d1fc`；[详细证据](CHANGES.md#nx-08e0-1-修正对照触发条件与需求文档)。
 - **NX-17-3 NX-17 设计决策与文档回填 — done**：设计决策（形状判据、能力判据、明确不采用的网络工具清单方案）与未放宽清单写入 CHANGES，新增 R-20 固化命令策略契约，README 说明策略范围与已知缺口，另附可复跑闸门矩阵 `docs/context-budget/nx17-gate-probes.mjs`（诊断脚本，非 CI 门禁）；[详细证据](CHANGES.md#nx-17-沙箱命令闸门误判修复筛查跑发现)。
 - **NX-17-2 出网规则改用能力判据 — done**：`echo`／`printf` 参数里的 URL 不再判出网，本段接管道时仍拦截，`||` 不计作管道；`curl`／`wget` 操作数、`git clone <url>` 照旧拒绝。提交 `c4a02ae`；[详细证据](CHANGES.md#nx-17-沙箱命令闸门误判修复筛查跑发现)。
 - **NX-17-1 命令分词与路径形状修复 — done**：双引号按 shell 语义识别 `\"`（事故命令由 49 token 变为 6 token，注释不再暴露为独立 token）；纯分隔符串与「首个分量含空白」的双斜杠 token 不再当路径操作数，单个 `/`、系统路径、`//etc`、`//home/…`、UNC 与 `..` 全部照旧拒绝。提交 `5322291`；[详细证据](CHANGES.md#nx-17-沙箱命令闸门误判修复筛查跑发现)。
