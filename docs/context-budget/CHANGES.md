@@ -303,6 +303,104 @@ pnpm eval:estimate    # estimator.matchesReference true；corpus.matchesReferenc
 
 六条命令均退出 0。README 三处测试计数同步为 257。
 
+### NX-34-7 三类 fixture、CLI `/compact`、演示与文档回填
+
+**CLI `/compact`**（`src/plugins/cli.ts` + `AgentLoopService.compact` + `Context.agentLoop` 的类型面）走
+`AgentLoopRuntime.compact`，打印 applied／declined（带闭集原因）以及替换了多少条事件、保留了多少条。
+`/compact` 进帮助行。压缩**刻意不是模型可调用的工具**：让模型自己决定「我要不要把看到的上下文压掉」
+是个坏主意——压缩是人或框架的事。
+
+**三类 fixture 测试**（`test/compaction-fixtures.test.ts`，零付费，全部在**机制**层面判）：
+
+1. `constraint loss: what the user actually asked for stays, and what got replaced stays checkable`——
+   原始请求里的约束落在保护集里，压缩后逐字仍在投影中；模型**复述**约束的那条消息确实随区间被换掉了
+   （这才是「可能记不住」的那一半），但它在 frame 给出的事件范围里，`read_history` 逐字读得回来。
+2. `fabricated facts: the summary is reproduced verbatim so nothing invented is attributable to the harness`——
+   `context/summary.summary` 与模型返回的正文逐字相等（Harness 一字不添、一字节不删）；frame 是代码写的，
+   门牌号的范围与条数与落盘的 `shadowedSeqs` 对得上，声称的每条 seq 都真的在日志里——编造的事实因此**可以
+   逐条对照**，而不是只能相信摘要。
+3. `across a restart: the summary survives, the projection is identical and the model is not asked again`——
+   JSONL 落盘、关闭、重开、恢复之后：摘要还在、投影逐条相等、模型调用计数仍是 1（压缩那一次）、被遮蔽的
+   原文照样读得回来。
+
+**这一层能保证什么、不能保证什么，写进测试文件头部、R-22 与本节**：能保证 Harness 自己没编造、门牌号可核对、
+原文可逐字回读；**不保证模型不编造**，也不保证它读了回读结果就改对。把这一层说成「压缩不会丢约束」是夸大，
+说成「压缩让约束丢失这件事变成可查的」才是准确的。
+
+**演示 `scripts/demo-compact.ts`**（`pnpm demo:compact`，不进 CI）：播一条单任务长会话，先合成一条压不动的
+大工具结果，再走一遍真正的 `AgentLoopRuntime.compact` 路径，然后逐条核对九项判定。实测输出：
+
+```
+=== [1] 压缩之前 ===
+  投影 5 条消息、约 11673 估算 token（输入目标 3000）
+  其中最长的一条是工具结果，13311 字符——既有裁剪救不了它：当前 task 恒受保护
+
+=== [2] /compact：一次摘要调用 ===
+  结果 applied=true，摘要调用 1 次，主循环调用 0 次
+  替换掉 3 条事件（4499 估算 token），写入摘要 225 token，保留尾部 2 条
+  被替换的 seq：[4,5,6]
+  投影 3 条消息、约 635 估算 token
+
+=== [3] frame 落在哪、原文还在不在 ===
+  frame 在投影里的位置：第 2 / 3 条；原始用户请求在第 1 条
+  frame 提到了 read_history：true
+  被替换掉的工具结果仍完整躺在日志里：1 条，13311 字符
+
+=== [4] 按事件号把原文读回来 ===
+  read_history({from:4}) 分 1 页、共 13702 字符
+  约束原文读得回来：true
+  那条 13311 字符的工具结果逐字读得回来：true
+
+=== [5] 判定 ===
+  ✓ 压缩确实应用了
+  ✓ 摘要只花了一次模型调用，主循环一次都没跑
+  ✓ 投影变小了
+  ✓ 被替换段不含原始用户请求
+  ✓ frame 紧跟在原始用户请求之后
+  ✓ frame 提到了 read_history（该部署确实挂载了它）
+  ✓ 被遮蔽的工具结果一条没删、长度不变
+  ✓ 约束原文可逐字读回
+  ✓ 被替换的工具结果也可逐字读回
+```
+
+`assembleDemoHarness`（`scripts/demo-context.ts`）装载 `read-history` 插件，与 `src/index.ts` 的装配一致——
+frame 的 recall 提示只在确实挂载了回读工具时才出现，演示要展示的正是那条提示兑现得了的样子。
+`demo:fix`／`demo:resume`／`demo:unknown` 在装配变动后复跑均退出 0。
+
+#### 文档回填
+
+- **`README.md`**：`## 演示` 由三条改四条并补 `demo:compact` 行与讲解段；零密钥命令块由八条改九条并加一行；
+  CLI 命令表补 `/compact`；工具计数 11→12（表格、结构一节、mermaid 图）；测试计数与文件计数按本步实测订正。
+- **`REQUIREMENTS.md`**：R-22 补状态段，明写前缀缓存未兑现与三类 fixture 的判据边界。
+- **`PLAN.md`**：D-21 已在 NX-34-4 补两段（`resolveBudget` 的两档放宽、维护型 run）。
+- **`DECISIONS.md`**：本项只更新漂移锚点，**未新增章节**（新增章节是独立任务，且有「每节各有代码／测试锚点」
+  的强制规则）。
+- **`PROGRESS.md`**：当前状态置顶 NX-34。
+- **`CHANGES.md` / `NX-08-REPORT.md`**：既有小节一字未改，本项只**追加** NX-34-3…-7 五个新小节。
+
+#### 六条验收命令的原始输出
+
+```
+pnpm check            # syntax ok: 105 files
+pnpm test             # tests 260 / pass 260 / fail 0 / skipped 0
+pnpm lint             # Checked 114 files in 90ms. No fixes applied.
+pnpm fixtures:check   # 16 项：初始全部失败、参考解全部通过（退出码 0）
+pnpm eval:offline     # planned 12 / executed 12 / accepted 12 / rejected 0
+pnpm eval:estimate    # estimator.matchesReference true；corpus.matchesReference true
+```
+
+另跑 `pnpm demo:compact # 退出码 0`（上面第九节判定全 ✓）与 `pnpm demo:fix`／`demo:resume`／`demo:unknown`
+（各退出 0）。
+
+#### 未做与代价
+
+- **不改裁剪语义**；`context_overflow` 仍是最后的停止原因。
+- **不加前缀缓存**：核实过 `src/models/deepseek.ts` 没有任何缓存实现（无 `cache_control`、无缓存相关字段），
+  但加缓存是独立改动，会污染本项的可回退边界——只在文档里如实写「红利尚未兑现」。
+- **不改 `token-estimator.ts`、不动 `biome.jsonc`、不引入向量检索／长期记忆／自动重试／自动模型切换**。
+- **未修 `planCompaction` 保护集偏严**（见 NX-34-5 一节）：实践不可达，改它要动已交付并有测试的代码，
+  留给用户决定是否单开一项。
+
 ## NX-33 大工具结果的尾部窗口
 
 ### 行为、边界与实现

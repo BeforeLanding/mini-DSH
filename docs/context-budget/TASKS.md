@@ -13,7 +13,7 @@
 | NX-34-4 | 真实摘要调用、三入口、预算与失败闩（**done**） | 模拟模型验证计数、取消、失败及溢出上界 | 1 次 |
 | NX-34-5 | `read_history`（**done**） | 原文逐字回读、分页、隔离与上限 | 1 次 |
 | NX-34-6 | 恢复时闭合未完尝试（**done**） | `unclosed` 落盘且恢复不调模型 | 1 次 |
-| NX-34-7 | 三类 fixture、CLI `/compact`、演示与文档（todo） | 六条验收命令及 `pnpm demo:compact` 实跑；活锚点与计数复核 | 1 次 |
+| NX-34-7 | 三类 fixture、CLI `/compact`、演示与文档（**done**） | 六条验收命令及 `pnpm demo:compact` 实跑；活锚点与计数复核 | 1 次 |
 
 ### NX-33 大工具结果的尾部窗口
 

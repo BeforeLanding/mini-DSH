@@ -20,6 +20,9 @@ class AgentLoopService extends Service {
     run(...args: Parameters<AgentLoopRuntime['run']>) {
         return this.runtime.run(...args)
     }
+    compact(...args: Parameters<AgentLoopRuntime['compact']>) {
+        return this.runtime.compact(...args)
+    }
 }
 
 export const name = 'mini-agent-loop'

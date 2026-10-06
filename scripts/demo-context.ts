@@ -14,6 +14,7 @@ import * as agentLoop from '../src/plugins/agent-loop.js'
 import * as runtimeContext from '../src/plugins/runtime-context.js'
 import * as projectContext from '../src/plugins/project-context.js'
 import * as sandbox from '../src/plugins/sandbox.js'
+import * as readHistory from '../src/plugins/read-history.js'
 import * as files from '../src/tools/files.js'
 import * as bash from '../src/tools/bash.js'
 
@@ -48,6 +49,9 @@ export async function assembleDemoHarness(fixture: Fixture, makeAdapter: (fixtur
     for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
     await root.plugin(runtimeContext, { workspace: fixture.workspace, profile: 'coding' })
     await root.plugin(sandbox, { workspace: fixture.workspace, autoApprove: true })
+    // 与 src/index.ts 的装配保持一致：摘要 frame 的 recall 提示只在确实挂载了 read_history 时才出现，
+    // 演示要展示的正是那条提示兑现得了的样子。
+    await root.plugin(readHistory)
     if (options.projectRules !== false) await root.plugin(projectContext)
     await root.plugin(files); await root.plugin(bash)
     const adapter = makeAdapter(fixture)

@@ -9,7 +9,7 @@ import type { SandboxRuntime } from '../core/sandbox-runtime.js'
 declare module '@deepseek-ai/cordis' {
   interface Context {
     agents: Pick<AgentRuntime, keyof AgentRuntime>
-    agentLoop: Pick<AgentLoopRuntime, 'run'>
+    agentLoop: Pick<AgentLoopRuntime, 'run' | 'compact'>
     llm: Pick<LlmRuntime, keyof LlmRuntime>
     sessions: Pick<SessionRuntime, keyof SessionRuntime>
     systemPrompt: Pick<SystemPromptRuntime, keyof SystemPromptRuntime>

@@ -63,7 +63,7 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
     const onKey = (chunk: Buffer | string) => { const bytes = Buffer.from(chunk); if (bytes.length === 1 && bytes[0] === 0x1b) controller?.abort() }
     input.on('data', onKey)
     print('mini-dsh — a local agent Harness')
-    print('Commands: /tools /models /model /history /prompt /reset /continue /budget [JSON] /changes [fileOffset] /diff [fileOffset] [byteOffset] /report [fileOffset] [verificationOffset] [byteOffset] /trace [requestOffset] [byteOffset] /exit')
+    print('Commands: /tools /models /model /history /prompt /reset /continue /compact /budget [JSON] /changes [fileOffset] /diff [fileOffset] [byteOffset] /report [fileOffset] [verificationOffset] [byteOffset] /trace [requestOffset] [byteOffset] /exit')
     print(`Sandbox workspace: ${workspace}`)
     print(`Session: ${session.id}${store ? ` (${store.directory})` : ' (memory)'}`)
     print('Writes and bash execution ask [Y/n] first. Press Esc to cancel, including during approval.')
@@ -208,6 +208,27 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
           break
         }
         case '/continue': await runInput(); break
+        // 压缩是人或框架的事，不是模型的事——所以它是个人工命令，不是模型可调用的工具。
+        // 它永远可用：不受失败闩影响，也不被 auto 关掉（AGENTS.md 的「最后手段」由人保留）。
+        case '/compact': {
+          if (parts.length) throw new Error('usage: /compact')
+          const before = ctx.sessions.visibleEvents(session.id).length
+          try {
+            const applied = await ctx.agentLoop.compact(agent, { signal: new AbortController().signal })
+            const end = [...ctx.sessions.visibleEvents(session.id)].reverse().find(event => event.type === 'context/summary-end')
+            const reason = end?.type === 'context/summary-end' && end.data.outcome.kind === 'declined' ? end.data.outcome.reason : undefined
+            print(applied
+              ? '[Compact] applied: the earlier part of this task now sits behind a summary frame; the original events are still in /history and readable with read_history.'
+              : `[Compact] not applied${reason ? ` (${reason})` : ''}; the projection is unchanged.`)
+            const summary = [...ctx.sessions.visibleEvents(session.id)].reverse().find(event => event.type === 'context/summary')
+            if (summary?.type === 'context/summary') print(`[Compact] replaced ${summary.data.shadowedSeqs.length} events (${summary.data.shadowedTokens} estimated tokens) with ${summary.data.summaryTokens}; retained=${summary.data.retainedNodes}`)
+          } catch (error) {
+            if (error instanceof BudgetStop) print(`[Compact] stopped: ${error.reason}`)
+            else print(`[CompactError] ${error instanceof Error ? error.message : String(error)}`)
+          }
+          print(`[Compact] events added: ${ctx.sessions.visibleEvents(session.id).length - before}`)
+          break
+        }
         case '/changes': if (parts.length > 1) throw new Error('usage: /changes [fileOffset]'); await showChanges(false, offset(parts[0])); break
         case '/diff': if (parts.length > 2) throw new Error('usage: /diff [fileOffset] [byteOffset]'); await showChanges(true, offset(parts[0]), offset(parts[1])); break
         case '/report': if (parts.length > 3) throw new Error('usage: /report [fileOffset] [verificationOffset] [byteOffset]'); await showReport(offset(parts[0]), offset(parts[1]), offset(parts[2])); break
