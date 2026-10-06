@@ -82,13 +82,13 @@ test('an unclosed summary attempt is closed as unclosed on recovery and never re
   })
 })
 
-test('a recorded summary is not relabelled as unclosed just because its bracket never closed', async () => {
+test('a recorded summary gets an applied end on recovery, not an unclosed one', async () => {
   const h = harness(async () => ({ content: 'unused' }))
   await withStore(async open => {
     const store = await open(h.session.id)
     try {
       h.sessions.attachStore(h.session.id, store)
-      const { run } = crashMidSummary(h, { summary: true })
+      const { run, start } = crashMidSummary(h, { summary: true })
       const projected = h.sessions.deriveMessages(h.session.id)
       await h.sessions.flush(h.session.id)
       await store.close()
@@ -96,10 +96,24 @@ test('a recorded summary is not relabelled as unclosed just because its bracket 
       const reopened = await open(h.session.id)
       const restored = new SessionRuntime()
       await restored.restore(reopened)
-      assert.deepEqual(endsOf(restored, h.session.id), [], '摘要已经落盘并生效，标成 declined 会让日志自相矛盾')
+      // 括号必然闭合（§9.1 的「每个未闭合 start 都要闭合」），但补的是 applied——
+      // 摘要正文已经落盘并在投影里生效，标成 declined 会让日志自相矛盾。
+      const ends = endsOf(restored, h.session.id)
+      assert.equal(ends.length, 1)
+      assert.equal(ends[0]!.data.startSeq, start.seq)
+      assert.deepEqual(ends[0]!.data.outcome, { kind: 'applied' })
+      assert.equal(ends[0]!.taskId, start.taskId)
+      assert.equal(ends[0]!.runId, start.runId)
       assert.deepEqual(restored.deriveMessages(h.session.id), projected)
       assert.equal(restored.visibleEvents(h.session.id).some(event => event.type === 'context/summary' && event.runId === run.runId), true)
       await reopened.close()
+
+      // 再恢复一次：已经闭合，不该再补第二条。
+      const again = await open(h.session.id)
+      const second = new SessionRuntime()
+      await second.restore(again)
+      assert.equal(endsOf(second, h.session.id).length, 1)
+      await again.close()
     } finally { await h.sessions.close().catch(() => {}) }
   })
 })

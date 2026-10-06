@@ -181,6 +181,46 @@ test('CLI and scripted model deliver confirmed task changes, failed attempts and
     await app.waitFor('unknown a'); await app.waitFor('(no confirmed diff)'); await app.waitFor('[Changes] no tracked edits in this task')
   } finally { await app.root.fiber.dispose(); await fs.rm(temp, { recursive: true, force: true }) }
 })
+test('CLI /compact reports only this attempt and says so when there is nothing to compact', { timeout: 15000 }, async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-cli-compact-'))
+  const app = await boot(temp, path.join(temp, 'sessions'))
+  try {
+    const id = app.root.sessions.list()[0].id
+    // 一条单任务长会话：压缩的典型场景（既有裁剪救不了当前 task 自己）。
+    const run = app.root.sessions.beginRun(id, {
+      contextWindowTokens: 1_000_000, inputTargetTokens: 3000, maxOutputTokens: 1000, minimumOutputTokens: 1,
+      compactionBudgetTokens: 3000, compactionRatio: 0.8, retainRatio: 0.1, maxModelRequests: 10,
+    }, 'mock/test')
+    app.root.sessions.append(id, 'user/message', { content: 'original request' }, run)
+    app.root.sessions.append(id, 'assistant/message', { content: 'understood' }, run)
+    app.root.sessions.append(id, 'assistant/tool_calls', { toolCalls: [{ id: 'c1', name: 'tick', arguments: {} }] }, run)
+    app.root.sessions.append(id, 'tool/result', { toolCallId: 'c1', name: 'tick', content: 't'.repeat(12_000) }, run)
+    app.root.sessions.append(id, 'assistant/message', { content: 'tail' }, run)
+    app.root.sessions.finishRun(run, 'max_steps')
+    await app.root.sessions.flush(id)
+    app.root.llm.register('compact', { models: ['test'], capabilities: { test: { contextWindowTokens: 1_000_000 } },
+      chat: async () => ({ content: '## Primary Request\n- original request' }) })
+
+    app.input.write('/model compact/test\n')
+    await app.waitFor('Model: compact/test')
+    app.input.write('/budget {"maxModelRequests":10,"inputTargetTokens":3000,"contextWindowTokens":1000000,"retainRatio":0.1}\n')
+    await app.waitFor('"inputTargetTokens": 3000')
+
+    app.input.write('/compact\n')
+    await app.waitFor('[Compact] applied')
+    assert.match(app.text(), /replaced 3 events/)
+
+    // 第二次没有可压缩的段（surface 只剩 请求 / frame / 尾巴）。旧实现会在全会话里反查，
+    // 把上一次的 reason 与统计原样再报一遍——那正是「展示上一次压缩的数据」。
+    app.input.write('/compact\n')
+    await app.waitFor('[Compact] nothing to compact: this task has no compactable range')
+    assert.equal(app.text().split('[Compact] replaced').length - 1, 1, '统计只该报一次')
+  } finally {
+    await app.root.fiber.dispose()
+    assert.equal(path.dirname(temp), path.resolve(os.tmpdir())); await fs.rm(temp, { recursive: true, force: true })
+  }
+})
+
 test('Esc cancels a CLI approval and releases its input handler', { timeout: 10000 }, async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-cli-approval-'))
   const app = await boot(temp, path.join(temp, 'sessions'), undefined, false)

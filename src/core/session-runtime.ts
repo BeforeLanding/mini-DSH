@@ -50,16 +50,17 @@ export class SessionRuntime {
             this.append(id, 'tool/result', { toolCallId: call.id, name: call.name, isError: true,
                 status: started ? 'unknown' : 'skipped', content: started ? 'ToolError: unknown outcome after recovery; verify side effects before continuing' : 'ToolError: skipped before execution after recovery' }, scope)
         }
-        // §9.1：崩溃窗口里的未闭合尝试补一条 declined/unclosed。语义是「日志知道的和它知道的一样多」——
-        // 不假装摘要成功，也不假装从未发生。
-        // 再收一格：**已经写下 context/summary 的那次尝试不算未闭合**。摘要已经落盘并在投影里生效，
-        // 崩溃只发生在括号闭合那一行之前（compaction-runtime 先写摘要再闭合），把它标成 declined 会让
-        // 日志自相矛盾。规则因此收窄为「既没有结束事件、也没有摘要正文」。
+        // §9.1：崩溃窗口里的未闭合尝试一律补上配对结束事件——**每一个** summary-start 都要有 end。
+        // 补什么由摘要正文是否已经落盘决定：写下 context/summary 的那次尝试事实上生效了（投影认它），
+        // 补 applied 才是如实记录；连正文都没有的才补 declined/unclosed。这样两条不变量同时成立——
+        // 括号必然闭合，且闭合后的结论与日志里真正发生了什么一致。
         for (const event of visible) {
             if (event.type !== 'context/summary-start') continue
             if (visible.some(candidate => candidate.type === 'context/summary-end' && candidate.data.startSeq === event.seq)) continue
-            if (visible.some(candidate => candidate.type === 'context/summary' && candidate.data.startSeq === event.seq)) continue
-            this.append(id, 'context/summary-end', { startSeq: event.seq, outcome: { kind: 'declined', reason: 'unclosed' } }, event)
+            const outcome: EventData['context/summary-end']['outcome'] = visible.some(candidate => candidate.type === 'context/summary' && candidate.data.startSeq === event.seq)
+                ? { kind: 'applied' }
+                : { kind: 'declined', reason: 'unclosed' }
+            this.append(id, 'context/summary-end', { startSeq: event.seq, outcome }, event)
         }
         for (const event of visible) {
             if (event.type !== 'model/start' || visible.some(e => e.type === 'model/usage' && e.data.requestId === event.data.requestId)) continue

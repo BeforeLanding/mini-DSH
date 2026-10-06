@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { deriveEventMessage, planCompaction, surfaceSeqs } from './compaction-plan.js'
+import { ModelStreamError } from './model-error.js'
+import { StreamJournal } from './stream-journal.js'
 import { estimateMessage } from './message-estimator.js'
 import { estimateInput, estimateUsage } from './token-estimator.js'
 import type { RunState, Usage } from './budget.js'
@@ -146,16 +148,31 @@ export class CompactionRuntime {
     state.counters.modelRequests++
     await this.#sessions.flush(sessionId)
 
+    // 摘要正文按主循环同一形态逐块落盘（§8.1）。除了崩溃时 restore 能据此重建用量估算，
+    // 它还让「调用抛错但供应商已经返回了一部分」时有东西可退——否则那部分正文与用量被一句估算盖掉。
+    const journal = new StreamJournal(requestId, data => this.#sessions.append(sessionId, 'model/fragment', data, state))
     let content: string | undefined
     let failure: unknown
+    let incomplete = false
     try {
-      const response = await this.#llm.chat({ maxOutputTokens, system: attempt.system, messages, tools: attempt.tools, signal: attempt.signal }, attempt.model)
+      const response = await this.#llm.chat({
+        maxOutputTokens, system: attempt.system, messages, tools: attempt.tools, signal: attempt.signal,
+        onReasoning: chunk => { if (attempt.signal.aborted || journal.closed) return; journal.add('reasoning', chunk) },
+        onContent: chunk => { if (attempt.signal.aborted || journal.closed) return; journal.add('content', chunk) },
+      }, attempt.model)
       content = response.content
-      this.#settle(sessionId, state, requestId, response.usage ?? estimateUsage(inputTokens, response), response.complete !== false)
+      // 截断的摘要是**失败**，不是成功。八节里排在后面的 Pending Work / Next Step / Critical Context
+      // 会整段消失，而这正是 §13.3「约束丢失」要防的东西——只要正文非空且更短就写成 applied，
+      // 等于把「模型没写完」伪装成「压缩成功」。主循环把 complete=false 升级成停止原因，这里对齐。
+      incomplete = response.complete === false
+      this.#settle(sessionId, state, requestId, response.usage ?? estimateUsage(inputTokens, response), !incomplete)
     } catch (error) {
+      journal.close()
       failure = error
-      this.#settle(sessionId, state, requestId, estimateUsage(inputTokens), false)
-    }
+      // 照主循环：ModelStreamError 带着供应商已经返回的部分正文与真实用量，不能被统一估算盖掉。
+      const partial = error instanceof ModelStreamError ? error.partial : { content: journal.content, reasoningContent: journal.reasoningContent, usage: undefined }
+      this.#settle(sessionId, state, requestId, partial.usage ?? estimateUsage(inputTokens, partial), false)
+    } finally { journal.close() }
 
     // 写 context/summary 之前复查取消与主动预算。§5.1 的闭集里没有 timeout／token_budget，`check()` 抛出的
     // 任何停止原因在此一律归入 `cancelled`——它表达的是「环境变了，这次不算数」。
@@ -163,7 +180,7 @@ export class CompactionRuntime {
     if (attempt.signal.aborted) reason = 'cancelled'
     else try { attempt.check() } catch { reason = 'cancelled' }
     if (reason === undefined) {
-      if (failure !== undefined) reason = 'summary-failed'
+      if (failure !== undefined || incomplete) reason = 'summary-failed'
       else if (!content?.trim()) reason = 'summary-empty'
     }
 

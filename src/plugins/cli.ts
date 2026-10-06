@@ -215,12 +215,19 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
           const before = ctx.sessions.visibleEvents(session.id).length
           try {
             const applied = await ctx.agentLoop.compact(agent, { signal: new AbortController().signal })
-            const end = [...ctx.sessions.visibleEvents(session.id)].reverse().find(event => event.type === 'context/summary-end')
+            // **只看这次尝试新写的事件**：在全会话里反查最近一条会把上一次压缩的原因与统计回显成本次结果，
+            // 而 skipped（没有可压缩的段）连括号都不写，正是最容易被冒充成「刚刚 declined」的情形。
+            // 判据是 summary-start 而**不是**「有没有新事件」——维护型 run 自己就会写 run/start 与 run/finish。
+            const added = ctx.sessions.visibleEvents(session.id).slice(before)
+            const attempted = added.some(event => event.type === 'context/summary-start')
+            const end = added.find(event => event.type === 'context/summary-end')
             const reason = end?.type === 'context/summary-end' && end.data.outcome.kind === 'declined' ? end.data.outcome.reason : undefined
-            print(applied
-              ? '[Compact] applied: the earlier part of this task now sits behind a summary frame; the original events are still in /history and readable with read_history.'
-              : `[Compact] not applied${reason ? ` (${reason})` : ''}; the projection is unchanged.`)
-            const summary = [...ctx.sessions.visibleEvents(session.id)].reverse().find(event => event.type === 'context/summary')
+            if (applied) print('[Compact] applied: the earlier part of this task now sits behind a summary frame; the original events are still in /history and readable with read_history.')
+            else if (!attempted) print('inputTargetTokens' in effective(agent.model) || 'compactionBudgetTokens' in effective(agent.model)
+              ? '[Compact] nothing to compact: this task has no compactable range; the projection is unchanged.'
+              : '[Compact] nothing to compact: no compaction budget is configured (set inputTargetTokens or compactionBudgetTokens); the projection is unchanged.')
+            else print(`[Compact] not applied${reason ? ` (${reason})` : ''}; the projection is unchanged.`)
+            const summary = added.find(event => event.type === 'context/summary')
             if (summary?.type === 'context/summary') print(`[Compact] replaced ${summary.data.shadowedSeqs.length} events (${summary.data.shadowedTokens} estimated tokens) with ${summary.data.summaryTokens}; retained=${summary.data.retainedNodes}`)
           } catch (error) {
             if (error instanceof BudgetStop) print(`[Compact] stopped: ${error.reason}`)

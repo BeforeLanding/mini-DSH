@@ -9,6 +9,7 @@ import { planCompaction, surfaceSeqs } from '../src/core/compaction-plan.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
 import { JsonlStore } from '../src/core/event-store.js'
 import { SessionRuntime } from '../src/core/session-runtime.js'
+import { ModelStreamError } from '../src/core/model-error.js'
 import { BudgetStop } from '../src/core/budget.js'
 import type { RunState } from '../src/core/budget.js'
 import type { Adapter } from '../src/core/contracts.js'
@@ -138,6 +139,34 @@ test('declines are recorded with a closed-set reason and never produce a summary
     // 摘要没落地，投影就没有变化。
     assert.ok(h.sessions.deriveMessages(h.session.id).some(message => message.content === 'recent tail'), label)
   }
+})
+
+test('a truncated summary is a failure, never a smaller summary that happens to fit', async () => {
+  // complete=false 的正文非空、也一定更短，但它缺的正是排在八节后面的 Pending Work / Next Step /
+  // Critical Context——拿它当 applied，等于把「模型没写完」伪装成压缩成功。
+  const { h, run } = longSingleTaskSession(async () => ({ content: '## Primary Request\n- half a summary', complete: false, finishReason: 'length' }))
+  assert.deepEqual(await compaction(h).compact(attemptFor(run, h.session.id)), { kind: 'declined', reason: 'summary-failed' })
+  assert.equal(summaries(h).length, 0)
+  assert.deepEqual(summaryEnds(h).map(event => event.data.outcome), [{ kind: 'declined', reason: 'summary-failed' }])
+  // 日志仍如实记下这次调用没有跑完，事后可解释。
+  const ended = [...events(h)].reverse().find(event => event.type === 'model/end')
+  assert.equal(ended?.type === 'model/end' && ended.data.complete, false)
+})
+
+test('a failed call keeps the partial usage and the text the provider already returned', async () => {
+  const { h, run } = longSingleTaskSession(async request => {
+    request.onContent?.('half a summary')
+    throw new ModelStreamError('stream broke', { content: 'half a summary', complete: false,
+      usage: { inputTokens: 77, outputTokens: 5, totalTokens: 82, source: 'provider', uncertain: false } })
+  })
+  assert.deepEqual(await compaction(h).compact(attemptFor(run, h.session.id)), { kind: 'declined', reason: 'summary-failed' })
+  // 供应商已经报回来的真实用量不能被一句估算盖掉——主循环早就是这么做的，压缩这一侧此前漏了。
+  assert.deepEqual(run.usage.map(usage => usage.source), ['provider'])
+  assert.equal(run.counters.inputTokens, 77)
+  assert.equal(run.counters.outputTokens, 5)
+  // 流式片段照样落盘：崩溃窗口里它是唯一能说明「模型说到哪」的东西。
+  assert.ok(events(h).some(event => event.type === 'model/fragment' && event.data.content.includes('half a summary')))
+  assert.equal(summaries(h).length, 0)
 })
 
 test('cancellation during the summary call is a decline and never writes an applied summary', async () => {
