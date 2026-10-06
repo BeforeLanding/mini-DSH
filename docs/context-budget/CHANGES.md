@@ -20,6 +20,75 @@ PLAN D-21 与 REQUIREMENTS R-22 显式修订 D-02／R-03 的“当前 task 所�
 
 本地 pnpm shim 仍在执行命令前尝试访问 registry，故实际验收使用仓库允许的等价 Node 入口。`node scripts/build.js` 退出 0；`node scripts/check-syntax.js` 输出 `syntax ok: 96 files`；最终定向测试 15/15。沙箱内全量测试因 Bash 与 Windows symlink 权限产生环境失败，正常用户权限复跑 `node --test dist/test/*.test.js` 为 `tests 225 / pass 225 / fail 0 / skipped 0`。
 
+### NX-34-3 脚本化假摘要闭环
+
+新增 `src/core/compaction-runtime.ts`（本步唯一新增的 `src/` 文件；`agent-loop-runtime.ts` **一字未动**）。
+`CompactionRuntime.compact()` 走完一次完整尝试：`planCompaction` 定区间 → 按既有 `outputAllowance` 预留输出 →
+写 `context/summary-start` → 写 `model/start` → `state.counters.modelRequests++` → 落盘确认 →
+调用一次真实形状的摘要请求 → 结算 usage 并写 `model/usage`、`model/end` → **复查取消与主动预算** →
+写 `context/summary` 与 `context/summary-end`。
+
+三处顺序是承重的，各自有一条用例钉住：
+
+1. **`summary-start` 在调用之前题写**——「已经付过钱的尝试必须落盘」，没有这个括号，试过但失败在日志里不存在。
+2. **`context/summary` 在 `summary-end` 之前写**——投影只依赖前者；崩溃落在两行之间时，落地的是
+   「压缩已生效」而不是「声称 applied 却查无摘要」。
+3. **写 applied 之前复查取消与预算**——`check()` 抛出的任何停止原因在此一律归入 `cancelled`，
+   因为 §5.1 的闭集里没有 `timeout`／`token_budget`。这一步没照搬参考实现的 after-await 计划重校验
+   （本仓库的 `beginRun` run 互斥已经消掉它防的那个竞态），但保留的是它真正需要的那部分。
+
+**`outputAllowance` 抛出的 `token_budget` 向外传播，不吞成 decline**：钱不够不是「摘要器不行」，
+混进失败闩就废了。它同时**一个字都不写**——调用没花出去，日志里就不该留下一次尝试。
+
+`summaryTokens` 量的是**替换进去的 frame**（代码写的门牌号 + 模型正文），不是模型正文——「摘要有没有让输入
+变小」的比较对象是替换品与原件，只量正文会把门牌号的成本漏掉。小于原件才写 applied，否则
+`summary-not-smaller`。
+
+**本步的指令正文是占位**：一条最小可用的「用 Markdown 要点写摘要」，够驱动一次形态真实的调用。
+§8.2 的八节正文与「已出现过更早摘要则合并而非照抄」的语义属于 NX-34-4（按用户确认的子步骤边界）。
+**三个触发入口尚未接进投影路径**，同样归 NX-34-4；本步的用例直接驱动 `compact()`，经真实
+`LlmRuntime`／`SessionRuntime`／`JsonlStore`，不做桩替。
+
+### 测试与反例
+
+新增 `test/compaction-runtime.test.ts`，10 条：`compaction replaces the shadowed range with a code-written frame right after the original request`、
+`a single-task long session is compactable and the original request is never shadowed`、
+`projection of a compacted log is deterministic and survives repeated derivation`、
+`the summary call is a real request counted into the same run`、
+`a budget shortage stops the run instead of being recorded as a summary decline`、
+`declines are recorded with a closed-set reason and never produce a summary`、
+`cancellation during the summary call is a decline and never writes an applied summary`、
+`nothing to plan writes no bracket at all`、
+`protecting an unknown tool group keeps the range closed and leaves it out of the plan`、
+`restore reads the recorded summary instead of asking the model again`。
+
+**第二条是本项存在的理由，且它自带翻面条件。** 既有裁剪只移除已结束的旧任务、当前 task 恒受保护，所以
+`context_overflow` 恰恰发生在单任务长会话里。若把区间起点改回「最早的 surface 事件」，保护集会顶掉全部候选、
+`planCompaction` 退化成 `undefined`，该用例的 `assert.ok(plan)` 当场失败——不需要另写一条反例，
+断言本身就是开关。用例同时断言 `shadowedSeqs` 不含那条原始 `user/message`、`plan.start` 等于可见面第二条。
+
+**恢复不重跑模型**由最后一条钉住：经 `JsonlStore` 落盘、关闭、重开、`restore` 之后，脚本化适配器的调用计数
+仍是 1（压缩那一次），投影与恢复前逐条相等，run 的 `modelRequests` 仍为 1。
+
+### 验收
+
+```
+pnpm check            # syntax ok: 98 files
+pnpm test             # tests 235 / pass 235 / fail 0 / skipped 0
+pnpm lint             # Checked 107 files in 96ms. No fixes applied.
+pnpm fixtures:check   # 16 项：初始全部失败、参考解全部通过（退出码 0）
+pnpm eval:offline     # planned 12 / executed 12 / accepted 12 / rejected 0
+pnpm eval:estimate    # estimator.matchesReference true；corpus.matchesReference true
+```
+
+六条命令均退出 0。本机 pnpm 的依赖自检会尝试重装并因无 TTY 中止（`ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`）；
+加 `CI=true` 后六条命令按原样可跑，上表即该条件下的真实输出。`node scripts/check-syntax.js` 与
+`node --test dist/test/*.test.js` 在不过 pnpm 时给出同一组数字（98 文件／235 条）。
+
+测试数由 225 升到 235，`README.md` 的三处计数（`:30` 表内、`:59` 命令块、`:144` 散文）**按本步实测值一并订正**；
+命令块里 `pnpm check` 的 `syntax ok: 93 files` 同样早已滞后（NX-34-1／-2 各加了一个 `src/` 文件却未回填），
+一并订正为 98。README 的能力清单同时补上「上下文压缩」。
+
 ## NX-33 大工具结果的尾部窗口
 
 ### 行为、边界与实现
