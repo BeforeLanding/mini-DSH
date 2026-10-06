@@ -48,7 +48,7 @@
 | --- | --- | --- |
 | 代码 | `src/core/event-store.ts:97` | `append` 只把新的一行推进写入队列并按 `seq` 校验，从不回写已有行 |
 | 代码 | `src/core/session-runtime.ts:77` | `visibleEvents` 是「最后一次 `session/reset` 之后」的切片，reset 是视图边界而非删除 |
-| 代码 | `src/core/session-runtime.ts:213` | `clear` 追加一条 `session/reset` 事件，文件里一行不少 |
+| 代码 | `src/core/session-runtime.ts:238` | `clear` 追加一条 `session/reset` 事件，文件里一行不少 |
 | 代码 | `src/core/context-runtime.ts:71` | 裁剪只从 `selected` 里剔除，作为参数的 `events` 原数组不参与 |
 | 测试 | `test/context.test.ts` · `request projection drops oldest complete tasks, preserves raw events and current task` | 投影后原事件与投影前逐条相等，被裁的任务只出现在 `removedTaskIds` 里 |
 | 测试 | `test/core.test.ts` · `Session clear keeps the same id and drops derived chat history` | reset 之后 id 不变、事件仍在、派生消息为空 |
@@ -81,7 +81,7 @@
 | 代码 | `src/core/context-runtime.ts:6` | `assertToolProtocol` 对孤立结果、缺失结果、重复或空 id 三种情况直接抛错，不静默丢弃 |
 | 代码 | `src/core/context-runtime.ts:40` | 组内只要还有未配对的调用、或 run 尚未结束，该组就被标成 `protected` |
 | 代码 | `src/core/context-runtime.ts:75` | 返回投影之前再跑一次 `assertToolProtocol`，裁剪不可能产出坏投影 |
-| 代码 | `src/core/agent-loop-runtime.ts:208` | 异常路径为每个在途调用补结果，按「进过工具入口没有」区分 `unknown` 与 `skipped` |
+| 代码 | `src/core/agent-loop-runtime.ts:249` | 异常路径为每个在途调用补结果，按「进过工具入口没有」区分 `unknown` 与 `skipped` |
 | 代码 | `src/core/pending-tools.ts:2` | `pendingTools` 是「已声明未配对」的唯一判定，恢复与错误路径共用同一份实现 |
 | 测试 | `test/context.test.ts` · `history groups entire tasks including multiple runs and never splits pending tools` | 带在途工具的组被判 `protected`；`assertToolProtocol` 对缺结果与孤立结果分别抛错 |
 | 测试 | `test/budget.test.ts` · `a batch with one tool allowance executes only the first and pairs all skipped results` | 一批三个工具只执行第一个，其余各有 `skipped` 结果，投影仍然合法 |
@@ -185,7 +185,7 @@
 | --- | --- | --- |
 | 代码 | `src/core/session-runtime.ts:49` | 恢复时用 `pendingTools` 逐个找出在途调用并补一条结果，由有没有 `tool/start` 决定 `unknown` 还是 `skipped` |
 | 代码 | `src/core/session-runtime.ts:63` | 崩溃窗口里还停在 running 的 run 被封成 `error`，不留在半途 |
-| 代码 | `src/core/session-runtime.ts:130` | 同 task 只要存在一条 `unknown` 结果，自动续跑就被拒并说明原因 |
+| 代码 | `src/core/session-runtime.ts:139` | 同 task 只要存在一条 `unknown` 结果，自动续跑就被拒并说明原因 |
 | 代码 | `src/core/task-changes.ts:39` | 文件编辑意图没有配对结果时同样抛错，不让新任务在不知道结果的情况下开工 |
 | 代码 | `src/core/agent-runtime.ts:32` | `continue` 只是开一段新 run；拒绝的逻辑在 `beginRun` 里，不在调用方 |
 | 测试 | `test/store.test.ts` · `recovery preserves task state, adds unknown/skipped results and never executes tools` | 两个在途调用分别补成 `unknown` 与 `skipped`；副作用文件未被触碰；用量标 `uncertain` |

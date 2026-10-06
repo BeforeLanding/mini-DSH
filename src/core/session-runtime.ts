@@ -89,7 +89,16 @@ export class SessionRuntime {
     }
     latestRun(id: string): RunState | undefined {
         const events = this.visibleEvents(id)
-        const begin = [...events].reverse().find(e => e.type === 'run/start')
+        return this.#foldLatestRun(id, events, [...events].reverse().find(e => e.type === 'run/start'))
+    }
+    // 续跑要承接的是**最后一次真正干活的 run**，不是最近一次 run：/compact 会追加一条维护型 run
+    // （maintenance，见 beginMaintenanceRun），它不承接任何工作。若让它当了 previous，
+    // 「预算停止之后还能续跑」会退化成「任务已完成」。
+    #latestWorkingRun(id: string) {
+        const events = this.visibleEvents(id)
+        return this.#foldLatestRun(id, events, [...events].reverse().find(e => e.type === 'run/start' && !e.data.state.maintenance))
+    }
+    #foldLatestRun(id: string, events: SessionEvent[], begin: SessionEvent | undefined): RunState | undefined {
         if (begin?.type !== 'run/start') return undefined
         const end = [...events].reverse().find(e => e.type === 'run/finish' && e.data.state.runId === begin.data.state.runId)
         if (end?.type === 'run/finish') {
@@ -122,7 +131,7 @@ export class SessionRuntime {
         if (this.#storeErrors.has(id)) throw new Error('session storage failed; close and verify the log before resuming', { cause: this.#storeErrors.get(id) })
         if (this.latestRun(id)?.terminalCommit?.status === 'uncertain') throw new Error('terminal commit uncertain; close and restore the session log before resuming')
         if (this.latestRun(id)?.status === 'running') throw new Error('session is already running')
-        const previous = this.latestRun(id)
+        const previous = continuing ? this.#latestWorkingRun(id) : this.latestRun(id)
         if (continuing) {
             if (!previous) throw new Error('no task to continue')
             if (previous.status === 'completed') throw new Error('task already completed')
@@ -136,6 +145,22 @@ export class SessionRuntime {
         const state: RunState = { sessionId: id, taskId: continuing ? previous!.taskId : randomUUID(), runId: randomUUID(), model,
             ...(continuing ? { previousRunId: previous!.runId } : {}),
             policy, counters: emptyCounters(), status: 'running', usage: [], removedTaskIds: [] }
+        this.append(id, 'run/start', { state }, state)
+        return state
+    }
+    // NX-34：维护型 run。它复用当前 task——压缩要压的正是这个 task 的历史，另开一个任务只会让旧历史
+    // 变成「可免费裁剪的旧任务」，那就不需要压缩了——但**不**承接任何待办工作：只允许记账与投影，
+    // 不派发工具、也不继续干活。所以 beginRun 里三道为「续跑工作」设的守卫在这里都不成立，保留它们
+    // 只会让 /compact 在任务刚做完时恰好被拒，而那一刻正是最该压缩的时候。保留的是三道与「这段 run
+    // 能不能被安全记账」有关的检查。
+    // 它刻意不写 previousRunId：维护型 run 不进续跑链，`latestWorkingRun` 会跳过它。
+    beginMaintenanceRun(id: string, policy: Readonly<BudgetPolicy>, model: string): RunState {
+        if (this.#storeErrors.has(id)) throw new Error('session storage failed; close and verify the log before resuming', { cause: this.#storeErrors.get(id) })
+        if (this.latestRun(id)?.terminalCommit?.status === 'uncertain') throw new Error('terminal commit uncertain; close and restore the session log before resuming')
+        if (this.latestRun(id)?.status === 'running') throw new Error('session is already running')
+        const previous = this.#latestWorkingRun(id)
+        const state: RunState = { sessionId: id, taskId: previous?.taskId ?? randomUUID(), runId: randomUUID(), model,
+            maintenance: true, policy, counters: emptyCounters(), status: 'running', usage: [], removedTaskIds: [] }
         this.append(id, 'run/start', { state }, state)
         return state
     }

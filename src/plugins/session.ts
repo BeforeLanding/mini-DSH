@@ -18,6 +18,7 @@ class SessionsService extends Service {
     configuration(...args: Parameters<SessionRuntime['configuration']>) { return this.runtime.configuration(...args) }
     latestRun(...args: Parameters<SessionRuntime['latestRun']>) { return this.runtime.latestRun(...args) }
     beginRun(...args: Parameters<SessionRuntime['beginRun']>) { return this.runtime.beginRun(...args) }
+    beginMaintenanceRun(...args: Parameters<SessionRuntime['beginMaintenanceRun']>) { return this.runtime.beginMaintenanceRun(...args) }
     finishRun(...args: Parameters<SessionRuntime['finishRun']>) { return this.runtime.finishRun(...args) }
     observeTerminalCommit(...args: Parameters<SessionRuntime['observeTerminalCommit']>) { return this.runtime.observeTerminalCommit(...args) }
     taskState(...args: Parameters<SessionRuntime['taskState']>) { return this.runtime.taskState(...args) }

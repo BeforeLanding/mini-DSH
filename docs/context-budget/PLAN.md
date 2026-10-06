@@ -252,6 +252,10 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 
 纯规划器只读事件，摘要尝试在付费调用前记录开始事件，结果以结束事件闭合；失败闩从当前 run 日志折叠。恢复只读已记录的摘要，不重新调用模型，未闭合尝试追加 `unclosed`。模型若缺事实，可用有界、session 隔离的 `read_history` 按事件号读回。摘要调用使用主循环的 system 和 tool schema，原样重放遮蔽段；DeepSeek 当前适配器未显式实现前缀缓存，因此缓存收益尚未兑现。与参考实现不同，本仓库的 `beginRun` 排斥同 session 并发 run，不需完整的 after-await 计划重校验；写 applied 前仍复查取消和主动预算。摘要可能遗漏或捏造事实，事件号与回读入口让事实可核对，却不保证模型一定主动核对。
 
+**`resolveBudget` 的两档放宽（NX-34-4）。** `compactionRatio` 与 `retainRatio` 是比率，0.8 存不进「非负安全整数」这条统一契约，因此为这两个键开一个**分数集**（要求 `0 < v ≤ 1`）、为 `auto` 开一个**布尔集**，其余键仍是安全整数。这是有意的契约放宽，代价是 `resolveBudget` 的判定从一档变两档；越过域的值（0、负数、>1、NaN、Infinity、非布尔）仍逐条拒绝。`compactionBudgetTokens` **不进** `CLI_BUDGET`：它默认取 `inputTargetTokens`，写死成 65,536 会让调整输入目标时压缩阈值不再跟着走。
+
+**`/compact` 的维护型 run（NX-34-4）。** R-22 要求摘要请求计入同一 run，而 `beginRun` 的三道续跑守卫（任务已完成／未知工具结果／配置未变的 `context_overflow`）恰在「任务刚做完」时把 `/compact` 拒之门外——那一刻正是最该压缩的时候。`beginMaintenanceRun` 因此**复用当前 task**（另开任务只会把旧历史变成可免费裁剪的旧任务，那就不需要压缩了），保留与「这段 run 能否安全记账」有关的三道检查，跳过为续跑工作设的三道守卫。它**不写 `previousRunId`**；配套地 `beginRun(continuing)` 改为从「最后一条非维护型 run」取 previous——否则一次 `/compact` 会让 `beginRun` 看着那条 `completed` 报 `task already completed`，把「预算停止后还能续跑」打掉。
+
 ## 默认参数与行为
 
 ### 请求规模与估算
@@ -313,7 +317,7 @@ NX-07 集成补充：搜索也默认忽略 .mini-dsh；read/search 的 maxOutput
 - 上列四项是**覆盖值**，其余参数取「默认参数与行为」的文档值；评测侧由 `evalPolicy = {...CLI_BUDGET, ...singleRunBudget}` 组装（NX-08d0-1），模型窗口按端点显式声明，官方端点取 1,000,000。只传这四项会让投影失去输入目标与窗口：`ContextBudgetRuntime` 对两者均未配置时恒判可容纳，裁剪与 `context_overflow` 全部失效。
 - 入口按**阶段**选择批次（NX-08e2-2）：`scripts/eval-screening.ts` 接受 `--phase`（默认 `screening`），默认清单取该阶段的注册表而非全部 fixture，`--tasks` 只能在其内部取子集（跨阶段取任务会让计划任务数超过该阶段上限）。`--plan-only` 在建立目录、发出请求之前打印计划、上限、模型、输入目标与证据目录，供人在花钱前核对——输入目标就是两臂的差异所在，预演里看得见。
 - 对照有效性条件（2026-09-30 修正）：两臂要产生差异必须**同时**满足两个条件——**会话组成**上存在已结束且可裁剪的旧任务，**规模**上这些旧任务的累计估算输入足以让 `fits` 为假。原表述只写了规模条件（「历史超过输入目标 65,536」），据此推出的「构造更大的任务」不成立，理由如下。
-- 裁剪的触发条件是会话组成，不是任务规模。`ContextBudgetRuntime.groupHistory` 按 `taskId` 分组，只有 `taskId === currentTaskId` 的组被标 `protected`（`src/core/context-runtime.ts:29`），`project()` 的循环只移除 `!protected && complete` 的组（同文件 `:68-70`）。而新的 `agent.send()` 一律分配新 `taskId`，只有 `/continue` 才复用旧 taskId（`src/core/session-runtime.ts:136`）。因此**当前 task 无论多大都不会被裁剪，`/continue` 的续跑段同样恒受保护**（R-12 与 `test/continue.test.ts` 的「完整当前过程跨续跑保留」）。能够被裁剪的只有**同一会话中更早结束的其它任务**。
+- 裁剪的触发条件是会话组成，不是任务规模。`ContextBudgetRuntime.groupHistory` 按 `taskId` 分组，只有 `taskId === currentTaskId` 的组被标 `protected`（`src/core/context-runtime.ts:29`），`project()` 的循环只移除 `!protected && complete` 的组（同文件 `:68-70`）。而新的 `agent.send()` 一律分配新 `taskId`，只有 `/continue` 才复用旧 taskId（`src/core/session-runtime.ts:145`）。因此**当前 task 无论多大都不会被裁剪，`/continue` 的续跑段同样恒受保护**（R-12 与 `test/continue.test.ts` 的「完整当前过程跨续跑保留」）。能够被裁剪的只有**同一会话中更早结束的其它任务**。
 - 由此，`scripts/eval-fixture.ts` 现有驱动每个 fixture 只建一个 session、只发一次 `agent.send()`（`:42-50`），会话里永远只有一个 task，`removedTaskIds` 恒为空是**结构性必然**，与任务规模无关。筛查跑 12 个 fixture 全部 `removedTaskIds` 为空，不能据此推断任务「太小」。
 - 因此 NX-08e 的前置是让评测驱动产出**多任务会话**（同一 session 内多个 `taskId`），而不是放大单个任务。对照 A 采用同仓库、后阶段依赖前阶段产物的多阶段任务序列。（对照 B 不受此限制：有界工具输出改变的是当前 task 内部的历史规模，单任务下就会让一臂 `context_overflow`、另一臂完成，两臂可直接分辨。）
 - 实测数值分列，不可混用：筛查跑 12 个 fixture 的最大估算输入为 17,220（`CHANGES.md` 的 NX-08d 节）；NX-08d0-3 的 `merge` 烟测在 9 次请求后达到 27,147（`CHANGES.md` 的 NX-08d0-3 节）。后者是单 fixture 重复两次烟测得到的数，不是 12 个 fixture 的最大值。
@@ -402,7 +406,7 @@ e0 只固化了驱动与布局，没有 fixture 声明 `TASKS/`。`pipeline` 是
 
 **为什么对照 B 不需要多阶段序列。** 对照 A 要产生差异，会话里必须存在**已结束且可裁剪的旧任务**（`context-runtime.ts:29,68-74` 只移除 `!protected && complete` 的组），所以它必须用多阶段序列才能构造出可裁剪的历史。有界工具输出改变的是**当前 task 内部**的历史规模，而当前 task 恒 `protected`、无法被裁剪——单任务会话下无界臂就会 `context_overflow`、有界臂完成。**两臂的可测性因此不对称，这不是缺陷而是两种处理作用在不同位置的必然结果。**
 
-**判别量是结构性的，不是通过率。** 对照 B 的分辨信号是 `context_overflow`（`agent-loop-runtime.ts:80`）这个事实，不需要两臂在 `accepted` 上分出高低——因此 NX-08g0 判定的「任务集天花板效应」不会让对照 B 失效。反之，**两臂的 token 差正是处理本身设定的量，只能作操纵检查，不得写成收益**。
+**判别量是结构性的，不是通过率。** 对照 B 的分辨信号是 `context_overflow`（`agent-loop-runtime.ts:121`）这个事实，不需要两臂在 `accepted` 上分出高低——因此 NX-08g0 判定的「任务集天花板效应」不会让对照 B 失效。反之，**两臂的 token 差正是处理本身设定的量，只能作操纵检查，不得写成收益**。
 
 **尚未预注册。** `phaseCaps` 的 `armA`/`armB` 已归属对照 A 的两条臂，对照 B 的两臂（`armC` 有界 / `armD` 无界）的阶段与整批上限留到 NX-08f-5，**且必须晚于 f-4b 的真实模型烟测**：NX-08e2 的教训是外推的 token 数被实测推翻（外推 3,884,608 / 实测 6,379,862，差 64%），预注册不得建立在没有实测支撑的外推上。样本量按用户选定为 **1 条 fixture × 6 次重复 × 2 臂**。
 
@@ -430,6 +434,6 @@ e0 只固化了驱动与布局，没有 fixture 声明 `TASKS/`。`pipeline` 是
 ### 实测结果（2026-10-01 追记，**以上条款逐字未改**）
 
 - **该次运行 `accepted === true`**（`acceptance.output` 逐字为 `acceptance passed: blind`、退出码 0、`protectedFilesChanged` 为空），零 `max_steps`，成本约 $1.43（off-peak 口径）。按上表**字面命中「未被打破」**：只可写「这一次没有失败」。
-- **上表漏了一种情形，照实记在这里而不是回改判据**：「未被打破」那一行只防了 `max_steps`，而这次有 **4/14 个阶段以 `context_overflow` 结束**（第 6、7、13、14），每个留下 1 个未发出的投影。触发点是 `agent-loop-runtime.ts:80-81` 的**输入目标**合取项（`estimatedInputTokens > 65,536`），发生在裁剪之后——那四个阶段已经把能裁的旧任务裁到底（5／6／12／13 个），当前任务单独就超了；窗口是 1,000,000，与它无关。**这是一处已知的判据缺口，不是把结果归进「未打破」的理由。**
+- **上表漏了一种情形，照实记在这里而不是回改判据**：「未被打破」那一行只防了 `max_steps`，而这次有 **4/14 个阶段以 `context_overflow` 结束**（第 6、7、13、14），每个留下 1 个未发出的投影。触发点是 `agent-loop-runtime.ts:120-121` 的**输入目标**合取项（`estimatedInputTokens > 65,536`），发生在裁剪之后——那四个阶段已经把能裁的旧任务裁到底（5／6／12／13 个），当前任务单独就超了；窗口是 1,000,000，与它无关。**这是一处已知的判据缺口，不是把结果归进「未打破」的理由。**
 - **`blind` 上的正式对照批次仍未预注册**，其上限必须等新的实测之后另行确定；与 `armB` 的比较不在本次预注册内。
 - 详细读数、机制与「不能支持什么」见 [CHANGES 的 NX-08h 节](CHANGES.md#nx-08h-打破任务集天花板方案-2无公开检查变体)。

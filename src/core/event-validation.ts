@@ -14,6 +14,7 @@ function validState(v: unknown): boolean {
   const counters = v.counters
   if (v.terminalCommit !== undefined && (!record(v.terminalCommit) || !['confirmed', 'uncertain'].includes(String(v.terminalCommit.status)) || !stops.has(String(v.terminalCommit.terminalStatus)) || v.terminalCommit.terminalStatus === 'running' || typeof v.terminalCommit.activeDurationMs !== 'number' || !Number.isFinite(v.terminalCommit.activeDurationMs) || v.terminalCommit.activeDurationMs < 0)) return false
   if (counters.approvalDurationMs !== undefined && (typeof counters.approvalDurationMs !== 'number' || !Number.isFinite(counters.approvalDurationMs) || counters.approvalDurationMs < 0)) return false
+  if (v.maintenance !== undefined && typeof v.maintenance !== 'boolean') return false
   if (!['modelRequests', 'toolCalls', 'inputTokens', 'outputTokens', 'totalTokens'].every(k => integer(counters[k])) || typeof counters.activeDurationMs !== 'number' || !Number.isFinite(counters.activeDurationMs) || counters.activeDurationMs < 0) return false
   try { resolveBudget(v.policy) } catch { return false }
   return true

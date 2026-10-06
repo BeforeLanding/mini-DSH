@@ -89,6 +89,116 @@ pnpm eval:estimate    # estimator.matchesReference true；corpus.matchesReferenc
 命令块里 `pnpm check` 的 `syntax ok: 93 files` 同样早已滞后（NX-34-1／-2 各加了一个 `src/` 文件却未回填），
 一并订正为 98。README 的能力清单同时补上「上下文压缩」。
 
+### NX-34-4 真实摘要调用、三入口、预算与失败闩
+
+**三个入口接进投影路径**（§4，插在裁剪之后、抛错之前——免费的先做完，贵的才出手）：
+
+- `pressure` 是主路径：装得下但已越过 `compactionBudgetTokens × compactionRatio`。**只做一次**——
+  压完还在带内说明这次压缩没解决问题，再压一遍只是重复花钱。
+- `context-overflow` 是兜底：裁剪之后仍装不下时压一次并重新投影，由 `maxOverflowRetries`（默认 1）限次。
+  `maxOverflowRetries: 0` 是一条可用的关闭路径。
+- `explicit` 是 `AgentLoopRuntime.compact(agent)` 这个公开入口，供 CLI `/compact` 用（接线在 NX-34-7）。
+  它**永远可用**：不受失败闩影响，也不被 `auto` 关掉。
+
+压缩后重新投影，**前后各记一条 `context/projection`，两条共用同一个 `requestId`**——它们准备的是同一个请求
+（§11：让「裁了哪些任务 + 压了哪些 seq」都可追溯）。
+
+**§8.2 的摘要指令正文落地**：固定八节（Primary Request／Key Concepts／Files and Code／Errors and Fixes／
+Pending Work／Current Work／Next Step／Critical Context）加「已出现过更早摘要请**合并**而非照抄」。
+合并而非照抄是「摘要的摘要越来越糊」的正解——第二次摘要拿「旧摘要 + 新内容」**重写一份完整的**，
+而不是把旧摘要再摘一遍。NX-34-3 的占位指令在此整段替换。
+
+**`summaryTokens` 用 frame 而非模型正文度量**已在 NX-34-3 落地，本步未改。
+
+#### 预算键与 `resolveBudget` 的两档放宽
+
+`BudgetPolicy` 新增 7 个键：`compactionBudgetTokens`、`compactionRatio`(0.8)、`retainRatio`(0.16)、
+`compactionMaxTokens`(8192)、`maxSummaryFailures`(2)、`maxOverflowRetries`(1)、`auto`(true)。
+**`compactionBudgetTokens` 刻意不进 `CLI_BUDGET`**：它的默认值是 `inputTargetTokens`，写死成 65,536 会让
+调整输入目标时压缩阈值不再跟着走。
+
+`resolveBudget` 原先要求每个策略值都是「非负安全整数」，而 0.8 根本存不进去。本步为两个比率开一个
+**分数集**（要求 `0 < v ≤ 1`）、为 `auto` 开一个**布尔集**，其余键仍是安全整数。这是一处**记录在案的
+契约放宽**：`resolveBudget` 从「一律整数」变成两档，越过域的值（0、负数、>1、NaN、Infinity、非布尔）
+仍逐条抛错并有测试钉住。
+
+**摘要调用的一次请求用尽额度时，主请求不再调度。** 这是本步新增的一道检查，位置在压缩成功之后、
+`model/start` 之前：R-04 的「每次调度前检查，额度用完后不再调度」对摘要调用同样成立。
+
+#### 维护型 run：`/compact` 怎么记账而不破坏续跑
+
+R-22 要求摘要请求计入**同一 run** 的次数、时间与 token，而 `beginRun` 的三道续跑守卫
+（任务已完成／存在未知工具结果／配置未变的 context_overflow）恰好会在「任务刚做完」时把 `/compact` 拒之门外，
+——而那一刻正是最该压缩的时候。
+
+新增 `SessionRuntime.beginMaintenanceRun(id, policy, model)`：**复用当前 task**（压缩要压的正是这个 task 的历史，
+另开任务只会让旧历史变成「可免费裁剪的旧任务」，那就不需要压缩了），但**不**承接任何工作——只允许记账与投影，
+不派发工具、也不继续干活。所以它保留三道与「这段 run 能不能被安全记账」有关的检查（存储已坏／终态未确认／
+会话正在跑），跳过三道为续跑工作设的守卫。
+
+它刻意**不写 `previousRunId`**。配套地，`beginRun(continuing = true)` 改从 `#latestWorkingRun`（最后一条
+**非维护型** run）取 previous。**这是一处承重的连带修改**：若维护型 run 进了续跑链，一次 `/compact` 之后
+`beginRun` 会看着它那条 `completed` 直接报 `task already completed`，把「预算停止后还能续跑」这个既有能力
+打掉。`test/compaction-trigger.test.ts` 的 `a maintenance run does not cost the task its ability to continue`
+专门钉住这一条。
+
+`RunState` 因此新增可选的 `maintenance?: boolean`，`event-validation.validState` 一并校验它的形状。
+`latestRun` 拆出 `#foldLatestRun` 供两者复用，折叠逻辑一字未改。
+
+#### 失败闩
+
+`#summaryFailures` 从**当前 run 的日志折叠**得出，不是内存计数器——这样事后可解释。计数规则照 §8.4：
+`summary-failed`／`summary-empty`／`summary-not-smaller` 使计数 +1，`applied` 归零，其余原因说的是
+「环境变了」，**既不计入也不清零**。作用域是当前 run：新 run（含 `/continue`）重获机会。
+
+#### 测试
+
+新增 `test/compaction-trigger.test.ts`，11 条：`budget policy carries compaction knobs and rejects values outside their domain`、
+`pressure compacts a fitting projection that has crossed the compaction ratio`、
+`overflow compacts and retries instead of stopping, and records both projections`、
+`auto false turns both automatic triggers off without changing where the run stops`、
+`maxOverflowRetries zero declines the overflow fallback`、
+`the failure latch counts only summary failures and stops the automatic path`、
+`explicit compaction is exempt from the latch and opens a maintenance run on the same task`、
+`a maintenance run does not cost the task its ability to continue`、
+`a declined compaction is recorded with a closed-set reason and re-projection stays honest`、
+`a summary call consumes the run model-request budget like any other request`、
+`a summary call that exhausts the request budget stops the run before dispatching the main request`。
+
+全部零付费：脚本化适配器按「最后一条消息是不是那固定指令」区分摘要调用与主循环调用。为此把压缩预算与输入
+目标**解耦**（`compactionBudgetTokens` 单独给值），压力触发才能独立于溢出触发被检验——默认配置下两者等价，
+那正是 §4.1 要如实写下来的事情。
+
+#### 锚点
+
+`DECISIONS.md` 三处机读锚点漂移并已实测订正（`pnpm test` 点名、改后复跑为绿）：
+
+| 锚点 | 旧 | 新 | 钉住什么 |
+| --- | --- | --- | --- |
+| `src/core/session-runtime.ts` | `:213` | `:238` | `clear` 追加一条 `session/reset` |
+| `src/core/session-runtime.ts` | `:130` | `:139` | 存在 `unknown` 结果则拒续跑 |
+| `src/core/agent-loop-runtime.ts` | `:208` | `:249` | 异常路径为每个在途调用补结果（`unknown`／`skipped`） |
+
+B 组（无测试兜底，逐处手动 grep 实测）另订正三处：`PLAN.md` 的 `session-runtime.ts:136` → `:145`，
+`agent-loop-runtime.ts:80` → `:121`、`agent-loop-runtime.ts:80-81` → `:120-121`；
+`TASKS.md` 的 `session-runtime.ts:136` → `:145`（两处同句）。`CHANGES.md:1314` 与 `NX-08-REPORT.md:171`
+里同形的 `agent-loop-runtime.ts:80-81` **按留档规则不回改**——它们是当时的快照。
+
+#### 验收
+
+```
+pnpm check            # syntax ok: 99 files
+pnpm test             # tests 246 / pass 246 / fail 0 / skipped 0
+pnpm lint             # Checked 108 files in 45ms. No fixes applied.
+pnpm fixtures:check   # 16 项：初始全部失败、参考解全部通过（退出码 0）
+pnpm eval:offline     # planned 12 / executed 12 / accepted 12 / rejected 0
+pnpm eval:estimate    # estimator.matchesReference true；corpus.matchesReference true
+```
+
+六条命令均退出 0（`CI=true` 下按原样跑；本机 pnpm 的依赖自检无 TTY 时会中止）。**`auto` 默认开启后
+`evalPolicy`（`CLI_BUDGET` 的展开）也带上压缩**，但 12 项筛查 fixture 的峰值估算输入远低于阈值，
+故评测输出与 NX-34-3 时逐字一致。README 三处计数同步订正为 246。
+
 ## NX-33 大工具结果的尾部窗口
 
 ### 行为、边界与实现
