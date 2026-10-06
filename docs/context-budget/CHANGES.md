@@ -256,6 +256,53 @@ pnpm eval:estimate    # estimator.matchesReference true；corpus.matchesReferenc
 六条命令均退出 0。README 的工具计数由 11 订正为 12（plugin 提供 2 → 3，含表格、结构一节与 mermaid 图），
 测试计数订正为 254。本步未改任何既有文件的 `文件:行号` 锚点。
 
+### NX-34-6 恢复时闭合未完尝试
+
+`SessionRuntime.restore` 追加一步：遍历可见事件快照里**既没有结束事件、也没有摘要正文**的
+`context/summary-start`，各补一条 `context/summary-end { outcome: { kind: 'declined', reason: 'unclosed' } }`，
+作用域沿用原事件的 `{taskId, runId}`（与 restore 补 `model/usage` 用的是同一个写法）。语义是「日志知道的
+和它知道的一样多」——不假装摘要成功，也不假装从未发生。
+
+**比 §9.1 再收一格，并说明为什么。** 方案写的是「未闭合的 `summary-start` 一律补 `unclosed`」。但
+`compaction-runtime` 的写入顺序是**先写 `context/summary`、再闭合括号**（NX-34-3 的决定：投影只依赖前者，
+崩溃落在两行之间时落地的是「压缩已生效」而不是「声称 applied 却查无摘要」）。于是存在一个窄窗口：摘要
+已经落盘并在投影里生效，括号却还没闭合。把这种尝试标成 `declined/unclosed` 会让日志**自相矛盾**——一条
+宣告「这次尝试不算数」的记录，旁边躺着它自己写下的、此刻正在生效的摘要。所以判据收窄为「既没有结束事件、
+也没有摘要正文」。
+
+**恢复绝不重新生成摘要**：`restore` 只读日志里已有的 `context/summary`，从不调用模型。这一点是结构性的
+（`SessionRuntime` 根本没有 llm 依赖），测试仍以脚本化适配器的调用计数为 0 钉住。
+
+#### 测试
+
+新增 `test/compaction-recovery.test.ts`，3 条：`an unclosed summary attempt is closed as unclosed on recovery and never re-asks the model`、
+`a recorded summary is not relabelled as unclosed just because its bracket never closed`、
+`a properly closed summary attempt is left exactly as it was recorded`。
+
+第一条同时断言：补出来的事件的 `taskId`／`runId` 与原 `summary-start` 相同；崩溃窗口里还停在 running 的
+run 被封成非 running；**再恢复一次不会再补第二条**（幂等）。第三条用「run 已封盘、请求已结算」的正常收尾
+做对照——恢复应当一个事件都不追加。
+
+#### 锚点
+
+本步在 `restore` 里插入的一段使 `session-runtime.ts` 整体后移，四处机读锚点漂移并已实测订正
+（`pnpm test` 点名、改后复跑为绿）：`:77`→`:88`（`visibleEvents`）、`:238`→`:249`（`clear`）、
+`:63`→`:74`（崩溃窗口的 run 封成 `error`）、`:139`→`:150`（存在 `unknown` 结果则拒续跑）。
+B 组两处 `session-runtime.ts:145` → `:156`（`PLAN.md` 一处、`TASKS.md` 两处同句）。
+
+#### 验收
+
+```
+pnpm check            # syntax ok: 103 files
+pnpm test             # tests 257 / pass 257 / fail 0 / skipped 0
+pnpm lint             # Checked 112 files in 43ms. No fixes applied.
+pnpm fixtures:check   # 16 项：初始全部失败、参考解全部通过（退出码 0）
+pnpm eval:offline     # planned 12 / executed 12 / accepted 12 / rejected 0
+pnpm eval:estimate    # estimator.matchesReference true；corpus.matchesReference true
+```
+
+六条命令均退出 0。README 三处测试计数同步为 257。
+
 ## NX-33 大工具结果的尾部窗口
 
 ### 行为、边界与实现
