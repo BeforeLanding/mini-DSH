@@ -199,6 +199,63 @@ pnpm eval:estimate    # estimator.matchesReference true；corpus.matchesReferenc
 `evalPolicy`（`CLI_BUDGET` 的展开）也带上压缩**，但 12 项筛查 fixture 的峰值估算输入远低于阈值，
 故评测输出与 NX-34-3 时逐字一致。README 三处计数同步订正为 246。
 
+### NX-34-5 消息级回读工具 `read_history`
+
+`read_tool_result` 只读得到**工具结果**；被遮蔽的 `user/message`、`assistant/message` 此前没有回读入口，
+于是 frame 里那个「第 N–M 号事件被替换了」的门牌号无从兑现。新增 `src/core/history-read.ts`（纯函数
+`readHistory`）与 `src/plugins/read-history.ts`（注册工具），在 `src/index.ts` 里装载。
+
+**只把会产生消息的那四类事件的原文渲染出来**（user／assistant／tool calls／tool result）；其余事件
+（`run/start`、`model/fragment`、`file/change`…）只列类型与 seq。理由写在工具描述里，不假装「日志里的
+一切都能从这里逐字读回来」：那些载荷不是模型当时看到的内容，整份 JSON 灌进来只会把预算吃光而不回答
+任何问题。
+
+**分页规则**（`maxBytes` 默认 16 KiB，上限可配置）：一页**绝不在中途把事件劈成两半**——装不下整条时停在
+它之前，让下一页从头完整地读它。只有一条事件自己就超出整页预算时才给出有界前缀，并在正文里点名
+`[event N truncated; M bytes total; raise maxBytes to read it whole]` 并**前进**到下一个 seq——否则同样的
+预算会一页页重读同一条超大事件，调用方永远走不到 `eof`。正文另有 `[truncated; continue with read_history
+from=N]` 收尾，且**最终按 UTF-8 边界裁到预算以内**，不超界。
+
+`read_history` 与 `read_tool_result` 一样被**豁免结果投影**（`src/plugins/tool-results.ts`）：它的输出已由
+调用方自己的 `maxBytes` 限定，再套一层预览截断与结果存储只会把「按 seq 分页」变成「按 ref 分页」。
+
+**不挂进评测路径**（`scripts/eval-fixture.ts`）。
+
+#### 测试
+
+新增 `test/history-read.test.ts`，8 条：`a shadowed range reads back verbatim, so a dropped fact is recoverable by event number`、
+`the read-back pages forward with nextSeq until eof without dropping an event`、
+`an event larger than the whole budget is bounded and says so instead of stalling the page`、
+`out-of-range, inverted and malformed requests are refused explicitly`、
+`non-message events are listed by type only, and the truncation is stated in the body`、
+`two sessions in one runtime never leak into each other`、
+`the Cordis tool requires a session and releases its registration on dispose`、
+`read_history output is not re-truncated by the result projection`。
+
+#### 一处与方案不符的观察（不在本步范围，报告里另提）
+
+`planCompaction`（`src/core/compaction-plan.ts:70`）与 `surfaceSeqs`（同文件 `:35`）把**任何**
+`user/message` 都算进保护集，而 §6.1 规则 1 与 §7.2 写的是只有当前 task 的**第一条**永不遮蔽、后续的
+**允许**被遮蔽。差别在实践里现在不可达：本仓库 `agent.send()` 一律分配新 `taskId`，只有 `/continue`
+才复用旧 taskId，而 `/continue` 不追加 `user/message`——**一个 task 里因此恒只有一条 `user/message`**，
+它正是被保护的那条。所以这不是一个用户能撞到的缺陷，而是一处「实现比方案更严」的潜在偏差：多轮会话
+一旦成为可能，当前区间会被顶成零长度。本步**未改**它（改它要动 NX-34-1／-2 已交付并有测试的代码），
+留给用户决定是否单开一项。
+
+#### 验收
+
+```
+pnpm check            # syntax ok: 102 files
+pnpm test             # tests 254 / pass 254 / fail 0 / skipped 0
+pnpm lint             # Checked 111 files in 41ms. No fixes applied.
+pnpm fixtures:check   # 16 项：初始全部失败、参考解全部通过（退出码 0）
+pnpm eval:offline     # planned 12 / executed 12 / accepted 12 / rejected 0
+pnpm eval:estimate    # estimator.matchesReference true；corpus.matchesReference true
+```
+
+六条命令均退出 0。README 的工具计数由 11 订正为 12（plugin 提供 2 → 3，含表格、结构一节与 mermaid 图），
+测试计数订正为 254。本步未改任何既有文件的 `文件:行号` 锚点。
+
 ## NX-33 大工具结果的尾部窗口
 
 ### 行为、边界与实现

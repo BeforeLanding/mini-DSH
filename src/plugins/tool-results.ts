@@ -13,7 +13,9 @@ export function apply(ctx: Context, config: ToolResultsConfig = {}) {
   const maxPreviewBytes = positiveLimit(config.maxPreviewBytes, 16 * 1024, 'maxPreviewBytes')
   const tailLimit = Math.max(1, Math.floor(maxPreviewBytes / PREVIEW_TAIL_DIVISOR))
   ctx.effect(() => ctx.tools.setResultProjection(async (tool, result, execution) => {
-    if (tool === 'read_tool_result' || !execution.sessionId) return result
+    // read_history 与 read_tool_result 一样，输出已由调用方自己的 maxBytes 限定；再套一层预览截断与
+    // 结果存储只会把「按 seq 分页」变成「按 ref 分页」。
+    if (tool === 'read_tool_result' || tool === 'read_history' || !execution.sessionId) return result
     if (tool === 'bash' && (result.value as CommandResult | null)?.type === 'command') {
       const limit = Math.max(1, Math.floor(maxPreviewBytes / 2))
       const project = async (stream: CommandStream): Promise<CommandStream> => {

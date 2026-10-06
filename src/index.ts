@@ -15,6 +15,7 @@ import * as sandbox from './plugins/sandbox.js'
 import * as bash from './tools/bash.js'
 import * as files from './tools/files.js'
 import * as toolResults from './plugins/tool-results.js'
+import * as readHistory from './plugins/read-history.js'
 
 dotenv.config({ quiet: true })
 const { default: externalConfig } = await import('../plugins.config.js')
@@ -29,6 +30,7 @@ try {
   await root.plugin(runtimeContext, { workspace, profile })
   await root.plugin(sandbox, { workspace })
   await root.plugin(toolResults)
+  await root.plugin(readHistory)
   if (profile === 'coding') await root.plugin(projectContext, { directory: process.env.MINI_DSH_PROJECT_DIRECTORY })
   await root.plugin(deepseek)
   await root.plugin(bash, { workspace })

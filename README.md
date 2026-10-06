@@ -26,8 +26,8 @@
 | --- | --- | --- |
 | 提交范围 | `0a95a7f`～`c5fc9c4`（共 11 个） | `43e3829` 起 |
 | 语言 | 纯 JavaScript | TypeScript（tsc strict / NodeNext），Node 执行 `dist` 产物 |
-| 工具 | 6 个：`bash` + `read_file`／`write_file`／`edit_file`／`glob`／`grep` | 11 个：`tools/` 的 9 个（上列 6 个再加 `task_changes`／`request_trace`／`task_report`）与插件提供的 2 个（`project_context`／`read_tool_result`） |
-| 测试 | 22 条（`core.test.js` 20 + `integration.test.js` 2） | 246 条；另有 16 项编程 fixture 基线、离线评测入口与三条演示 |
+| 工具 | 6 个：`bash` + `read_file`／`write_file`／`edit_file`／`glob`／`grep` | 12 个：`tools/` 的 9 个（上列 6 个再加 `task_changes`／`request_trace`／`task_report`）与插件提供的 3 个（`project_context`／`read_tool_result`／`read_history`） |
+| 测试 | 22 条（`core.test.js` 20 + `integration.test.js` 2） | 254 条；另有 16 项编程 fixture 基线、离线评测入口与三条演示 |
 | 已有能力 | 基础配置、Session Event Log、Tool Runtime、System Prompt + LLM Adapter、Agent Loop、DeepSeek 适配器、runtime-context、外部插件与 MCP、沙箱与路径闸门、Bash/文件工具 | 上下文投影与裁剪、四维执行预算、JSONL 持久化与崩溃恢复、预算停止后的 `/continue`、有界读取/搜索与大结果回读、可靠编辑与任务变更清单、结构化前台命令、验证记录与交付报告、请求 trace、项目上下文、编程任务 fixture、真实模型评测 |
 
 上表每一行都能在仓库根目录复现（全部离线，不联网）：
@@ -55,8 +55,8 @@ git log --oneline --reverse | sed -n '12p'                # 43e3829：分界之�
 
 ```powershell
 pnpm install --frozen-lockfile
-pnpm check            # syntax ok: 99 files
-pnpm test             # tests 246 / pass 246 / fail 0 / skipped 0
+pnpm check            # syntax ok: 102 files
+pnpm test             # tests 254 / pass 254 / fail 0 / skipped 0
 pnpm fixtures:check   # 16 项：初始全部失败、参考解全部通过
 pnpm eval:offline     # planned 12 / executed 12 / accepted 12
 pnpm demo:fix         # 退出码 0：项目规则 → 定位 → 修改 → 失败测试 → 再修复 → diff 与证据
@@ -109,7 +109,7 @@ project-context 插件可通过 `limits` 配置 `maxFileBytes`（默认 16 KiB�
 
 ## 结构
 
-入口负责装配插件；`core/` 实现事件日志、工具注册表、提示词、模型路由和 Agent Loop；`plugins/` 将 runtime 暴露为 Cordis 服务；`models/` 实现 DeepSeek 流式协议。工具分两处注册：`tools/` 提供 9 个（Bash、五个文件工具、`task_changes`、`request_trace`、`task_report`），插件再提供 2 个（`project_context`、`read_tool_result`），合计 11 个。
+入口负责装配插件；`core/` 实现事件日志、工具注册表、提示词、模型路由和 Agent Loop；`plugins/` 将 runtime 暴露为 Cordis 服务；`models/` 实现 DeepSeek 流式协议。工具分两处注册：`tools/` 提供 9 个（Bash、五个文件工具、`task_changes`、`request_trace`、`task_report`），插件再提供 3 个（`project_context`、`read_tool_result`、`read_history`），合计 12 个。
 
 ```mermaid
 flowchart LR
@@ -121,14 +121,14 @@ flowchart LR
   Loop --> Tools["工具注册表<br/>src/core/tool-runtime.ts"]
 
   Tools --> Tools9["tools/ 注册 9 个<br/>bash、read_file、write_file、edit_file<br/>glob、grep、task_changes<br/>request_trace、task_report"]
-  Tools --> Plugins2["插件注册 2 个<br/>project_context、read_tool_result"]
+  Tools --> Plugins2["插件注册 3 个<br/>project_context、read_tool_result、read_history"]
 
   Log[("事件日志 JSONL<br/>src/core/event-store.ts<br/>唯一事实来源")] -. 投影由它派生 .-> Ctx
   Llm --> Log
   Tools --> Log
 ```
 
-看这张图要看三件事：**请求**从 CLI 进 Agent Loop，再由 Loop 分发给投影、预算、模型与工具；**事件日志是唯一事实来源**，请求投影（虚线）是从它派生出来的视图，裁剪只作用于投影、不删原始事件；**工具在两处注册**——`tools/` 9 个与插件 2 个，合计 11 个。
+看这张图要看三件事：**请求**从 CLI 进 Agent Loop，再由 Loop 分发给投影、预算、模型与工具；**事件日志是唯一事实来源**，请求投影（虚线）是从它派生出来的视图，裁剪只作用于投影、不删原始事件；**工具在两处注册**——`tools/` 9 个与插件 3 个，合计 12 个。
 
 Loop 通过服务契约工作，不依赖具体模型或工具，底层未注入预算时没有固定次数上限；CLI 默认使用有限预算。每个已记录的 tool_call 都保证有配对结果（真实完成、`skipped` 或 `unknown`）。
 
@@ -141,7 +141,7 @@ pnpm check
 pnpm test
 ```
 
-当前 246 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读及尾部窗口、上下文压缩、可靠编辑/任务变更、结构化命令、here-doc、Windows Git Bash 临时目录、验证报告、请求 trace、文档锚点与会话锁核验回归测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
+当前 254 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读及尾部窗口、上下文压缩、可靠编辑/任务变更、结构化命令、here-doc、Windows Git Bash 临时目录、验证报告、请求 trace、文档锚点与会话锁核验回归测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
 
 NX-05a 起提供可重复的 [编程任务 fixture](test/fixtures/coding/README.md)，NX-05b 扩展到 12 项，覆盖边界修复、功能扩展、跨文件接口修改、去重、分页、查询重试、合并、CSV、库存与汇总等；此后又加入多阶段序列 `pipeline`、单任务 `audit`、演示夹具 `repair`，以及 `pipeline` 的无公开检查变体 `blind`，**当前注册表共 16 项 = 筛查 12 项（上列，冻结）+ 这 4 项**（`blind` 与 `pipeline` 是同一套任务，只差工作区里有没有公开 `check.mjs`）。运行 `pnpm fixtures:check` 核验全部 16 项的初始失败/参考通过基线；`pnpm test` 还覆盖模拟模型经真实文件/Bash 工具完成失败→修改→重跑的流程。每次使用新临时工作区，独立验收器保留在工作区外；模拟结果不代表真实模型编程成功率。
 
