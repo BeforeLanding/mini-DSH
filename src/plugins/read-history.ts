@@ -13,11 +13,11 @@ export function apply(ctx: Context, config: ReadHistoryConfig = {}) {
   const maxBytes = positiveLimit(config.maxBytes, HISTORY_READ_MAX_BYTES, 'maxBytes')
   ctx.effect(() => ctx.tools.register({
     name: 'read_history',
-    description: 'Read this session original events by event number (seq), for recovering facts that a context summary dropped. Messages (user, assistant, tool calls and tool results) are rendered verbatim; every other event is listed by type only. The range is bounded by maxBytes and pages forward with nextSeq until eof. Reading does not modify the log.',
-    parameters: { type: 'object', properties: { from: { type: 'integer', minimum: 1 }, to: { type: 'integer', minimum: 1 }, maxBytes: { type: 'integer', minimum: 1, maximum: maxBytes } }, required: ['from'] },
+    description: 'Read this session original events by event number (seq), for recovering facts that a context summary dropped. Messages (user, assistant, tool calls and tool results) are rendered verbatim; every other event is listed by type only. Paging is a byte cursor, exactly like read_tool_result: pass back BOTH nextSeq and nextOffset until eof, or you will re-read the same page forever. nextOffset is a UTF-8 byte offset inside the event at nextSeq and resets to 0 whenever nextSeq advances. No event is ever dropped: every rendered byte of the range is reachable, though an event larger than one page takes several calls. Reading does not modify the log.',
+    parameters: { type: 'object', properties: { from: { type: 'integer', minimum: 1 }, to: { type: 'integer', minimum: 1 }, offset: { type: 'integer', minimum: 0 }, maxBytes: { type: 'integer', minimum: 1, maximum: maxBytes } }, required: ['from'] },
     execute(args, execution) {
       if (!execution.sessionId) throw new Error('read_history requires a session')
-      return readHistory(ctx.sessions, execution.sessionId, args.from, args.to, args.maxBytes, maxBytes)
+      return readHistory(ctx.sessions, execution.sessionId, args.from, args.to, args.maxBytes, maxBytes, args.offset)
     },
   }), 'register read_history')
 }

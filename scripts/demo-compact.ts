@@ -36,7 +36,7 @@ const scripted = () => ({
 // 保护，所以真正会撑爆上下文的就是这种会话——压缩要压的正是它。
 const CONSTRAINT = 'constraint: never edit src/secret.ts; always rerun node check.mjs'
 // 大小刻意选在「压得动，又装得下一页」之间：它单独就超过输入目标，但默认 16 KiB 一页装得下整条。
-// 单条事件**大于一整页**时 read_history 会给出有界前缀并点名「raise maxBytes」——那是另一条分支，
+// 单条事件**大于一整页**时 read_history 按 (nextSeq, nextOffset) 游标分页续读——那是另一条分支，
 // 由 test/history-read.test.ts 钉住，不混进这一幕。
 const toolText = ['// cart.mjs', ...Array.from({ length: 350 }, () => 'const line = "the call site is here";')].join('\n')
 // 窗口显式给出 1M：默认配置下压缩阈值（输入目标的 80%）在家用小历史上够不着，演示要让它可达。
@@ -92,19 +92,24 @@ try {
   heading('[4] 按事件号把原文读回来')
   const shadowed = summary?.type === 'context/summary' ? summary.data.shadowedSeqs : []
   const pages: string[] = []
+  // 游标是一对 (nextSeq, nextOffset)。只跟 nextSeq 会在超大事件上原地打转——这里按正确用法走，
+  // 并且把每页末尾那句「继续读」的提示语剥掉再拼，因为提示语是插在页面之间的，不属于任何事件的原文。
   let from = shadowed[0] ?? 1
+  let offset = 0
   let guard = 0
-  while (guard++ < 20) {
-    const page = readHistory(root.sessions, sessionId, from)
+  while (guard++ < 50) {
+    const page = readHistory(root.sessions, sessionId, from, undefined, undefined, undefined, offset)
     pages.push(page.content)
     if (page.eof) break
     from = page.nextSeq
+    offset = page.nextOffset
   }
-  const whole = pages.join('\n')
+  const whole = pages.map(text => text.replace(/\n\[truncated; continue with read_history from=\d+ offset=\d+\]/g, '')).join('')
   console.log(`  read_history({from:${shadowed[0] ?? 1}}) 分 ${pages.length} 页、共 ${whole.length} 字符`)
   console.log(`  约束原文读得回来：${whole.includes(CONSTRAINT)}`)
   console.log(`  那条 ${toolText.length} 字符的工具结果逐字读得回来：${whole.includes(toolText)}`)
-  console.log('  （默认一页 16 KiB；一页绝不在中途把事件劈成两半，装不下整条时停在它之前，下一页从头读它。）')
+  console.log('  （默认一页 16 KiB；一页绝不在中途把事件劈成两半，装不下整条时停在它之前；单条事件自己超过一页时，')
+  console.log('    给出有界前缀并把游标停在它身上，下一次调用带着 nextOffset 接着读——一个字节都不会丢。）')
 
   heading('[5] 判定')
   const checks: [string, boolean][] = [

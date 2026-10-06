@@ -7,7 +7,10 @@ export const HISTORY_READ_MAX_BYTES = 16 * 1024
 
 export interface HistoryRead {
   content: string
+  // 游标是一对：nextSeq 是「下一条要读的事件号」，nextOffset 是「该事件**渲染文本**里的字节偏移」。
+  // nextSeq 前进时 nextOffset 归零，eof 时为 0。两个数必须一起带回，只带 nextSeq 会原地打转。
   nextSeq: number
+  nextOffset: number
   eof: boolean
   totalEvents: number
 }
@@ -31,16 +34,36 @@ function renderEvent(event: SessionEvent): string {
   }
 }
 
+// 一页里装的是「事件渲染文本 + 换行」。偏移就量这个，不是量原始 JSON，也不是量事件正文。
+const pageText = (event: SessionEvent) => `${renderEvent(event)}\n`
+
 function seqArg(value: unknown, name: string) {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) throw new Error(`${name} must be a positive safe integer event sequence number`)
   return value
 }
 
+function offsetArg(value: unknown) {
+  if (value === undefined) return 0
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error('offset must be a nonnegative safe integer')
+  return value
+}
+
 // 按 seq 有界回读原始事件。它是「同一份日志产出同一个输入」的配套：摘要可以漏、可以错，但事件号还在，
 // 事实就核对得回来。读取本身不产生任何可被遮蔽的内容——它只是一条普通的工具结果。
+//
+// 分页游标是 (from, offset) 一对，与 `read_tool_result` 的 (ref, offset) 同形：
+//   - offset 量的是 from 那条事件**渲染文本**里的 UTF-8 字节偏移（0 表示从头读它）
+//   - offset 等于该事件文本长度时归一化成「下一条事件、偏移 0」
+//   - 一页绝不在中途把一条事件劈成两半；一条事件自己就大于一页时，给出有界前缀并把
+//     nextSeq 停在它身上、nextOffset 指向断点——**剩下的字节下一次调用照样取得回来**
+//
+// 由此得到的性质比「nextSeq 必前进」更强也更有用：游标 (nextSeq, nextOffset) 按字典序严格前进，
+// 而区间内每一条事件的每一个字节都能经有限次调用取回。**唯一会打转的用法是只跟 nextSeq、把
+// offset 丢掉**——服务端无法区分「正确续读」与「从头重读同一条事件」，只能靠这对字段名和
+// 页面末尾的提示语把误用挡住。这一点在工具描述里写明白，不假装它是服务端能兜住的事。
 export function readHistory(
   sessions: Pick<SessionRuntime, 'visibleEvents'>, sessionId: string,
-  from: unknown, to?: unknown, maxBytes?: unknown, ceiling = HISTORY_READ_MAX_BYTES,
+  from: unknown, to?: unknown, maxBytes?: unknown, ceiling = HISTORY_READ_MAX_BYTES, offset?: unknown,
 ): HistoryRead {
   const events = sessions.visibleEvents(sessionId)
   const start = seqArg(from, 'from')
@@ -49,40 +72,57 @@ export function readHistory(
   const end = to === undefined ? lastSeq : seqArg(to, 'to')
   if (end < start) throw new Error('to must not be before from')
   const limit = positiveLimit(maxBytes, ceiling, 'maxBytes', ceiling)
-  const parts: string[] = []
-  let bytes = 0
+  const at0 = offsetArg(offset)
+  const inRange = events.filter(event => event.seq >= start && event.seq <= end)
+  const rendered = inRange.map(event => Buffer.from(pageText(event)))
+
+  // 提示语的长度上界：本区间内可能出现的最大游标（seq 不超过 end，offset 不超过 MAX_SAFE_INTEGER）。
+  // **先把它留出来再装正文**——正文装完再裁剪提示语，会把上一页最后一条事件的尾巴剪掉，
+  // 而 nextSeq 已经越过它，那些字节就再也取不回来了。
+  const reserve = Buffer.byteLength(`\n[truncated; continue with read_history from=${end} offset=${Number.MAX_SAFE_INTEGER}]`)
+
+  let begin = 0
+  let at = at0
+  if (at > 0) {
+    const first = rendered[0]
+    if (!first) throw new Error('offset must be 0 unless from identifies an event in this session history')
+    if (at > first.length || (at < first.length && (first[at]! & 0xc0) === 0x80)) throw new Error(`offset must be a UTF-8 character boundary inside event ${start}`)
+    if (at === first.length) { begin = 1; at = 0 }
+  }
+
+  const parts: Buffer[] = []
+  let used = 0
   let nextSeq = end + 1
+  let nextOffset = 0
   let eof = true
-  for (const event of events) {
-    if (event.seq < start || event.seq > end) continue
-    const rendered = `${renderEvent(event)}\n`
-    const size = Buffer.byteLength(rendered)
-    const room = limit - bytes
-    if (size <= room) {
-      parts.push(rendered)
-      bytes += size
-      continue
-    }
-    // 放不下整条事件。这一页还空着（room === limit）时把能放的部分放进去并**前进**到下一个 seq：
-    // 否则同样的预算会一页页地重读同一条超大事件，调用方永远走不到 eof。页里已经有内容时则在它之前
-    // 停下，让下一页从头完整地读它。
-    if (room === limit) {
-      const marker = `[event ${event.seq} truncated; ${size} bytes total; raise maxBytes to read it whole]\n`
-      parts.push(marker + utf8Prefix(Buffer.from(rendered), Math.max(0, room - Buffer.byteLength(marker))).toString('utf8'))
-      bytes = limit
-      nextSeq = event.seq + 1
-      eof = nextSeq > end
+  for (let index = begin; index < rendered.length; index++) {
+    const event = inRange[index]!
+    const whole = rendered[index]!
+    const bytes = index === begin && at > 0 ? whole.subarray(at) : whole
+    const size = bytes.length
+    // 装得下整条、而且它就是这个区间的最后一条：不需要提示语，本页到此为止（eof）。
+    if (index === rendered.length - 1 && used + size <= limit) { parts.push(bytes); used += size; break }
+    // 装得下整条、且还留得下提示语的位置：收下，继续看下一条。
+    if (used + size + reserve <= limit) { parts.push(bytes); used += size; continue }
+    if (used > 0) {
+      // 本页已经有内容：停在它之前，让下一页从头完整地读它（偏移归零，因为下一条是**这条**事件）。
+      nextSeq = event.seq
+      eof = false
       break
     }
+    // 本页还空着：这条事件自己就超过一页。给有界前缀，游标停在它身上，剩下的字节下次接着读。
+    const room = limit - reserve
+    if (room <= 0) throw new Error(`maxBytes cannot fit the continuation notice; raise it above ${reserve}`)
+    const head = utf8Prefix(bytes, room)
+    if (!head.length) throw new Error('maxBytes cannot fit the next UTF-8 character')
+    parts.push(head)
+    used += head.length
     nextSeq = event.seq
+    nextOffset = at + head.length
     eof = false
     break
   }
-  let body = parts.join('')
-  if (!eof) {
-    const note = `\n[truncated; continue with read_history from=${nextSeq}]`
-    const noteBytes = Buffer.byteLength(note)
-    body = noteBytes < limit ? utf8Prefix(Buffer.from(body), limit - noteBytes).toString('utf8') + note : utf8Prefix(Buffer.from(body), limit).toString('utf8')
-  }
-  return { content: body || '[no events in this range]', nextSeq, eof, totalEvents: events.length }
+  if (!eof) parts.push(Buffer.from(`\n[truncated; continue with read_history from=${nextSeq} offset=${nextOffset}]`))
+  const body = Buffer.concat(parts).toString('utf8')
+  return { content: body || '[no events in this range]', nextSeq, nextOffset, eof, totalEvents: events.length }
 }
