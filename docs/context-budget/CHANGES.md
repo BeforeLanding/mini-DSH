@@ -14,6 +14,12 @@ PLAN D-21 与 REQUIREMENTS R-22 显式修订 D-02／R-03 的“当前 task 所�
 
 新增 `context/summary-start`、`context/summary-end`、`context/summary` 事件契约与运行时校验；新增纯 `planCompaction`／`planIsLive`，规划从原始用户请求之后开始，保持工具调用与结果闭合，并保证同一日志确定地产生同一计划。新增两条零模型测试。`node scripts/build.js` 因工作区依赖不完整失败：`@deepseek-ai/cosmokit`、`@standard-schema/spec`、`undici-types` 缺失；不是本步骤 TypeScript 诊断。`git diff --check` 退出 0。
 
+### NX-34-2 投影遮蔽与 frame
+
+`surfaceSeqs` 从四类消息事件派生可见面，并按日志顺序把每条 `context/summary` 的连续 `shadowedSeqs` 原位替换为摘要事件；后续摘要可继续遮蔽旧摘要。`deriveMessages` 只按该可见面派生消息，因此事件原文不变、frame 出现在被替换段的位置。规划器同时把摘要事件视作一条可压缩消息。新增 `surfaceSeqs replaces a shadowed range in place and composes later summaries` 与 `applied summaries replace their range at the original position deterministically`，覆盖二次摘要、重复投影、原始用户请求和工具协议。
+
+本地 pnpm shim 仍在执行命令前尝试访问 registry，故实际验收使用仓库允许的等价 Node 入口。`node scripts/build.js` 退出 0；`node scripts/check-syntax.js` 输出 `syntax ok: 96 files`；最终定向测试 15/15。沙箱内全量测试因 Bash 与 Windows symlink 权限产生环境失败，正常用户权限复跑 `node --test dist/test/*.test.js` 为 `tests 225 / pass 225 / fail 0 / skipped 0`。
+
 ## NX-33 大工具结果的尾部窗口
 
 ### 行为、边界与实现

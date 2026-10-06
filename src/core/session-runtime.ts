@@ -7,8 +7,9 @@ import { parseLog } from './event-store.js'
 import type { EventStore } from './event-store.js'
 import { emptyCounters } from './budget.js'
 import type { BudgetPolicy, RunState, StopReason, Counters } from './budget.js'
-import type { Arguments, EventData, Session, SessionEvent, Message } from './contracts.js'
+import type { Arguments, EventData, Session, SessionEvent } from './contracts.js'
 import { randomUUID } from 'node:crypto'
+import { deriveEventMessage, surfaceSeqs } from './compaction-plan.js'
 
 export class SessionRuntime {
     #stores = new Map<string, EventStore>()
@@ -221,51 +222,11 @@ export class SessionRuntime {
     }
 
     deriveMessages(id: string, events = this.visibleEvents(id)) {
-        const messages: Message[] = []
-
-        for (const event of events) {
-            const { type, data } = event
-
-            if (type === 'user/message') {
-                messages.push({
-                    role: 'user',
-                    content: data.content,
-                })
-            }
-
-            if (type === 'assistant/message') {
-                messages.push({
-                    role: 'assistant',
-                    ...(data.reasoningContent ? { reasoning_content: data.reasoningContent } : {}),
-                    content: data.content,
-                })
-            }
-
-            if (type === 'assistant/tool_calls') {
-                messages.push({
-                    role: 'assistant',
-                    content: data.content ?? null,
-                    ...(data.reasoningContent ? { reasoning_content: data.reasoningContent } : {}),
-                    tool_calls: data.toolCalls.map((call) => ({
-                        id: call.id,
-                        type: 'function',
-                        function: {
-                            name: call.name,
-                            arguments: JSON.stringify(call.arguments ?? {}),
-                        },
-                    })),
-                })
-            }
-
-            if (type === 'tool/result') {
-                messages.push({
-                    role: 'tool',
-                    tool_call_id: data.toolCallId,
-                    content: data.content,
-                })
-            }
-        }
-
-        return messages
+        const bySeq = new Map(events.map(event => [event.seq, event]))
+        return surfaceSeqs(events).flatMap(seq => {
+            const event = bySeq.get(seq)
+            const message = event ? deriveEventMessage(event) : undefined
+            return message ? [message] : []
+        })
     }
 }

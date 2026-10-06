@@ -100,6 +100,23 @@ test('request projection drops oldest complete tasks, preserves raw events and c
   assert.deepEqual(project(), result)
   assert.deepEqual(h.session.events, before)
 })
+test('applied summaries replace their range at the original position deterministically', () => {
+  const h = harness(async () => ({ content: 'unused' }))
+  const scope = { taskId: 'task', runId: 'run' }
+  const request = h.sessions.append(h.session.id, 'user/message', { content: 'original request' }, scope)
+  const call = h.sessions.append(h.session.id, 'assistant/tool_calls', { toolCalls: [{ id: 'call', name: 'tool', arguments: {} }] }, scope)
+  const result = h.sessions.append(h.session.id, 'tool/result', { toolCallId: 'call', content: 'large result' }, scope)
+  h.sessions.append(h.session.id, 'assistant/message', { content: 'recent tail' }, scope)
+  h.sessions.append(h.session.id, 'context/summary', { startSeq: 20, trigger: 'explicit', budgetTokens: 1000, projectedTokens: 900, shadowedSeqs: [call.seq, result.seq], shadowedTokens: 100, summaryTokens: 10, retainedNodes: 2, summary: 'tool completed', frame: '<system-reminder>history 3-4</system-reminder>\n\ntool completed' }, scope)
+  const before = structuredClone(h.session.events)
+  const first = h.sessions.deriveMessages(h.session.id)
+  const second = h.sessions.deriveMessages(h.session.id)
+  assert.deepEqual(first, second)
+  assert.deepEqual(first.map(message => message.content), ['original request', '<system-reminder>history 3-4</system-reminder>\n\ntool completed', 'recent tail'])
+  assert.equal(first[0].content, request.data.content)
+  assertToolProtocol(first)
+  assert.deepEqual(h.session.events, before)
+})
 test('capacity equality dispatches, one token below stops, and model capacity is recomputed', async () => {
   let calls = 0
   const h = harness(async () => { calls++; return { content: 'ok' } })
