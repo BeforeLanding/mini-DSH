@@ -24,6 +24,9 @@ export function deriveEventMessage(event: SessionEvent): Message | undefined {
 
 export function surfaceSeqs(events: readonly SessionEvent[]): number[] {
   let surface = events.filter(event => deriveEventMessage(event) !== undefined && event.type !== 'context/summary').map(event => event.seq)
+  // §7.2 的保护集：**当前 task 的第一条** user/message 永不被遮蔽，后续的允许（§6.1 规则 1）。
+  // 只有第一条——「任何 user/message 都不遮蔽」是比方案更严的口径，会把多轮会话压成「只能在两轮之间压」。
+  const request = events.find(event => event.type === 'user/message')?.seq
   for (const event of events) {
     if (event.type !== 'context/summary') continue
     const positions = event.data.shadowedSeqs.map(seq => surface.indexOf(seq)).filter(index => index >= 0)
@@ -32,7 +35,7 @@ export function surfaceSeqs(events: readonly SessionEvent[]): number[] {
     const end = Math.max(...positions)
     if (end - start + 1 !== positions.length) continue
     const shadowed = event.data.shadowedSeqs.map(seq => events.find(candidate => candidate.seq === seq)).filter((candidate): candidate is SessionEvent => candidate !== undefined)
-    if (shadowed.some(candidate => candidate.type === 'user/message' || (candidate.type === 'tool/result' && candidate.data.status === 'unknown'))) continue
+    if (shadowed.some(candidate => candidate.seq === request || (candidate.type === 'tool/result' && candidate.data.status === 'unknown'))) continue
     try { assertToolProtocol(shadowed.flatMap(candidate => { const item = deriveEventMessage(candidate); return item ? [item] : [] })) } catch { continue }
     surface = [...surface.slice(0, start), event.seq, ...surface.slice(end + 1)]
   }
@@ -42,10 +45,17 @@ export function surfaceSeqs(events: readonly SessionEvent[]): number[] {
 function toolResult(event: SessionEvent | undefined) { return event?.type === 'tool/result' }
 
 /** Deterministically chooses an early, protocol-closed message range after the original request. */
-export function planCompaction(events: readonly SessionEvent[], visibleSeqs: readonly number[], options: CompactionPlanOptions): CompactionPlan | undefined {
+export function planCompaction(events: readonly SessionEvent[], visible: readonly number[], options: CompactionPlanOptions): CompactionPlan | undefined {
   const min = options.minShadowedNodes ?? 2
-  if (visibleSeqs.length <= min) return undefined
   const bySeq = new Map(events.map(event => [event.seq, event]))
+  // §7：「区间落在当前 task 内部」不是退而求其次，**它就是本项的定义**。压缩要换掉的是**请求里的**消息，
+  // 而可见集里除当前 task 外只可能剩下没被裁剪掉的旧任务（它们因为工具组未配对／unknown 而被保护，
+  // 本就不该进区间）。不收这一步，规划器会在已被裁剪、已经不在请求里的旧任务上规划出一段压了等于没压
+  // 的区间：摘要照样落成 applied，投影却因为那些 seq 根本不在请求里而不生效——白花一次调用，还写坏日志。
+  // 当前 task = 最后一条带 taskId 的事件所属的 task；没有 taskId 的合成日志退回整份可见集，行为不变。
+  const currentTaskId = [...events].reverse().find(event => event.taskId)?.taskId
+  const visibleSeqs = currentTaskId === undefined ? visible : visible.filter(seq => bySeq.get(seq)?.taskId === currentTaskId)
+  if (visibleSeqs.length <= min) return undefined
   const costs = visibleSeqs.map(seq => { const m = deriveEventMessage(bySeq.get(seq)!); return m ? estimateMessage(m) : 0 })
   const total = costs.reduce((a, b) => a + b, 0)
   let anchor = visibleSeqs.findIndex(seq => bySeq.get(seq)?.type === 'user/message')
@@ -67,7 +77,10 @@ export function planCompaction(events: readonly SessionEvent[], visibleSeqs: rea
     const shadowed = shadowedSeqs.map(seq => bySeq.get(seq)).filter((event): event is SessionEvent => event !== undefined)
     const retained = visibleSeqs.slice(first + shadowedSeqs.length).map(seq => bySeq.get(seq)).filter((event): event is SessionEvent => event !== undefined)
     try {
-      if (shadowed.some(event => event.type === 'user/message' || (event.type === 'tool/result' && event.data.status === 'unknown'))) throw new Error('protected')
+      // 区间从第一条 user/message **之后**起算，所以这里不必再挡 user/message：区间内的后续用户消息
+      // 允许被遮蔽（§6.1 规则 1），摘要指令已要求承载 Primary Request 与 Pending Work，frame 给出 seq 范围，
+      // read_history 可按范围读回原文。要挡的只剩 unknown 工具组——那是数据完整性，不是可读性问题。
+      if (shadowed.some(event => event.type === 'tool/result' && event.data.status === 'unknown')) throw new Error('protected')
       assertToolProtocol(shadowed.flatMap(event => { const item = deriveEventMessage(event); return item ? [item] : [] }))
       assertToolProtocol(retained.flatMap(event => { const item = deriveEventMessage(event); return item ? [item] : [] }))
       break

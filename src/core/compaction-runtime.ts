@@ -77,15 +77,23 @@ function buildFrame(summary: string, covered: readonly number[], recallTool?: st
   return lines.join('\n')
 }
 
-// 被本区间换掉的**原始**事件并集：区间里若含一份更早的摘要，展开它遮蔽过的那些 seq（§7.1：
-// 第二次压缩时门牌号取整个会话的并集，因为第二次会把第一份摘要也遮蔽掉）。
+// 被本区间换掉的**原始**事件并集（§7.1：门牌号取整个会话的并集，因为后来的压缩会把更早的摘要也遮蔽掉）。
+// 展开必须**递归到不动点**：只展开一层的话，第三次压缩手里的 shadowedSeqs 里躺的是第二份摘要的 seq，
+// 展开它得到的是第一份摘要的 seq 而不是最初那批原文——frame 的 from 会指向一份摘要自己，最早的范围就此丢失。
+// 摘要自身的 seq 不进集合（它不是原文），seen 兼作防环。
 function coveredSeqs(bySeq: Map<number, SessionEvent>, shadowedSeqs: readonly number[]) {
   const covered = new Set<number>()
-  for (const seq of shadowedSeqs) {
-    const event = bySeq.get(seq)
-    if (event?.type === 'context/summary') for (const original of event.data.shadowedSeqs) covered.add(original)
-    else covered.add(seq)
+  const seen = new Set<number>()
+  const expand = (seqs: readonly number[]) => {
+    for (const seq of seqs) {
+      if (seen.has(seq)) continue
+      seen.add(seq)
+      const event = bySeq.get(seq)
+      if (event?.type === 'context/summary') expand(event.data.shadowedSeqs)
+      else covered.add(seq)
+    }
   }
+  expand(shadowedSeqs)
   return [...covered].sort((a, b) => a - b)
 }
 

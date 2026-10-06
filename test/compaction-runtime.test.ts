@@ -95,6 +95,36 @@ test('projection of a compacted log is deterministic and survives repeated deriv
     planCompaction(events(h), first, { budgetTokens: 65_536, retainRatio: 0.1 }))
 })
 
+test('a third compaction still addresses the earliest originals, not the first summary', async () => {
+  const h = harness(async () => ({ content: 'a summary' }))
+  const run = h.sessions.beginRun(h.session.id, policy, 'mock/test')
+  h.sessions.append(h.session.id, 'user/message', { content: 'the original request' }, run)
+  const earliest = h.sessions.append(h.session.id, 'assistant/message', { content: 'EARLIEST-ORIGINAL' }, run).seq
+  h.sessions.append(h.session.id, 'assistant/tool_calls', { toolCalls: [{ id: 'c1', name: 'read_file', arguments: {} }] }, run)
+  h.sessions.append(h.session.id, 'tool/result', { toolCallId: 'c1', name: 'read_file', content: 'x'.repeat(5000) }, run)
+  h.sessions.append(h.session.id, 'assistant/message', { content: 'tail-1' }, run)
+
+  const runtime = compaction(h)
+  assert.equal((await runtime.compact(attemptFor(run, h.session.id))).kind, 'applied')
+  for (const text of ['mid-a', 'mid-b', 'mid-c']) h.sessions.append(h.session.id, 'assistant/message', { content: text }, run)
+  assert.equal((await runtime.compact(attemptFor(run, h.session.id))).kind, 'applied')
+  for (const text of ['late-a', 'late-b', 'late-c']) h.sessions.append(h.session.id, 'assistant/message', { content: text }, run)
+  assert.equal((await runtime.compact(attemptFor(run, h.session.id))).kind, 'applied')
+
+  const applied = summaries(h)
+  assert.equal(applied.length, 3)
+  // 第三次压缩遮蔽的是**第二份摘要**，而第二份摘要遮蔽的是**第一份摘要**。门牌号展开只做一层的话，
+  // 它会停在第一份摘要自己的 seq 上（实测是 7），最早那批原文就此从 frame 的范围里消失——
+  // 而 frame 的全部意义就是让「丢了什么」可寻址。展开必须递归到不动点。
+  const frame = applied.at(-1)!.data.frame
+  const from = Number(/第 (\d+)–/.exec(frame)![1])
+  assert.equal(from, earliest, `第三次压缩的 frame 必须一路指回最早的原文（第 ${earliest} 号），实际是 ${from}`)
+  // 而且门牌号里给出的每一条都确实是发生过的事件，不是凭空的号段。
+  const all = new Set(events(h).map(event => event.seq))
+  const [, to] = /第 \d+–(\d+) 号/.exec(frame)!.slice(1)
+  for (let seq = from; seq <= Number(to); seq++) assert.ok(all.has(seq), `第 ${seq} 号事件必须在日志里存在`)
+})
+
 test('the summary call is a real request counted into the same run', async () => {
   let calls = 0
   const { h, run } = longSingleTaskSession(async () => { calls++; return { content: 'summary body', usage: { inputTokens: 10, outputTokens: 4, totalTokens: 14, source: 'provider', uncertain: false } } })
