@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 // 从 dist/test 出发，../../ 是仓库根；docs/ 只在仓库里，不进 dist。
 const repository = fileURLToPath(new URL('../../', import.meta.url))
 const document = path.join(repository, 'docs', 'context-budget', 'DECISIONS.md')
+const plan = path.join(repository, 'docs', 'context-budget', 'PLAN.md')
 
 // 路线图 M9 点名要求解释的五条选择。少一条就算这份文档没有交付它该交付的东西。
 const topics = ['事件与投影分离', '协议完整性', '可靠编辑', '验证时效', '未知副作用恢复']
@@ -40,6 +41,60 @@ function parse(source: string): { rows: Row[]; sections: string[] } {
         rows.push({ section, kind: row[1], anchor: cells[2] ?? '', note: cells[3] ?? '' })
     }
     return { rows, sections }
+}
+
+// 节标题 → 该节正文（到下一条三级或更高级标题为止）。切节口径与上面的 parse() 一致：
+// `#### 锚点` 这类四级小标题不切节，它下面的正文仍属于本节。
+function bodies(source: string): { title: string; body: string }[] {
+    const out: { title: string; body: string }[] = []
+    let title: string | undefined
+    let body: string[] = []
+    for (const line of source.split('\n')) {
+        const heading = /^(#{1,6})\s+(\S.*)$/.exec(line)
+        if (heading) {
+            const level = heading[1].length
+            if (level <= 3) {
+                if (title !== undefined) out.push({ title, body: body.join('\n') })
+                title = level === 3 ? heading[2].trim() : undefined
+                body = []
+            }
+            continue
+        }
+        if (title !== undefined) body.push(line)
+    }
+    if (title !== undefined) out.push({ title, body: body.join('\n') })
+    return out
+}
+
+// PLAN 的决策小节标题形如 `### D-21 当前任务历史的可回读压缩（NX-34）`。正文第一行以
+// 「修订」开头的，就是一份改掉了既有决策的决策；它后头写的 D-xx 就是被改的那些。
+function planRevisions(source: string): { reviser: string; revised: string[] }[] {
+    const out: { reviser: string; revised: string[] }[] = []
+    let current: { id: string; body: string[] } | undefined
+    const flush = () => {
+        if (current === undefined) return
+        const first = current.body.find(line => line.trim() !== '') ?? ''
+        if (first.startsWith('修订')) {
+            const revised = [...new Set([...first.matchAll(/D-\d+/g)].map(match => match[0]))]
+            if (revised.length > 0) out.push({ reviser: current.id, revised })
+        }
+        current = undefined
+    }
+    for (const line of source.split('\n')) {
+        const heading = /^(#{1,6})\s+(\S.*)$/.exec(line)
+        if (heading) {
+            const level = heading[1].length
+            if (level <= 3) {
+                flush()
+                const id = level === 3 ? /^(D-\d+)\b/.exec(heading[2]) : null
+                current = id ? { id: id[1], body: [] } : undefined
+            }
+            continue
+        }
+        if (current !== undefined) current.body.push(line)
+    }
+    flush()
+    return out
 }
 
 // 这份文档的价值全在「锚点是真的」，所以这里把「还指着真东西」变成回归。
@@ -85,4 +140,26 @@ test('the decision write-up keeps every code and test anchor pointing at somethi
     assert.deepEqual(problems, [])
     assert.ok(codeRows.length >= topics.length, '代码锚点数量不应少于小节数')
     assert.ok(testRows.length >= topics.length, '测试锚点数量不应少于小节数')
+})
+
+// PLAN 里凡以「修订 D-xx」开头的决策，都改掉了本文某一节援引的结论。那一节必须留下反转
+// 注记并点出修订者的编号——否则读者读到的是已经被推翻、却没人告诉他被推翻的说法。
+// 2026-10-06 的 NX-35 发现 §1 仍写着「没有 compaction」就漏在这一步：NX-34 改过这个文件，
+// 但只重编了行号，而上面那条锚点回归对散文一句话都不问。
+// 和锚点一样，这条只钉「有没有承认被改过」，不证明注记把改动说对了。
+test('every PLAN revision of a decision the write-up cites is acknowledged in that section', () => {
+    const revisions = planRevisions(text(plan))
+    // 这条护栏由 PLAN 的「修订」前缀驱动。前缀若换写法，护栏会静默变成空转——先把非空钉住。
+    assert.ok(revisions.length > 0, 'PLAN 里没有解析到任何以「修订」开头的决策，本条护栏已空转')
+
+    const problems: string[] = []
+    for (const { reviser, revised } of revisions) {
+        for (const { title, body } of bodies(text(document))) {
+            const declared = /规范条目见\s*\[PLAN 的 ([^\]]+)\]/.exec(body)?.[1] ?? ''
+            const cited = [...declared.matchAll(/D-\d+/g)].map(match => match[0])
+            if (!cited.some(id => revised.includes(id))) continue
+            if (!body.includes(reviser)) problems.push(`「${title}」援引的 ${cited.join('／')} 已被 ${reviser} 修订，本节却没有点出 ${reviser}`)
+        }
+    }
+    assert.deepEqual(problems, [])
 })
