@@ -16,11 +16,13 @@
 
 **范围与方向**：只改文档与一条测试，`src/` 一行不动，零付费。`DECISIONS.md` 仍保持「五条选择」的形状，压缩的参数与细节按该文件自己的约定留在 PLAN——只把两处说法改成真的，并**点出修订者编号**。护栏取**反例驱动**而非字符串黑名单：PLAN 里凡以「修订 D-xx」开头的决策，本文引用被修订编号的那一节必须出现修订者编号，否则为红。这样下一轮改契约时同样的漂移会当场变红，而不是等下一次人工复审。
 
+**已于 2026-10-06 完成**（零付费）：三处均已订正，`pnpm test` 269 → 270（新增的那条即护栏），`src/` 一行未动。逐步命令与实测输出见 [CHANGES 的 NX-35 节](CHANGES.md#nx-35-nx-34-反转点的文档同步)。
+
 | 子步骤 | 行为与状态 | 独立验收 | 预计提交 |
 |---|---|---|---:|
-| NX-35-0 | TASKS 立项：本节（**done**） | `grep -cE '^\| NX-35-' docs/context-budget/TASKS.md` = 3；每行「独立验收」列至少含一个反引号命令或可判定的退出码；`pnpm test` 基线 `pass 269 / fail 0` 不变；`git diff --stat` 只含 `docs/context-budget/TASKS.md` | 1 次 |
-| NX-35-1 | `DECISIONS.md` 两处反转注记与「修订必被承认」回归（**todo**） | 新测试在注记写入前**为红**、写入后为绿（反例实跑并留存输出）；`pnpm check`、`pnpm test`、`pnpm lint` 均退出 0；`git diff --stat` 只含 `DECISIONS.md` 与 `test/decisions-doc.test.ts` | 1 次 |
-| NX-35-2 | NX-16 状态、路线图 §1 与 PLAN 过期口径同步（**todo**） | 三处不再陈述旧事实且各自带日期与凭证；`pnpm test` 仍全绿；`git diff --stat` 只含 `TASKS.md`／`INTERNSHIP_ROADMAP.md`／`PLAN.md` | 1 次 |
+| NX-35-0 | TASKS 立项：本节（**done**，`9619a66`） | `grep -cE '^\| NX-35-' docs/context-budget/TASKS.md` = 3；每行「独立验收」列至少含一个反引号命令或可判定的退出码；`pnpm test` 基线 `pass 269 / fail 0` 不变；`git diff --stat` 只含 `docs/context-budget/TASKS.md` | 1 次 |
+| NX-35-1 | `DECISIONS.md` 两处反转注记与「修订必被承认」回归（**done**，`e582c99`） | 新测试在注记写入前**为红**、写入后为绿（反例实跑并留存输出）；`pnpm check`、`pnpm test`、`pnpm lint` 均退出 0；`git diff --stat` 只含 `DECISIONS.md` 与 `test/decisions-doc.test.ts` | 1 次 |
+| NX-35-2 | NX-16 状态、路线图 §1 与 PLAN 过期口径同步（**done**，`b247596`） | 三处不再陈述旧事实且各自带日期与凭证；`pnpm test` 仍全绿；`git diff --stat` 只含 `TASKS.md`／`INTERNSHIP_ROADMAP.md`／`PLAN.md` | 1 次 |
 
 ### NX-34 上下文压缩
 
