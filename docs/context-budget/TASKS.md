@@ -1,6 +1,22 @@
 # 任务清单
 
-更新：2026-10-06。每项只保留当前状态和证据入口；行为、边界、逐步提交与完整验收记录见 [CHANGES](CHANGES.md)。状态：`todo`、`in_progress`、`blocked`、`done`。
+更新：2026-10-09。每项只保留当前状态和证据入口；行为、边界、逐步提交与完整验收记录见 [CHANGES](CHANGES.md)。状态：`todo`、`in_progress`、`blocked`、`done`。
+
+### NX-36 评测仪器自洽准则的固化（NX-08h）
+
+**问题（2026-10-09，NX-08h 复盘）**。NX-08h 的 `blind` fixture 想用「删掉工作区里的公开检查」来打破任务集天花板——`check.mjs` 从 `initial/` 移除，其余可改文件与 `pipeline` 逐字相同。实测没有分叉：模型照着**仍然留在工作区**的 `docs/SPEC.md` 自建了等价的检查脚本（第 6、7 阶段各写一份 `tmp-verify-NN.mjs`；117 次 bash 调用里 31 次是 `node` 内联脚本），反馈回路的品质一点没变。**这是一次本可事先推出来的判断失误**：对完全确定性的编程任务，一份完整的权威规格同时就是验收判据的载荷，删掉规格的翻译件不等于删掉判据。那次付费诊断跑因此没回答它原本要回答的问题。
+
+**要留下的不是这个失误，是它的纠正。** 三处已知违反（NX-08f 报告生成器的 `RULES` 映射把规范值写成可读句子、同 fixture 数据集每行自带期望值、NX-08h 的 `blind`）说明「验收器别放进工作区」这条惯例不够用：判据还可以由工作区**推导**出来。本条把惯例升为明文条件，并补上可推导性这一维。
+
+**范围与方向**：只改文档，`src/` 一行不动，零付费。
+
+**不做**：不新造 `blind` 式 fixture；不为「继续调 fixture 追分叉」开工作项（那是按结果挑仪器，NX-08e2 与 NX-08f 已有同类教训）；**不写进 `DECISIONS.md`**——本准则约束 fixture 设计而非 Harness 架构，不与 M9 点名的五条关键选择并列（用户 2026-10-09 决策）。`DECISIONS.md` 只按 PLAN 条目编号范围的变化同步一行。
+
+| 子步骤 | 行为与状态 | 独立验收 | 预计提交 |
+|---|---|---|---:|
+| NX-36-0 | TASKS 立项：本节（**todo**） | `grep -cE '^\| NX-36-' docs/context-budget/TASKS.md` = 3；每行「独立验收」列至少含一个反引号命令或可判定的退出码；`pnpm test` 基线 `pass 270 / fail 0` 不变；`git diff --stat` 只含 `docs/context-budget/TASKS.md` | 1 次 |
+| NX-36-1 | 订正 R-21 的过期状态（**todo**） | REQUIREMENTS 的 R-21 状态行不再陈述「NX-08e／f／g 尚未开跑」，改列已开跑项、「仪器未成立」的收尾理由与报告链接；`grep -c '尚未开跑' docs/context-budget/REQUIREMENTS.md` = 0；`pnpm test` 仍全绿；`git diff --stat` 只含 `docs/context-budget/REQUIREMENTS.md` | 1 次 |
+| NX-36-2 | PLAN D-22 与 REQUIREMENTS R-23 固化，`DECISIONS.md` 条目范围同步（**todo**） | 新增规范条目 D-22 与验收条款 R-23 并互相引用；`DECISIONS.md` 的 `D-01…D-21` 不再与 PLAN 的条目范围矛盾；`pnpm check`、`pnpm test`（含 `decisions-doc` 与 `docs-links` 两条守卫）、`pnpm lint` 均退出 0；`git diff --stat` 只含 `PLAN.md`／`REQUIREMENTS.md`／`DECISIONS.md` | 1 次 |
 
 ### NX-35 NX-34 反转点的文档同步
 
