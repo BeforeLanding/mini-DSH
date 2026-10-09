@@ -12,11 +12,13 @@
 
 **不做**：不新造 `blind` 式 fixture；不为「继续调 fixture 追分叉」开工作项（那是按结果挑仪器，NX-08e2 与 NX-08f 已有同类教训）；**不写进 `DECISIONS.md`**——本准则约束 fixture 设计而非 Harness 架构，不与 M9 点名的五条关键选择并列（用户 2026-10-09 决策）。`DECISIONS.md` 只按 PLAN 条目编号范围的变化同步一行。
 
+**已完成（2026-10-09，零付费）**：三步均为文档，`src/` 一行未动，`pnpm test` 保持 270/270（R-21 订正为其中一步，因此计数不变）。逐步命令与实测输出见 [CHANGES 的 NX-36 节](CHANGES.md#nx-36-评测仪器自洽准则的固化nx-08h)。**准则没有机读护栏**——可推导性不可判定，验收动作是设计 fixture 时的人工步骤，这一点写进 R-23 的正文。
+
 | 子步骤 | 行为与状态 | 独立验收 | 预计提交 |
 |---|---|---|---:|
-| NX-36-0 | TASKS 立项：本节（**todo**） | `grep -cE '^\| NX-36-' docs/context-budget/TASKS.md` = 3；每行「独立验收」列至少含一个反引号命令或可判定的退出码；`pnpm test` 基线 `pass 270 / fail 0` 不变；`git diff --stat` 只含 `docs/context-budget/TASKS.md` | 1 次 |
-| NX-36-1 | 订正 R-21 的过期状态（**todo**） | REQUIREMENTS 的 R-21 状态行不再陈述「NX-08e／f／g 尚未开跑」，改列已开跑项、「仪器未成立」的收尾理由与报告链接；`grep -c '尚未开跑' docs/context-budget/REQUIREMENTS.md` = 0；`pnpm test` 仍全绿；`git diff --stat` 只含 `docs/context-budget/REQUIREMENTS.md` | 1 次 |
-| NX-36-2 | PLAN D-22 与 REQUIREMENTS R-23 固化，`DECISIONS.md` 条目范围同步（**todo**） | 新增规范条目 D-22 与验收条款 R-23 并互相引用；`DECISIONS.md` 的 `D-01…D-21` 不再与 PLAN 的条目范围矛盾；`pnpm check`、`pnpm test`（含 `decisions-doc` 与 `docs-links` 两条守卫）、`pnpm lint` 均退出 0；`git diff --stat` 只含 `PLAN.md`／`REQUIREMENTS.md`／`DECISIONS.md` | 1 次 |
+| NX-36-0 | TASKS 立项：本节（**done**，`e9e38b8`） | `grep -cE '^\| NX-36-' docs/context-budget/TASKS.md` = 3；每行「独立验收」列至少含一个反引号命令或可判定的退出码；`pnpm test` 基线 `pass 270 / fail 0` 不变；`git diff --stat` 只含 `docs/context-budget/TASKS.md` | 1 次 |
+| NX-36-1 | 订正 R-21 的过期状态（**done**，`10ae871`） | REQUIREMENTS 的 R-21 状态行不再陈述「NX-08e／f／g 尚未开跑」，改列已开跑项、「仪器未成立」的收尾理由与报告链接；`grep -c '尚未开跑' docs/context-budget/REQUIREMENTS.md` = 0；`pnpm test` 仍全绿；`git diff --stat` 只含 `docs/context-budget/REQUIREMENTS.md` | 1 次 |
+| NX-36-2 | PLAN D-22 与 REQUIREMENTS R-23 固化，`DECISIONS.md` 条目范围同步（**done**，`352d510`） | 新增规范条目 D-22 与验收条款 R-23 并互相引用；`DECISIONS.md` 的 `D-01…D-21` 不再与 PLAN 的条目范围矛盾；`pnpm check`、`pnpm test`（含 `decisions-doc` 与 `docs-links` 两条守卫）、`pnpm lint` 均退出 0；`git diff --stat` 只含 `PLAN.md`／`REQUIREMENTS.md`／`DECISIONS.md` | 1 次 |
 
 ### NX-35 NX-34 反转点的文档同步
 
