@@ -10,15 +10,21 @@ import type { FixtureId } from '../scripts/coding-fixtures.js'
 // 也就是说「改了 fixture」这个动作在花钱之前是无声的。这里让它在构建时点名，与 estimation.test.ts 把
 // 语料与估算器的摘要钉住同一个道理。
 // 需要有意改动仪器时：改完重跑受影响的批次、回填结论，再更新这里的数字——不要静默改数字。
+// NX-39-3d（2026-10-14）**只更新了数字、没有重跑**，这件事必须在这里说清楚：`interface` 与 `inventory`
+// 的 `verify.mjs` 加了「行为不变」那一段（与改动前的那份实现差分，输入空间 200 条），判据因此**严格变强**
+// ——旧判据下通过的一次运行，在新判据下**可能**不过。NX-08d 的 12/12 是在旧判据上发布的，它如今不再被
+// 当前仪器支持；重跑属付费批次，本步未获授权，因此那两条结论自此**标注为过期**（CHANGES 的 NX-39-3d 节），
+// 由 NX-39-6 的四格批次一并重测（`ablationIds` 已包含 `screeningIds`）。下面这两个新数字的作用只剩一条：
+// 让**未来**的改动继续被点名，而不是把 12/12 说成仍然成立。
 // 覆盖范围只到已发布结论依赖的这四份；repair 是演示夹具、没有评测结论挂在它上面，因此不钉。
 const pinned: Readonly<Record<string, { ids: readonly FixtureId[]; sha256: string; perFixture: Readonly<Record<string, string>> }>> = {
   screening: {
     ids: screeningIds,
-    sha256: '30b593faf26d7a02bf9fd77fc10cce833036533cf2d7c5b6c19132d9d93d1b83',
+    sha256: 'fac062fe15f923712d2737070904fa0f5b1f090e478556813a1669f9d56d5c18',
     perFixture: {
       boundary: '1e642299e99a664278d6a2d415a73a9e10e7a0cb8fcd968f8f2c904102e38efd',
       options: '46fe82718dc8471da8313fdcbb6ffa56de2fee1852fcc5089f408600600f1e79',
-      interface: '92ec677e22d81dab0750d7e3e3e6682f9b154ca36ae311e023e13ed58045292e',
+      interface: 'e5589727653c1373db4ccc32fd2cc06778faecaa76a8ca1ffed077283cf658b8',
       normalize: 'ecc7768a5b29f6b3201700da708652b2f1d7b262b2b2b5ca55505ea37c07a0fe',
       dedupe: 'dbd0aa7e8caab2e5ea1af1a3085aa728ad395c15e9a51f06b771c3c3beeae11b',
       pagination: '3fa0e618aa0fb28248d07e177f2a1d323f4fda85b2f9e57a20178078882f384d',
@@ -26,7 +32,7 @@ const pinned: Readonly<Record<string, { ids: readonly FixtureId[]; sha256: strin
       retry: '45c7aeacd0058a4df6c68af7f326ace8ddc97f3de86e393676172e191b48ef1b',
       merge: '757df9ff1b79124ae985862b69157f74c34f93f1aaca7b9b76e135e91659d6b4',
       csv: '6bc2a2af5e6b0491ceaf065579045be6f5d40961fa1c15f7e7c11c883f2ecdf9',
-      inventory: 'dde6f3237894dd728477d7399382ea458ef95a93868126b83e58c88a257f0874',
+      inventory: '08cfa921ab74b1bc0fbf7c3d216ad6c65f83d6548acaa91e25cae9958f2c9b6e',
       summary: 'c4ded42f96062c68f95a444da8ba94016e970b19e92c425557db83941d93336d',
     },
   },

@@ -12,6 +12,19 @@
 
 `blind` 是第 16 个，本身**不是一套新任务**，而是 `pipeline` 的**无公开检查变体**（NX-08h）：同一套十四个阶段、同一个 `docs/SPEC.md` 与同一份参考解，只去掉 `initial/check.mjs`、并把阶段说明末句由「运行 `node check.mjs N`」改成按 SPEC 自验。差别必须**只有这一件事**——这正是它可用的前提，因为与 `pipeline` 并排读的两个数字只有在这个前提下才能相互解释。它与 `pipeline` 测的不是同一件事：`pipeline` 测「有完整、即时、廉价 oracle 时能否收敛」，`blind` 测「能否按规格独立产出正确实现」，而 [NX-08g0](../../../docs/context-budget/CHANGES.md#nx-08g0-任务集天花板效应定性边界与补救排序) 判定的天花板正来自前者的 oracle。该前提由 [coding-fixtures.test.ts](../../coding-fixtures.test.ts) 的六条断言钉住，其中最强的一条是「从 `pipeline` 去掉的每一行都必须与公开检查有关」——只断言「不含 `check.mjs`」会放过一整段被改写的任务要求。它不进筛查批次、不进阶段序列，单独一份注册表 `blindIds`。
 
+**「重构」类**是筛查批次里的两项：`interface`、`inventory`（种类仍是 `edit`，判据的两段由 NX-39-3d 补齐）。它们的判据分**两段**，而两段成立的**条件不同**：
+
+| 段 | 问什么 | 在哪些态上成立 | 看什么 |
+|---|---|---|---|
+| 1 行为不变 | 有没有动到不该动的地方 | **初始态与参考态都成立** | 数值语义（与改动前逐位相同）＋ 纯度（不改入参） |
+| 2 新接口 | 任务点名要改的那两处改了没有 | **只在参考态成立** | 返回形状、渲染文本、调用方派生自那次计算 |
+
+**这个分法本身是判据的一部分。** 旧判据只有第 2 段——它说的全是「任务点名要改的那两处改了没有」，**没有一句**在说行为没变，而「改结构、不改行为」才是这道题的考点：一份把求和外加 `+0.01` 的实现在旧判据下与参考解一样全绿。两段写混的话，初始态判不过的原因就不再唯一——「行为被改坏了」与「改动还没做完」给出同一个读数，而报告里前者是失败、后者只是没完成。门禁因此拿**改动前的那份源码**当工作区跑一遍 `verify.mjs`，要求它退出 1、stderr 里出现「新接口」而**不**出现「行为不变」。
+
+段 1 的量法是**差分**：[`_shared/refactor.mjs`](_shared/refactor.mjs) 把 fixture 目录下 `initial/src/` 的**改动前那份实现**加载进来当参照物（工作区之外，agent 改不到），对同一批输入断言两者算出同一个数（`assert.equal` 在 strict 下走 `Object.is`，含浮点累加顺序在内逐位相同），并断言入参没被改动。**为什么不另写一张期望值表**：那张表是照着参考解抄下来的答案，参考解改一次得跟着改，而且它测不出「参考解与改动前在这一维上是否真的没变」——那恰好是重构类判据要问的唯一一件事。这不违反 R-23：`initial/` 本来就是交给 agent 的起点，隐藏的是判据本身（这批输入与「必须逐位相同」这条规则）。输入空间 = 手写边界（空、单条、多条、`quantity` 为 0、进位敏感的小数）＋ 200 条固定种子的 LCG 生成——不用 `Math.random`：判据的输入空间在任何机器、任何一次运行上必须逐字相同，否则「这次过了」与「上次没过」不是同一件事，失败也无法复现。生成的那一片有它自己的护栏：候选「只在前几条手写用例上算对、在别处算错」必须判不过。
+
+两处**如实记的口径边界**。① `inventory` 的参考解在 `Object.prototype` 的名字上**确实改了行为**：原实现按 `catalog[sku] ?? 0` 取值，`sku` 为 `'toString'` 时取到的是继承来的那个函数、算出 `NaN`，参考解改用 `Object.hasOwn` 之后把它归进 `missing`（实测原实现 `NaN`、参考解 `{total: 1, missing: ['toString']}`）。这是任务**没点名**的行为变化，把这类输入放进「不变」那一段会让参考解自己判不过，因此生成的 SKU 只用普通名字——判据管的是任务点名的那两处，不因此扩大范围。② 同一个未知 SKU 重复出现时 `missing` 该不该去重，任务说明没有规定（参考实现按出现次数重复列出），因此生成的用例里每个未知 SKU 最多出现一次——凭空规定一个读法会把另一种同样合理的写法判成错。
+
 **「代码理解」类**是第 18–21 个：`repro-sessions`、`repro-money`、`repro-tally`、`repro-order`（种类 `repro`，NX-39）。它们四份是**同一个模板的四份实例**，共同形状如下。
 
 判据不再是「工作区终态长什么样」，而是**agent 新建的那份产物的运行结果**。工作区里只有权威规格 `docs/SPEC.md` 与一处**静默的**实现缺陷，**没有公开检查**——有的话这道题就退化成照抄。任务要求 agent 在工作区根目录新建 `repro.mjs`，验收器把它放到工作区副本上跑两次：原始缺陷上必须非零退出、`reference/` 覆盖之后必须恰好 0 退出。这条 **FAIL_TO_PASS** 判据有一条直接的好处：两种偷懒写法都过不了——恒 0 在缺陷上不退非零，恒非零在参考实现上不退 0。可改文件为空（`sources[id] = []`），于是 `initial/` 里的一切自动进受保护集合，而 agent 新建的产物因为不在 `initial/` 里天然可写。判据实现在 [`_shared/criteria.mjs`](_shared/criteria.mjs)（两个新种类共用一份），门禁见 [coding-criteria.test.ts](../../coding-criteria.test.ts)；它单独一份注册表 `comprehensionIds`。
@@ -56,7 +69,7 @@
 
 - `boundary`：修复空集合、尾部和小数索引边界；任务见 [TASK.md](boundary/TASK.md)。
 - `options`：扩展 separator / skipEmpty，保留默认行为与原数组；任务见 [TASK.md](options/TASK.md)。
-- `interface`：金额返回值变为对象，同时修改收据调用方；任务见 [TASK.md](interface/TASK.md)。
+- `interface`：金额返回值变为对象，同时修改收据调用方；任务见 [TASK.md](interface/TASK.md)。两段判据见上文「重构」类。
 - `normalize`：规整姓名中的空白与大小写；任务见 [TASK.md](normalize/TASK.md)。
 - `dedupe`：按 id 保留首次出现的对象；任务见 [TASK.md](dedupe/TASK.md)。
 - `pagination`：修复从 1 开始的分页偏移；任务见 [TASK.md](pagination/TASK.md)。
@@ -64,7 +77,7 @@
 - `retry`：异步操作失败后限次重试；任务见 [TASK.md](retry/TASK.md)。
 - `merge`：递归合并嵌套配置并整体替换数组；任务见 [TASK.md](merge/TASK.md)。
 - `csv`：处理引号、逗号和空字段的单行 CSV；任务见 [TASK.md](csv/TASK.md)。
-- `inventory`：跨订单计算与收据模块修改接口；任务见 [TASK.md](inventory/TASK.md)。
+- `inventory`：跨订单计算与收据模块修改接口；任务见 [TASK.md](inventory/TASK.md)。两段判据见上文「重构」类。
 - `summary`：按类别汇总事件数量和金额；任务见 [TASK.md](summary/TASK.md)。
 - `pipeline`：分十四个阶段实现「模块依赖 → 构建计划」工具；阶段见 [TASKS/](pipeline/TASKS)。
 - `audit`：修正字段规整逻辑与审计比对，使 1600 条记录全部与数据集给出的期望规范值一致；任务见 [TASK.md](audit/TASK.md)。数据集由 [generate.mjs](audit/generate.mjs) 确定性生成（计数、取值池与三条缺陷轴都在那个文件里），重跑同一条命令得到逐字节相同的 `initial/data/records.jsonl`。
@@ -100,7 +113,7 @@ pnpm test
 测试入口为 [coding-fixtures.test.ts](../../coding-fixtures.test.ts)。它实际装配 Cordis 与文件/Bash 工具，用模拟适配器读取源码、检查失败、编辑并重跑。options 故意先只修 separator，收到 skipEmpty 的失败后再补修；interface 和 inventory 各编辑两个源码文件。最终 run 状态与独立验收结果分别检查，模型回答不会直接变成验收通过。
 
 复用接口在 [coding-fixtures.ts](../../../scripts/coding-fixtures.ts)：`createFixture(id)` 返回 kind、workspace、`tasks`、参考 edits、`artifact`、applyReference、evaluate 和 close。创建者须在 finally 调用 close；参考 edits 只供离线测试驱动使用，后续真实模型评测只发送 `tasks` 和初始工作区。`evaluate` 默认超时 30 秒（`fixtureProcessTimeoutMs`）、输出上限 32 KiB，可通过 timeoutMs / maxOutputBytes 配置。**种类由 `fixtureKind(id)` 决定**：`edit`（既有 17 个，行为逐字不变）、`repro`（代码理解，4 个）、`mutation`（测试编写，4 个）。**类别由 `fixtureCategory(id)` 决定**，与种类**正交**：种类说判据怎么算，类别说问的是什么能力——`edit` 这一类里同时住着 bug 修复、功能实现与重构三种。它用 `Record<FixtureId, …>` 逐项列全（漏一个即编译错误），因为它是**报告口径的一部分**（分类别报分子/分母），按注册表推断会在某天重排注册表时静默改掉历史口径。前三类的划分依据是各自 `TASK.md` 的正文：**bug 修复 2**（`boundary`、`pagination`）＋ **功能实现 8** ＋ **重构 2**（`interface`、`inventory`）；`audit`／`repair` 看着像修复，但它们不在筛查批次里。新种类在 `evaluate` 时多拿一个**工作区之外**的报告目录（开在 fixture 自己的临时目录里，随 close 一起消失），验收器把读数写进 `report.json`，Harness 读回来后**按自己的规则复算一遍**并与读数里那份结论比对——两边不一致即失败，否则「判据的规则」会与「Harness 认定的规则」悄无声息地漂开。`mutation` 的复算还多一层：读数里的 `minKilled`／变异体总数／等价体总数要与 Harness 自己数的目录项对得上，否则整份作废。注册表分九份：`screeningIds`（12 个单任务）、`sequenceIds`（阶段序列）、`boundedIds`（对照 B 的单任务仪器）、`demoIds`（演示夹具）、`blindIds`（`pipeline` 的无公开检查变体）、`ledgerIds`（判据载体仪器）、`comprehensionIds`（代码理解，4 个）、`mutationIds`（测试编写，4 个）、`fixtureIds`（以上之和，25 项，`fixtures:check` 用）。`readFixtureFile` 读取 fixture 目录里非 `initial/`／`reference/` 的部位（`repair` 的 `partial/`、`ledger` 的 `naive/` 与两个新种类的 `oracle/`／`weak/`／`mutants/`／`equivalents/`），路径越界直接报错。
-两个新种类的判据实现在 [_shared/criteria.mjs](_shared/criteria.mjs)（一份实现供全部 fixture 复用，因此门禁测试能直接对它跑正例与反例），每个 fixture 的 `verify.mjs` 只有两行、`criteria.json` 声明产物名与种类；`criteria.json` 的 `kind` 与注册表不一致会直接抛错。
+两个新种类的判据实现在 [_shared/criteria.mjs](_shared/criteria.mjs)（一份实现供全部 fixture 复用，因此门禁测试能直接对它跑正例与反例），每个 fixture 的 `verify.mjs` 只有两行、`criteria.json` 声明产物名与种类；`criteria.json` 的 `kind` 与注册表不一致会直接抛错。**「重构」类那两段判据不共用一份实现**：`_shared/refactor.mjs` 只提供两边都要用的零件（加载改动前的那份实现、确定性用例生成、「数值不变 ＋ 不改入参」那一条），两段各自看什么由 `interface`／`inventory` 的 `verify.mjs` 自己写——它们的输入形状与要断言的语义各不相同，抽成一份反而要把两套语义塞进同一串回调。
 
 可信验收器不从候选工作区读取测试逻辑；package.json / check.mjs 的内容和软链状态也受检查。公开检查被删改、只迁移一半接口或导入时提前退出都不会被这组回归误判为通过。临时目录与子进程不是操作系统安全隔离；这是已知离线 fixture 的验收设施，不声称能防御任意恶意代码。NX-05a 本步未新增生产验证事件、版本关联或任务交付报告；后续 NX-15 已独立实现显式文件范围验证与交付查询，仍不将普通 Bash 或 fixture 流程自动标为任务验收。
 

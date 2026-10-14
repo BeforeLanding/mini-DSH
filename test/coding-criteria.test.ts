@@ -1,9 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { createFixture, fixtureIds, fixtureKind, comprehensionIds, mutationIds, screeningIds, sequenceIds, boundedIds, demoIds, blindIds, ledgerIds } from '../scripts/coding-fixtures.js'
+import { createFixture, fixtureCategory, fixtureIds, fixtureKind, comprehensionIds, mutationIds, screeningIds, sequenceIds, boundedIds, demoIds, blindIds, ledgerIds } from '../scripts/coding-fixtures.js'
 import type { Acceptance, FixtureId, MutationEvidence } from '../scripts/coding-fixtures.js'
 import { runFixtureTask, scriptedAdapter } from '../scripts/eval-fixture.js'
 
@@ -15,6 +17,9 @@ const codingFixtures = path.join(repository, 'test', 'fixtures', 'coding')
 // 推导出来（R-23），而 fixture 看起来仍然一切正常。
 const HIDDEN = ['reference', 'oracle', 'weak', 'mutants', 'equivalents']
 const newKindIds = (): FixtureId[] => [...comprehensionIds, ...mutationIds] as FixtureId[]
+// 重构类按**类别**取，不写死那两个 id：类别是报告口径的一部分，重排注册表或调整分类时这条门禁要跟着走，
+// 而不是继续守着一对不再属于重构的 fixture。
+const refactorIds = (): FixtureId[] => fixtureIds.filter(id => fixtureCategory(id) === 'refactor')
 
 // 逐行最长公共子序列的行走，把差异行并成「几处改动」。只数处数，不做通用 diff 排版——这里要回答的
 // 唯一问题是「两份源码差了几处」。
@@ -223,4 +228,51 @@ test('the two new registries stay out of every other batch', () => {
   }
   // 互斥要两个方向都成立：新注册表里也不能混进既有 id。
   for (const id of others) assert.ok(!newKindIds().includes(id as FixtureId), `${id} must not join the new registries`)
+})
+
+// 重构类的判据分两段，两段成立的**条件不同**：段 1（行为不变）问「有没有动到不该动的地方」，它对改动的
+// **前后**两份实现都成立；段 2（新接口）问「点名要改的那两处改了没有」，它只在参考态成立。两段若写混，
+// 初始态判不过的原因就不再唯一——「行为被改坏了」与「改动还没做完」给出同一个读数，而报告里前者是失败、
+// 后者只是没完成。下面这条钉的就是这个分离。
+test('a refactor fixture fails on its original sources for the interface alone, never for its behaviour', () => {
+  const ids = refactorIds()
+  // 类别为空时这条门禁会「全绿」——它守的东西一个都没守到。
+  assert.ok(ids.length > 0, '重构类至少要有一个 fixture')
+  for (const id of ids) {
+    const source = path.join(codingFixtures, id)
+    const result = spawnSync(process.execPath, [path.join(source, 'verify.mjs'), path.join(source, 'initial')], { encoding: 'utf8' })
+    assert.equal(result.status, 1, `${id}: 改动前的那份源码必须判不过`)
+    assert.match(result.stderr, /新接口/, `${id}: 判不过的理由应当是「新接口还没改」，实际是 ${result.stderr.trim().slice(0, 200)}`)
+    assert.doesNotMatch(result.stderr, /行为不变/, `${id}: 「行为不变」那一段对改动前的源码也必须成立`)
+  }
+})
+
+test('a refactor fixture rejects the new shape when the numbers behind it are wrong', async () => {
+  // 两个反例，各自堵一条「判据白送」的路子：
+  //   ① 形状对、数整体算错——公开检查、返回形状、渲染文本可以全绿，只有与**改动前的那份实现**对照才看得出来。
+  //   ② 只在手写的那几条上算对、在别处算错——这一条钉住「输入空间是由生成出来的那一片撑着」。把生成那块
+  //      删掉、只留手写的几条，①照样判红（它在手写用例上就错），②会当场变成全绿。
+  // 两个反例还共同钉住参照物的**来源**：它必须来自工作区之外。若 `loadPristine` 改从工作区读，就成了拿
+  // 候选跟它自己比，两条都会变绿。
+  const broken = {
+    '数整体算错': "export function calculateSubtotal(items) {\n  return { amount: items.reduce((sum, item) => sum + item.price * item.quantity, 0) + 0.01, currency: 'CNY' }\n}\n",
+    '只在前四条上算对': "export function calculateSubtotal(items) {\n  if (items.length > 3) return { amount: 0, currency: 'CNY' }\n  return { amount: items.reduce((sum, item) => sum + item.price * item.quantity, 0), currency: 'CNY' }\n}\n",
+  }
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'nx39-refactor-'))
+  const workspace = path.join(directory, 'workspace')
+  try {
+    // 候选的工作区是**参考态**、只把 `pricing.mjs` 换掉——反例要只错在一处。若留着初始态的 `receipt.mjs`，
+    // 它会在调用方就抛 `TypeError`，判红的原因就不是「数算错了」，这条门禁会以为自己守住了其实没有。
+    await fs.cp(path.join(codingFixtures, 'interface', 'initial'), workspace, { recursive: true })
+    await fs.cp(path.join(codingFixtures, 'interface', 'reference', 'src'), path.join(workspace, 'src'), { recursive: true })
+    for (const [label, source] of Object.entries(broken)) {
+      await fs.writeFile(path.join(workspace, 'src', 'pricing.mjs'), source)
+      const result = spawnSync(process.execPath, [path.join(codingFixtures, 'interface', 'verify.mjs'), workspace], { encoding: 'utf8' })
+      assert.equal(result.status, 1, `${label}：候选必须判不过`)
+      assert.match(result.stderr, /行为不变/, `${label}：判不过的理由应当落在「行为不变」上，实际是 ${result.stderr.trim().slice(0, 200)}`)
+    }
+  } finally {
+    assert.equal(path.dirname(directory), path.resolve(os.tmpdir()))
+    await fs.rm(directory, { recursive: true, force: true })
+  }
 })

@@ -29,7 +29,7 @@
 | 提交范围 | `0a95a7f`～`c5fc9c4`（共 11 个） | `43e3829` 起 |
 | 语言 | 纯 JavaScript | TypeScript（tsc strict / NodeNext），Node 执行 `dist` 产物 |
 | 工具 | 6 个：`bash` + `read_file`／`write_file`／`edit_file`／`glob`／`grep` | 12 个：`tools/` 的 9 个（上列 6 个再加 `task_changes`／`request_trace`／`task_report`）与插件提供的 3 个（`project_context`／`read_tool_result`／`read_history`） |
-| 测试 | 22 条（`core.test.js` 20 + `integration.test.js` 2） | 303 条；另有 17 项编程 fixture 基线、离线评测入口与四条演示 |
+| 测试 | 22 条（`core.test.js` 20 + `integration.test.js` 2） | 346 条；另有 25 项编程 fixture 基线、离线评测入口与四条演示 |
 | 已有能力 | 基础配置、Session Event Log、Tool Runtime、System Prompt + LLM Adapter、Agent Loop、DeepSeek 适配器、runtime-context、外部插件与 MCP、沙箱与路径闸门、Bash/文件工具 | 上下文投影与裁剪、四维执行预算、JSONL 持久化与崩溃恢复、预算停止后的 `/continue`、有界读取/搜索与大结果回读、可靠编辑与任务变更清单、结构化前台命令、验证记录与交付报告、请求 trace、项目上下文、编程任务 fixture、真实模型评测 |
 
 上表每一行都能在仓库根目录复现（全部离线，不联网）：
@@ -58,7 +58,7 @@ git log --oneline --reverse | sed -n '12p'                # 43e3829：分界之�
 ```powershell
 pnpm install --frozen-lockfile
 pnpm check              # syntax ok: 122 files
-pnpm test               # tests 344 / pass 344 / fail 0 / skipped 0
+pnpm test               # tests 346 / pass 346 / fail 0 / skipped 0
 pnpm fixtures:check     # 25 项：初始全部失败、参考解全部通过
 pnpm eval:offline       # planned 12 / executed 12 / accepted 12
 pnpm eval:factor-precheck  # 退出码 0：装置能被驱动到阈值以上，因子 1 的两半都出手
@@ -148,9 +148,9 @@ pnpm check
 pnpm test
 ```
 
-当前 344 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读及尾部窗口、上下文压缩、可靠编辑/任务变更、结构化命令、here-doc、Windows Git Bash 临时目录、验证报告、请求 trace、文档锚点、会话锁核验与两类新判据（复现脚本、变异得分）回归测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
+当前 346 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读及尾部窗口、上下文压缩、可靠编辑/任务变更、结构化命令、here-doc、Windows Git Bash 临时目录、验证报告、请求 trace、文档锚点、会话锁核验与两类新判据（复现脚本、变异得分）回归测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
 
-NX-05a 起提供可重复的 [编程任务 fixture](test/fixtures/coding/README.md)，NX-05b 扩展到 12 项，覆盖边界修复、功能扩展、跨文件接口修改、去重、分页、查询重试、合并、CSV、库存与汇总等；此后又加入多阶段序列 `pipeline`、单任务 `audit`、演示夹具 `repair`、`pipeline` 的无公开检查变体 `blind`，一套新任务类别 `ledger`（「流水 → 台账」导出，判据的某一段只写在排期说明里、不在工作区），以及覆盖另两类任务的 `repro-*`（**代码理解**：交一份复现脚本，判据是它在缺陷上非零退出、在参考实现上恰好 0 退出）与 `mutation-*`（**测试编写**：交一套测试，判据是它杀掉足够多的变异体、且**不杀**行为保持的等价实现）各四项。**当前注册表共 25 项 = 筛查 12 项（上列，冻结）+ 这 13 项**（`blind` 与 `pipeline` 是同一套任务，只差工作区里有没有公开 `check.mjs`）。运行 `pnpm fixtures:check` 核验全部 25 项的初始失败/参考通过基线（两个新种类的前提按种类各查各的）；`pnpm test` 还覆盖模拟模型经真实文件/Bash 工具完成失败→修改→重跑的流程。每次使用新临时工作区，独立验收器保留在工作区外；模拟结果不代表真实模型编程成功率。
+NX-05a 起提供可重复的 [编程任务 fixture](test/fixtures/coding/README.md)，NX-05b 扩展到 12 项，覆盖边界修复、功能扩展、跨文件接口修改、去重、分页、查询重试、合并、CSV、库存与汇总等；此后又加入多阶段序列 `pipeline`、单任务 `audit`、演示夹具 `repair`、`pipeline` 的无公开检查变体 `blind`，一套新任务类别 `ledger`（「流水 → 台账」导出，判据的某一段只写在排期说明里、不在工作区），以及覆盖另两类任务的 `repro-*`（**代码理解**：交一份复现脚本，判据是它在缺陷上非零退出、在参考实现上恰好 0 退出）与 `mutation-*`（**测试编写**：交一套测试，判据是它杀掉足够多的变异体、且**不杀**行为保持的等价实现）各四项；而 `interface`／`inventory` 这两个**重构**类 fixture 的判据分两段——**行为不变**（与**改动前的那份实现**差分：数值逐位相同、不改入参，初始态与参考态**都**成立）与**新接口**（只在参考态成立），两段写混会让「行为被改坏了」与「改动还没做完」给出同一个读数。**当前注册表共 25 项 = 筛查 12 项（上列，冻结）+ 这 13 项**（`blind` 与 `pipeline` 是同一套任务，只差工作区里有没有公开 `check.mjs`）。运行 `pnpm fixtures:check` 核验全部 25 项的初始失败/参考通过基线（两个新种类的前提按种类各查各的）；`pnpm test` 还覆盖模拟模型经真实文件/Bash 工具完成失败→修改→重跑的流程。每次使用新临时工作区，独立验收器保留在工作区外；模拟结果不代表真实模型编程成功率。
 
 `pnpm eval:offline` 用模拟模型把 12 个 fixture 跑成一次筛查阶段，用于验证评测运行器与整批上限核算（单次 run 预算与按阶段计数的整批上限见 [PLAN](docs/context-budget/PLAN.md#nx-08-评测批次上限预注册)）。该命令同样不使用真实模型，通过率不作为模型能力证据。
 
