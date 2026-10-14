@@ -24,7 +24,16 @@ export const demoIds = ['repair'] as const
 // 「cannot be split evenly」；即便整除，也会让对照 A 的两臂拿到不同的任务集，把「上下文策略」换成
 // 「任务难度」。因此单独一份注册表。
 export const blindIds = ['blind'] as const
-export const fixtureIds = [...screeningIds, ...sequenceIds, ...boundedIds, ...demoIds, ...blindIds] as const
+// NX-38 的仪器：一套**新任务类别**（流水 → 台账导出的多阶段序列），它的判据有一段只写在第 1 阶段的
+// 排期说明正文里，工作区里没有副本、也不可由 `docs/SPEC.md` 推导。它问的问题与 blind 不同：blind 问
+// 「没有公开 oracle 时能否按 SPEC 独立产出正确实现」（已被 NX-08h 证伪——完整权威规格对确定性编程任务
+// 同时就是判据的载荷）；它问「判据的载体本身在会话历史里，被裁剪之后还守不守得住」。
+// 它不进 sequenceIds：`phaseCaps.sequence.runs = 1` 而 registry 会有 2 项，`repeatCount(1, 2)` 直接抛
+// 「cannot be split evenly」；即便整除，也会让对照 A 的两臂拿到不同的任务集，把「上下文策略」换成
+// 「任务难度」。它也不进筛查批次（那 12 个已冻结）。因此单独一份注册表。
+// 无付费批次：NX-38-2 只做离线机制证明（test/nx38-covenant.test.ts），正式批次的上限与判据要另行预注册。
+export const ledgerIds = ['ledger'] as const
+export const fixtureIds = [...screeningIds, ...sequenceIds, ...boundedIds, ...demoIds, ...blindIds, ...ledgerIds] as const
 export type FixtureId = typeof fixtureIds[number]
 const repository = fileURLToPath(new URL('../../', import.meta.url))
 const fixtures = path.join(repository, 'test', 'fixtures', 'coding')
@@ -44,6 +53,10 @@ const sources: Record<FixtureId, string[]> = {
   // blind 与 pipeline 的可改文件逐字相同：唯一的差异是 initial/ 下没有 check.mjs，因此 docs/SPEC.md 与
   // data/ 成了工作区里唯一的规范载体，也更有动机被改动——它们照旧落在受保护集合里。
   blind: ['src/parse.mjs', 'src/order.mjs', 'src/cycles.mjs', 'src/batches.mjs', 'src/report.mjs', 'src/delta.mjs', 'src/plan-parse.mjs', 'src/plan-merge.mjs', 'src/blocked.mjs', 'src/audit.mjs', 'src/parse-audit.mjs', 'src/closure.mjs', 'src/sub-plan.mjs', 'src/audit-delta.mjs', 'src/pipeline.mjs'],
+  // 顺序必须与 TASKS/*.md 的文件名顺序一致：test/nx38-covenant.test.ts 按阶段号取第 N 个 edit 来驱动
+  // 脚本化适配器，并把这条对应关系单独断言了一遍。`data/` 与 `docs/SPEC.md` 不在表内，因而都在受保护
+  // 集合里——判据的副本不能由工作区承载，这是本 fixture 成立的前提。
+  ledger: ['src/parse.mjs', 'src/summarize.mjs', 'src/render.mjs', 'src/checksum.mjs'],
 }
 async function exists(target: string): Promise<boolean> { return fs.stat(target).then(() => true, () => false) }
 // 一个 fixture 要么是单个任务（TASK.md），要么是同一会话内按序下发的多个阶段（TASKS/*.md，按文件名

@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { Context } from '@deepseek-ai/cordis'
-import { createFixture, screeningIds, sequenceIds, boundedIds, demoIds, blindIds, fixtureProcessTimeoutMs, readTaskSequence, readFixtureFile } from '../scripts/coding-fixtures.js'
+import { createFixture, screeningIds, sequenceIds, boundedIds, demoIds, blindIds, ledgerIds, fixtureProcessTimeoutMs, readTaskSequence, readFixtureFile } from '../scripts/coding-fixtures.js'
 import type { FixtureId } from '../scripts/coding-fixtures.js'
 import { batchPhases, evalPolicy } from '../scripts/eval-runner.js'
 import { phaseRegistry } from '../scripts/eval-cli.js'
@@ -197,7 +197,7 @@ test('the screening batch is still twelve single-task fixtures', async () => {
 // 上限，进了阶段序列会被当成多阶段 fixture。
 test('the bounded-tool-output fixture is a single task whose report dwarfs the input target', { timeout: 60_000 }, async () => {
   assert.deepEqual([...boundedIds], ['audit'])
-  const otherBatches: readonly string[] = [...screeningIds, ...sequenceIds, ...blindIds]
+  const otherBatches: readonly string[] = [...screeningIds, ...sequenceIds, ...blindIds, ...ledgerIds]
   for (const id of boundedIds) assert.ok(!otherBatches.includes(id), `${id} must stay out of the other batches`)
   const fixture = await createFixture('audit')
   try {
@@ -368,10 +368,26 @@ test('the blind fixture drops the public check and stops pointing its stages at 
 // 是裸的——这条把它补上。
 test('the blind fixture stays out of every other batch and owns a diagnostic phase', () => {
   assert.deepEqual([...blindIds], ['blind'])
-  const others: readonly string[] = [...screeningIds, ...sequenceIds, ...boundedIds, ...demoIds]
+  const others: readonly string[] = [...screeningIds, ...sequenceIds, ...boundedIds, ...demoIds, ...ledgerIds]
   for (const id of blindIds) assert.ok(!others.includes(id), `${id} must stay out of the other four batches`)
   assert.ok(!(batchPhases as readonly string[]).includes('blind'), 'blind must not join the pre-registered batch phases')
   assert.deepEqual(phaseRegistry('blind'), ['blind'])
+})
+
+// 注册表互斥：ledger 也必须自成一档，理由与 blind 相同（并进 sequenceIds 会让 repeatCount(1, 2) 抛错，
+// 也会让对照 A 的两臂拿到不同的任务集）。它比 blind 还多一层约束：已冻结的那几批，历史结论都建立在
+// 「判据在工作区、拿得到」之上，把一台判据载体在会话历史里的仪器并进去，那些数字就不再对应同一件事。
+// 它目前**没有**对应阶段：NX-38-2 只做离线机制证明，付费批次的上限与判据要另行预注册（NX-38-3/-4）。
+test('the ledger fixture stays out of every other batch and owns no phase yet', () => {
+  assert.deepEqual([...ledgerIds], ['ledger'])
+  const others: readonly string[] = [...screeningIds, ...sequenceIds, ...boundedIds, ...demoIds, ...blindIds]
+  for (const id of ledgerIds) assert.ok(!others.includes(id), `${id} must stay out of the other five batches`)
+  assert.ok(!(batchPhases as readonly string[]).includes('ledger'), 'ledger must not join the pre-registered batch phases')
+  // 「不在别的 registry 里」还不够：阶段→registry 的映射是另一处，漏一条就可能让它被某个阶段计划带上。
+  // 逐阶段查一遍 phaseRegistry 的输出，而不是只断言那张表。
+  const reachable = (['screening', 'armA', 'armB', 'sequence', 'smoke', 'blind'] as const)
+    .flatMap(phase => phaseRegistry(phase).filter(id => (ledgerIds as readonly string[]).includes(id)))
+  assert.deepEqual(reachable, [], 'ledger must not be reachable through any phase registry yet')
 })
 
 async function runFixtureAcrossBudgetStop(id: FixtureId) {
@@ -468,7 +484,7 @@ test('acceptance bounds hung code and output, rejects invalid limits and reports
 // 当成多阶段 fixture，进对照 B 仪器则会让那台仪器的「单任务」契约不再唯一。
 test('the repair fixture keeps a partial fix that still fails the public check', { timeout: 30_000 }, async () => {
   assert.deepEqual([...demoIds], ['repair'])
-  const otherBatches: readonly string[] = [...screeningIds, ...sequenceIds, ...boundedIds, ...blindIds]
+  const otherBatches: readonly string[] = [...screeningIds, ...sequenceIds, ...boundedIds, ...blindIds, ...ledgerIds]
   for (const id of demoIds) assert.ok(!otherBatches.includes(id), `${id} must stay out of the other four batches`)
   const fixture = await createFixture('repair')
   try {
