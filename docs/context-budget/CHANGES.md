@@ -167,6 +167,39 @@
 
 提交 `9987c1d`，本节即回填。**未授权、也未发生任何付费调用。**付费批次 NX-38-4 仍未开跑。
 
+### NX-38-4 正式批次：两批四次开跑
+
+正式批次按预注册的四臂跑完：`ledgerA1`／`ledgerA2`／`ledgerB1`／`ledgerB2` 各 3 次重复，共 **12 次运行**，全部 `completed`、零基础设施失败、零不可行项（`infeasible`／`excludedInfeasible`／`excludedErrored` 均为 0）。四条臂的时间窗是 UTC 02:15–02:44，`provenance.git.sha` 四次均为 `e154358`、`dirty` 为 `false`——证据对得上已推送的代码。读者面向的报告是 [NX-38-REPORT.md](NX-38-REPORT.md)；本节记的是执行过程与授权边界。
+
+**授权边界（首次与重跑分别确认，共四次）**：第一次开跑被自动权限分类器拦下——「开跑」两字没有点名那条会花钱的命令，落不到具体一次付费跑上。这正是预注册那条规矩按设计在起作用：**含糊的放行不兑成付费开跑**。此后四条命令各自取得明确授权才执行，未发生任何未经确认的调用。
+
+| 开跑 | 命令 | 运行 | 请求 | token |
+|---|---|---:|---:|---:|
+| A1 | `pnpm eval:screening --phase ledgerA1` | 3 | 57 | 961,475 |
+| A2 | `pnpm eval:screening --phase ledgerA2 --input-target 22791` | 3 | 62 | 795,336 |
+| B1 | `pnpm eval:screening --phase ledgerB1` | 3 | 59 | 904,092 |
+| B2 | `pnpm eval:screening --phase ledgerB2` | 3 | 54 | 1,171,840 |
+| | **合计** | **12** | **232** | **3,832,743** |
+
+**A2 的目标是现算的**：A1 跑完 3 次后由 `pnpm eval:ledger-target` 读 `runs.jsonl` 得出逐次峰值 25,711／30,389／26,871，取最大 30,389，`floor(0.75 × 30,389) = 22791`，冻结后才跑 A2。工具只读层 A 的处理量、不读 `report.json`、不打印 `accepted`。
+
+**层 A 读数**：
+
+| 臂 | 逐次峰值估算输入 | 裁剪出手 | 主动压缩 `applied`（`pressure`） |
+|---|---|---|---|
+| `ledgerA1` | 25,711 / 30,389 / 26,871 | 否（`removedTaskIds` 全空） | 0（0） |
+| `ledgerA2` | 21,742 / 22,696 / 22,783 | **是**，每次都是第 0 阶段的任务组 | 0（0） |
+| `ledgerB1` | 24,984 / 27,003 / 24,787 | 否 | **0（0）** |
+| `ledgerB2` | 30,359 / 33,189 / 44,252 | 否 | 0（0） |
+
+**层 B**：批次 A 判 **`ceiling-broken`**（A1 三次 `accepted` 全 true，A2 为 true／false／true，取到 ≥2 个不同值）；批次 B 的层 A 不成立，按预注册**不进层 B**，判 **`instrument-not-established`**。批次 A 那次失败是真·任务失败：`ledgerA2` 的 `repeat=1`，`status` 仍为 `completed`、退出码 1、`protectedFilesChanged` 为空，验收器断言原文是 `checksum does not follow the agreed reconciliation basis 0 !== 550679`。
+
+**开跑前已经预判到 B 会不成立，这条预判照实记下**。A1 的实测峰值为 30,389，而 B1 的主动压缩出手线在 `65,536 × 0.8 = 52,428.8`（`agent-loop-runtime.ts:111`，`compactionRatio` 缺省 0.8 见 `budget.ts:30`），A1 与 B1 的裁剪阈值都在实测输入之上、都不裁，因此 B1 的上下文演化应与 A1 同量级——B 的自变量大概率不被触发。用户据此仍选择**照预注册两臂都跑**（四臂 12 次运行跑满，账面上无提前退出需要声明）。事后看这条预判成立，但**余量比只看 B1 时更窄**：六次 B 批运行里 `ledgerB2` 的第三次从第 0 阶段起取了另一支行为样本（峰值 33,289／37,439／40,271／44,252），到出手线只差 16%。两臂在压缩不触发的前提下构造等价，这些差异全是采样，不是处理效应。
+
+**成本约 $1.30**（peak 口径：输入 $0.30/M、输出 $1.20/M，按 2026-09-30 核验的价格页、输入全部按未命中缓存保守估）；四批落在 UTC 01:00–04:00 的 peak 窗口内，2026-10-14 为周三、不适用「法定假日不计 peak」，off-peak 折半约 $0.65。上限从未成为约束：3,832,743 token 对四条臂合计的 96,000,000，232 请求对 1,536。
+
+**报告按预注册要求分两段写、不写任何比例或提升**：`n=3` 且解码未固定（`provenance.sampling` 逐字写明 temperature／seed 未发送、thinking 打开、重复独立采样），只作存在性证据与波动幅度。报告落 `docs/context-budget/NX-38-REPORT.md`，提交 `489da79`；本节即回填。
+
 ## NX-37 评测证据的来源指纹与 fixture 摘要钉
 
 本项给评测证据补上「自己是哪来的」这件事。**要补的不是能力，是留档的可核对性**：`.eval-evidence/*/report.json` 此前只有 `phase`／`totals`／`model`／`probe`／`runs`，没有提交号、时间戳、fixture 摘要与采样参数，而整个目录又按 `.gitignore` 不入库——于是两份 `full` 报告在结构上无法区分彼此属于哪个源码版本，对应关系只存在于 PROGRESS 的散文里。

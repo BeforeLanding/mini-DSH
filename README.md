@@ -69,7 +69,7 @@ pnpm demo:compact     # 退出码 0：单任务长会话的上下文压缩与按
 
 各条的覆盖面不同：`pnpm check` 只做类型、构建与产物语法；`pnpm test` **使用模拟模型驱动 Loop，但真实执行 Bash 与文件工具**；`pnpm fixtures:check` 逐项跑独立验收器并核对受保护文件未被改动；`pnpm eval:offline` 验证评测运行器与整批上限核算，它会自己打印一行 `note: 模拟模型驱动，用于验证运行器与整批上限；通过率不作为模型能力证据`。
 
-这些命令的绿色**只说明 Harness 在本机成立，不代表真实模型的编程能力**——真实模型的结论见 [NX-08 评测报告](docs/context-budget/NX-08-REPORT.md)，且那里的结论受样本量与任务集天花板效应限制。
+这些命令的绿色**只说明 Harness 在本机成立，不代表真实模型的编程能力**——真实模型的结论见 [NX-08 评测报告](docs/context-budget/NX-08-REPORT.md)（结论受样本量与任务集天花板效应限制）与 [NX-38 评测报告](docs/context-budget/NX-38-REPORT.md)（预注册的两批：批次 A 判「装置能分辨裁与不裁」，批次 B 的自变量未被触发）。
 
 ### 接真实模型
 
