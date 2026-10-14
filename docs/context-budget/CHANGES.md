@@ -1,5 +1,53 @@
 # 改动与验收证据
 
+### NX-39-3b 「代码理解」类补齐到 4 个
+
+把 NX-39-3a 立起来的 `repro` 种类从 1 个 fixture 补到 4 个。**本步零付费，未发生任何模型调用**，`src/` 一行未动——新增的只有 fixture 数据与两处用例的泛化。
+
+**为什么第二个 fixture 不能照着第一个抄。** 如果四份只是同一个 off-by-one 换个函数名，这一类量到的就是**同一个能力点的四次重复**，而报告里「代码理解 4/4 vs 2/4」会被读成四个独立的观测。所以四份各换一种**缺陷类别**，且都保持两条硬约束：**只在一处、只在一行**偏离规格（「一模块一缺陷」是 FAIL_TO_PASS 成立的前提），且都是**静默的值错**（不抛错——抛错的话一份「调用一下、看它抛不抛」的产物就能满足判据）。
+
+| fixture | 唯一导出的函数 | 缺陷类别 | 规格要求 vs 实现 |
+|---|---|---|---|
+| `repro-sessions`（3a） | `groupSessions(timestamps, gapMs)` | 比较边界 | 时间差**恰好等于** `gapMs` 时同一会话；实现按 `>=` 断开 |
+| `repro-money` | `roundMoney(amount)` | 取整方向 / 符号 | 中点向**远离零**进位（`-0.125 → -0.13`）；实现用 `Math.round`，负中点向 `+∞` 进位 |
+| `repro-tally` | `tallyByKind(entries)` | **漏掉一个分支** | 类别不合法（缺失／`''`／非字符串）的条目归入 `'other'`；实现把它 `continue` 掉，金额凭空消失 |
+| `repro-order` | `rank(players)` | 比较器不完整 | 分数相同时按 `id` 升序；实现只比分数，同名次保持输入顺序 |
+
+四份的规格都**明写**那条被违反的规则（规格是权威的，模型该按它去核实现），但**例子部分一律不给**能区分两者的输入——这是与 `repro-sessions` 一致的做法，也是这一类成立的关键：给一个能区分两者的例子，这道题就退化成「把例子敲进脚本」。
+
+`repro-order` 有一处值得单独说：它依赖 `Array.prototype.sort` 在 ES2019 之后的**稳定性**（同名次保持输入顺序）。因此缺陷的输出是**确定的**，`reference/` 覆盖之后的输出也是确定的，判据不会 flaky——但这条依赖必须写进 fixture README，否则后来者会以为「同分顺序随便」而把断言写松。`repro-money` 的算术也刻意选在二进制精确的点上（`0.125`、`2.375` 都是 2 的负幂的整数倍），使 `Math.round` 与「远离零」在同一处必然分道，不依赖浮点误差。
+
+**门禁泛化（`test/coding-criteria.test.ts`）**
+
+- 「只把产物放进工作区」与「模拟模型经 `write_file` 走到判过」两条由**单个 fixture** 改为**遍历 `comprehensionIds`**。复制模板最典型的失效就是「复制时改漏一处」，它会在每个 fixture 上各自表现一次，只跑一个会漏掉其余三个。
+- `pnpm test` 里那条脚本化用例同时是**逐 fixture 的 FAIL_TO_PASS 证明**：验收通过要求 Harness 复算的 `evidence.initialExitCode !== 0 && referenceExitCode === 0` 成立，因此这四条不是「跑通了」而是「判据在这一台上确实有分辨力」。CI 只跑 `pnpm check` 与 `pnpm test`（不跑 `fixtures:check`），这一点很重要。
+- **新增一条门禁**（`every comprehension fixture tells the agent the same names the fixture is wired to`）：`TASK.md` 点名的模块与导出名，必须与 fixture 实际装配的那一份一致；且每个 fixture 只有**一个**源码模块。它盯的正是上面说的复制失效——那时 `TASK.md` 会让 agent 去 import 上一个 fixture 的模块或新建另一个名字的产物，判据照常工作、`fixtures:check` 照常全绿，只有真跑模型才会发现。这条是「四个 fixture 共享一个模板」这个决定**直接换来的风险**，所以它必须有一条对应的门禁，而不是靠下一步的人记得。
+
+**验证**
+
+| 命令 | 结果 |
+|---|---|
+| `pnpm typecheck` | 通过 |
+| `pnpm check` | `syntax ok: 116 files` |
+| `pnpm test` | **316/316**（基线 315，新增 1 条），失败、取消、跳过均为 0 |
+| `pnpm lint` | `Checked 126 files … No fixes applied.`（0 诊断） |
+| `pnpm fixtures:check` | 退出码 0，**21 项**；四个 `repro` fixture 各自三个读数：missing 判不过、weak 判不过、参考产物判过，且 `initialExitCode=1 / referenceExitCode=0` |
+| `pnpm eval:offline` | 退出码 0 |
+| `pnpm eval:estimate` | 退出码 0 |
+
+**反例实跑四处**（各自判红、还原后复绿）：
+
+- 把 `repro-tally/TASK.md` 的 `tallyByKind` 换成 `roundMoney`（模拟「复制模板改漏一处」）→ 新门禁报 `repro-tally: TASK.md must name the export tallyByKind`。
+- 给 `repro-order/reference/src/rank.mjs` 追加一行 → 「一模块一缺陷」报 `must differ by exactly one hunk`。
+- 把 `repro-money/weak/repro.mjs` 换成参考产物 → 报 `the weak artifact must differ from the oracle`。
+- 往 `repro-money/initial/docs/SPEC.md` 追加一行含 `reference` 的注释 → R-23 卫生报 `must not name reference`。
+
+**一处执行失误，如实记。** 这四个 fixture 文件在跑反例时**还没进 git**（新文件、untracked），而我用 `git checkout -- <path>` 还原——它对未跟踪文件直接 `error: pathspec ... did not match`，**静默地什么都没做**，四处改动因此全部留在盘上。是「还原后应复绿」那次仍然 `pass 3 / fail 3` 才露出来的。改用 `Write` 逐份写回并复核（`grep -c` 计数归零、门禁复绿）。教训是直接的：**用版本控制还原，前提是目标已经被版本控制跟踪**；对新增文件应当先备份再改。
+
+**与设计的一处落差，如实记。** NX-39 的设计里这两类新任务要做成**多阶段**，理由是裁剪只移除「已结束且非当前」的 task（R-21），单任务会话永远不触发裁剪，于是上下文那一维在对照批次里只剩「压缩 + 有界」两半。这四份目前都是**单任务**（3a 的第一份就是，本步沿用了它）。处置：不在这一步凭推理改成多阶段，交给 NX-39-5 的离线因子预检按**实测**决定——R-21 的验收条款本来就写着「处理没真的发生就不得开跑对照」。这条同时写进 [fixture README](test/fixtures/coding/README.md)，并须在 NX-39-4 重写 R-21 条文时一并落定。
+
+提交：见本节对应的本地提交。
+
 ### NX-39-3a fixture 种类机制与「代码理解」类
 
 给评测集补上五类任务里此前**没有判据**的两类中的第一类。实验设计见 [TASKS 的 NX-39 节](TASKS.md#nx-39-五类代码任务--四条件的全因子对照实验)。**本步零付费，未发生任何模型调用。**

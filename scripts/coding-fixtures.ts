@@ -37,7 +37,7 @@ export const ledgerIds = ['ledger'] as const
 // 上恰好 0 退出。它们与既有六份注册表形状不同——可改文件为空（`sources[id] = []`），于是 `initial/` 里的
 // 每个文件都自动进受保护集合，而 agent **新建**的产物因为不在 `initial/` 里天然可写；判据则落在工作区
 // 之外的新验收器上（`verify.mjs` 转交 `_shared/criteria.mjs`）。因此单独一份注册表。
-export const comprehensionIds = ['repro-sessions'] as const
+export const comprehensionIds = ['repro-sessions', 'repro-money', 'repro-tally', 'repro-order'] as const
 // NX-39「测试编写」类。判据是**变异得分**：agent 的测试在原始源码上必须全绿、杀掉 ≥ `minKilled` 个变异体、
 // 且**不杀**行为保持的等价体。与 comprehensionIds 同形（可改文件为空、判据在工作区之外），但判据的实现
 // 要到 NX-39-4 才落地，因此这里先占好位置、暂不设成员。
@@ -78,7 +78,7 @@ const sources: Record<FixtureId, string[]> = {
   // NX-39 的两个新种类**没有可改文件**。这不是省事，而是它们要的形状：`initial/` 里的规格、源码与
   // 配置全部进受保护集合（agent 不得就地改源码来「修好」它），而 agent 要交的产物是**新建**的文件——
   // 它不在 `initial/` 里，因此天然可写，无需另立一条「允许新建」的规则。
-  'repro-sessions': [],
+  'repro-sessions': [], 'repro-money': [], 'repro-tally': [], 'repro-order': [],
 }
 async function exists(target: string): Promise<boolean> { return fs.stat(target).then(() => true, () => false) }
 // 一个 fixture 要么是单个任务（TASK.md），要么是同一会话内按序下发的多个阶段（TASKS/*.md，按文件名

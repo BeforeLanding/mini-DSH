@@ -51,15 +51,20 @@ async function walk(directory: string, prefix = ''): Promise<string[]> {
 test('a new-kind fixture puts only the artifact into the workspace and never the reference sources', async () => {
   // 这条曾经写错过一版：applyReference 把整棵 reference/ 覆盖进工作区之后，agent 的产物在**缺陷**上
   // 也照样通过，判据当场失效且毫无征兆（fixtures:check 那次报的是 reference 态 initialExitCode=0）。
-  const fixture = await createFixture('repro-sessions')
-  try {
-    assert.equal(fixture.kind, 'repro')
-    const defect = await read('test/fixtures/coding/repro-sessions/initial/src/sessions.mjs')
-    assert.equal(await fs.readFile(path.join(fixture.workspace, 'src/sessions.mjs'), 'utf8'), defect)
-    await fixture.applyReference()
-    assert.equal(await fs.readFile(path.join(fixture.workspace, 'src/sessions.mjs'), 'utf8'), defect)
-    assert.equal(await fs.readFile(path.join(fixture.workspace, fixture.artifact!.path), 'utf8'), fixture.artifact!.content)
-  } finally { await fixture.close() }
+  for (const id of comprehensionIds) {
+    const fixture = await createFixture(id)
+    try {
+      assert.equal(fixture.kind, 'repro')
+      // 每个 comprehension fixture 只有一处缺陷，因此「参考态」就是那一处不动、产物多出来一份。
+      const [source] = (await walk(path.join(codingFixtures, id, 'initial'))).filter(relative => relative.startsWith('src/'))
+      assert.ok(source, `${id} must ship a source file`)
+      const defect = await read(`test/fixtures/coding/${id}/initial/${source}`)
+      assert.equal(await fs.readFile(path.join(fixture.workspace, source), 'utf8'), defect)
+      await fixture.applyReference()
+      assert.equal(await fs.readFile(path.join(fixture.workspace, source), 'utf8'), defect)
+      assert.equal(await fs.readFile(path.join(fixture.workspace, fixture.artifact!.path), 'utf8'), fixture.artifact!.content)
+    } finally { await fixture.close() }
+  }
 })
 
 test('every comprehension fixture states exactly one defect and ships a non-vacuous negative control', async () => {
@@ -100,14 +105,37 @@ test('hidden criteria payloads stay out of the workspace and out of every task t
   }
 })
 
-test('the scripted model drives a comprehension fixture through write_file to a passing acceptance', { timeout: 60_000 }, async () => {
+test('every comprehension fixture tells the agent the same names the fixture is wired to', async () => {
+  // 这四个 fixture 是从同一个模板复制出来的，因此最可能的失效不是判据退化了，而是**复制时改漏一处**：
+  // TASK.md 让 agent 去 import 上一个 fixture 的模块、或去新建另一个名字的产物。那时判据照常工作、
+  // fixtures:check 照常全绿——只是它判的那份东西没人交得出来，要等真跑模型才会发现。
+  for (const id of comprehensionIds) {
+    const source = path.join(codingFixtures, id)
+    const task = await fs.readFile(path.join(source, 'TASK.md'), 'utf8')
+    const criteria: unknown = JSON.parse(await fs.readFile(path.join(source, 'criteria.json'), 'utf8'))
+    const artifact = (criteria as { artifact: string }).artifact
+    assert.match(task, new RegExp(artifact.replace('.', '\\.')), `${id}: TASK.md must name the artifact ${artifact}`)
+    const modules = (await walk(path.join(source, 'initial'))).filter(relative => relative.startsWith('src/'))
+    assert.equal(modules.length, 1, `${id} must ship exactly one source module`)
+    const code = await fs.readFile(path.join(source, 'initial', modules[0]!), 'utf8')
+    const exported = [...code.matchAll(/export function (\w+)/g)].map(match => match[1]!)
+    assert.ok(exported.length > 0, `${id} must export a function`)
+    for (const name of exported) assert.match(task, new RegExp(`\\b${name}\\b`), `${id}: TASK.md must name the export ${name}`)
+  }
+})
+
+test('the scripted model drives every comprehension fixture through write_file to a passing acceptance', { timeout: 120_000 }, async () => {
   // 新种类的产物是**新建**的文件，走 write_file 而不是 edit_file；这条钉住评测链路真的能驱动它，
-  // 而不只是 fixtures:check 那条直连验收器的路径能跑通。
-  const outcome = await runFixtureTask('repro-sessions', scriptedAdapter)
-  assert.equal(outcome.accepted, true)
-  assert.equal(outcome.acceptance?.exitCode, 0)
-  assert.equal(outcome.acceptance?.evidence?.kind, 'repro')
-  assert.deepEqual(outcome.acceptance?.protectedFilesChanged, [])
+  // 而不只是 fixtures:check 那条直连验收器的路径能跑通。逐 fixture 跑而不是只跑一个：模板复制出来的
+  // 东西最容易在「复制时改漏一处」上失效（例如 criteria.json 的产物名与 TASK.md 要求的新建路径不一致），
+  // 那种失配在每个 fixture 上各自表现一次，只跑一个会漏掉其余三个。
+  for (const id of comprehensionIds) {
+    const outcome = await runFixtureTask(id, scriptedAdapter)
+    assert.equal(outcome.accepted, true, `${id} must be accepted when the reference artifact is written`)
+    assert.equal(outcome.acceptance?.exitCode, 0, `${id} acceptance must exit 0`)
+    assert.equal(outcome.acceptance?.evidence?.kind, 'repro', `${id} must report repro evidence`)
+    assert.deepEqual(outcome.acceptance?.protectedFilesChanged, [], `${id} must not touch protected files`)
+  }
 })
 
 test('the two new registries stay out of every other batch', () => {
