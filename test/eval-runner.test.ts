@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { armPolicy, runPhase, summarize, phaseCaps, batchCaps, batchPhases, singleRunBudget, evalPolicy, capKeys, toolOutputPolicy } from '../scripts/eval-runner.js'
+import { armPolicy, ledgerPolicy, ledgerPhases, resolvePhasePolicy, runPhase, summarize, phaseCaps, batchCaps, batchPhases, singleRunBudget, evalPolicy, capKeys, toolOutputPolicy } from '../scripts/eval-runner.js'
 import type { RunOutcome, ToolOutputMode } from '../scripts/eval-runner.js'
 import { runFixtureTask, scriptedAdapter, summarizeStage, type Fixture, type FixtureAdapter } from '../scripts/eval-fixture.js'
 import { createFixture, screeningIds, sequenceIds } from '../scripts/coding-fixtures.js'
@@ -62,6 +62,13 @@ test('pre-registered caps match PLAN and the phase caps sum to the whole-batch c
     // NX-08h 的诊断烟测：十四阶段 fixture blind（工作区无公开 check.mjs），与 sequence 同口径取
     // 逐阶段预算的理论上界。它同样不进 batchCaps；正式对照批次的上限要等实测之后另行预注册。
     blind: { runs: 1, requests: 448, tokens: 28_000_000 },
+    // NX-38-3 预注册的两批四条臂：同一 fixture ledger（四阶段）各 3 次重复，共 12 次运行。上限取逐阶段
+    // 预算的理论上界——4 阶段 × 32 请求 / 4 × 2,000,000 token，再乘 3 次重复。四条臂逐字相同是刻意的：
+    // 臂之间被比较的是上下文策略，不是预算。
+    ledgerA1: { runs: 3, requests: 384, tokens: 24_000_000 },
+    ledgerA2: { runs: 3, requests: 384, tokens: 24_000_000 },
+    ledgerB1: { runs: 3, requests: 384, tokens: 24_000_000 },
+    ledgerB2: { runs: 3, requests: 384, tokens: 24_000_000 },
   })
   // 整批只归约预注册的三个对照阶段。把诊断阶段算进去会改变这个数字的含义，因此按值钉死而不是只断言
   // 求和：以前改 armA 只会静默改变和值，现在会直接撞上预注册数字。
@@ -88,6 +95,19 @@ test('pre-registered caps match PLAN and the phase caps sum to the whole-batch c
   assert.equal(blindStages, stages, 'blind must ship the same number of stages as pipeline')
   assert.equal(phaseCaps.blind.requests, blindStages * (singleRunBudget.maxModelRequests ?? 0))
   assert.equal(phaseCaps.blind.tokens, blindStages * (singleRunBudget.maxTotalTokens ?? 0))
+  // NX-38 的四条臂同理：ledger 是 4 个阶段，上限必须与阶段数逐字相等。阶段数从 fixture 本身取，改阶段数
+  // 时这条断言会跟着动，而不是留下一个对不上的常数。
+  const ledger = await createFixture('ledger')
+  const ledgerStages = ledger.tasks.length
+  await ledger.close()
+  for (const phase of ledgerPhases) {
+    // 每次运行是整条四阶段序列，每阶段各有一份单次预算，再乘 3 次重复——与 sequence 同口径，只是 runs 不是 1。
+    assert.equal(phaseCaps[phase].requests, ledgerStages * (singleRunBudget.maxModelRequests ?? 0) * phaseCaps[phase].runs, phase)
+    assert.equal(phaseCaps[phase].tokens, ledgerStages * (singleRunBudget.maxTotalTokens ?? 0) * phaseCaps[phase].runs, phase)
+    assert.equal(phaseCaps[phase].runs, 3, phase)
+    // 四条臂的上限逐字相同：臂间的差异只由策略承担，不来自预算。
+    assert.deepEqual(phaseCaps[phase], phaseCaps[ledgerPhases[0]], phase)
+  }
 })
 
 // 预注册只固定四项；上下文目标与窗口必须由文档默认值补上，否则投影不裁剪、context_overflow 不再触发，
@@ -114,6 +134,51 @@ test('the two comparison arms differ only in the input target', () => {
   assert.deepEqual(withoutTarget(armA as typeof evalPolicy), withoutTarget(evalPolicy))
   // 窗口不高于 armB 的目标时直接失败，而不是静默把两臂对调成「armA 裁得更多」。
   assert.throws(() => armPolicy('armA', 65_536), /window larger than arm B/)
+})
+
+// NX-38-3 预注册的批次 A：两臂**只差 inputTargetTokens**，其余逐字段相等——包括主动压缩阈值（两臂都
+// 抬到窗口，一次都不触发）。差异多于一个字段，被比较的就不是「裁掉了载体之后还守不守得住」。
+test('ledger batch A arms differ only in the derived input target', () => {
+  const window = 1_000_000
+  const armA1 = ledgerPolicy('ledgerA1', window), armA2 = ledgerPolicy('ledgerA2', window, 6_840)
+  assert.equal(armA1.inputTargetTokens, window)
+  assert.equal(armA2.inputTargetTokens, 6_840)
+  for (const arm of [armA1, armA2]) assert.equal(arm.compactionBudgetTokens, window)
+  const withoutTarget = (policy: Readonly<typeof evalPolicy>) => Object.fromEntries(Object.entries(policy).filter(([key]) => key !== 'inputTargetTokens'))
+  assert.deepEqual(withoutTarget(armA1 as typeof evalPolicy), withoutTarget(armA2 as typeof evalPolicy))
+  // A2 的目标由 A1 的实测现算后传入：缺目标不能静默退回默认值，否则两臂退化成同一臂而账面上看不出来；
+  // 目标高于窗口则裁剪永不可能触发。
+  assert.throws(() => ledgerPolicy('ledgerA2', window), /needs an input target derived from the ledgerA1 peaks/)
+  assert.throws(() => ledgerPolicy('ledgerA2', window, window + 1), /no larger than the context window/)
+  assert.throws(() => ledgerPolicy('ledgerA2', window, 0), /positive input target/)
+})
+
+// NX-38-3 预注册的批次 B：两臂的输入目标**都是** 65,536，只差主动压缩阈值。B1 是生产默认（一个字段都
+// 不改，正是 evalPolicy 本身），B2 只把阈值抬到窗口；裁剪行为因此逐字相同，差异只来自压缩是否先出手。
+test('ledger batch B arms keep the production input target and differ only in the compaction threshold', () => {
+  const window = 1_000_000
+  const b1 = ledgerPolicy('ledgerB1', window), b2 = ledgerPolicy('ledgerB2', window)
+  assert.equal(b1, evalPolicy)
+  assert.equal(b1.inputTargetTokens, 65_536)
+  assert.equal(b1.compactionBudgetTokens, undefined)
+  assert.equal(b2.inputTargetTokens, 65_536)
+  assert.equal(b2.compactionBudgetTokens, window)
+  const withoutThreshold = (policy: Readonly<typeof evalPolicy>) => Object.fromEntries(Object.entries(policy).filter(([key]) => key !== 'compactionBudgetTokens'))
+  assert.deepEqual(b1, withoutThreshold(b2 as typeof evalPolicy))
+})
+
+// 阶段 → 策略的唯一映射点必须让既有阶段**逐字不变**：armA/armB 仍走 armPolicy，screening/sequence/
+// smoke/blind 仍拿到 evalPolicy 本体（同一对象引用）。四条 ledger 臂则一律进 ledgerPolicy。
+test('the phase policy dispatcher leaves every existing phase byte-identical', () => {
+  const window = 1_000_000
+  // armA 每次调用都新建一个冻结对象，因此按值比；armB 与其后的默认分支必须返回 evalPolicy **本体**
+  // （下面按 === 钉住），否则「既有阶段的预算一字不变」就只是碰巧相等。
+  assert.deepEqual(resolvePhasePolicy('armA', window), armPolicy('armA', window))
+  for (const phase of ['armB', 'screening', 'sequence', 'smoke', 'blind'] as const) assert.equal(resolvePhasePolicy(phase, window), evalPolicy, phase)
+  for (const phase of ledgerPhases) assert.deepEqual(resolvePhasePolicy(phase, window, 6_840), ledgerPolicy(phase, window, 6_840), phase)
+  // 新阶段不进 batchPhases：混进去会让 batchCaps 的 {18, 3_200, 88_000_000} 不再对应同一件事，
+  // 而那是一次独立的预注册动作。
+  for (const phase of ledgerPhases) assert.ok(!(batchPhases as readonly string[]).includes(phase), phase)
 })
 
 // 对照 B 的自变量是工具输出模式而不是输入目标，因此它落在另一个函数上，且不能顺带改动任何既有阶段——
@@ -341,6 +406,7 @@ test('a stage summary reports a stage that never pruned without inventing eviden
     estimatedInputTokens: 2000, maxEstimatedInputTokens: 2000, projections: 2,
     firstPrunedProjection: null, removedTaskIds: [], unsentProjections: 0,
     usageSources: { provider: 2, estimated: 0 },
+    compactions: { applied: 0, pressure: 0, declined: 0 },
   })
 })
 
@@ -376,7 +442,29 @@ test('a stage summary neither absorbs other runs nor hides projections that were
   assert.deepEqual(summarizeStage([], 'run-1'), {
     projections: 0, firstPrunedProjection: null, removedTaskIds: [], unsentProjections: 0,
     usageSources: { provider: 0, estimated: 0 },
+    compactions: { applied: 0, pressure: 0, declined: 0 },
   })
+})
+
+// NX-38-3 预注册要求 B 批的仪器判据是「**主动**压缩有没有出手」，而装置里关掉它的办法只是把阈值抬到
+// 窗口——兜底那条路（裁剪到底仍装不下）不看阈值。所以这两类压缩必须分开计数，合并成一个数就把判据弄丢了。
+// 同时钉住 run 过滤：同一会话更早阶段的压缩不属于本阶段。
+test('a stage summary counts compactions by trigger and ignores other runs', () => {
+  const start = (seq: number, trigger: 'pressure' | 'context-overflow' | 'explicit', runId = 'run-1') =>
+    stageEvent(seq, 'context/summary-start', { trigger, budgetTokens: 1000, projectedTokens: 900, plannedStart: 1, plannedEnd: 5, plannedNodes: 4 }, runId)
+  const end = (seq: number, startSeq: number, outcome: EventData['context/summary-end']['outcome'], runId = 'run-1') =>
+    stageEvent(seq, 'context/summary-end', { startSeq, outcome }, runId)
+  const summary = summarizeStage([
+    // 本阶段：一次主动压缩成功、一次兜底压缩成功、一次被拒。
+    start(1, 'pressure'), end(2, 1, { kind: 'applied' }),
+    start(3, 'context-overflow'), end(4, 3, { kind: 'applied' }),
+    start(5, 'pressure'), end(6, 5, { kind: 'declined', reason: 'summary-not-smaller' }),
+    // 别的 run 的压缩不属于本阶段——把 runId 过滤去掉，下面三个计数会各多 1。
+    start(7, 'pressure', 'run-2'), end(8, 7, { kind: 'applied' }, 'run-2'),
+    start(9, 'context-overflow', 'run-2'), end(10, 9, { kind: 'applied' }, 'run-2'),
+    start(11, 'pressure', 'run-2'), end(12, 11, { kind: 'declined', reason: 'summary-empty' }, 'run-2'),
+  ], 'run-1')
+  assert.deepEqual(summary.compactions, { applied: 2, pressure: 1, declined: 1 })
 })
 
 // 基础设施失败要么中止后续阶段，要么把同一个失败重复记成多份、而每一份都进入阶段累计用量——后者正是

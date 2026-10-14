@@ -66,6 +66,17 @@ export function summarizeStage(events: readonly SessionEvent[], runId: string) {
   }
   const usageSources = { provider: 0, estimated: 0 }
   for (const event of scope) if (event.type === 'model/usage') usageSources[event.data.usage.source] += 1
+  // 压缩按 trigger 拆开记：结束事件只带 startSeq，触发方式在上面那条 start 里，两者按 seq 配对。
+  // 只在 scope（本 run）内配对是必须的——同一会话更早阶段的压缩不在本阶段的读数里。
+  const triggers = new Map<number, 'pressure' | 'context-overflow' | 'explicit'>()
+  for (const event of scope) if (event.type === 'context/summary-start') triggers.set(event.seq, event.data.trigger)
+  const compactions = { applied: 0, pressure: 0, declined: 0 }
+  for (const event of scope) {
+    if (event.type !== 'context/summary-end') continue
+    if (event.data.outcome.kind !== 'applied') { compactions.declined += 1; continue }
+    compactions.applied += 1
+    if (triggers.get(event.data.startSeq) === 'pressure') compactions.pressure += 1
+  }
   return {
     ...(estimates.length ? { estimatedInputTokens: estimates.at(-1), maxEstimatedInputTokens: Math.max(...estimates) } : {}),
     projections: projections.length,
@@ -73,6 +84,7 @@ export function summarizeStage(events: readonly SessionEvent[], runId: string) {
     removedTaskIds,
     unsentProjections,
     usageSources,
+    compactions,
   }
 }
 

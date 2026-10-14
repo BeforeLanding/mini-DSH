@@ -2,10 +2,10 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
-import { armPolicy, evalPolicy, phaseCaps, runPhase, summarize, toolOutputPolicy } from './eval-runner.js'
+import { phaseCaps, resolvePhasePolicy, runPhase, summarize, toolOutputPolicy } from './eval-runner.js'
 import type { RunOutcome } from './eval-runner.js'
 import type { FixtureId } from './coding-fixtures.js'
-import { evidenceScope, parseEvalArguments, phaseRegistry, repeatCount, resolveContextWindow, resolveInfeasible, resolveModel, resolvePlanned, resolveRuns } from './eval-cli.js'
+import { evidenceScope, parseEvalArguments, phaseRegistry, repeatCount, resolveContextWindow, resolveInfeasible, resolveInputTarget, resolveModel, resolvePlanned, resolveRuns } from './eval-cli.js'
 import { runFixtureTask } from './eval-fixture.js'
 import { buildProvenance } from './eval-provenance.js'
 import { createDeepSeekAdapter } from '../src/models/deepseek.js'
@@ -32,8 +32,12 @@ const infeasible = resolveInfeasible(phase, options.infeasible, options.infeasib
 const scope = evidenceScope(phase, planned)
 const baseUrl = (process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com').replace(/\/+$/, '')
 const contextWindowTokens = resolveContextWindow(process.env, baseUrl)
-// 对照 A 的两臂只差上下文策略（见 eval-runner.ts 的 armPolicy）；其余阶段用的是两臂共用的 evalPolicy。
-const policy = phase === 'armA' || phase === 'armB' ? armPolicy(phase, contextWindowTokens) : evalPolicy
+// 对照 A 与 NX-38 两批的臂间差异各是一个策略字段（见 eval-runner.ts 的 armPolicy / ledgerPolicy）；
+// 其余阶段用的是两臂共用的 evalPolicy 本体。这个纯函数是阶段 → 策略的唯一映射点。
+// A2 的目标由 A1 的实测现算后经 --input-target 传入；它在预演分支之前调用（纯函数、不碰文件与网络），
+// 因此「A2 缺目标」在建目录与协议探测之前就报错——预演存在的理由正是这个。
+const inputTarget = resolveInputTarget(phase, options.inputTarget)
+const policy = resolvePhasePolicy(phase, contextWindowTokens, inputTarget)
 // 对照 B 的自变量是工具输出是否有界（见 eval-runner.ts 的 toolOutputPolicy）。undefined 表示不装载
 // tool-results 插件，既有阶段的行为一字不变。
 const toolOutput = toolOutputPolicy(phase)
@@ -52,7 +56,16 @@ if (options.planOnly) {
   // 看起来已经兑现，而实际只跑 1 次。两者现在由构造相等，但说清楚仍然是这个预演存在的理由。
   console.log(`${phase}-${scope}: ${planned.length} 个任务 × ${repeats} 次重复 = ${runs.length} 次运行：${planned.join(', ')}`)
   console.log(`预算：单次 run ${policy.maxModelRequests} 请求 / ${policy.maxToolCalls} 工具 / ${policy.maxActiveDurationMs}ms / ${policy.maxTotalTokens} token；整批 ${caps.requests} 请求 / ${caps.tokens} token，${caps.runs} 次运行`)
-  console.log(`上下文：输入目标 ${policy.inputTargetTokens} token（对照 A 的臂间差异只在这里）`)
+  // 每个批次的臂间差异落在**哪个字段**，就在这一行点出来；接着的下一行给出该字段的数值。指着看的读者
+  // 不必回去翻预注册。没有对照臂的阶段（screening/sequence/smoke/blind）不加括号。
+  const axis = phase === 'armA' || phase === 'armB' ? '对照 A 的臂间差异只在这里'
+    : phase === 'ledgerA1' || phase === 'ledgerA2' ? '批次 A 的臂间差异只在这里'
+    : phase === 'ledgerB1' || phase === 'ledgerB2' ? '批次 B 的臂间差异在下一行' : undefined
+  console.log(`上下文：输入目标 ${policy.inputTargetTokens} token${axis === undefined ? '' : `（${axis}）`}`)
+  // 有效压缩阈值 = compactionBudgetTokens ?? 输入目标（budget.ts 的设计）。批次 B 的臂间差异正是它：
+  // ledgerB1 与 ledgerB2 的预演输出应当**只差这一行**，这就是「自变量在花钱之前可见」的意思。
+  const compactionThreshold = policy.compactionBudgetTokens ?? policy.inputTargetTokens
+  console.log(`主动压缩：阈值 ${compactionThreshold} token${policy.compactionBudgetTokens === undefined ? '（缺省 = 输入目标）' : ''}`)
   // 对照 B 的臂间差异是工具输出模式而不是输入目标，预演里看不见它就等于预演失效——这正是这个分支存在的
   // 理由。只打语义不打数值：具体的预览上限属于驱动侧的实现细节，写在这里会多出第二处需要同步的常量。
   console.log(`工具输出：${toolOutput ? (toolOutput.bounded ? '有界（超出预览上限即截断并落盘，可用 read_tool_result 回读）' : '无界（结果原样进入历史，不截断）') : '不装载 tool-results 插件（既有阶段的行为）'}`)

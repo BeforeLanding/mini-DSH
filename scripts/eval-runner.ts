@@ -16,7 +16,13 @@ export interface BatchCaps { runs: number; requests: number; tokens: number }
 // 全部」：诊断烟测会随开发增减，让它混进预注册算术会让那个数字不再对应同一件事。
 export const batchPhases = ['screening', 'armA', 'armB'] as const
 export type BatchPhase = typeof batchPhases[number]
-export type PhaseName = BatchPhase | 'sequence' | 'smoke' | 'blind'
+// NX-38-3 预注册的两批四条臂。它们**不进 batchPhases**：batchCaps 是「整批 18 次运行」这条既有结论的
+// 载体，混进新批次会让它不再对应同一件事；要让它们进就必须重写那三个数字，那是一次独立的预注册动作
+// （处置同 sequence/smoke/blind）。四条臂共用同一 fixture ledger、同一模型/prompt/验收器与同一单次 run
+// 预算，差异只由 ledgerPolicy 承担。
+export const ledgerPhases = ['ledgerA1', 'ledgerA2', 'ledgerB1', 'ledgerB2'] as const
+export type LedgerPhase = typeof ledgerPhases[number]
+export type PhaseName = BatchPhase | 'sequence' | 'smoke' | 'blind' | LedgerPhase
 export const phaseCaps: Readonly<Record<PhaseName, BatchCaps>> = Object.freeze({
   screening: { runs: 12, requests: 400, tokens: 8_000_000 },
   // 对照 A 的两臂各 3 次运行（NX-08e2-6 按实测重预注册，NX-08e2-4 之后随序列扩到十四阶段再重算一次；
@@ -63,6 +69,17 @@ export const phaseCaps: Readonly<Record<PhaseName, BatchCaps>> = Object.freeze({
   // 它也不进 batchPhases：诊断烟测会随开发增减，混进预注册算术会让 {18, 3_200, 88_000_000} 不再
   // 对应同一件事。
   blind: { runs: 1, requests: 448, tokens: 28_000_000 },
+  // NX-38-3 预注册的四条臂：同一 fixture ledger（四阶段），每个阶段各 3 次重复，合计 12 次运行。
+  // 上限取**逐阶段预算的理论上界**，口径同 sequence/smoke/blind：ledger 是 4 个阶段，每次运行的每个阶段
+  // 各有一份 singleRunBudget（32 请求 / 2,000,000 token），4 × 32 = 128、4 × 2,000,000 = 8,000,000，
+  // 乘 3 次重复即下表。**这是机械推导，不是按实测的预注册**——NX-08e2 的教训是按外推定的 token 上限被
+  // 实测推翻 64%；这里取上界只会松不会紧（runPhase 只在两次 fixture 之间检查累计值，对 3 次重复本来就
+  // 不构成中途制动），它约束的是「不会跑飞」而不是「预计花多少」。
+  // 四条臂的上限逐字相同是刻意的：臂之间被比较的是上下文策略，不是预算。
+  ledgerA1: { runs: 3, requests: 384, tokens: 24_000_000 },
+  ledgerA2: { runs: 3, requests: 384, tokens: 24_000_000 },
+  ledgerB1: { runs: 3, requests: 384, tokens: 24_000_000 },
+  ledgerB2: { runs: 3, requests: 384, tokens: 24_000_000 },
 })
 export const batchCaps: Readonly<BatchCaps> = Object.freeze(batchPhases.reduce((totals, name) => ({
   runs: totals.runs + phaseCaps[name].runs,
@@ -79,6 +96,51 @@ export function armPolicy(phase: BatchPhase, contextWindowTokens: number): Reado
   if (phase !== 'armA') return evalPolicy
   if (contextWindowTokens <= (evalPolicy.inputTargetTokens ?? 0)) throw new Error(`arm A needs a window larger than arm B's input target, got ${contextWindowTokens}`)
   return Object.freeze({ ...evalPolicy, inputTargetTokens: contextWindowTokens })
+}
+
+// NX-38-3 预注册的两批。自变量各是一个字段：
+// 批次 A 是 inputTargetTokens（裁或不裁），批次 B 是 compactionBudgetTokens（主动压缩是否先出手）。
+// compactionBudgetTokens 缺省时取 inputTargetTokens（budget.ts 刻意的设计），所以「关主动压缩」= 把它
+// 抬到窗口，其可判定的效果是 context/summary-end 的 applied 计数为 0——装置里没有完全关掉压缩的开关，
+// 兜底那条路（agent-loop-runtime.ts 的 context-overflow 重试）不看这个阈值。
+export function ledgerPolicy(phase: LedgerPhase, contextWindowTokens: number, inputTargetTokens?: number): Readonly<BudgetPolicy> {
+  switch (phase) {
+    // A1 不裁剪：目标抬到窗口，「输入 ≤ 目标」恒成立；主动压缩同样关掉，被测量的因此只是「不裁」。
+    case 'ledgerA1':
+      return Object.freeze({ ...evalPolicy, inputTargetTokens: contextWindowTokens, compactionBudgetTokens: contextWindowTokens })
+    // A2 裁剪：目标由 A1 的实测峰值现算后经 --input-target 传入。缺目标**不能**静默退回默认值——那会把
+    // 「裁 / 不裁」两臂退化成同一臂，而账面上看不出来。目标高于窗口则裁剪永不可能触发，同样直接失败。
+    case 'ledgerA2': {
+      if (inputTargetTokens === undefined) throw new Error('ledger A2 needs an input target derived from the ledgerA1 peaks (--input-target)')
+      if (!Number.isSafeInteger(inputTargetTokens) || inputTargetTokens <= 0) throw new Error(`ledger A2 needs a positive input target, got ${inputTargetTokens}`)
+      if (inputTargetTokens > contextWindowTokens) throw new Error(`ledger A2 needs an input target no larger than the context window, got ${inputTargetTokens} > ${contextWindowTokens}`)
+      return Object.freeze({ ...evalPolicy, inputTargetTokens, compactionBudgetTokens: contextWindowTokens })
+    }
+    // B1 生产默认：一个字段都不改——输入目标 65,536、主动压缩在 65,536 × 0.8 处出手。
+    case 'ledgerB1':
+      return evalPolicy
+    // B2 关主动压缩：只把压缩阈值抬到窗口，输入目标仍是 65,536，因此裁剪行为与 B1 逐字相同。
+    case 'ledgerB2':
+      return Object.freeze({ ...evalPolicy, compactionBudgetTokens: contextWindowTokens })
+  }
+}
+
+// 阶段 → 预算策略的**唯一**映射点。既有阶段逐字保持原来的形状：armA/armB 仍只经 armPolicy，其余四个
+// 筛查/诊断阶段仍返回 evalPolicy **本体**（同一个对象引用），因此 screening/sequence/smoke/blind 的预算
+// 与历史基线一字不变。ledgerPolicy 只在四个 ledger 阶段被调用。
+export function resolvePhasePolicy(phase: PhaseName, contextWindowTokens: number, inputTargetTokens?: number): Readonly<BudgetPolicy> {
+  switch (phase) {
+    case 'armA':
+    case 'armB':
+      return armPolicy(phase, contextWindowTokens)
+    case 'ledgerA1':
+    case 'ledgerA2':
+    case 'ledgerB1':
+    case 'ledgerB2':
+      return ledgerPolicy(phase, contextWindowTokens, inputTargetTokens)
+    default:
+      return evalPolicy
+  }
 }
 
 // 对照 B 的自变量：工具输出是否有界。两臂都装载同一个 tool-results 插件、只改它的配置——插件无条件
@@ -125,6 +187,14 @@ export interface RunTaskDetail {
   unsentProjections: number
   // provider 与 estimated 分列（R-21 要求报告给出这一区分），按使用条目数计。
   usageSources: { provider: number; estimated: number }
+  // 该阶段的压缩，按**触发的 trigger** 拆开（contracts.ts 的 context/summary-start）：
+  // `applied` 是已应用的压缩总数，`pressure` 是其中由**主动压缩**触发的（越过
+  // compactionBudgetTokens × compactionRatio），`declined` 是被拒的结束事件。
+  // 为什么要拆：NX-38-3 预注册里 B 批的仪器判据是「主动压缩有没有出手」，而兜底那条路（裁剪到底仍装不下
+  // 时触发）**不看压缩阈值**，它出手只说明这次运行随后必然以 context_overflow 结束——合并成一个计数就把
+  // 判据弄丢了。评测路径上出现的 trigger 只有 pressure 与 context-overflow（explicit 来自 CLI 的
+  // `/compact`，不在这条链路上），因此 `applied > 0 && pressure === 0` 就等价于「压缩由兜底触发」。
+  compactions: { applied: number; pressure: number; declined: number }
 }
 export interface RunOutcome {
   status: StopReason | 'running'

@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process'
 import { Context } from '@deepseek-ai/cordis'
 import { createFixture, screeningIds, sequenceIds, boundedIds, demoIds, blindIds, ledgerIds, fixtureProcessTimeoutMs, readTaskSequence, readFixtureFile } from '../scripts/coding-fixtures.js'
 import type { FixtureId } from '../scripts/coding-fixtures.js'
-import { batchPhases, evalPolicy } from '../scripts/eval-runner.js'
+import { batchPhases, evalPolicy, ledgerPhases, phaseCaps } from '../scripts/eval-runner.js'
 import { phaseRegistry } from '../scripts/eval-cli.js'
 import type { ToolCall } from '../src/core/contracts.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
@@ -377,17 +377,21 @@ test('the blind fixture stays out of every other batch and owns a diagnostic pha
 // 注册表互斥：ledger 也必须自成一档，理由与 blind 相同（并进 sequenceIds 会让 repeatCount(1, 2) 抛错，
 // 也会让对照 A 的两臂拿到不同的任务集）。它比 blind 还多一层约束：已冻结的那几批，历史结论都建立在
 // 「判据在工作区、拿得到」之上，把一台判据载体在会话历史里的仪器并进去，那些数字就不再对应同一件事。
-// 它目前**没有**对应阶段：NX-38-2 只做离线机制证明，付费批次的上限与判据要另行预注册（NX-38-3/-4）。
-test('the ledger fixture stays out of every other batch and owns no phase yet', () => {
+// 它**恰好**有自己的四个阶段：NX-38-3 已预注册两批四条臂（ledgerA1/A2/B1/B2），NX-38-4a 把它们接进
+// phaseRegistry。四条臂共用同一份任务集——臂之间的差异只由 eval-runner 的 ledgerPolicy 承担。
+test('the ledger fixture is reachable through exactly its own four arms and nothing else', () => {
   assert.deepEqual([...ledgerIds], ['ledger'])
   const others: readonly string[] = [...screeningIds, ...sequenceIds, ...boundedIds, ...demoIds, ...blindIds]
   for (const id of ledgerIds) assert.ok(!others.includes(id), `${id} must stay out of the other five batches`)
   assert.ok(!(batchPhases as readonly string[]).includes('ledger'), 'ledger must not join the pre-registered batch phases')
   // 「不在别的 registry 里」还不够：阶段→registry 的映射是另一处，漏一条就可能让它被某个阶段计划带上。
-  // 逐阶段查一遍 phaseRegistry 的输出，而不是只断言那张表。
-  const reachable = (['screening', 'armA', 'armB', 'sequence', 'smoke', 'blind'] as const)
+  // 两个方向都查：四条 ledger 臂必须**恰好**指向它，其余阶段必须一条都摸不到它。
+  for (const phase of ledgerPhases) assert.deepEqual(phaseRegistry(phase), ['ledger'], phase)
+  const foreign = (['screening', 'armA', 'armB', 'sequence', 'smoke', 'blind'] as const)
     .flatMap(phase => phaseRegistry(phase).filter(id => (ledgerIds as readonly string[]).includes(id)))
-  assert.deepEqual(reachable, [], 'ledger must not be reachable through any phase registry yet')
+  assert.deepEqual(foreign, [], 'ledger must not be reachable through any other phase registry')
+  // 四条臂都进 phaseCaps 且不进 batchPhases：后者会让 {18, 3_200, 88_000_000} 不再对应同一件事。
+  for (const phase of ledgerPhases) assert.ok(phaseCaps[phase].runs > 0, phase)
 })
 
 async function runFixtureAcrossBudgetStop(id: FixtureId) {

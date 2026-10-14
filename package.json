@@ -16,6 +16,8 @@
     "eval:screening": "pnpm build && node dist/scripts/eval-screening.js",
     "eval:sequence": "pnpm build && node dist/scripts/eval-screening.js --phase sequence",
     "eval:estimate": "pnpm build && node dist/scripts/eval-estimate.js",
+    "eval:ledger-target": "pnpm build && node dist/scripts/eval-ledger-target.js",
+    "eval:ledger-verdict": "pnpm build && node dist/scripts/eval-ledger-verdict.js",
     "demo:fix": "pnpm build && node dist/scripts/demo-fix.js",
     "demo:resume": "pnpm build && node dist/scripts/demo-resume.js",
     "demo:unknown": "pnpm build && node dist/scripts/demo-unknown.js",

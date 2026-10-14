@@ -1,9 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { evidenceScope, parseEvalArguments, phaseRegistry, repeatCount, resolveContextWindow, resolveInfeasible, resolveModel, resolvePlanned, resolveRuns } from '../scripts/eval-cli.js'
-import { phaseCaps } from '../scripts/eval-runner.js'
+import { derivePruningTarget, evidenceScope, ledgerRunPeaks, parseEvalArguments, phaseRegistry, repeatCount, resolveContextWindow, resolveInfeasible, resolveInputTarget, resolveModel, resolvePlanned, resolveRuns } from '../scripts/eval-cli.js'
+import { ledgerPhases, phaseCaps } from '../scripts/eval-runner.js'
 import type { PhaseName } from '../scripts/eval-runner.js'
-import { screeningIds, sequenceIds } from '../scripts/coding-fixtures.js'
+import { ledgerIds, screeningIds, sequenceIds } from '../scripts/coding-fixtures.js'
 
 // 入口脚本本身有顶层 await（协议探测、付费批次），被 import 就会花钱，所以真实的参数与计划判据全部
 // 住在 eval-cli.ts 的纯函数里，由这里离线钉住。
@@ -47,7 +47,7 @@ test('both comparison arms plan the same sequence task set', () => {
 // 的机制（runPhase 遍历的是 registry 那 1 个 fixture），于是「每臂 3 次运行」的预注册一条命令只兑现 1 次；
 // --plan-only 还把上限当计划打印，让它在花钱之前看不出破绽。这条断言把两者钉死在一起，是当时缺的那一环。
 test('every phase schedules exactly as many runs as its cap pre-registers', () => {
-  const phases: readonly PhaseName[] = ['screening', 'armA', 'armB', 'sequence', 'smoke', 'blind']
+  const phases: readonly PhaseName[] = ['screening', 'armA', 'armB', 'sequence', 'smoke', 'blind', ...ledgerPhases]
   for (const phase of phases) assert.equal(resolveRuns(phase).length, phaseCaps[phase].runs, phase)
   // 两臂的差异只能来自上下文策略，不能来自跑了几次或跑了哪些任务，因此执行清单必须逐字相同。
   assert.deepEqual(resolveRuns('armA'), resolveRuns('armB'))
@@ -82,11 +82,63 @@ test('arguments are parsed into one options object with screening as the default
   assert.deepEqual(parseEvalArguments([]), { phase: 'screening', probeOnly: false, planOnly: false })
   assert.deepEqual(parseEvalArguments(['--phase', 'sequence', '--plan-only']), { phase: 'sequence', probeOnly: false, planOnly: true })
   assert.deepEqual(parseEvalArguments(['--phase=sequence', '--tasks=pipeline']), { phase: 'sequence', tasks: 'pipeline', probeOnly: false, planOnly: false })
-  assert.throws(() => parseEvalArguments(['--phase', 'bogus']), /unknown phase: bogus; expected one of screening, armA, armB, sequence, smoke, blind/)
+  // 逐字钉住这份清单：新阶段只加进 phaseNames 却漏了别处时，这条会当场点名，而不是让 `--phase ledgerA1`
+  // 在运行期被当成未知阶段拒收。
+  assert.throws(() => parseEvalArguments(['--phase', 'bogus']), /unknown phase: bogus; expected one of screening, armA, armB, sequence, smoke, blind, ledgerA1, ledgerA2, ledgerB1, ledgerB2/)
   assert.throws(() => parseEvalArguments(['--phase']), /--phase needs a value/)
   assert.throws(() => parseEvalArguments(['--plan-only=yes']), /--plan-only takes no value/)
   assert.throws(() => parseEvalArguments(['--unknown']), /unknown option: --unknown/)
   assert.throws(() => parseEvalArguments(['sequence']), /unexpected argument: sequence/)
+})
+
+// NX-38 的四条臂共用同一 fixture（ledger）与同一份任务集，且各 3 次重复。臂之间的差异只能来自策略：
+// 计划一旦不同，「裁掉载体之后还守不守得住」就不再是两臂之间唯一的差别。
+test('the four ledger arms plan the same fixture the same number of times', () => {
+  for (const phase of ledgerPhases) {
+    assert.deepEqual(phaseRegistry(phase), [...ledgerIds], phase)
+    assert.deepEqual(resolvePlanned(phase), ['ledger'], phase)
+    assert.equal(evidenceScope(phase, resolvePlanned(phase)), 'full', phase)
+    assert.deepEqual(resolveRuns(phase), [{ id: 'ledger', repeat: 0 }, { id: 'ledger', repeat: 1 }, { id: 'ledger', repeat: 2 }], phase)
+  }
+  // 四条臂的计划逐字相同：一次运行是整条四阶段序列，重复 3 次。
+  for (const phase of ledgerPhases.slice(1)) assert.deepEqual(resolveRuns(phase), resolveRuns(ledgerPhases[0]), phase)
+})
+
+// --input-target 是批次 A 第二臂唯一的自变量，且只由 ledgerA2 消费。两条越界各自失败，理由与 --tasks 的
+// 越界报错同一类：静默接受等于让一次声称「裁得更狠」的运行其实没改裁剪目标。
+test('--input-target is consumed by ledgerA2 only, and never silently', () => {
+  assert.deepEqual(parseEvalArguments(['--phase', 'ledgerA2', '--input-target', '6840']), { phase: 'ledgerA2', inputTarget: '6840', probeOnly: false, planOnly: false })
+  assert.deepEqual(parseEvalArguments(['--phase=ledgerA2', '--input-target=6840']), { phase: 'ledgerA2', inputTarget: '6840', probeOnly: false, planOnly: false })
+  assert.throws(() => parseEvalArguments(['--input-target']), /--input-target needs a value/)
+  assert.equal(resolveInputTarget('ledgerA2', '6840'), 6_840)
+  assert.equal(resolveInputTarget('ledgerA1'), undefined)
+  // 缺目标：A2 没有它就没有自变量，静默退回默认值会让两臂退化成同一臂。
+  assert.throws(() => resolveInputTarget('ledgerA2'), /--phase ledgerA2 requires --input-target derived from the ledgerA1 peaks/)
+  // 传错阶段：把它塞进一条不改裁剪的臂，账面上看不出来。
+  assert.throws(() => resolveInputTarget('ledgerA1', '6840'), /--input-target is only consumed by --phase ledgerA2, not ledgerA1/)
+  assert.throws(() => resolveInputTarget('screening', '6840'), /only consumed by --phase ledgerA2/)
+  assert.throws(() => resolveInputTarget('ledgerA2', '0'), /positive safe integer/)
+  assert.throws(() => resolveInputTarget('ledgerA2', 'abc'), /positive safe integer/)
+  assert.throws(() => resolveInputTarget('ledgerA2', '1.5'), /positive safe integer/)
+})
+
+// 预注册写死的推导规则：A2 的目标 = floor(0.75 × A1 逐阶段峰值估算输入的最大值)。这条规则之所以要写成
+// 函数而不是留给人算，是因为「读到结局再定目标」与「按写死的规则现算」在事后无法区分——只有前者能被排除。
+test('the pruning target follows the pre-registered 0.75 x peak rule', () => {
+  assert.equal(derivePruningTarget([5260, 6815, 7922, 9121]), 6_840)
+  // 取的是最大值而不是第一个：A1 的峰值可能落在任何一次运行上。
+  assert.equal(derivePruningTarget([10, 3]), 7)
+  assert.equal(derivePruningTarget([3]), 2)
+  assert.throws(() => derivePruningTarget([]), /empty peak list/)
+})
+
+// 证据行只有 `{phase, fixture, repeat, ...RunOutcome}`：峰值取自该 run 各阶段的 maxEstimatedInputTokens。
+// phase 不符即抛错——把 A2 或 B 批的结果误当 A1 的基线，正是「按结果挑仪器」的形状。
+test('peaks are recovered from evidence and refuse to be read off another phase', () => {
+  const record = (phase: string, peaks: number[]) => ({ phase, tasks: peaks.map(peak => ({ maxEstimatedInputTokens: peak })) })
+  assert.deepEqual(ledgerRunPeaks([record('ledgerA1', [5260, 6815]), record('ledgerA1', [9121, 100])]), [6_815, 9_121])
+  assert.throws(() => ledgerRunPeaks([record('ledgerA1', [1]), record('ledgerA2', [2])]), /evidence came from ledgerA2, expected ledgerA1/)
+  assert.throws(() => ledgerRunPeaks([{ phase: 'ledgerA1', tasks: [] }]), /recorded no stage projections/)
 })
 
 // 不可行是人的判断且影响成功率分母：不给理由就不允许使用这个口径，理由也不能是空白。

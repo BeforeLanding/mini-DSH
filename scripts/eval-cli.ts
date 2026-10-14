@@ -1,20 +1,21 @@
-import { blindIds, boundedIds, screeningIds, sequenceIds } from './coding-fixtures.js'
+import { blindIds, boundedIds, ledgerIds, screeningIds, sequenceIds } from './coding-fixtures.js'
 import type { FixtureId } from './coding-fixtures.js'
-import { batchPhases, phaseCaps } from './eval-runner.js'
-import type { PhaseName } from './eval-runner.js'
+import { batchPhases, ledgerPhases, phaseCaps } from './eval-runner.js'
+import type { LedgerPhase, PhaseName } from './eval-runner.js'
 
 // 真实适配器评测入口的参数解析与计划推算，全部是纯函数：不读环境变量、不碰文件系统、不发请求。
 // 抽出来的理由是「可离线验收」——eval-screening.ts 有顶层 await（协议探测、批次执行），被测试 import
 // 会真的发起付费请求，所以这些判据不能只住在那个文件里。env 一律由调用方传入。
-const phaseNames: readonly PhaseName[] = [...batchPhases, 'sequence', 'smoke', 'blind']
+const phaseNames: readonly PhaseName[] = [...batchPhases, 'sequence', 'smoke', 'blind', ...ledgerPhases]
 const flagOptions = new Set(['probe-only', 'plan-only'])
-const valueOptions = new Set(['phase', 'tasks', 'infeasible', 'infeasible-reason'])
+const valueOptions = new Set(['phase', 'tasks', 'infeasible', 'infeasible-reason', 'input-target'])
 
 export interface EvalOptions {
   phase: PhaseName
   tasks?: string
   infeasible?: string
   infeasibleReason?: string
+  inputTarget?: string
   probeOnly: boolean
   planOnly: boolean
 }
@@ -36,6 +37,13 @@ export function phaseRegistry(phase: PhaseName): readonly FixtureId[] {
     // 「没有 oracle 之后还会不会一次做对」。它单列一份注册表（并进 sequenceIds 会让 repeatCount 抛错，
     // 也会让对照 A 的两臂拿到不同的任务集），上限单独预注册、不进 batchCaps。
     case 'blind': return blindIds
+    // NX-38 的两批四条臂共用同一 fixture（ledger）与同一份任务集：臂之间的差异只由 eval-runner.ts 的
+    // ledgerPolicy 承担，不来自跑了哪些任务，也不来自跑了几次。四条臂的计划因此逐字相同。
+    case 'ledgerA1':
+    case 'ledgerA2':
+    case 'ledgerB1':
+    case 'ledgerB2':
+      return ledgerIds
   }
 }
 
@@ -62,6 +70,7 @@ export function parseEvalArguments(argv: readonly string[]): EvalOptions {
     ...(parsed.has('tasks') ? { tasks: parsed.get('tasks') } : {}),
     ...(parsed.has('infeasible') ? { infeasible: parsed.get('infeasible') } : {}),
     ...(parsed.has('infeasible-reason') ? { infeasibleReason: parsed.get('infeasible-reason') } : {}),
+    ...(parsed.has('input-target') ? { inputTarget: parsed.get('input-target') } : {}),
     probeOnly: parsed.has('probe-only'),
     planOnly: parsed.has('plan-only'),
   }
@@ -123,6 +132,47 @@ export function resolveModel(env: Record<string, string | undefined>): string {
   const value = env.MINI_DSH_EVAL_MODEL ?? env.MINI_DSH_MODEL
   if (value === undefined || !value.trim()) throw new Error('MINI_DSH_MODEL is required; refusing to fall back to the adapter default list')
   return value.trim()
+}
+
+// `--input-target` 是批次 A 第二臂（ledgerA2）**唯一**的自变量，且只由它消费。两条越界各自失败，
+// 理由与 `--tasks` 的越界报错同一类：把裁剪目标悄悄塞进一条不改裁剪的臂，账面上看不出来。
+export function resolveInputTarget(phase: PhaseName, raw?: string): number | undefined {
+  if (raw === undefined) {
+    // 缺目标时静默退回默认值会让「裁 / 不裁」两臂退化成同一臂——那正是这个参数存在的理由。
+    if (phase === 'ledgerA2') throw new Error('--phase ledgerA2 requires --input-target derived from the ledgerA1 peaks')
+    return undefined
+  }
+  if (phase !== 'ledgerA2') throw new Error(`--input-target is only consumed by --phase ledgerA2, not ${phase}`)
+  const value = Number(raw)
+  if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`--input-target must be a positive safe integer, got ${raw}`)
+  return value
+}
+
+// NX-38-3 预注册写死的推导规则：A2 的裁剪目标 = floor(0.75 × A1 逐阶段峰值估算输入的最大值)。
+// 0.75 与离线证明（test/nx38-covenant.test.ts 的 targetFor）同一个系数；floor 保证目标不高于实测峰值的
+// 3/4，从而让裁剪真的会触发。空数组抛错而不是让 -Infinity 流到命令行里。
+export function derivePruningTarget(peaks: readonly number[]): number {
+  if (!peaks.length) throw new Error('cannot derive a pruning target from an empty peak list')
+  return Math.floor(Math.max(...peaks) * 0.75)
+}
+
+// 证据行的形状（`runs.jsonl` 每行是 `{phase, fixture, repeat, ...RunOutcome}`）。只声明推导需要的那两个
+// 字段，避免把评测运行器的类型拖进这个纯函数模块。
+export interface LedgerRunRecord {
+  phase?: string
+  tasks?: readonly { maxEstimatedInputTokens?: number }[]
+}
+
+// 从证据复原预注册写死的那串数：「峰值取 A1 每次运行 context/projection 的 maxEstimatedInputTokens，
+// 再跨 A1 的重复取最大」。每条记录是一次运行，取该 run 各阶段的最大值。
+// phase 不符即抛错——防止把 A2 或 B 批的结果误当 A1 的基线，那正是「按结果挑仪器」的形状。
+export function ledgerRunPeaks(records: readonly LedgerRunRecord[], phase: LedgerPhase = 'ledgerA1'): number[] {
+  return records.map(record => {
+    if (record.phase !== phase) throw new Error(`evidence came from ${String(record.phase)}, expected ${phase}`)
+    const peaks = (record.tasks ?? []).map(stage => stage.maxEstimatedInputTokens ?? 0)
+    if (!peaks.length) throw new Error(`a ${phase} run recorded no stage projections; nothing to derive from`)
+    return Math.max(...peaks)
+  })
 }
 
 // 窗口能力必须明确：官方端点取 PLAN 保守配置的 1,000,000，自定义端点不允许靠模型名猜。
