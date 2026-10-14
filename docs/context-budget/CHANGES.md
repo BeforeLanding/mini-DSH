@@ -89,7 +89,7 @@
 
 **另一处照实记**：更早一版用例曾在某个目标值上「通过」，事后查证是假通过——探针遇到压缩请求时 `fixture.tasks.indexOf(lastUser)` 取到 `-1`，`seen` 里末尾那条记的其实是压缩请求的读数，不是最后一个阶段的。改成「按最高编号的阶段说明定位、凡压缩请求先分流」之后结论才站得住；现在用例同时断言**压缩次数相同**与**口径可见性**，两者不成立时直接判红。
 
-验收：`pnpm check` `syntax ok: 110 files`；`pnpm test` **287/287**（基线 282，新增 5 条：契约守卫、naive 对照、裁剪路、压缩路、ledger 注册表互斥）；`pnpm lint` `Checked 120 files … No fixes applied.`；`pnpm fixtures:check` **17 项**全部「初始失败、参考通过」退出 0；`pnpm eval:offline`、`pnpm eval:estimate` 退出码 0。`docs/context-budget/nx38-ledger-probe.mjs` 是同一装置，把数值打出来供人核对。**未授权、也未发生任何付费调用。**
+验收：`pnpm check` `syntax ok: 110 files`；`pnpm test` **287/287**（基线 282，新增 5 条：契约守卫、naive 对照、裁剪路、压缩路、ledger 注册表互斥）；`pnpm lint` `Checked 120 files … No fixes applied.`；`pnpm fixtures:check` **17 项**全部「初始失败、参考通过」退出 0；`pnpm eval:offline`、`pnpm eval:estimate` 退出码 0。`docs/context-budget/nx38-ledger-probe.mjs` 是同一装置，把数值打出来供人核对。提交 `d69f421`，本节即回填。**未授权、也未发生任何付费调用。**
 
 ## NX-37 评测证据的来源指纹与 fixture 摘要钉
 

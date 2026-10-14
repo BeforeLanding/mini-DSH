@@ -12,7 +12,7 @@
 |---|---|---|---:|
 | NX-38-0 | 立项与设计：本节 ＋ PLAN 的 NX-38 节（**done**，`8ded62f`） | `grep -cE '^\| NX-38-' docs/context-budget/TASKS.md` = 5（本节的子步骤行数）；每行「独立验收」列至少含一个可判定的命令或退出码；`pnpm test`（含 `docs-links` 与 `decisions-doc` 两条守卫）全绿；`git diff --stat` 只含 `docs/context-budget/TASKS.md` 与 `docs/context-budget/PLAN.md` | 1 次 |
 | NX-38-1 | 判据分层与指标资格表落进报告口径（**done**，`05927e9`；回填即本提交） | NX-08-REPORT 的判据段改成层 A／层 B 两段，且层 A 不成立时明写「仪器未成立」；指标资格表逐项给出资格与依据；**反例**：把层 A 的读数去掉、只留结局时相应守卫为红 | 1 次 |
-| NX-38-2 | 新任务类别的 fixture 契约与**离线**机制证明（**done**，零付费；回填即本提交） | 脚本化适配器下「无裁剪档」验收通过、「有裁剪档」因该约定被裁掉而变红；两档**只差** `inputTargetTokens`；`pnpm eval:offline`、`pnpm fixtures:check`、`pnpm test` 退出 0 | 1 次 |
+| NX-38-2 | 新任务类别的 fixture 契约与**离线**机制证明（**done**，`d69f421`，零付费；回填即本提交） | 脚本化适配器下「无裁剪档」验收通过、「有裁剪档」因该约定被裁掉而变红；两档**只差** `inputTargetTokens`；`pnpm eval:offline`、`pnpm fixtures:check`、`pnpm test` 退出 0 | 1 次 |
 | NX-38-3 | 预注册（判据含 `context_overflow`、整批上限、组数与重复数） | 判据在开跑前写死；「天花板被打破／未被打破／仪器未成立／被拒」四类各有唯一判据；`batchCaps` 的现有三个数字不因本步改动；`git diff --stat` 只含文档 | 1 次 |
 | NX-38-4 | 正式批次（**需单独付费授权**） | 首次与重跑分别取得明确授权后开跑；证据目录一次一跑（`ensureWritable` 拒绝复用）；报告按层 A／层 B 两段写，不写任何比例或提升 | 1 次 |
 
