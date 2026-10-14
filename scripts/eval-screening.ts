@@ -7,6 +7,7 @@ import type { RunOutcome } from './eval-runner.js'
 import type { FixtureId } from './coding-fixtures.js'
 import { evidenceScope, parseEvalArguments, phaseRegistry, repeatCount, resolveContextWindow, resolveInfeasible, resolveModel, resolvePlanned, resolveRuns } from './eval-cli.js'
 import { runFixtureTask } from './eval-fixture.js'
+import { buildProvenance } from './eval-provenance.js'
 import { createDeepSeekAdapter } from '../src/models/deepseek.js'
 import type { ChatResponse } from '../src/core/contracts.js'
 
@@ -86,6 +87,15 @@ if (options.probeOnly) {
   process.exit(0)
 }
 
+// 来源指纹在批次开跑之前取，而不是写报告时取：它要描述的是**产出这批结果的代码与 fixture**，而
+// 写报告那一刻的磁盘状态可能已经变了（批次跑到一半时改工作区，起点取的 dirty 标记才不会漏掉它）。
+const provenance = await buildProvenance(repository, planned, new Date().toISOString(), process.env)
+if (provenance.git.dirty !== false) {
+  // 不因工作区脏而拒绝开跑——那会把一次正常的评测变成环境问题；但也不能让它静默：HEAD 代表的
+  // 不是被执行的代码时，整批结论就只能被读成「某次未提交的实验」。
+  console.warn(`警告：工作区${provenance.git.dirty === null ? '状态不可知' : '有未提交的改动'}，报告里的提交号不代表被执行的代码（${provenance.git.error ?? provenance.git.sha}）`)
+}
+
 const spent = { runs: 0, requests: 0, tokens: 0 }
 const report = await runPhase(phase, runs, caps, async task => {
   // 重复之间共用同一个 fixture 子目录：每次运行的 session id 是随机分配的，落盘时天然各占一个子目录，
@@ -106,7 +116,7 @@ const report = await runPhase(phase, runs, caps, async task => {
   return outcome
 }, record => (infeasible.ids.has(record.task.id) ? { infeasible: true } : undefined))
 
-const summary = { ...summarize(report), model: `${provider}/${modelId}`, baseUrl, contextWindowTokens, inputTargetTokens: policy.inputTargetTokens, probe, ...(infeasible.reason === undefined ? {} : { infeasibleReason: infeasible.reason }) }
+const summary = { ...summarize(report), provenance, model: `${provider}/${modelId}`, baseUrl, contextWindowTokens, inputTargetTokens: policy.inputTargetTokens, probe, ...(infeasible.reason === undefined ? {} : { infeasibleReason: infeasible.reason }) }
 await fs.writeFile(reportPath, `${JSON.stringify({ ...summary, runs: report.executed }, null, 2)}\n`)
 console.log(`\n汇总：${JSON.stringify(summary)}`)
 console.log(`证据：${runLog}\n报告：${reportPath}\n会话：${sessionDirectory}`)
