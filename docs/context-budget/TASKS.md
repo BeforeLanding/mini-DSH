@@ -10,10 +10,11 @@
 
 | 子步骤 | 行为与状态 | 独立验收 | 预计提交 |
 |---|---|---|---:|
-| NX-38-0 | 立项与设计：本节 ＋ PLAN 的 NX-38 节（**done**，`8ded62f`） | `grep -cE '^\| NX-38-' docs/context-budget/TASKS.md` = 5（本节的子步骤行数）；每行「独立验收」列至少含一个可判定的命令或退出码；`pnpm test`（含 `docs-links` 与 `decisions-doc` 两条守卫）全绿；`git diff --stat` 只含 `docs/context-budget/TASKS.md` 与 `docs/context-budget/PLAN.md` | 1 次 |
+| NX-38-0 | 立项与设计：本节 ＋ PLAN 的 NX-38 节（**done**，`8ded62f`） | `grep -cE '^\| NX-38-' docs/context-budget/TASKS.md` = 5（**该步完成时**的子步骤行数；后续每加一个子步骤都会增长，NX-38-4a 之后是 6）；每行「独立验收」列至少含一个可判定的命令或退出码；`pnpm test`（含 `docs-links` 与 `decisions-doc` 两条守卫）全绿；`git diff --stat` 只含 `docs/context-budget/TASKS.md` 与 `docs/context-budget/PLAN.md` | 1 次 |
 | NX-38-1 | 判据分层与指标资格表落进报告口径（**done**，`05927e9`；回填即本提交） | NX-08-REPORT 的判据段改成层 A／层 B 两段，且层 A 不成立时明写「仪器未成立」；指标资格表逐项给出资格与依据；**反例**：把层 A 的读数去掉、只留结局时相应守卫为红 | 1 次 |
 | NX-38-2 | 新任务类别的 fixture 契约与**离线**机制证明（**done**，`d69f421`，零付费；回填即本提交） | 脚本化适配器下「无裁剪档」验收通过、「有裁剪档」因该约定被裁掉而变红；两档**只差** `inputTargetTokens`；`pnpm eval:offline`、`pnpm fixtures:check`、`pnpm test` 退出 0 | 1 次 |
 | NX-38-3 | 预注册（判据含 `context_overflow`、整批上限、组数与重复数）（**done**，`b8eface`，零付费；回填即本提交） | 判据在开跑前写死；「天花板被打破／未被打破／仪器未成立／被拒」四类各有唯一判据；`batchCaps` 的现有三个数字不因本步改动；`git diff --stat` 只含文档 | 1 次 |
+| NX-38-4a | 四阶段接入与离线判定（**done**，`9987c1d`，零付费；回填即本提交） | 四条臂进 `phaseCaps`/`phaseNames`/`phaseRegistry`；四条 `--plan-only` 预演各自成立，且 `ledgerB1` 与 `ledgerB2` 的输出只差「主动压缩」一行；`ledgerA2` 缺 `--input-target`、或目标给了不消费它的阶段时退出 1 并点名；`pnpm eval:ledger-target` 无证据目录时退出 1；**反例**：去掉 A2 缺目标守卫、`derivePruningTarget` 用 `peaks[0]` 取代 `Math.max`、压缩计数不按 `runId` 过滤，三者各自让对应用例变红；`pnpm test`／`check`／`lint` 退出 0，`batchCaps` 仍为 `{18, 3_200, 88_000_000}`；`git diff --stat` 不含 `src/` | 1 次 |
 | NX-38-4 | 正式批次（**需单独付费授权**） | 首次与重跑分别取得明确授权后开跑；证据目录一次一跑（`ensureWritable` 拒绝复用）；报告按层 A／层 B 两段写，不写任何比例或提升 | 1 次 |
 
 **NX-38-0 已完成（2026-10-14，零付费）**：两处均为新增小节，`src/` 一行未动。设计本体见 [PLAN 的 NX-38 节](PLAN.md#nx-38-区分度的获取设计)。**本项不制造区分度**，它把「加组数治不了饱和」写成有顺序的判据，并把 D-22 的一句话展开成**离线可证、线上单独授权**的施工步骤。
@@ -21,6 +22,8 @@
 **NX-38-2 已完成（2026-10-14，零付费）**：新增 fixture `ledger`（注册表 `ledgerIds`，17 项里的第 17 个，唯一一套判据载体在工作区之外的任务）、`docs/context-budget/nx38-ledger-probe.mjs`，以及覆盖契约守卫与两条上下文字段的 `test/nx38-covenant.test.ts`。两档只差 `inputTargetTokens` 的裁剪路与只差摘要一行的压缩路都实跑成立，四处反例逐一判红。**这一步更正了 PLAN 里一处说法**：压缩住在核心里（`src/core/compaction-runtime.ts`）而不是插件里，所以「被裁掉的内容没有检索入口」不成立——压缩只在当前 task 内部规划、动不到阶段说明，它其实是模型的自救通道。完整证据与两处照实记的失误见 [CHANGES 的 NX-38-2 节](CHANGES.md#nx-38-2-判据载体-fixture-与离线机制证明)。
 
 **NX-38-3 已完成（2026-10-14，零付费）**：把两批的判据在开跑前写死，落在 [PLAN 的「预注册：两批」](PLAN.md#预注册两批开跑前写死)。用户选定「两路都跑，分两批预注册」——**A 批**（`ledgerA1` 不裁剪 / `ledgerA2` 裁剪）问「载体被拿走之后还守不守得住」，A2 的目标由 A1 实测峰值按写死的 `floor(0.75 × 峰值)` 现算，**目标冻结前不得读任一臂的 `accepted`**；**B 批**（`ledgerB1` 生产默认 / `ledgerB2` 关主动压缩）只差 `compactionBudgetTokens` 一个参数，问「模型会不会把口径带进自己写的摘要」。四臂各 3 次重复，共 12 次运行；四个新阶段的整批上限按逐阶段预算的理论上界机械推导（各 384 请求 / 24,000,000 token），**不是按实测的预注册**。四类结局（被拒 / 仪器未成立 / 天花板被打破 / 未被打破）按**固定顺序**判定，各有唯一判据；`context_overflow` 单列为第一类。**本步只动文档**：`src/` 与 `scripts/` 一行未动，`batchCaps` 的 `{18, 3_200, 88_000_000}` 不变，四个新阶段不进 `batchPhases`。**未授权、也未发生任何付费调用。**记在 [CHANGES 的 NX-38-3 节](CHANGES.md#nx-38-3-两批的预注册判据上限与重复数)。
+
+**NX-38-4a 已完成（2026-10-14，零付费）**：把预注册的四条臂接进评测入口，并补上一条**不补就跑不起来**的读数。四条臂（`ledgerA1`/`ledgerA2`/`ledgerB1`/`ledgerB2`）进 `phaseCaps`/`phaseNames`/`phaseRegistry`，四条都**不进 `batchPhases`**，因此 `batchCaps` 仍是 `{18, 3_200, 88_000_000}`；`resolvePhasePolicy` 成为阶段 → 策略的唯一映射点，既有阶段按 `===` 钉住一字不变。`--input-target` 只由 `ledgerA2` 消费：缺目标、或把目标给了不消费它的阶段，各自抛错——静默接受等于让一次声称「裁得更狠」的运行其实没改裁剪目标。`derivePruningTarget` 把 `floor(0.75 × A1 峰值)` 写成函数，`pnpm eval:ledger-target` 读 `runs.jsonl` 打印一条可粘贴的命令行，**只读层 A 的处理量、绝不打印 `accepted`**（预注册的硬线）。**补读数是本步不能只做接线的原因**：预注册里 B 批的仪器判据是「主动压缩（`pressure`）有没有出手」，而 `RunTaskDetail` 此前**根本没记压缩次数**——`summarizeStage` 补上 `compactions`（`applied`/`pressure`/`declined`，按 `startSeq` 配对、按 `trigger` 拆开），不改它付费跑出的证据就归不了类。新增 `scripts/eval-classify.ts` 把四类结局（被拒 / 仪器未成立 / 天花板被打破 / 未被打破）按**固定顺序**做成纯函数，`pnpm eval:ledger-verdict` 是它的调用者——判定不该只活在测试里。三处反例实跑各自变红、还原后复绿。验收 `pnpm test` **303/303**（基线 287，新增 16 条）、`pnpm check` 114 文件、`pnpm lint` 124 文件 0 诊断、`fixtures:check` 17 项、`eval:offline`／`eval:estimate` 退出 0；`src/` 一行未动，未发生任何付费调用。记在 [CHANGES 的 NX-38-4a 节](CHANGES.md#nx-38-4a-四阶段接入与离线判定)。
 
 ### README 架构概览图 v1（2026-10-14）
 

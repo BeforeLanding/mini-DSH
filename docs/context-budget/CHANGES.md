@@ -10,7 +10,7 @@
 
 ## NX-38 区分度的获取（设计）
 
-本节按序记四步：立项与设计（NX-38-0）、把判据落进口径（NX-38-1）、判据载体的 fixture 与离线机制证明（NX-38-2）、两批的预注册（NX-38-3）。**四项都零付费，`src/` 一行未动**——NX-38-1 只动报告与测试，NX-38-2 另加一组 fixture、一份探针与两条用例（都在 `test/` 与 `scripts/` 的注册表里），NX-38-3 只动文档。
+本节按序记五步：立项与设计（NX-38-0）、把判据落进口径（NX-38-1）、判据载体的 fixture 与离线机制证明（NX-38-2）、两批的预注册（NX-38-3）、四阶段接入与离线判定（NX-38-4a）。**五项都零付费，`src/` 一行未动**——NX-38-1 只动报告与测试，NX-38-2 另加一组 fixture、一份探针与两条用例（都在 `test/` 与 `scripts/` 的注册表里），NX-38-3 只动文档，NX-38-4a 动 `scripts/` 与 `test/` 但只在评测设施里。付费批次（NX-38-4）**尚未授权、也未发生**。
 
 ### NX-38-0 立项与设计
 
@@ -124,6 +124,48 @@
 **反 p-hacking 条款**：不改 `ledger` 任何文件、不改 `pipeline`／`audit`／`blind`、不改已冻结的 `phaseCaps` 与 `batchCaps`、不改这四条判据；**继续调 fixture 或目标系数直到出现预期分叉就是按结果挑仪器**（红线沿用 NX-08f-4c 与 NX-38-0）。报告按层 A／层 B 两段写，不写任何比例或提升；n=3 只作存在性证据与波动幅度，不作比率。**首次与重跑分别取得明确授权**，重跑必须先记录本次结果。
 
 验收：`git diff --stat` 只含 `docs/` 下的文档与 `PROGRESS.md`，`src/` 与 `scripts/` 一行未动；`pnpm check` `syntax ok: 110 files`；`pnpm test` **287/287**（新增的两条锚点链接由 `docs-links` 当场校验）；`pnpm lint` `Checked 120 files … No fixes applied.`；`pnpm fixtures:check` **17 项**退出 0；`pnpm eval:offline`、`pnpm eval:estimate` 退出码 0；`git diff --check` 退出 0。提交 `b8eface`，本节即回填。**未授权、也未发生任何付费调用。**
+
+### NX-38-4a 四阶段接入与离线判定
+
+这一步把预注册的四条臂接进评测入口，让付费批次只剩「跑 + 按层 A／层 B 写报告」。零付费，`src/` 一行未动。施工范围由用户选定为**接线 + 补数据 + 判定函数**。
+
+**为什么不能只做接线——一处硬需求。** 预注册里 B 批的「仪器未成立」判据是「B1 的 `applied` 压缩计数为 0」，但 `RunTaskDetail`（`scripts/eval-fixture.ts` 的 `summarizeStage`）**根本没记压缩次数**。不改它，付费跑出来的证据就归不了类：判据写死了，读它的字段不存在。`summarizeStage` 因此补上 `compactions`，按 `startSeq` 把 `context/summary-end` 与 `context/summary-start` 配对、按 `trigger` 拆成 `applied`/`pressure`/`declined`。**拆开是必须的**：关掉主动压缩的办法只是把阈值抬到窗口，兜底那条路（裁剪到底仍装不下）不看阈值——它出手只说明这次运行随后必然以 `context_overflow` 结束，那一类已经归入「被拒」。合并成一个计数就把判据弄丢了。
+
+**接线。** 四条臂 `ledgerA1`/`ledgerA2`/`ledgerB1`/`ledgerB2` 进 `phaseCaps`（各 `{runs: 3, requests: 384, tokens: 24_000_000}`，= 4 阶段 × 32 请求／2,000,000 token × 3 次重复）、`phaseNames`、`phaseRegistry`。四条都**不进 `batchPhases`**，因此 `batchCaps` 仍是 `{18, 3_200, 88_000_000}`——预注册明写「要让它们进就必须重写那三个数字，那是一次独立的预注册动作」。新增 `resolvePhasePolicy` 作为阶段 → 策略的**唯一**映射点：`armA`/`armB` 逐字委托 `armPolicy`（签名未动），`screening`/`sequence`/`smoke`/`blind` 仍返回 `evalPolicy` **本体**（用例按 `===` 钉住），四条 ledger 臂走新增的 `ledgerPolicy`。
+
+| 臂 | `inputTargetTokens` | `compactionBudgetTokens` |
+|---|---|---|
+| `ledgerA1` | 窗口 | 窗口（主动压缩不触发） |
+| `ledgerA2` | **`--input-target` 传入** | 窗口 |
+| `ledgerB1` | 65,536（`evalPolicy` 本身，`===` 同一引用） | 未设 → 取 65,536 |
+| `ledgerB2` | 65,536 | 窗口 |
+
+**A2 的目标走显式命令行参数，不读证据目录。** 理由是预注册那条硬线——「目标冻结之前不得读任一臂的 `accepted`」，而命令行本身就是「这次到底跑了什么」的记录；自动读证据目录会让 A2 那条命令不可复现（证据目录按 `.gitignore` 不入库）。转写风险由工具消除：`scripts/eval-ledger-target.ts`（`pnpm eval:ledger-target`）读 `runs.jsonl`，按 `derivePruningTarget` 算出 `floor(0.75 × 峰值)`，打印一条可直接粘贴的命令行。**它只读层 A 的处理量，绝不读 `report.json`、绝不打印 `accepted`**，并把这句话自己打出来。`resolveInputTarget` 三条路径各自失败：A2 缺目标（静默退回默认值会让「裁 / 不裁」两臂退化成同一臂而账面上看不出来）、目标给了不消费它的阶段（把裁剪目标悄悄塞进一条不改裁剪的臂）、非正安全整数。
+
+**四类判定成为可执行的。** 新增 `scripts/eval-classify.ts`，把预注册的四类按**固定顺序**做成纯函数：① 被拒（任一次运行终态 `status !== 'completed'`，或计划里的运行没跑）② 仪器未成立（A 批：A2 没裁掉第 1 阶段的 `taskId`，或两臂处理量区间重叠；B 批：B1 的 `pressure` 为 0，或 B2 出现了已应用的压缩）③ 天花板被打破（层 A 成立且结局取到 ≥2 个不同值）④ 天花板未被打破。`pnpm eval:ledger-verdict A|B` 是它的调用者——判定不该只活在测试里。
+
+**验收读数**：
+
+| 项 | 结果 |
+|---|---|
+| `pnpm test` | **303/303**（基线 287，新增 16 条） |
+| `pnpm check` / `pnpm lint` | `syntax ok: 114 files` / `Checked 124 files … No fixes applied.` |
+| `pnpm fixtures:check` / `eval:offline` / `eval:estimate` | 17 项、退出 0、退出 0 |
+| 四条 `--plan-only` | 各自打印 `384 请求 / 24000000 token，3 次运行`；`ledgerB1` 与 `ledgerB2` 的输出**只差「主动压缩」那一行**（65536 对 1000000） |
+| 负例 | A2 缺目标、目标给了 `ledgerA1`、目标为 0、未知阶段名——四条各自退出 1 并点名 |
+| 两个工具脚本无证据目录 | 各自退出 1 并提示先跑哪条命令 |
+
+**反例实跑三处**（先改坏、观察变红、还原后复绿）：
+
+| 反例 | 结果 |
+|---|---|
+| 去掉 `ledgerPolicy` 的 A2 缺目标守卫（改成静默退回默认目标） | `✖ ledger batch A arms differ only in the derived input target`，`fail 1` |
+| `derivePruningTarget` 用 `peaks[0]` 取代 `Math.max(...peaks)` | `✖ the pruning target follows the pre-registered 0.75 x peak rule`，`fail 1` |
+| 压缩计数不按 `runId` 过滤（把本阶段读数放进整会话） | `✖ a stage summary counts compactions by trigger and ignores other runs`，`fail 1` |
+
+归档时发现**类型系统自己也拦了一道**：第一版反例把守卫改成 `inputTargetTokens = evalPolicy.inputTargetTokens`，`tsc` 直接报 `TS18048: 'inputTargetTokens' is possibly 'undefined'`——收窄在赋值后丢失。改成返回一个退化的策略对象才复现出运行期红灯。
+
+提交 `9987c1d`，本节即回填。**未授权、也未发生任何付费调用。**付费批次 NX-38-4 仍未开跑。
 
 ## NX-37 评测证据的来源指纹与 fixture 摘要钉
 
