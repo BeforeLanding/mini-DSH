@@ -129,11 +129,19 @@ export class SessionRuntime {
             }
             if (event.type === 'model/start') state.counters.modelRequests++
             if (event.type === 'tool/start') state.counters.toolCalls++
+            // NX-39：错误数从 tool/result 的 isError 派生，与 toolCalls 同一条折叠路径。
+            // 但 isError **不是**「工具失败」的同义词：预算耗尽与取消写下的 tool/result 同样是 isError: true、
+            // 只是 status 为 'skipped'（见 agent-loop-runtime 的批次循环），崩溃恢复补写的则可能是 'unknown'。
+            // 把 skipped 算进来会让「错误数」随预算松紧变化——而四个对照格子的预算是同一个，「预算决定的量」
+            // 混进被比较的量正是这类实验最容易犯的错。因此只数真正跑过的：completed（跑完并报错）与
+            // unknown（跑过但结果无法判定，它确实是没跑成的调用）。
+            if (event.type === 'tool/result' && event.data.isError && event.data.status !== 'skipped') state.counters.toolErrors++
             if (event.type === 'model/usage') {
                 state.usage.push(event.data.usage)
                 state.counters.inputTokens += event.data.usage.inputTokens
                 state.counters.outputTokens += event.data.usage.outputTokens
                 state.counters.totalTokens += event.data.usage.totalTokens
+                state.counters.cacheReadTokens += event.data.usage.cacheReadTokens ?? 0
             }
         }
         if (this.#storeErrors.has(id)) state.status = 'error'

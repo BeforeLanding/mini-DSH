@@ -1,5 +1,37 @@
 # 任务清单
 
+### NX-39 五类代码任务 × 四条件的全因子对照实验
+
+**问题（2026-10-14，用户提出）**。要一次能写进简历/面试的实证：建一套覆盖**代码理解／bug 修复／功能实现／重构／测试编写**五类的评测集，统一模型、权限与预算，对**四个条件**做对照，产出六类指标（成功率、Model Rounds、Tool Calls、Tool Errors、Token、Latency）。现有评测设施只覆盖三类、从未做过多因子对照，且**六类指标里有四类不完整**——Tool Errors 在事件里有 `isError` 却无人聚合，缓存 token 被 `normalizeUsage` 丢弃，逐请求延迟没有，跨批次聚合器不存在。
+
+**四个条件 = 两个因子 × 两个水平的四个格子（2×2 全因子）**（用户 2026-10-14 定的口径）：
+
+- **因子 1 上下文管理** = 裁剪/压缩 ＋ 工具输出有界（**复合处理**，同开同关）。报告不下「裁剪 vs 有界」的分解结论；要分解得另跑一批。
+- **因子 2 提示优化** = **前缀缓存安全**的提示布局。依据取自参照项目 `earthwalker17/MiniDSH`：它的 `core/prompt` 明文要求 section 在会话内逐字节稳定（`time-varying context goes through agent/pre-step as a durable message, not a section`），而 mini-DSH 的 `src/plugins/project-context.ts` 恰好相反——把项目上下文注册成 section，其 `text` **每轮重读工作区文件**，而 `assemble()` 在 `src/core/agent-loop-runtime.ts` 的循环里每轮调用一次。
+
+| 条件 | 上下文管理 | 提示优化 |
+|---|---|---|
+| `baseline` | off | off |
+| `context` | on | off |
+| `prompt` | off | on |
+| `full` | on | on |
+
+**必须先承认的两条**（写进报告，不能事后找补）：① 前三类**复用** `screeningIds` 的 12 个 fixture，它们的历史读数是 **12/12**，成功率在这些任务上有**天花板效应**，四格分不出来——它们测的是**效率**（轮次／工具／错误／token／延迟）而不是能力；能力对比由新两类承担，两类必须分开呈现。② 前三类是**单任务**，而 `ContextBudgetRuntime` 的裁剪只移除「已结束且非当前」的 task（R-21 已明文），**单任务会话无论多大都不会触发裁剪**——Context 维在它们身上只测到「压缩 + 有界」两半。
+
+**不做**：不改 `screeningIds`／`sequenceIds`／`boundedIds`／`blindIds`／`ledgerIds`／`demoIds` 六份注册表本身（只新增一份**引用**它们的注册表）；不改 `batchCaps` 的 `{18, 3_200, 88_000_000}`；四个新阶段不进 `batchPhases`；不把 `.eval-evidence/` 入库；**本项不授权任何付费跑**——正式批次单独授权、首次与重跑分别确认。
+
+| 子步骤 | 行为与状态 | 独立验收 | 预计提交 |
+|---|---|---|---:|
+| NX-39-1 | 三处指标埋点：`toolErrors`／`cacheReadTokens`／逐请求延迟（**done**，零付费，`src/` 有改动） | `Counters` 增三字段且两条路径一致（实时 ++ 与事件折叠）；`toolErrors` **排除** `status: 'skipped'`（预算/取消写下的结果 `isError` 同为 true，算进来会让错误数随预算松紧变化，而四格预算是同一个）；缓存字段按 provider 报的取、缺省不写；延迟由 `model/start→model/end` 的 `at` 现算、**不改事件词表**；`pnpm test` 305/305（基线 303，新增 2 条）；**反例**：把 `status !== 'skipped'` 去掉、或把延迟按未闭合请求补一条，各自让对应用例变红 | 1 次 |
+| NX-39-2 | 把 `project-context` 装进评测装配（零付费） | 评测链路现在**不含**该插件，因此提示优化那一维在评测里触发不了；装进去之后「每轮重读的 section」才可观测；两档 `--plan-only` 只差该插件一行 | 1 次 |
+| NX-39-3 | fixture 种类机制 ＋ 两个新判据（零付费） | `fixtureKind` 区分 `edit`／`repro`／`mutation`，现有 17 项全为 `edit` 且行为一字不变；代码理解按 FAIL_TO_PASS 判（原始态失败、`reference/` 上通过）；测试编写按变异得分判（原始态全绿 + 杀掉 ≥ `minKilled`，且**不杀**行为保持的等价体）；变异体改动 ≤1 行 1 文件、导出面逐字一致；R-23 门禁：`initial/**` 与任务文本不得出现隐藏件目录名 | 2 次 |
+| NX-39-4 | 四个 phase 注册 ＋ 预注册（零付费） | 新增一份**引用** `screeningIds` 的注册表（现有七份两两互斥，这是第一个包含既有 id 的，须在注释里写清）；六处改动点由类型穷尽性兜底；`repeatCount` 整除成立；R-21 条文改成「四格共用…，差异只在声明的两个维度」；四条 `--plan-only` 各自成立 | 1 次 |
+| NX-39-5 | 跨批次聚合器 ＋ 离线因子预检（零付费） | 聚合器**必须在付费之前建好**（否则口径变成事后挑指标）；预检逐 fixture 量出处理是否真的发生（裁剪 > 0／压缩 applied > 0／预览截断 > 0），R-21 的验收条款要求「不满足时不得开跑对照」；「禁止静默跳过」：一次付费 run 都没跑成也要退 1 | 1 次 |
+| NX-39-6 | 正式批次（**需单独付费授权**） | 每格单独 `--plan-only` 报价并逐次确认（四条臂四次确认）；证据目录一跑一用；先跑 `baseline`（最贵、最可能撞顶），其余三格按它的实测报价 | 1 次 |
+| NX-39-7 | 报告（零付费） | 按参照项目 `BLUEPRINT.md §4` 的口径：通过数/总数 × 重复数，逐条**命名失败形状**，flake 不许一次通过就销案；前三类与后两类**分开呈现**；必报**触顶率**（Context 维压低每轮 token，在同一 token 天花板下天然占便宜，不报则成功率差异可能只是「谁先撞墙」） | 1 次 |
+
+**NX-39-1 已完成（2026-10-14，零付费）**：`src/core/budget.ts` 的 `Counters` 增 `toolErrors`／`cacheReadTokens`（`Usage` 增可选 `cacheReadTokens`），`src/models/deepseek.ts` 的 `normalizeUsage` 补读 `prompt_cache_hit_tokens`（缺省写 `undefined` 而不是 0——「没有这个概念」与「命中 0」不该被压成同一个数；上界取 `input`，超过即抛错），`src/core/agent-loop-runtime.ts` 与 `src/core/session-runtime.ts` 各补实时与折叠两条路径，逐请求延迟**不进 `Counters`** 而在 `summarizeStage` 里由事件时间戳现算（属评测视图而非运行时状态，且**不改事件词表**）。摘要行加 `错误=` 与 `cache=`——cache 是提示优化那一维的主信号，跑的时候当场看得见才有意义。**一处口径判断照实记**：`tool/result` 的 `isError` 不是「工具失败」的同义词，预算耗尽与取消写下的结果同为 `isError: true`，只数 `status !== 'skipped'` 才能让这个指标不随预算松紧漂移。记在 [CHANGES 的 NX-39-1 节](CHANGES.md#nx-39-1-三处指标埋点)。
+
 ### NX-38 区分度的获取（设计，零付费）
 
 **问题（2026-10-14，NX-37 之后的口径讨论）**。NX-37 把「证据可核对」补齐之后，剩下的问题是**这套仪器能不能体现 mini-DSH 的优势**。答案是分层的：**回归层能**（反例实跑会让套件变红），**证明层不能**——而且不是样本量不够，是**结局饱和**：筛查 12/12、对照 A 6/6、`blind` 的 `accepted` 无分叉，以 `accepted` 为分子的统计量方差为零。NX-08-REPORT 的「两条独立的限制」已把「结局饱和」与「样本量小」分开写过，但**它们与「组数」的关系没有一处写清楚**，于是最容易被读成「多跑几次就有了」；同时 D-22 点名的正解（「正解是换任务类别，不是修补旧仪器」）只有一句话，没有可施工的形状。

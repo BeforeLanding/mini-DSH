@@ -14,24 +14,27 @@ import type { ChatRequest, ChatResponse, EventData, SessionEvent, ToolCall } fro
 
 // summarizeStage 是对事件数组的纯函数，因此合成日志就能钉住裁剪触发点、未发出投影与 usage 来源这些
 // 边界；不该等到真实模型烟测才发现读数不对。
-const stageEvent = <K extends keyof EventData>(seq: number, type: K, data: EventData[K], runId = 'run-1'): SessionEvent =>
-  ({ version: 1, sessionId: 'session-1', id: `event-${seq}`, taskId: 'task-1', runId, seq, type, data, at: '2026-10-01T00:00:00.000Z' }) as SessionEvent
+const stageEvent = <K extends keyof EventData>(seq: number, type: K, data: EventData[K], runId = 'run-1', at = '2026-10-01T00:00:00.000Z'): SessionEvent =>
+  ({ version: 1, sessionId: 'session-1', id: `event-${seq}`, taskId: 'task-1', runId, seq, type, data, at }) as SessionEvent
 const projection = (seq: number, estimatedInputTokens: number, removedTaskIds: string[], scope: { requestId?: string; runId?: string } = {}) =>
   stageEvent(seq, 'context/projection', { ...(scope.requestId === undefined ? {} : { requestId: scope.requestId }), estimatedInputTokens, reservedOutputTokens: 4096, safetyMarginTokens: 2048, removedTaskIds }, scope.runId)
-const modelStart = (seq: number, requestId: string) => stageEvent(seq, 'model/start', { taskId: 'task-1', runId: 'run-1', requestId, estimatedInputTokens: 100 })
+const modelStart = (seq: number, requestId: string, at?: string) => stageEvent(seq, 'model/start', { taskId: 'task-1', runId: 'run-1', requestId, estimatedInputTokens: 100 }, 'run-1', at)
+const modelEnd = (seq: number, requestId: string, at?: string) => stageEvent(seq, 'model/end', { requestId, complete: true }, 'run-1', at)
 const modelUsage = (seq: number, requestId: string, source: 'provider' | 'estimated') =>
   stageEvent(seq, 'model/usage', { taskId: 'task-1', runId: 'run-1', requestId, usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12, source, uncertain: source === 'estimated' } })
 
 const counters = (modelRequests: number, totalTokens: number): Counters =>
-  ({ modelRequests, toolCalls: 0, inputTokens: 0, outputTokens: 0, totalTokens, activeDurationMs: 0, approvalDurationMs: 0 })
+  ({ modelRequests, toolCalls: 0, toolErrors: 0, inputTokens: 0, outputTokens: 0, totalTokens, cacheReadTokens: 0, activeDurationMs: 0, approvalDurationMs: 0 })
 // 逐字段独立求和，而不是复用 eval-fixture 的 sumCounters：用例要给出「应该是多少」，复用实现里的
 // 求和等于用结论证明结论。
 const sumStages = (all: readonly Counters[]): Counters => ({
   modelRequests: all.reduce((total, stage) => total + stage.modelRequests, 0),
   toolCalls: all.reduce((total, stage) => total + stage.toolCalls, 0),
+  toolErrors: all.reduce((total, stage) => total + stage.toolErrors, 0),
   inputTokens: all.reduce((total, stage) => total + stage.inputTokens, 0),
   outputTokens: all.reduce((total, stage) => total + stage.outputTokens, 0),
   totalTokens: all.reduce((total, stage) => total + stage.totalTokens, 0),
+  cacheReadTokens: all.reduce((total, stage) => total + stage.cacheReadTokens, 0),
   activeDurationMs: all.reduce((total, stage) => total + stage.activeDurationMs, 0),
   approvalDurationMs: all.reduce((total, stage) => total + stage.approvalDurationMs, 0),
 })
@@ -407,6 +410,9 @@ test('a stage summary reports a stage that never pruned without inventing eviden
     firstPrunedProjection: null, removedTaskIds: [], unsentProjections: 0,
     usageSources: { provider: 2, estimated: 0 },
     compactions: { applied: 0, pressure: 0, declined: 0 },
+    // 这两次请求都有 model/start 而没有 model/end，因此不成对、不进延迟数组——空的不是「延迟为 0」，
+    // 是「没有可配对的请求」。把未闭合的请求按日志末条时间补成一条会把等待记成延迟。
+    requestDurationsMs: [], modelDurationMs: 0,
   })
 })
 
@@ -443,7 +449,22 @@ test('a stage summary neither absorbs other runs nor hides projections that were
     projections: 0, firstPrunedProjection: null, removedTaskIds: [], unsentProjections: 0,
     usageSources: { provider: 0, estimated: 0 },
     compactions: { applied: 0, pressure: 0, declined: 0 },
+    requestDurationsMs: [], modelDurationMs: 0,
   })
+})
+
+// NX-39 逐请求延迟由 model/start→model/end 的 at 现算，不改事件词表。用**真实毫秒差**断言而不是只断言
+// 「有值」——把单位或配对键写错时，前者会红，后者不会。三条边界：只有 end 没有 start 的无从配对，
+// 必须丢掉而不是拿日志起点去补；别的 run 的 end 不算；顺序按 end 在日志里的次序。
+test('a stage summary measures one request from its model/start to its model/end', () => {
+  const summary = summarizeStage([
+    modelStart(1, 'q1', '2026-10-01T00:00:00.000Z'), modelEnd(2, 'q1', '2026-10-01T00:00:00.250Z'),
+    modelStart(3, 'q2', '2026-10-01T00:00:01.000Z'), modelEnd(4, 'q2', '2026-10-01T00:00:01.750Z'),
+    modelEnd(5, 'q3', '2026-10-01T00:00:09.000Z'),
+    stageEvent(6, 'model/end', { requestId: 'q4', complete: true }, 'run-2', '2026-10-01T00:00:20.000Z'),
+  ], 'run-1')
+  assert.deepEqual(summary.requestDurationsMs, [250, 750])
+  assert.equal(summary.modelDurationMs, 1000)
 })
 
 // NX-38-3 预注册要求 B 批的仪器判据是「**主动**压缩有没有出手」，而装置里关掉它的办法只是把阈值抬到

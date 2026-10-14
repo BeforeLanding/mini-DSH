@@ -1,4 +1,4 @@
-import { CLI_BUDGET } from '../src/core/budget.js'
+import { CLI_BUDGET, emptyCounters } from '../src/core/budget.js'
 import type { BudgetPolicy, Counters, StopReason } from '../src/core/budget.js'
 
 // PLAN「NX-08 评测批次上限（预注册）」固定的参数。请求数 32 是约束（两臂获得相同工作量，被比较的才是
@@ -195,6 +195,10 @@ export interface RunTaskDetail {
   // 判据弄丢了。评测路径上出现的 trigger 只有 pressure 与 context-overflow（explicit 来自 CLI 的
   // `/compact`，不在这条链路上），因此 `applied > 0 && pressure === 0` 就等价于「压缩由兜底触发」。
   compactions: { applied: number; pressure: number; declined: number }
+  // NX-39 逐请求延迟（毫秒），按 model/start→model/end 的 at 现算，**不新增事件类型**。保留整个数组
+  // 而不是只留合计：p50/p95 是延迟的正确报法，而合计会被单次超时拽偏。未闭合的请求不进数组。
+  requestDurationsMs: number[]
+  modelDurationMs: number
 }
 export interface RunOutcome {
   status: StopReason | 'running'
@@ -241,7 +245,7 @@ export async function runPhase<T>(phase: PhaseName, planned: readonly T[], caps:
       outcome = await execute(task)
     } catch (error) {
       // 单次执行失败记在该 run 上并继续，不中止阶段：中止只由整批上限触发，否则会掩盖其余任务的证据。
-      outcome = { status: 'error', counters: { modelRequests: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, activeDurationMs: 0, approvalDurationMs: 0 }, accepted: null, error: error instanceof Error ? error.message : String(error) }
+      outcome = { status: 'error', counters: emptyCounters(), accepted: null, error: error instanceof Error ? error.message : String(error) }
     }
     const record: RunRecord<T> = { ...outcome, task }
     if (classify?.(record)?.infeasible) record.infeasible = true

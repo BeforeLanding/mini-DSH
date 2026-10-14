@@ -59,9 +59,18 @@ export function resolveBudget(...layers: (BudgetPolicy | undefined)[]): Readonly
   return Object.freeze(result)
 }
 export type StopReason = 'completed' | 'max_steps' | 'max_tool_calls' | 'timeout' | 'token_budget' | 'context_overflow' | 'cancelled' | 'error' | 'approval_timeout' | 'request_timeout' | 'output_limit'
-export interface Usage { inputTokens: number; outputTokens: number; totalTokens: number; source: 'provider' | 'estimated'; uncertain: boolean; reasoningTokens?: number }
-export interface Counters { modelRequests: number; toolCalls: number; inputTokens: number; outputTokens: number; totalTokens: number; activeDurationMs: number; approvalDurationMs: number }
-export const emptyCounters = (): Counters => ({ modelRequests: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, activeDurationMs: 0, approvalDurationMs: 0 })
+// NX-39 新增 cacheReadTokens：DeepSeek 的 usage 里一直带着 prompt_cache_hit_tokens，此前被
+// normalizeUsage 丢掉，于是「命中缓存的部分」只能按无命中估算。它是**成本**口径的量，不影响能力——
+// 前缀缓存纪律那条对照（见 PLAN 的提示优化维度）靠它才可判。缺省不写（undefined）与 provider 明确
+// 报 0 是两回事：前者是没有这个字段的 provider，后者是真的没命中。
+export interface Usage { inputTokens: number; outputTokens: number; totalTokens: number; source: 'provider' | 'estimated'; uncertain: boolean; reasoningTokens?: number; cacheReadTokens?: number }
+// NX-39 新增 toolErrors 与 cacheReadTokens。toolErrors 此前只以 tool/result 的 isError 形态存在于事件里，
+// 没有任何聚合——报告要归因「失败是模型没做出来还是工具本身在报错」就得手工数事件。两者都从事件派生
+// （见 session-runtime.ts 的 #foldLatestRun），与 toolCalls/modelRequests 同一条路径，因此续跑与恢复
+// 折叠出来的值一致。逐请求延迟**不在这里**：它由 eval 侧从 model/start→model/end 的 at 时间戳现算，
+// 属于评测视图而不是运行时状态。
+export interface Counters { modelRequests: number; toolCalls: number; toolErrors: number; inputTokens: number; outputTokens: number; totalTokens: number; cacheReadTokens: number; activeDurationMs: number; approvalDurationMs: number }
+export const emptyCounters = (): Counters => ({ modelRequests: 0, toolCalls: 0, toolErrors: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, cacheReadTokens: 0, activeDurationMs: 0, approvalDurationMs: 0 })
 export interface RunState {
   sessionId: string; taskId: string; runId: string; previousRunId?: string; model: string
   policy: Readonly<BudgetPolicy>; counters: Counters; status: 'running' | StopReason

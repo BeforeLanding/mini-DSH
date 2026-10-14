@@ -1,5 +1,50 @@
 # 改动与验收证据
 
+### NX-39-1 三处指标埋点
+
+为一次「五类任务 × 四条件」的 2×2 全因子对照实验补三类此前采不到的指标。实验设计、四格定义与两条必须先承认的限制见 [TASKS 的 NX-39 节](TASKS.md#nx-39-五类代码任务--四条件的全因子对照实验)。**本步零付费，未发生任何模型调用。**
+
+**改动（`src/` 4 个文件，评测侧 3 个）**
+
+- `src/core/budget.ts`：`Counters` 增 `toolErrors` 与 `cacheReadTokens`；`Usage` 增可选 `cacheReadTokens`。
+- `src/models/deepseek.ts`：`normalizeUsage` 补读 `prompt_cache_hit_tokens`。**缺省写 `undefined` 而不是 0**——别的 provider（Anthropic 报的是 `cache_read_input_tokens`）没有这个字段，「没有这个概念」与「命中 0」不该被压成同一个数。上界取 `input`：命中数超过总输入说明字段被换过含义，宁可抛错，也不静默采信。
+- `src/core/agent-loop-runtime.ts`：`settle` 累加 `cacheReadTokens`；工具执行返回后 `if (result.isError) state.counters.toolErrors++`。
+- `src/core/session-runtime.ts`：`#foldLatestRun` 从 `model/usage` 与 `tool/result` 派生同样两个字段。
+- `scripts/eval-fixture.ts`：`sumCounters` 求和新字段；`summarizeStage` 新增 `requestDurationsMs` 与 `modelDurationMs`。
+- `scripts/eval-runner.ts`：`RunTaskDetail` 增两个延迟字段；错误路径的 `Counters` 字面量改用 `emptyCounters()`（原先逐字段写死，加字段就会漏）。
+- `scripts/eval-screening.ts`：摘要行加 `错误=` 与 `cache=`。
+
+**三处口径判断（每一处不这么做，指标就会骗人）**
+
+1. **`isError` 不是「工具失败」的同义词。** 预算耗尽与取消写下的 `tool/result` 同样是 `isError: true`，只是 `status` 为 `'skipped'`（`agent-loop-runtime.ts` 的批次循环）。把它们算进错误数，会让这个指标随预算松紧变化——而四个对照格子的预算是同一个，「由预算决定的量」混进被比较的量正是这类实验最容易犯的错。因此只数 `status !== 'skipped'` 的：`completed`（跑完并报错）与 `unknown`（崩溃恢复后结果无法判定，它确实是没跑成的调用）。
+2. **延迟由事件时间戳现算，不改事件词表。** `model/start` 与 `model/end` 本来就在日志里，`event-store` 的不变量已保证每个 `start` 至多一个 `end`、`end` 之后不再有 `fragment`，配对键就是 `requestId`。新增一个 `model/end.durationMs` 要动 `contracts.ts` 的契约与 `event-validation.ts` 的校验，而这条信息是**派生的**——放在 `summarizeStage` 里算，既不动契约，也与「计数器可由事件折叠」的既有形状一致。只统计**成对**的请求：未闭合的那次（请求超时、进程被杀）没有 `end`，拿日志末条时间去减它会把「等待」记成「延迟」。**已知偏差**：恢复路径补写的 `model/end` 用补写时刻的 `at`，崩溃恢复之后的第一次读数会偏大；报告里出现离群值按这条解释，不当成模型的真实延迟。
+3. **延迟不进 `Counters`。** `Counters` 是运行时状态（CLI 显示它、恢复要折叠它），逐请求延迟是**评测视图**，住在 `RunTaskDetail` 里。保留整个 `requestDurationsMs` 数组而非只留合计：p50/p95 是延迟的正确报法，合计会被单次超时拽偏。
+
+**为什么 cache 这一项不能省**：提示优化那一维（前缀缓存安全的提示布局）改变的是**成本与延迟，不是能力**——它不会让模型更聪明。不采缓存字段，那一维的胜负就无处可读。这也是把 `错误=` 与 `cache=` 放进摘要行的理由：跑的时候当场看得见，才不至于把判据留到看见结果之后。
+
+**验证**
+
+| 命令 | 结果 |
+|---|---|
+| `pnpm typecheck` | 通过 |
+| `pnpm check` | `syntax ok: 114 files` |
+| `pnpm test` | **305/305**（基线 303，新增 2 条），失败、取消、跳过均为 0 |
+| `pnpm lint` | `Checked 124 files … No fixes applied.`（0 诊断） |
+| `pnpm fixtures:check` | 退出码 0，17 项全 `expected: true` |
+| `pnpm eval:offline` | 退出码 0 |
+| `pnpm eval:estimate` | 退出码 0（语料与估算器摘要未变） |
+
+新增两条用例，各自钉住一个口径而不是「有值就行」：
+
+- `test/budget.test.ts` · `tool errors count calls that ran and failed, not the ones the budget skipped`——同一批次里第一个工具抛错、后两个因 `max_tool_calls` 被跳过，三个 `tool/result` 的 `isError` **全是 true**，断言 `toolCalls = 1` 而 `toolErrors = 1`。**反例**：把折叠里的 `status !== 'skipped'` 去掉，该用例变红（`toolErrors` 变成 3）。
+- `test/eval-runner.test.ts` · `a stage summary measures one request from its model/start to its model/end`——用**真实毫秒差**（250 / 750，合计 1000）断言，而不是只断言「有值」；把单位或配对键写错时前者会红、后者不会。同时覆盖「只有 `end` 没有 `start` 的无从配对必须丢掉」与「别的 run 的 `end` 不算」。
+
+既有断言的更新：`test/eval-runner.test.ts` 与 `test/task-report.test.ts` 里三处 `deepStrictEqual` 钉住了 `Counters`／`summarizeStage` 的完整形状，按其原意**逐字段补上新字段**（该文件明写「逐字段独立求和，而不是复用 `sumCounters`：用例要给出『应该是多少』，复用实现里的求和等于用结论证明结论」，因此没有改用 `emptyCounters()`）。
+
+**顺带触发的一次文档同步**：`test/decisions-doc.test.ts` 的锚点守卫在改动后变红——`session-runtime.ts` 因新增注释行而位移，`DECISIONS.md` 的两条代码锚点（`:250` 的 `clear`、`:151` 的 `unknown`）指空。按锚点在新位置（`:258`、`:159`）更新，**只改行号，不加小节、不进总表**。这正是该守卫按设计起作用。
+
+提交：见本节对应的本地提交。
+
 ### README 架构概览图 v1（2026-10-14）
 
 用户确认预览图后授权推送。新增 `docs/images/architecture-v1.png`，README 顶部使用仓库相对路径引用并附中文替代文本；图片展示当前运行架构，包含上下文压缩、持久化恢复与应用层执行约束。保留原 Mermaid 技术图，未改变源码或运行行为。

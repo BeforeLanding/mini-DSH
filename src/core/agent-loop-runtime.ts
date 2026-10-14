@@ -126,6 +126,7 @@ export class AgentLoopRuntime {
                 state.counters.inputTokens += usage.inputTokens
                 state.counters.outputTokens += usage.outputTokens
                 state.counters.totalTokens += usage.totalTokens
+                state.counters.cacheReadTokens += usage.cacheReadTokens ?? 0
                 append(sessionId, 'model/usage', { taskId: state.taskId, runId: state.runId, requestId, usage })
             }
             await control.wait(() => this.sessions.flush(sessionId))
@@ -218,6 +219,10 @@ export class AgentLoopRuntime {
                     agent,
                     approval: work => control.approve(work),
                 }))
+                // NX-39：与 toolCalls 一样「实时 ++ 且可由事件折叠」两条路径并存，两者必须一致。
+                // 这里只可能记 completed 的（跳过与取消在上面的分支里 continue 掉了），与
+                // session-runtime 折叠时排除 status 'skipped' 的口径严格对齐。
+                if (result.isError) state.counters.toolErrors++
 
                 const renderedContent = this.tools.renderResult(result)
 

@@ -89,7 +89,12 @@ export function normalizeUsage(raw: unknown): Usage | undefined {
   if (typeof input !== 'number' || !Number.isSafeInteger(input) || input < 0 || typeof output !== 'number' || !Number.isSafeInteger(output) || output < 0 || raw.total_tokens !== input + output) throw new Error('invalid model usage counts')
   const reasoning = isRecord(raw.completion_tokens_details) ? raw.completion_tokens_details.reasoning_tokens : undefined
   if (reasoning !== undefined && (typeof reasoning !== 'number' || !Number.isSafeInteger(reasoning) || reasoning < 0 || reasoning > output)) throw new Error('invalid reasoning usage')
-  return { inputTokens: input, outputTokens: output, totalTokens: input + output, source: 'provider', uncertain: false, ...(typeof reasoning === 'number' ? { reasoningTokens: reasoning } : {}) }
+  // NX-39：prompt_cache_hit_tokens 是计价里打折的那部分输入。缺省写 undefined 而不是 0——别的 provider
+  // （Anthropic 报的是 cache_read_input_tokens）根本没有这个字段，「没有这个概念」和「命中 0」不该被
+  // 压成同一个数。上界取 input：命中数超过总输入说明字段被换过含义，宁可抛错也不要静默采信。
+  const cached = raw.prompt_cache_hit_tokens
+  if (cached !== undefined && (typeof cached !== 'number' || !Number.isSafeInteger(cached) || cached < 0 || cached > input)) throw new Error('invalid cache usage')
+  return { inputTokens: input, outputTokens: output, totalTokens: input + output, source: 'provider', uncertain: false, ...(typeof reasoning === 'number' ? { reasoningTokens: reasoning } : {}), ...(typeof cached === 'number' ? { cacheReadTokens: cached } : {}) }
 }
 export function createDeepSeekAdapter(config: DeepSeekConfig = {}): Adapter {
   const apiKey = config.apiKey ?? process.env.DEEPSEEK_API_KEY

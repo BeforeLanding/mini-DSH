@@ -33,9 +33,11 @@ export interface FixtureAdapter { provider: string; model: string; chat: Adapter
 const sumCounters = (all: readonly Counters[]): Counters => all.reduce((total, counters) => ({
   modelRequests: total.modelRequests + counters.modelRequests,
   toolCalls: total.toolCalls + counters.toolCalls,
+  toolErrors: total.toolErrors + counters.toolErrors,
   inputTokens: total.inputTokens + counters.inputTokens,
   outputTokens: total.outputTokens + counters.outputTokens,
   totalTokens: total.totalTokens + counters.totalTokens,
+  cacheReadTokens: total.cacheReadTokens + counters.cacheReadTokens,
   activeDurationMs: total.activeDurationMs + counters.activeDurationMs,
   approvalDurationMs: total.approvalDurationMs + counters.approvalDurationMs,
 }), emptyCounters())
@@ -77,6 +79,22 @@ export function summarizeStage(events: readonly SessionEvent[], runId: string) {
     compactions.applied += 1
     if (triggers.get(event.data.startSeq) === 'pressure') compactions.pressure += 1
   }
+  // NX-39 逐请求延迟：由 model/start 与 model/end 的 `at` 现算，**不改事件词表**——两者本来就在日志里，
+  // 而 event-store 的不变量已保证每个 start 至多一个 end、end 之后不再有 fragment，配对键就是 requestId。
+  // 只统计**成对**的请求：未闭合的那次（请求超时、进程被杀）没有 end，拿日志末条时间去减它会把「等待」
+  // 记成「延迟」；这类请求另有 status 与 unsentProjections 反映，不混进这个读数。
+  // 已知偏差：恢复路径补写的 model/end 用的是补写时刻的 at（见 session-runtime 的 recover），因此崩溃
+  // 恢复之后的第一次读数会偏大。报告里出现极端离群值时按这条解释，不要当成模型的真实延迟。
+  // 保留整个数组而不是只留合计：p50/p95 是延迟口径的正确报法，合计会被单次超时拽偏。
+  const startedAt = new Map<string, number>()
+  for (const event of scope) if (event.type === 'model/start') startedAt.set(event.data.requestId, Date.parse(event.at))
+  const requestDurationsMs: number[] = []
+  for (const event of scope) {
+    if (event.type !== 'model/end') continue
+    const began = startedAt.get(event.data.requestId)
+    if (began === undefined) continue
+    requestDurationsMs.push(Math.max(0, Date.parse(event.at) - began))
+  }
   return {
     ...(estimates.length ? { estimatedInputTokens: estimates.at(-1), maxEstimatedInputTokens: Math.max(...estimates) } : {}),
     projections: projections.length,
@@ -85,6 +103,8 @@ export function summarizeStage(events: readonly SessionEvent[], runId: string) {
     unsentProjections,
     usageSources,
     compactions,
+    requestDurationsMs,
+    modelDurationMs: requestDurationsMs.reduce((sum, ms) => sum + ms, 0),
   }
 }
 

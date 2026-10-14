@@ -76,6 +76,18 @@ test('a batch with one tool allowance executes only the first and pairs all skip
   assert.equal(h.sessions.latestRun(h.session.id)?.counters.toolCalls, 1)
   assertToolProtocol(h.sessions.deriveMessages(h.session.id))
 })
+// NX-39：toolErrors 只数**真正跑过并报错**的调用。预算耗尽与取消写下的 tool/result 同样是 isError: true，
+// 只是 status 为 'skipped'——把它们算进来会让错误数随预算松紧变化，而四个对照格子的预算是同一个，
+// 「由预算决定的量」混进被比较的量正是这类实验最容易犯的错。这条同时钉住实时计数与事件折叠两条路径。
+test('tool errors count calls that ran and failed, not the ones the budget skipped', async () => {
+  const h = harness(async () => ({ toolCalls: ['a', 'b', 'c'].map(id => ({ id, name: 'fail', arguments: {} })) }))
+  h.tools.register({ name: 'fail', execute: () => { throw new Error('rejected operation') } })
+  await assert.rejects(h.agent.send('batch', { budget: { maxModelRequests: 3, maxToolCalls: 1 } }), /max_tool_calls/)
+  const results = h.session.events.flatMap(e => e.type === 'tool/result' ? [[e.data.status, e.data.isError]] : [])
+  assert.deepEqual(results, [['completed', true], ['skipped', true], ['skipped', true]])
+  assert.equal(h.sessions.latestRun(h.session.id)?.counters.toolCalls, 1)
+  assert.equal(h.sessions.latestRun(h.session.id)?.counters.toolErrors, 1)
+})
 test('runtime defaults, agent limits and call overrides obey precedence per run', async () => {
   const h = harness(async () => ({ content: 'ok' }))
   h.loop.budget = { maxModelRequests: 0 }
