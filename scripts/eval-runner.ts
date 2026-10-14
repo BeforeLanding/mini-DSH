@@ -1,5 +1,6 @@
 import { CLI_BUDGET, emptyCounters } from '../src/core/budget.js'
 import type { BudgetPolicy, Counters, StopReason } from '../src/core/budget.js'
+import type { AcceptanceEvidence } from './coding-fixtures.js'
 
 // PLAN「NX-08 评测批次上限（预注册）」固定的参数。请求数 32 是约束（两臂获得相同工作量，被比较的才是
 // 上下文策略而不是预算）；token 2000000 是兜底（正常 fixture 任务不应触及，否则预算耗尽会混进所测用量）。
@@ -172,6 +173,10 @@ export interface AcceptanceDetail {
   exitCode: number | null
   output: string
   protectedFilesChanged: string[]
+  // 两个新种类的判据**读数**（repro：同一份产物在缺陷与参考实现上的退出码）。edit 种类没有这个字段。
+  // 报告必须能回答「它是怎么被算出来的」，而不只是「通过没通过」——对这两类来说，「通过」可以是
+  // 判据失效的结果（例如产物恒为 0），读数才看得出区别。
+  evidence?: AcceptanceEvidence
 }
 // 一个 fixture 可以是一个任务，也可以是同一会话内按序下发的多个阶段任务（见 coding-fixtures.ts 的
 // readTaskSequence）。RunOutcome 描述整次 fixture 运行：status 取最后一个阶段，counters 是各阶段之和，

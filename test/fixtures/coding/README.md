@@ -12,6 +12,9 @@
 
 `blind` 是第 16 个，本身**不是一套新任务**，而是 `pipeline` 的**无公开检查变体**（NX-08h）：同一套十四个阶段、同一个 `docs/SPEC.md` 与同一份参考解，只去掉 `initial/check.mjs`、并把阶段说明末句由「运行 `node check.mjs N`」改成按 SPEC 自验。差别必须**只有这一件事**——这正是它可用的前提，因为与 `pipeline` 并排读的两个数字只有在这个前提下才能相互解释。它与 `pipeline` 测的不是同一件事：`pipeline` 测「有完整、即时、廉价 oracle 时能否收敛」，`blind` 测「能否按规格独立产出正确实现」，而 [NX-08g0](../../../docs/context-budget/CHANGES.md#nx-08g0-任务集天花板效应定性边界与补救排序) 判定的天花板正来自前者的 oracle。该前提由 [coding-fixtures.test.ts](../../coding-fixtures.test.ts) 的六条断言钉住，其中最强的一条是「从 `pipeline` 去掉的每一行都必须与公开检查有关」——只断言「不含 `check.mjs`」会放过一整段被改写的任务要求。它不进筛查批次、不进阶段序列，单独一份注册表 `blindIds`。
 
+`repro-sessions` 是第 18 个，也是**第一个「代码理解」类** fixture（种类 `repro`，NX-39）：判据不再是「工作区终态长什么样」，而是**agent 新建的那份产物的运行结果**。工作区里只有权威规格 `docs/SPEC.md` 与一处**静默的**实现缺陷（`groupSessions` 在时间差**恰好等于** `gapMs` 时误判为新会话），**没有公开检查**——有的话这道题就退化成照抄。任务要求 agent 在工作区根目录新建 `repro.mjs`，验收器把它放到工作区副本上跑两次：原始缺陷上必须非零退出、`reference/` 覆盖之后必须恰好 0 退出。这条 **FAIL_TO_PASS** 判据有一条直接的好处：两种偷懒写法都过不了——恒 0 在缺陷上不退非零，恒非零在参考实现上不退 0。可改文件为空（`sources['repro-sessions'] = []`），于是 `initial/` 里的一切自动进受保护集合，而 agent 新建的产物因为不在 `initial/` 里天然可写。判据实现在 [`_shared/criteria.mjs`](_shared/criteria.mjs)（两个新种类共用一份），门禁见 [coding-criteria.test.ts](../../coding-criteria.test.ts)；它单独一份注册表 `comprehensionIds`。
+**已知可被绕过的一处**：判据只看退出码，因此一份**比对源码文本**（例如在 `src/sessions.mjs` 里找某个运算符）而不真正调用实现的产物，也能满足 FAIL_TO_PASS。TASK.md 明文禁止这么做，但**没有机械门禁**——为它要求的机制（行为保持的改写）正是 `mutation` 类的 `equivalents/`，两类合并到同一份验收器之后可以顺带补上。
+
 `ledger` 是第 17 个，也是唯一一套**判据的载体不在工作区里**的任务。它换的是另一条思路：`blind` 证伪了「删掉公开 oracle 就能测独立产出」（完整权威规格对确定性编程任务同时就是判据的载荷），`ledger` 因此不再动规格，而是把**判据的某一段**只写进第 1 阶段的排期说明正文——`checksum:` 的口径（金额换算成「分」、取绝对值、求和）不在 `docs/SPEC.md` 里、也不可由它推导；而真正用上它的第 4 个阶段离第 1 个阶段足够远，上下文装不下时裁剪一定会先把那条说明整个拿走。它测的是「判据的载体在会话历史里时，丢掉了还守不守得住」。契约的四条落点与两条上下文字段的实测见 [PLAN 的 NX-38 契约落点](../../../docs/context-budget/PLAN.md#契约的落点fixture-ledgernx-38-2-已实现)，离线机制证明见 [nx38-covenant.test.ts](../../nx38-covenant.test.ts)。它不进筛查批次、不进阶段序列、不进对照 B 仪器与演示夹具，单独一份注册表 `ledgerIds`；**目前没有对应阶段**，付费批次的上限与判据另行预注册。
 
 ## 任务与文件
@@ -53,13 +56,14 @@ pnpm fixtures:check
 pnpm test
 ```
 
-`fixtures:check` 遍历 `fixtureIds`（筛查批次 12 项 + 阶段序列 + 对照 B 仪器 + 演示夹具 + 无公开检查变体 + 判据载体仪器），为每个任务新建临时目录，复制初始代码、执行独立验收、应用参考解、再次验收，然后删除本次创建的目录。逐行 JSON 包含初始/参考结果的 passed、退出码、输出及受保护文件变更；全部 17 项均符合“初始失败、参考通过”时命令退出 0，否则退出 1。
+`fixtures:check` 遍历 `fixtureIds`（筛查批次 12 项 + 阶段序列 + 对照 B 仪器 + 演示夹具 + 无公开检查变体 + 判据载体仪器 + 两个新种类的注册表），为每个任务新建临时目录，复制初始代码、执行独立验收、应用参考解、再次验收，然后删除本次创建的目录。逐行 JSON 包含初始/参考结果的 passed、退出码、输出及受保护文件变更。**前提按种类各查各的**（`edit` 种类与历史逐字相同；`repro` 还要多查两件事：没放产物必须判不过、放上反例产物必须判不过，放上参考产物不仅要判过、**读数里那一对退出码还要显式成立**——只让 `edit` 那套「初始失败、参考通过」跑一遍的话，新种类的初始态失败只是因为产物不存在，与判据有没有分辨力无关）。全部 18 项符合各自的前提时命令退出 0，否则退出 1。
 
 `pnpm eval:offline` 只跑**筛查批次**（`screeningIds` 的 12 个单任务 fixture，对上 `phaseCaps.screening.runs = 12`）。多阶段序列属于对照 A 的仪器，不进筛查批次；它的驱动路径由 [eval-runner.test.ts](../../eval-runner.test.ts) 离线覆盖。
 
 测试入口为 [coding-fixtures.test.ts](../../coding-fixtures.test.ts)。它实际装配 Cordis 与文件/Bash 工具，用模拟适配器读取源码、检查失败、编辑并重跑。options 故意先只修 separator，收到 skipEmpty 的失败后再补修；interface 和 inventory 各编辑两个源码文件。最终 run 状态与独立验收结果分别检查，模型回答不会直接变成验收通过。
 
-复用接口在 [coding-fixtures.ts](../../../scripts/coding-fixtures.ts)：`createFixture(id)` 返回 workspace、`tasks`、参考 edits、applyReference、evaluate 和 close。创建者须在 finally 调用 close；参考 edits 只供离线测试驱动使用，后续真实模型评测只发送 `tasks` 和初始工作区。`evaluate` 默认超时 30 秒（`fixtureProcessTimeoutMs`）、输出上限 32 KiB，可通过 timeoutMs / maxOutputBytes 配置。注册表分七份：`screeningIds`（12 个单任务）、`sequenceIds`（阶段序列）、`boundedIds`（对照 B 的单任务仪器）、`demoIds`（演示夹具）、`blindIds`（`pipeline` 的无公开检查变体）、`ledgerIds`（判据载体仪器）、`fixtureIds`（六者之和，`fixtures:check` 用）。`readFixtureFile` 读取 fixture 目录里非 `initial/`／`reference/` 的部位（`repair` 的 `partial/` 与 `ledger` 的 `naive/`），路径越界直接报错。
+复用接口在 [coding-fixtures.ts](../../../scripts/coding-fixtures.ts)：`createFixture(id)` 返回 kind、workspace、`tasks`、参考 edits、`artifact`、applyReference、evaluate 和 close。创建者须在 finally 调用 close；参考 edits 只供离线测试驱动使用，后续真实模型评测只发送 `tasks` 和初始工作区。`evaluate` 默认超时 30 秒（`fixtureProcessTimeoutMs`）、输出上限 32 KiB，可通过 timeoutMs / maxOutputBytes 配置。**种类由 `fixtureKind(id)` 决定**：`edit`（既有 17 个，行为逐字不变）、`repro`（代码理解）、`mutation`（测试编写，判据实现待 NX-39-4）。新种类在 `evaluate` 时多拿一个**工作区之外**的报告目录（开在 fixture 自己的临时目录里，随 close 一起消失），验收器把读数写进 `report.json`，Harness 读回来后**按自己的规则复算一遍**并与读数里那份结论比对——两边不一致即失败，否则「判据的规则」会与「Harness 认定的规则」悄无声息地漂开。注册表分九份：`screeningIds`（12 个单任务）、`sequenceIds`（阶段序列）、`boundedIds`（对照 B 的单任务仪器）、`demoIds`（演示夹具）、`blindIds`（`pipeline` 的无公开检查变体）、`ledgerIds`（判据载体仪器）、`comprehensionIds`（代码理解）、`mutationIds`（测试编写，暂空）、`fixtureIds`（以上之和，`fixtures:check` 用）。`readFixtureFile` 读取 fixture 目录里非 `initial/`／`reference/` 的部位（`repair` 的 `partial/`、`ledger` 的 `naive/` 与两个新种类的 `oracle/`／`weak/`／`mutants/`／`equivalents/`），路径越界直接报错。
+两个新种类的判据实现在 [_shared/criteria.mjs](_shared/criteria.mjs)（一份实现供全部 fixture 复用，因此门禁测试能直接对它跑正例与反例），每个 fixture 的 `verify.mjs` 只有两行、`criteria.json` 声明产物名与种类；`criteria.json` 的 `kind` 与注册表不一致会直接抛错。
 
 可信验收器不从候选工作区读取测试逻辑；package.json / check.mjs 的内容和软链状态也受检查。公开检查被删改、只迁移一半接口或导入时提前退出都不会被这组回归误判为通过。临时目录与子进程不是操作系统安全隔离；这是已知离线 fixture 的验收设施，不声称能防御任意恶意代码。NX-05a 本步未新增生产验证事件、版本关联或任务交付报告；后续 NX-15 已独立实现显式文件范围验证与交付查询，仍不将普通 Bash 或 fixture 流程自动标为任务验收。
 

@@ -173,6 +173,7 @@ export async function runFixtureTask(
     const acceptance = await fixture.evaluate()
     const detail: AcceptanceDetail = {
       passed: acceptance.passed, exitCode: acceptance.exitCode, output: acceptance.output, protectedFilesChanged: acceptance.protectedFilesChanged,
+      ...(acceptance.evidence === undefined ? {} : { evidence: acceptance.evidence }),
     }
     // 预算校验或装配在 beginRun 之前失败时不会留下 run 状态；此时按基础设施失败报告，不用非空断言把
     // 缺失状态伪装成一次真实的运行结论。
@@ -188,11 +189,16 @@ export async function runFixtureTask(
 }
 
 // 预设工具序列驱动的模拟模型：验证运行器与 Harness 接线，不作为自主编程成功率证据（见 PLAN NX-05a）。
+// 新种类的产物是 agent **新建**的文件（走 write_file），且它们的可改文件为空、edits 里没有东西可循环，
+// 因此按种类分派而不是把两种序列混在同一串命令里。
 export function scriptedAdapter(fixture: Fixture): FixtureAdapter {
-  const commands: ToolCall[] = fixture.edits.map((edit, index) => ({ id: `read-${index}`, name: 'read_file', arguments: { path: edit.path } }))
-  commands.push({ id: 'before', name: 'bash', arguments: { command: 'node check.mjs' } })
-  for (const [index, edit] of fixture.edits.entries()) commands.push({ id: `edit-${index}`, name: 'edit_file', arguments: edit })
-  commands.push({ id: 'after', name: 'bash', arguments: { command: 'node check.mjs' } })
+  const commands: ToolCall[] = fixture.artifact === undefined ? [] : [{ id: 'artifact', name: 'write_file', arguments: { path: fixture.artifact.path, content: fixture.artifact.content } }]
+  if (fixture.artifact === undefined) {
+    for (const [index, edit] of fixture.edits.entries()) commands.push({ id: `read-${index}`, name: 'read_file', arguments: { path: edit.path } })
+    commands.push({ id: 'before', name: 'bash', arguments: { command: 'node check.mjs' } })
+    for (const [index, edit] of fixture.edits.entries()) commands.push({ id: `edit-${index}`, name: 'edit_file', arguments: edit })
+    commands.push({ id: 'after', name: 'bash', arguments: { command: 'node check.mjs' } })
+  }
   let step = 0
   return {
     provider: 'scripted', model: 'fixture', capabilities: { fixture: { contextWindowTokens: 1_000_000 } },

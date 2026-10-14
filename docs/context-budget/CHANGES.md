@@ -1,5 +1,53 @@
 # 改动与验收证据
 
+### NX-39-3a fixture 种类机制与「代码理解」类
+
+给评测集补上五类任务里此前**没有判据**的两类中的第一类。实验设计见 [TASKS 的 NX-39 节](TASKS.md#nx-39-五类代码任务--四条件的全因子对照实验)。**本步零付费，未发生任何模型调用。**
+
+**为什么不能沿用既有验收器。** 现有 `verify.mjs` 判的是「工作区终态对不对」：它读 `workspace/src/x.mjs`、断言返回值、打印标记。这对「改对既有源码」是完备的，但对「读懂代码并**新建**一份复现」什么也没说——终态里根本没有那份产物，而该被断言的行为在**缺陷版**源码上。新两类的判据因此换了个落点：**agent 新建的那份产物运行起来对不对**。
+
+**种类机制（`scripts/coding-fixtures.ts`）**
+
+- `fixtureKind(id): 'edit' | 'repro' | 'mutation'`，由三份注册表决定；既有 17 个 fixture 全是 `edit`，`applyReference`／`evaluate` 的既有分支**逐字未改**——`edit` 种类连 `spawn` 的参数都不多一个。
+- 新种类在 `fixture` 目录里多一份 `criteria.json`（声明 `kind` 与产物名）。**验收器与 Harness 读的是同一个文件**，因此不会出现「产物叫什么」在两处各写一遍；`criteria.json` 的 `kind` 与注册表不一致时 `createFixture` 直接抛错——否则一个 fixture 可以声明自己是 `repro` 而注册表把它当 `edit` 跑，两边各自自洽，谁也不会报错。
+- `Acceptance` 增可选 `evidence`，`evaluate()` 给新种类的验收器多传一个**工作区之外**的报告目录（开在 fixture 自己的临时目录里：既在工作区之外、不混进受保护文件的字节比对，又随 `close()` 一起消失，因此验收器里没有第二套临时目录生命周期要管）。`report.json` 是给 Harness 读的**读数**，Harness 照自己的规则**复算一遍**再与读数里的结论比对，两者不一致即失败。
+- `scripts/check-coding-fixtures.ts` **按种类分查**。这一点是本步最容易写错的地方，见下。
+
+**「代码理解」类：`repro-sessions`**
+
+工作区里只有权威规格 `docs/SPEC.md` 与一处**静默的**实现缺陷：`groupSessions(timestamps, gapMs)` 在相邻时间差**恰好等于** `gapMs` 时把会话断开，而规格要求只有**严格大于**时才断开。选静默值错而不是抛错是刻意的——判据是 FAIL_TO_PASS，若缺陷表现成抛错，一份「调用一下、看它抛不抛」的产物就能满足判据；值错则只有真正核对过规格的产物才通得过。
+
+任务要求 agent 在工作区根目录**新建** `repro.mjs`：符合规格时退出 0、不符合时非零退出。验收器把同一份产物放到工作区副本上跑两次——原始缺陷上必须非零、`reference/` 覆盖之后必须恰好 0。可改文件为空（`sources['repro-sessions'] = []`），于是 `initial/` 里的一切自动进受保护集合，而 agent 新建的产物因为不在 `initial/` 里天然可写。
+
+**两处设计错误，都在本步被逮到**
+
+1. **`applyReference()` 对新种类不能把 `reference/` 覆盖进工作区。** 第一版按 `edit` 的思路写了「覆盖 `reference/` + 放上参考产物」，结果 `fixtures:check` 报 reference 态 `initialExitCode=0` 且受保护文件被改——把源码修好之后，agent 的产物在「缺陷」上也照样通过，判据当场失效。新种类的参考态**只有产物这一半**：`reference/` 只被验收器用在工作区副本上。
+2. **前提自检不能共用一句「初始失败、参考通过」。** 对新种类那句话几乎恒真：初始态失败只是因为**产物还不存在**，与判据有没有分辨力无关。改成按种类分查：`repro` 要额外查两件事——**放上参考产物**（源码仍是缺陷）必须判过，**放上反例产物**必须判不过，且前者**读数里那一对退出码要显式成立**（缺陷上非零、参考实现上 0）。只看 `passed` 的话，「缺陷到底存不存在」没有任何证据。
+
+**已知可被绕过的一处，如实记。** 判据只看退出码，因此一份**比对源码文本**（在 `src/sessions.mjs` 里找某个运算符）而不真正调用实现的产物也能满足 FAIL_TO_PASS。TASK.md 明文禁止这么做，但**没有机械门禁**。要堵它需要「行为保持的改写」，而那正是 `mutation` 类 `equivalents/` 的机制——两类合并到同一份验收器之后可以顺带补上，本步不做。这条已写进 [fixture README](test/fixtures/coding/README.md) 而不只是留在这里。
+
+**验证**
+
+| 命令 | 结果 |
+|---|---|
+| `pnpm typecheck` | 通过 |
+| `pnpm check` | `syntax ok: 116 files` |
+| `pnpm test` | **315/315**（基线 310，新增 5 条），失败、取消、跳过均为 0 |
+| `pnpm lint` | `Checked 126 files … No fixes applied.`（0 诊断） |
+| `pnpm fixtures:check` | 退出码 0，18 项；`repro-sessions` 三个读数：missing 判不过、weak 判不过、参考产物判过且 `initialExitCode=1 / referenceExitCode=0` |
+| `pnpm eval:offline` | 退出码 0 |
+| `pnpm eval:estimate` | 退出码 0 |
+
+**反例实跑三处**（各自判红、还原后复绿）：
+
+- 给 `reference/src/sessions.mjs` 追加一处改动 → 门禁「一模块一缺陷」报 `must differ by exactly one hunk`。这条是 FAIL_TO_PASS 成立的前提：差得多于一处的 fixture 上，产物的失败可能来自别的改动。
+- 把 `weak/repro.mjs` 换成参考产物 → 门禁报 `the weak artifact must differ from the oracle`；同时 `fixtures:check` 退出 1。这道门禁若空转，「判据不是白送的」就没有证据。
+- （第一处设计错误的实跑证据即上面第 1 条：那次的 `fixtures:check` 输出。）
+
+新增 `test/coding-criteria.test.ts` 五条：新种类只把产物放进工作区而**永不**放参考源码；每个 `repro` fixture 恰好一处缺陷且反例产物与参考产物不同；隐藏件（`reference`／`oracle`／`weak`／`mutants`／`equivalents`）不出现在 `initial/**` 与任务文本里、产物不在 `initial/` 里、`criteria.json` 与注册表一致（R-23 卫生）；模拟模型经 `write_file` 驱动一个 `repro` fixture 走到判过（证明**评测链路**能驱动它，而不只是 `fixtures:check` 那条直连验收器的路径）；两份新注册表与既有六份互斥且 `fixtureIds` 不重不漏。
+
+提交：见本节对应的本地提交。
+
 ### NX-39-2 易变提示段落的冻结开关
 
 把「提示优化」那一维从**设计上的一个说法**变成**可测量的量**。实验设计与四格定义见 [TASKS 的 NX-39 节](TASKS.md#nx-39-五类代码任务--四条件的全因子对照实验)。**本步零付费，未发生任何模型调用。**

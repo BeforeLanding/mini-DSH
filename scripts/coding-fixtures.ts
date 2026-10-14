@@ -33,8 +33,26 @@ export const blindIds = ['blind'] as const
 // 「任务难度」。它也不进筛查批次（那 12 个已冻结）。因此单独一份注册表。
 // 无付费批次：NX-38-2 只做离线机制证明（test/nx38-covenant.test.ts），正式批次的上限与判据要另行预注册。
 export const ledgerIds = ['ledger'] as const
-export const fixtureIds = [...screeningIds, ...sequenceIds, ...boundedIds, ...demoIds, ...blindIds, ...ledgerIds] as const
+// NX-39「代码理解」类。判据是 **FAIL_TO_PASS**：agent 的产物必须在**原始缺陷**上非零退出、在 `reference/`
+// 上恰好 0 退出。它们与既有六份注册表形状不同——可改文件为空（`sources[id] = []`），于是 `initial/` 里的
+// 每个文件都自动进受保护集合，而 agent **新建**的产物因为不在 `initial/` 里天然可写；判据则落在工作区
+// 之外的新验收器上（`verify.mjs` 转交 `_shared/criteria.mjs`）。因此单独一份注册表。
+export const comprehensionIds = ['repro-sessions'] as const
+// NX-39「测试编写」类。判据是**变异得分**：agent 的测试在原始源码上必须全绿、杀掉 ≥ `minKilled` 个变异体、
+// 且**不杀**行为保持的等价体。与 comprehensionIds 同形（可改文件为空、判据在工作区之外），但判据的实现
+// 要到 NX-39-4 才落地，因此这里先占好位置、暂不设成员。
+export const mutationIds = [] as const
+export const fixtureIds = [...screeningIds, ...sequenceIds, ...boundedIds, ...demoIds, ...blindIds, ...ledgerIds, ...comprehensionIds, ...mutationIds] as const
 export type FixtureId = typeof fixtureIds[number]
+// 三个种类。既有 17 个 fixture 全是 `edit`（就地改既有源码），行为逐字不变。
+// 新两类的共同点：判据不落在「工作区的终态长什么样」上，而落在「agent 新建的那份产物运行起来对不对」上，
+// 因此验收器需要一个工作区之外的报告目录来放中间产物与读数。
+export type FixtureKind = 'edit' | 'repro' | 'mutation'
+export function fixtureKind(id: FixtureId): FixtureKind {
+  if ((comprehensionIds as readonly FixtureId[]).includes(id)) return 'repro'
+  if ((mutationIds as readonly FixtureId[]).includes(id)) return 'mutation'
+  return 'edit'
+}
 const repository = fileURLToPath(new URL('../../', import.meta.url))
 const fixtures = path.join(repository, 'test', 'fixtures', 'coding')
 // Cold-starting a Node process inside a freshly created temp workspace costs far more on
@@ -57,6 +75,10 @@ const sources: Record<FixtureId, string[]> = {
   // 脚本化适配器，并把这条对应关系单独断言了一遍。`data/` 与 `docs/SPEC.md` 不在表内，因而都在受保护
   // 集合里——判据的副本不能由工作区承载，这是本 fixture 成立的前提。
   ledger: ['src/parse.mjs', 'src/summarize.mjs', 'src/render.mjs', 'src/checksum.mjs'],
+  // NX-39 的两个新种类**没有可改文件**。这不是省事，而是它们要的形状：`initial/` 里的规格、源码与
+  // 配置全部进受保护集合（agent 不得就地改源码来「修好」它），而 agent 要交的产物是**新建**的文件——
+  // 它不在 `initial/` 里，因此天然可写，无需另立一条「允许新建」的规则。
+  'repro-sessions': [],
 }
 async function exists(target: string): Promise<boolean> { return fs.stat(target).then(() => true, () => false) }
 // 一个 fixture 要么是单个任务（TASK.md），要么是同一会话内按序下发的多个阶段（TASKS/*.md，按文件名
@@ -81,11 +103,54 @@ async function protectedFilesIn(directory: string, editable: readonly string[], 
   }
   return result
 }
+// 新种类的判据**读数**。它由工作区之外的验收器写进 `report.json`，Harness 读回来后再用自己的规则
+// 复算一遍（见 evidencePasses），两边不一致即失败——否则「这份判据的规则」与「Harness 认定的规则」
+// 会悄无声息地漂开，而这正是判据本身没人能核对的那类失效。
+export interface ReproEvidence {
+  kind: 'repro'; artifact: string
+  // 同一份产物在两份源码上的退出码：原始缺陷上必须非零，reference/ 上必须恰好 0（FAIL_TO_PASS）。
+  // spawn 失败（超时、被输出上限掐掉）记 null，而 null 永远不被当成成功。
+  initialExitCode: number | null; referenceExitCode: number | null
+  /** 验收器自己算出的结论；Harness 复算并比对。 */
+  passed: boolean
+  reason?: string
+}
+export type AcceptanceEvidence = ReproEvidence
+function evidencePasses(evidence: AcceptanceEvidence): boolean {
+  if (evidence.kind === 'repro') return evidence.initialExitCode !== null && evidence.initialExitCode !== 0 && evidence.referenceExitCode === 0
+  return false
+}
 export interface Acceptance {
   passed: boolean; exitCode: number | null; output: string; protectedFilesChanged: string[]
+  evidence?: AcceptanceEvidence
+}
+// report.json 是判据自己写的文件，因此按「不可信输入」读：解析失败、形状不对、或是还没实现的种类，
+// 一律当作**没有读数**，而不是猜一个默认值出来。
+async function readEvidence(reportDirectory: string): Promise<AcceptanceEvidence | undefined> {
+  try {
+    const parsed: unknown = JSON.parse(await fs.readFile(path.join(reportDirectory, 'report.json'), 'utf8'))
+    if (!parsed || typeof parsed !== 'object') return undefined
+    const candidate = parsed as AcceptanceEvidence
+    return candidate.kind === 'repro' && typeof candidate.artifact === 'string' && typeof candidate.passed === 'boolean' ? candidate : undefined
+  } catch { return undefined }
+}
+// `criteria.json` 把「产物叫什么」这件事放在 fixture 自己身上：验收器与 Harness 读的是同一个文件，
+// 因而不会出现两处各写一遍、改一处漏一处。kind 必须与注册表一致——否则一个 fixture 可以声明自己是
+// repro 而注册表把它当 edit 跑，两边都能自洽，谁也不会报错。
+async function readCriteria(source: string, id: FixtureId): Promise<{ artifact: string } | undefined> {
+  const kind = fixtureKind(id)
+  if (kind === 'edit') return undefined
+  const criteria: unknown = JSON.parse(await fs.readFile(path.join(source, 'criteria.json'), 'utf8'))
+  const record = criteria as { kind?: unknown; artifact?: unknown }
+  if (record.kind !== kind) throw new Error(`fixture ${id} declares kind ${String(record.kind)} but its registry says ${kind}`)
+  if (typeof record.artifact !== 'string' || !record.artifact || path.isAbsolute(record.artifact) || record.artifact.split(/[\\/]/).includes('..')) {
+    throw new Error(`fixture ${id} declares an invalid criteria artifact: ${String(record.artifact)}`)
+  }
+  return { artifact: record.artifact }
 }
 export async function createFixture(id: FixtureId) {
   if (!fixtureIds.includes(id)) throw new Error('unknown coding fixture')
+  const kind = fixtureKind(id)
   const source = path.join(fixtures, id)
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), `mini-dsh-fixture-${id}-`))
   const workspace = path.join(directory, 'workspace')
@@ -98,10 +163,23 @@ export async function createFixture(id: FixtureId) {
       newText: await fs.readFile(path.join(source, 'reference', filename), 'utf8'),
     })))
     const protectedFiles = await protectedFilesIn(path.join(source, 'initial'), sources[id])
+    const criteria = await readCriteria(source, id)
+    // 参考产物必须来自 fixture 目录，**不能**由工作区推导（R-23）。它在门禁里充当正例：把它放进工作区
+    // 之后验收必须通过，而放 weak/ 里那份反例产物必须判不过——判据不是白送的，靠这一对量出来。
+    const artifact = criteria === undefined ? undefined : { path: criteria.artifact, content: await fs.readFile(path.join(source, 'oracle', criteria.artifact), 'utf8') }
     return {
-      id, workspace, tasks, edits,
+      id, kind, workspace, tasks, edits, artifact,
       async applyReference() {
-        for (const edit of edits) await fs.writeFile(path.join(workspace, edit.path), edit.newText)
+        // edit：就地改既有源码，与历史逐字相同。
+        if (kind === 'edit') {
+          for (const edit of edits) await fs.writeFile(path.join(workspace, edit.path), edit.newText)
+          return
+        }
+        // 新种类的「参考态」**只有产物这一半**：源码那一半从不进工作区。`reference/` 只被验收器用在
+        // 工作区副本上（repro 就是靠它造出「修好之后」的那一份），一旦把它覆盖进工作区，agent 的产物
+        // 在「缺陷」上也照样通过——判据会当场失效，而且失效得毫无征兆。这条曾经写错过一版，由
+        // fixtures:check 逮到：那次 reference 态报 initialExitCode=0 且受保护文件被改。
+        if (artifact) await fs.writeFile(path.join(workspace, artifact.path), artifact.content)
       },
       async evaluate({ timeoutMs = fixtureProcessTimeoutMs, maxOutputBytes = 32 * 1024 } = {}): Promise<Acceptance> {
         if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || !Number.isSafeInteger(maxOutputBytes) || maxOutputBytes <= 0) throw new Error('invalid acceptance limits')
@@ -112,13 +190,24 @@ export async function createFixture(id: FixtureId) {
             if (!(await fs.lstat(candidate)).isFile() || !(await fs.readFile(candidate)).equals(content)) protectedFilesChanged.push(filename)
           } catch { protectedFilesChanged.push(filename) }
         }
-        const result = spawnSync(process.execPath, [path.join(source, 'verify.mjs'), workspace], {
+        // 只有新种类才开报告目录，且开在 fixture 自己的临时目录里（工作区之外，因此不混进上面的字节比对，
+        // 又随 close() 一起消失）。edit 种类连 argv 都不多一个，既有 17 个 fixture 的 spawn 逐字不变。
+        const reportDirectory = artifact === undefined ? undefined : path.join(directory, 'report')
+        if (reportDirectory !== undefined) {
+          await fs.rm(reportDirectory, { recursive: true, force: true })
+          await fs.mkdir(reportDirectory, { recursive: true })
+        }
+        const result = spawnSync(process.execPath, [path.join(source, 'verify.mjs'), workspace, ...(reportDirectory === undefined ? [] : [reportDirectory])], {
           cwd: workspace, encoding: 'utf8', timeout: timeoutMs, maxBuffer: maxOutputBytes, windowsHide: true,
         })
         const output = Buffer.from([result.error?.message, result.stdout, result.stderr].filter(Boolean).join('\n')).subarray(0, maxOutputBytes).toString('utf8')
         const marker = `acceptance passed: ${id}`
-        return { passed: result.status === 0 && !result.error && output.trim() === marker && !protectedFilesChanged.length,
-          exitCode: result.status, output, protectedFilesChanged }
+        const evidence = reportDirectory === undefined ? undefined : await readEvidence(reportDirectory)
+        // 三个条件缺一不可：退出码与标记照旧，且新种类还必须带上**自洽的读数**——验收器没写报告、
+        // 或它自己算的结论与复算不一致，都判失败。
+        const consistent = evidence !== undefined && evidence.passed === evidencePasses(evidence) && evidence.passed
+        return { passed: result.status === 0 && !result.error && output.trim() === marker && !protectedFilesChanged.length && (artifact === undefined || consistent),
+          exitCode: result.status, output, protectedFilesChanged, ...(evidence === undefined ? {} : { evidence }) }
       },
       async close() {
         if (path.dirname(directory) !== path.resolve(os.tmpdir()) || !path.basename(directory).startsWith(`mini-dsh-fixture-${id}-`)) throw new Error('invalid fixture cleanup path')
