@@ -1,6 +1,23 @@
 # 任务清单
 
-更新：2026-10-09。每项只保留当前状态和证据入口；行为、边界、逐步提交与完整验收记录见 [CHANGES](CHANGES.md)。状态：`todo`、`in_progress`、`blocked`、`done`。
+更新：2026-10-14。每项只保留当前状态和证据入口；行为、边界、逐步提交与完整验收记录见 [CHANGES](CHANGES.md)。状态：`todo`、`in_progress`、`blocked`、`done`。
+
+### NX-37 评测证据的来源指纹与 fixture 摘要钉
+
+**问题（2026-10-14，P0 复审期间发现）**。`.eval-evidence/*/report.json` 的顶层字段只有 `phase`／`planned`／`totals`／`model`／`baseUrl`／`contextWindowTokens`／`probe`／`runs`——**没有提交号、没有时间戳、没有 fixture 内容摘要、没有采样参数**，而 `.gitignore` 又把整个 `.eval-evidence/` 排除在版本库之外（含模型正文，体积随批次增长，不入库是有意为之）。于是「哪份 12/12 出自哪个提交、哪版仪器」只能靠本文件的散文维持，机器读不出来：`blind-full/report.json` 与 `screening-full/report.json` 在结构上无法区分彼此属于哪个源码版本。
+
+这正是 D-22／R-23 要求「仪器与结论对得上」时最先崩的一环。NX-36 写下的判断是「**准则没有机读护栏**——可推导性不可判定」，那句话对**可推导性**成立；但「仪器给结论留一个自指纹」是**可机读**的另一半，此前没有拿到。对照：`scripts/estimation-corpus.ts` 那条链早就有 `corpusDigest`／`estimatorDigest`（sha256），并由 `eval:estimate` 在语料或估算器一变时以退出码 1 拦下；coding fixture 这条链此前没有等价物。
+
+**范围与方向**：只动 `scripts/` 与 `test/`，`src/` 一行不动，零付费（不跑真实批次，因此**历史批次不会被补上指纹**——那需要重跑）。
+
+**不做**：不把 `.eval-evidence/` 入库；不给已完成的历史批次补指纹；不把「工作区脏就拒绝开跑」设成门禁（记录并警告，不阻断——评测不该因为环境问题跑不起来，但「出处是这个提交」与「不知道出处」必须可区分）。
+
+| 子步骤 | 行为与状态 | 独立验收 | 预计提交 |
+|---|---|---|---:|
+| NX-37-0 | TASKS 立项：本节（**in_progress**） | `grep -cE '^\| NX-37-' docs/context-budget/TASKS.md` = 3；每行「独立验收」列至少含一个可判定的退出码或反例；`git diff --stat` 只含 `docs/context-budget/TASKS.md` | 1 次 |
+| NX-37-1 | 来源指纹模块与评测入口接入（**todo**） | `node --test dist/test/eval-provenance.test.js` 输出 `pass 5 / fail 0`；`provenance.git`／`fixtures`／`sampling`／`runtime`／`startedAt` 均落入 `report.json` 的顶层；**反例**：给 `src/models/deepseek.ts` 的请求体加 `temperature`／`seed` 后采样声明用例 `fail 1` 并点名，改回复绿；`pnpm check`、`pnpm test`、`pnpm lint` 退出 0 | 1 次 |
+| NX-37-2 | 已发布仪器的 fixture 摘要钉（**todo**） | `node --test dist/test/eval-provenance-pins.test.js` 输出 `pass 5 / fail 0`；**反例**：给四份仪器中任一份的任一 fixture 文件追加一个换行后 `fail 1` 且 `perFixture` 点名该 fixture，改回复绿；`git diff --stat` 只含 `test/eval-provenance-pins.test.ts` | 1 次 |
+| NX-37-3 | 文档回填（**todo**） | 本表各行置 `done` 并记提交号；CHANGES 增 NX-37 节且命令与实际输出一致；PROGRESS 增已完成条目；`pnpm test`（含 `docs-links` 守卫）全绿 | 1 次 |
 
 ### NX-36 评测仪器自洽准则的固化（NX-08h）
 
