@@ -14,10 +14,12 @@
 
 | 子步骤 | 行为与状态 | 独立验收 | 预计提交 |
 |---|---|---|---:|
-| NX-37-0 | TASKS 立项：本节（**in_progress**） | `grep -cE '^\| NX-37-' docs/context-budget/TASKS.md` = 4（本节的子步骤行数）；每行「独立验收」列至少含一个可判定的退出码或反例；`git diff --stat` 只含 `docs/context-budget/TASKS.md` | 1 次 |
-| NX-37-1 | 来源指纹模块与评测入口接入（**todo**） | `node --test dist/test/eval-provenance.test.js` 输出 `pass 5 / fail 0`；`provenance.git`／`fixtures`／`sampling`／`runtime`／`startedAt` 均落入 `report.json` 的顶层；**反例**：给 `src/models/deepseek.ts` 的请求体加 `temperature`／`seed` 后采样声明用例 `fail 1` 并点名，改回复绿；`pnpm check`、`pnpm test`、`pnpm lint` 退出 0 | 1 次 |
-| NX-37-2 | 已发布仪器的 fixture 摘要钉（**todo**） | `node --test dist/test/eval-provenance-pins.test.js` 输出 `pass 5 / fail 0`；**反例**：给四份仪器中任一份的任一 fixture 文件追加一个换行后 `fail 1` 且 `perFixture` 点名该 fixture，改回复绿；`git diff --stat` 只含 `test/eval-provenance-pins.test.ts` | 1 次 |
-| NX-37-3 | 文档回填（**todo**） | 本表各行置 `done` 并记提交号；CHANGES 增 NX-37 节且命令与实际输出一致；PROGRESS 增已完成条目；`pnpm test`（含 `docs-links` 守卫）全绿 | 1 次 |
+| NX-37-0 | TASKS 立项：本节（**done**，`713e554`＋订正 `2f6bcc6`） | `grep -cE '^\| NX-37-' docs/context-budget/TASKS.md` = 4（本节的子步骤行数）；每行「独立验收」列至少含一个可判定的退出码或反例；`git diff --stat` 只含 `docs/context-budget/TASKS.md` | 1 次 |
+| NX-37-1 | 来源指纹模块与评测入口接入（**done**，`2b8913e`） | `node --test dist/test/eval-provenance.test.js` 输出 `pass 5 / fail 0`；`provenance.git`／`fixtures`／`sampling`／`runtime`／`startedAt` 均落入 `report.json` 的顶层；**反例**：给 `src/models/deepseek.ts` 的请求体加 `temperature`／`seed` 后采样声明用例 `fail 1` 并点名，改回复绿；`pnpm check`、`pnpm test`、`pnpm lint` 退出 0 | 1 次 |
+| NX-37-2 | 已发布仪器的 fixture 摘要钉（**done**，`d6cb679`） | `node --test dist/test/eval-provenance-pins.test.js` 输出 `pass 5 / fail 0`；**反例**：给四份仪器中任一份的任一 fixture 文件追加一个换行后 `fail 1` 且 `perFixture` 点名该 fixture，改回复绿；`git diff --stat` 只含 `test/eval-provenance-pins.test.ts` | 1 次 |
+| NX-37-3 | 文档回填（**done**，即本提交） | 本表各行置 `done` 并记提交号；CHANGES 增 NX-37 节且命令与实际输出一致；PROGRESS 增已完成条目；`pnpm test`（含 `docs-links` 守卫）全绿 | 1 次 |
+
+**已完成（2026-10-14，零付费）**：两步代码／测试与两步文档，`src/` 一行未动（被临时改坏以跑反例的 `src/models/deepseek.ts` 已 `git checkout` 还原，未进入任何提交）。逐步命令与实测输出见 [CHANGES 的 NX-37 节](CHANGES.md#nx-37-评测证据的来源指纹与-fixture-摘要钉)。**本项补的是 NX-36「准则没有机读护栏」那一句的另一半**：可推导性不可判定仍然成立，但仪器自指纹可机读，此前只是没拿到。**历史批次不会被补上指纹**——那需要重跑，本轮不做。
 
 ### NX-36 评测仪器自洽准则的固化（NX-08h）
 

@@ -1,6 +1,66 @@
 # 改动与验收证据
 
-更新：2026-10-09。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
+更新：2026-10-14。本文件保存任务的详细行为、验证、提交和 CI 证据；可扫描状态见 [TASKS](TASKS.md)。以下任务证据从原 TASKS 原样迁入，原 CHANGES 的实现总结保留在文末。
+
+## NX-37 评测证据的来源指纹与 fixture 摘要钉
+
+本项给评测证据补上「自己是哪来的」这件事。**要补的不是能力，是留档的可核对性**：`.eval-evidence/*/report.json` 此前只有 `phase`／`totals`／`model`／`probe`／`runs`，没有提交号、时间戳、fixture 摘要与采样参数，而整个目录又按 `.gitignore` 不入库——于是两份 `full` 报告在结构上无法区分彼此属于哪个源码版本，对应关系只存在于 PROGRESS 的散文里。
+
+NX-36 写下的判断是「准则没有机读护栏——可推导性不可判定」。那句话对**可推导性**成立；本项补的是**另一半**：仪器给结论留一个自指纹是**可机读**的，此前没有拿到。仓库里早有先例可抄——`scripts/estimation-corpus.ts` 的 `corpusDigest`／`estimatorDigest` 就是同一形状，且由 `eval:estimate` 真正拦下变化。两步都是 `scripts/` 与 `test/`，`src/` 一行未动，零付费。
+
+### NX-37-0 TASKS 立项
+
+TASKS 列出四个独立验收与提交边界，并写明两条**不做**：不把 `.eval-evidence/` 入库（含模型正文，体积随批次增长，不入库是有意为之）；不给已完成的历史批次补指纹（那需要重跑，本轮零付费）。同时写明「工作区脏」只记录并警告、**不设成门禁**——评测不该因为环境问题跑不起来，但「出处是这个提交」与「不知道出处」必须可区分。
+
+**本次记录一处自身的订正**：立项行原写 `grep -cE '^\| NX-37-'` 应为 `3`，是从 NX-36 节抄来的行数；实跑输出 `4`（NX-37-0／1／2／3 共四行），随即以独立提交订正为 `4` 并注明「本节的子步骤行数」。把判据改成能自我解释的写法，避免下次增删子步骤时又出现同一个错。
+
+验收：`grep -cE '^\| NX-37-' docs/context-budget/TASKS.md` 输出 `4`；`git diff --stat` 只含 `docs/context-budget/TASKS.md`（`1 file changed, 18 insertions(+), 1 deletion(-)`）。提交 `713e554`，订正 `2f6bcc6`。
+
+### NX-37-1 来源指纹模块与评测入口接入
+
+新增 `scripts/eval-provenance.ts`，四个字段各有它要挡住的事：
+
+- **`git`**：`{ sha, dirty }`。取不到提交（不是仓库、或环境里没有 git）时返回 `{ sha: null, dirty: null, error: '…' }` 并**不抛错**——评测不该因为环境缺 git 就跑不起来，但「不知道出处」与「出处是这个提交」必须在报告里可区分，所以宁可留一个显式的 `error` 字段。`dirty` 与 `sha` 同等重要：工作区脏时 HEAD 不代表被执行的代码。入口在**批次开跑之前**取样（写报告那一刻的磁盘状态可能已经变了），且 `dirty !== false` 时 `console.warn` 警告但不阻断。
+- **`fixtures`**：`{ ids, sha256, perFixture }`。摘要覆盖 fixture 目录下的每一个字节（任务文本、初始态、参考解与 `verify.mjs`），**按 LF 归一后再算**（这条是必需的而非讲究：本仓库 `core.autocrlf` 生效，git add 时提示「LF will be replaced by CRLF」，不归一会让同一份 fixture 在 Windows 检出后得到另一个指纹），并按 id 排序，使摘要只取决于内容。`perFixture` 单独保留，是为了摘要变化时能**点名是哪一个 fixture 变了**。
+- **`sampling`**：`{ temperature: null, seed: null, thinking, note }`。改编自一个真实缺口——适配器从不发送 `temperature`／`seed`（`src/models/deepseek.ts` 的请求体里没有这两个字段），因此**解码不可固定、重复运行只能各自采样**，这件事此前没有任何地方写下来，读者只会默认它可复现。`thinking` 则每次都发，其默认值由 `DEEPSEEK_THINKING` 决定（评测入口构造适配器时不覆盖它）。
+- **`runtime`** 与 **`startedAt`**：node 版本、平台与 ISO 开跑时刻。
+
+接入点是 `scripts/eval-screening.ts` 的汇总行，`provenance` 与既有的 `model`／`baseUrl`／`probe` 并列。
+
+**采样声明由测试对着真实请求体钉住**，而不是只写一句话：`test/eval-provenance.test.ts` 用注入的假 `fetch` 抓下适配器实际发出的 body，断言 `'temperature' in payload === false`、`'seed' in payload === false`、且 `payload.thinking.type` 等于声明值。**反例实跑**——给 `src/models/deepseek.ts` 的请求体加上 `temperature: 0, seed: 7` 后：
+
+```
+✖ the sampling declaration matches the request body the adapter actually sends (14.4521ms)
+ℹ tests 5 / pass 4 / fail 1
+```
+
+`git checkout -- src/models/deepseek.ts` 恢复后复绿 `pass 5 / fail 0`。这条路径正是「改了声明的对象却忘了改声明」那个失效模式。
+
+另有两条边界用例：摘要对 CRLF 与 LF **必须同值**（否则指纹就不再只反映内容）、新增文件必须改变摘要（否则「覆盖了全部字节」是假话）；`git` 契约用真实临时仓库驱动——非仓库给出理由而不抛错、干净仓库报出 40 位 sha 且 `dirty=false`、加一个未跟踪文件后 `dirty=true`。
+
+**接入本身的验证边界要如实说**：`scripts/eval-screening.ts` 被 import 就会发起付费请求，因此该文件内部没有任何单元测试，`provenance` 这一行与既有的 `probe`／`model`／`baseUrl` 同属一类只经类型检查的接线。零成本的替代证据是 `--plan-only` 预演（它排在一切副作用之前），实跑仍打印原样计划并输出「只做计划预演，未建立目录、未发出请求」，证明入口可加载、未被打断。**历史批次不会因此获得指纹**——那是重跑才能补的。
+
+验收：`node --test dist/test/eval-provenance.test.js` 输出 `tests 5 / pass 5 / fail 0`；`pnpm check` 输出 `syntax ok: 108 files`；`pnpm test` 输出 `tests 280 / pass 280 / fail 0`（基线 270 → 280）；`pnpm lint` 输出 `Checked 117 files … No fixes applied.`；`pnpm fixtures:check`、`pnpm eval:offline`、`pnpm eval:estimate` 退出码均 0 且 `eval:estimate` 报 `matchesReference: true`。提交 `2b8913e`。
+
+### NX-37-2 已发布仪器的 fixture 摘要钉
+
+摘要写进报告是一回事，**有人真的会因为摘要变化而停手**是另一回事。没有后者的指纹只是装饰。新增 `test/eval-provenance-pins.test.ts`，把已发布结论所依赖的四份仪器各钉一个内容摘要：`screening`（NX-08d 的 12/12）、`sequence`／`pipeline`（NX-08e 的两臂）、`bounded`／`audit`（NX-08f）、`blind`（NX-08h）。`repair` 是演示夹具、没有评测结论挂在它上面，因此不钉。
+
+四条测试都做**逐字段**断言而不是只比聚合摘要：摘要变化时 `perFixture` 会点名是哪一个 fixture 变了，人不必再去二分。另有一条非空断言（四份仪器齐全、每份的 `perFixture` 键集合与 `ids` 一致），防止护栏静默空转——NX-35 给同类护栏补的正是这一条。
+
+**反例实跑**——给 `test/fixtures/coding/summary/TASK.md` 追加一个换行后：
+
+```
+✖ screening fixtures still match the revision their published conclusions came from (15.7799ms)
+ℹ pass 4 / fail 1
+  实际 perFixture.summary: 2afde42f…   期望: c4ded42f…   （其余 11 项不变）
+```
+
+`git checkout -- test/fixtures/coding/summary/TASK.md` 恢复后复绿 `pass 5 / fail 0`。它点名的粒度和预期一致：只指出 `summary` 变了，其余 11 项逐字相同。
+
+**这一条是设计判断，不是纯记录**：代价是今后每一次有意改动 fixture 都要同步更新这里的数字，失败信息因此写成「先重跑受影响的批次并回填结论，再更新这个钉」。若不接受这份摩擦，应单独 revert 本提交——它与 NX-37-1 的取舍正是仓库「每个可独立回退的行为单独提交」这条规则要求的形态。
+
+验收：`node --test dist/test/eval-provenance-pins.test.js` 输出 `tests 5 / pass 5 / fail 0`；`git diff --stat` 只含 `test/eval-provenance-pins.test.ts`（`1 file changed, 65 insertions(+)`）。提交 `d6cb679`。
 
 ## NX-36 评测仪器自洽准则的固化（NX-08h）
 
