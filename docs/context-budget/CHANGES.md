@@ -1,5 +1,50 @@
 # 改动与验收证据
 
+### NX-39-2 易变提示段落的冻结开关
+
+把「提示优化」那一维从**设计上的一个说法**变成**可测量的量**。实验设计与四格定义见 [TASKS 的 NX-39 节](TASKS.md#nx-39-五类代码任务--四条件的全因子对照实验)。**本步零付费，未发生任何模型调用。**
+
+**这一步推翻了原来的判据。** 计划把这一维挂在 `project-context` 的「每轮重读工作区文件」上，实测下来它在既有 17 个 fixture 上**一次都不会变**：该插件只读 `AGENTS.md`、`package.json` 与 `tsconfig.json`／锁文件／`README.md` 这几种标记，而 `AGENTS.md` 只有 `repair` 有、`package.json` 则全部落在受保护集合里（不在 `sources[id]` 中）——**agent 改不动它读的任何一样东西**。`live` 与 `frozen` 因此渲染出完全相同的字节，「去掉提示优化掉 0 分」会是**假零**。这正是「因子空转」那条约束要拦的东西，只是这次它拦下的是我们自己的设计。
+
+真正每轮必变的是另一处：`src/plugins/runtime-context.ts` 往系统提示里放 `Time: ${new Date().toISOString()}`，**毫秒**精度、每轮重新求值，而且它本来就在**生产装配**里（`src/index.ts:30`）。参照项目 `core/prompt` 的原则（section 在会话内逐字节稳定，会变的内容走 `agent/pre-step` 当消息）被它违反得比 `project-context` 彻底。
+
+**改动**
+
+- `src/core/system-prompt-runtime.ts`：新增 `stableText(render)`——渲染一次就定住。它由插件在各自的 `apply` 里构造，寿命因此正好是该 Context（评测里一次 run、CLI 里一个进程），跨会话不串味；**渲染抛错时不缓存**，下一轮重试，而不是把一个会话永久钉在失败态上。
+- `src/plugins/runtime-context.ts`、`src/plugins/project-context.ts`：各增 `layout: 'live' | 'frozen'`，缺省 `'live'` 就是历史行为；非法的值在任何 `ctx.effect` **之前**抛错，不留半个注册。
+- `scripts/eval-runner.ts`：新增 `PromptLayoutMode`（`{ frozen: boolean }`），与 `ToolOutputMode` 并排——两者都是「只在显式给出时生效」的对照自变量。
+- `scripts/eval-fixture.ts`：`runFixtureTask` 增第六个可选参数 `promptLayout`。**不传就一个插件都不装载**，理由与 `toolOutput` 完全相同（`scripts/demo-context.ts:21-29` 已记过）：补上它们会改掉 `eval:offline`／`eval:screening` 与既有各臂的系统提示，让已记录的基线与预注册上限不再对应同一件事。装载时取 `profile: 'coding'`，与 `src/index.ts:27` 的生产缺省一致——评测要跑的是同一个 agent。
+
+**两条守住的边界**
+
+1. **`frozen` 只作用于系统提示那一份。** `project_context` 工具照旧实时读盘。否则冻掉的不只是前缀稳定性，而是实时读的能力——那样这一维就从「同样的信息换个放法」变成了「少给模型一个工具」，两个臂差的就不再是一个字段。
+2. **两臂的首帧字节逐字相同。** `frozen` 定的是**首次装配那一刻**的渲染结果，所以它与 `live` 在同一时刻渲染出的字符串完全一致，差别只剩后续轮次稳不稳。这条用 `mock.timers` 把时钟拨回同一刻再渲染两条臂来钉——不用它，首帧断言会随真实毫秒漂移。这一维测的是「同一段文本稳不稳」，不是「换了一段提示文本」。
+
+**量级（离线实测，不花钱）**
+
+`boundary` + 两个插件、`live` 布局下：系统提示 831 token，其中**只有 559 落在 `Time:` 之前**（67.3%）。缓存是**前缀**缓存，所以 `live` 下每轮请求的最长公共前缀止步于此——其后的 272 token 连同**整段对话历史**每轮重算；`frozen` 下整段提示在会话内逐字不变，公共前缀随轮次长到「历史减去新增的那一轮」。这个比例是 `boundary` 的，提示越短的系统提示（不加 `project-context` 时）被吃掉的比例越大。
+
+**验证**
+
+| 命令 | 结果 |
+|---|---|
+| `pnpm typecheck` | 通过 |
+| `pnpm check` | `syntax ok: 115 files` |
+| `pnpm test` | **310/310**（基线 305，新增 5 条），失败、取消、跳过均为 0 |
+| `pnpm lint` | `Checked 125 files … No fixes applied.`（0 诊断） |
+| `pnpm fixtures:check` | 退出码 0，17 项全 `expected: true` |
+| `pnpm eval:offline` | 退出码 0 |
+| `pnpm eval:estimate` | 退出码 0 |
+
+新增 `test/prompt-stability.test.ts` 五条，其中两条是这一步的全部理由：
+
+- `the eval assembly loads the volatile prompt sections only when asked, and pins them when asked`——走的是 `runFixtureTask` 本身，读的是**模型真实收到的 `system`**，钉三个数：不传模式时两个插件的段落都不出现（既有各阶段的基线前提）；`frozen: false` 时同一会话内出现**多个互不相同的系统提示**（因子确实触发）；`frozen: true` 时**只有一个**（冻结确实生效），且两臂请求数相同。时钟由用例在每次 `chat` 里 `mock.timers.tick` 推进，因此这个差别是确定性的，不随机器快慢漂移。
+- `the project context section follows the workspace by default and pins it under frozen while the tool stays live`——把同一份 `AGENTS.md` 从 `rule-one` 改成 `rule-two` 之后：`live` 的提示跟着变，`frozen` 的提示停在 `rule-one`，而 `frozen` 那个实例的 `project_context` 工具**返回 `rule-two`**。
+
+另三条：`stableText` 渲染一次、失败不缓存（空串是合法结果，不能被 `??=` 当成「还没渲染过」）；`runtime-context` 的 `Time:` 在缺省布局下逐轮变化、`frozen` 下不变、且**同一时刻两臂首帧逐字相同**；两个插件对非法 `layout` 都在注册任何提示条目之前失败。
+
+提交：见本节对应的本地提交。
+
 ### NX-39-1 三处指标埋点
 
 为一次「五类任务 × 四条件」的 2×2 全因子对照实验补三类此前采不到的指标。实验设计、四格定义与两条必须先承认的限制见 [TASKS 的 NX-39 节](TASKS.md#nx-39-五类代码任务--四条件的全因子对照实验)。**本步零付费，未发生任何模型调用。**

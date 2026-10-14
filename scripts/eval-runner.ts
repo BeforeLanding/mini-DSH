@@ -154,6 +154,12 @@ export interface ToolOutputMode { bounded: boolean }
 export function toolOutputPolicy(phase: PhaseName): ToolOutputMode | undefined {
   return phase === 'smoke' ? { bounded: false } : undefined
 }
+// 对照 C 的自变量：系统提示里的**易变段落**是否在会话内定住（前缀缓存安全）。两臂装载同一批插件、首帧
+// 字节逐字相同，差异只有 layout 一个字段，因此它测的是稳定性本身，不是换了一段提示文本。
+// undefined 表示**既不装载 runtime-context 也不装载 project-context**——理由与 scripts/demo-context.ts:21-29
+// 记的同一条：把这两个插件补进 runFixtureTask 会改掉 eval:offline / eval:screening 与既有各臂的系统提示，
+// 让已记录的基线与预注册上限不再对应同一件事。因此它与 toolOutputPolicy 一样只在显式给出时生效。
+export interface PromptLayoutMode { frozen: boolean }
 export const capKeys = ['runs', 'requests', 'tokens'] as const
 
 // 单次 run 预算与整批上限的优先关系：单次预算由 Agent 循环在 run 内强制，触顶只停止该次 run 并给出停止

@@ -2,7 +2,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { createFixture } from './coding-fixtures.js'
 import type { FixtureId } from './coding-fixtures.js'
 import { evalPolicy } from './eval-runner.js'
-import type { AcceptanceDetail, RunOutcome, RunTaskDetail, ToolOutputMode } from './eval-runner.js'
+import type { AcceptanceDetail, PromptLayoutMode, RunOutcome, RunTaskDetail, ToolOutputMode } from './eval-runner.js'
 import { BudgetStop, emptyCounters } from '../src/core/budget.js'
 import type { BudgetPolicy, Counters } from '../src/core/budget.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
@@ -16,6 +16,8 @@ import * as agents from '../src/plugins/agent.js'
 import * as agentLoop from '../src/plugins/agent-loop.js'
 import * as sandbox from '../src/plugins/sandbox.js'
 import * as toolResults from '../src/plugins/tool-results.js'
+import * as runtimeContext from '../src/plugins/runtime-context.js'
+import * as projectContext from '../src/plugins/project-context.js'
 import * as files from '../src/tools/files.js'
 import * as bash from '../src/tools/bash.js'
 
@@ -117,16 +119,27 @@ export function summarizeStage(events: readonly SessionEvent[], runId: string) {
 // 对工作区终态做一次判定，不按阶段拆分。
 // toolOutput 是对照 B 的自变量，不传时**不装载** tool-results 插件，既有阶段（screening/armA/armB/
 // sequence 与全部离线用例）的行为与历史基线因此一字不变。
+// promptLayout 是对照 C 的自变量，同样不传就**不装载** runtime-context 与 project-context：评测路径历来
+// 不带这两者（理由见 scripts/demo-context.ts:21-29），补上它们会改掉既有各臂的系统提示。给出模式时两臂
+// 的装配逐字相同，差异只有 layout。
 export async function runFixtureTask(
   id: FixtureId, makeAdapter: (fixture: Fixture) => FixtureAdapter,
   budget: Readonly<BudgetPolicy> = evalPolicy, sessionDirectory?: string,
-  toolOutput?: ToolOutputMode,
+  toolOutput?: ToolOutputMode, promptLayout?: PromptLayoutMode,
 ): Promise<RunOutcome> {
   const fixture = await createFixture(id), root = new Context()
   let store: JsonlStore | undefined
   try {
     for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
     await root.plugin(sandbox, { workspace: fixture.workspace, autoApprove: true })
+    // runtime-context 的 runtime:environment 是评测路径上唯一**每轮必然变化**的系统提示段落（毫秒级
+    // 时间戳），对照 C 要测的前缀缓存失效就是它；project-context 同属「易变段落」这一类，一起按同一个
+    // layout 处理。profile 取 coding，与 src/index.ts:27 的生产缺省一致——评测要跑的是同一个 agent。
+    if (promptLayout) {
+      const layout = promptLayout.frozen ? 'frozen' : 'live'
+      await root.plugin(runtimeContext, { workspace: fixture.workspace, profile: 'coding', layout })
+      await root.plugin(projectContext, { layout })
+    }
     await root.plugin(files); await root.plugin(bash)
     // 有界走生产默认（positiveLimit 的 16 KiB 预览），无界抬到 UNBOUNDED_PREVIEW_BYTES。两者注册的工具
     // 与 schema 逐字相同，差异只在结果是否被投影截断。

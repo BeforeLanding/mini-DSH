@@ -7,7 +7,7 @@
 **四个条件 = 两个因子 × 两个水平的四个格子（2×2 全因子）**（用户 2026-10-14 定的口径）：
 
 - **因子 1 上下文管理** = 裁剪/压缩 ＋ 工具输出有界（**复合处理**，同开同关）。报告不下「裁剪 vs 有界」的分解结论；要分解得另跑一批。
-- **因子 2 提示优化** = **前缀缓存安全**的提示布局。依据取自参照项目 `earthwalker17/MiniDSH`：它的 `core/prompt` 明文要求 section 在会话内逐字节稳定（`time-varying context goes through agent/pre-step as a durable message, not a section`），而 mini-DSH 的 `src/plugins/project-context.ts` 恰好相反——把项目上下文注册成 section，其 `text` **每轮重读工作区文件**，而 `assemble()` 在 `src/core/agent-loop-runtime.ts` 的循环里每轮调用一次。
+- **因子 2 提示优化** = **前缀缓存安全**的提示布局。依据取自参照项目 `earthwalker17/MiniDSH`：它的 `core/prompt` 明文要求 section 在会话内逐字节稳定（`time-varying context goes through agent/pre-step as a durable message, not a section`）。mini-DSH 违反它的地方有**两处**，且两处的 `text` 都在 `src/core/agent-loop-runtime.ts` 的循环里每轮被重新求值一次：`src/plugins/runtime-context.ts` 把 `Time: ${new Date().toISOString()}`（**毫秒**精度）放进系统提示，`src/plugins/project-context.ts` 把项目上下文注册成**每轮重读工作区文件**的 section。NX-39-2 的实测结论：**只有前者必然触发**（后者在 fixture 上读的那几个文件一个都不会变），这一维的可测量性由前者承担。
 
 | 条件 | 上下文管理 | 提示优化 |
 |---|---|---|
@@ -23,7 +23,7 @@
 | 子步骤 | 行为与状态 | 独立验收 | 预计提交 |
 |---|---|---|---:|
 | NX-39-1 | 三处指标埋点：`toolErrors`／`cacheReadTokens`／逐请求延迟（**done**，零付费，`src/` 有改动） | `Counters` 增三字段且两条路径一致（实时 ++ 与事件折叠）；`toolErrors` **排除** `status: 'skipped'`（预算/取消写下的结果 `isError` 同为 true，算进来会让错误数随预算松紧变化，而四格预算是同一个）；缓存字段按 provider 报的取、缺省不写；延迟由 `model/start→model/end` 的 `at` 现算、**不改事件词表**；`pnpm test` 305/305（基线 303，新增 2 条）；**反例**：把 `status !== 'skipped'` 去掉、或把延迟按未闭合请求补一条，各自让对应用例变红 | 1 次 |
-| NX-39-2 | 把 `project-context` 装进评测装配（零付费） | 评测链路现在**不含**该插件，因此提示优化那一维在评测里触发不了；装进去之后「每轮重读的 section」才可观测；两档 `--plan-only` 只差该插件一行 | 1 次 |
+| NX-39-2 | 把**易变提示段落**装进评测装配（**done**，零付费，`src/` 有改动） | 原判据「装进 `project-context` 让每轮重读可观测」**被实测推翻**：它只读 `AGENTS.md`／`package.json`／标记文件，而前者在 fixture 里不存在、`package.json` 又进受保护集合改不动，因此它在 17 个 fixture 上**不产生任何字节变化**，这一维会空转。真正每轮必变的是 `runtime-context` 的 `runtime:environment`，且它本来就在生产装配里（`src/index.ts`）。两段按同一个 `layout` 处理：不传 = 都不装载（既有各阶段一字不变）；`frozen` 与 `live` 的**首帧逐字相同** | 1 次 |
 | NX-39-3 | fixture 种类机制 ＋ 两个新判据（零付费） | `fixtureKind` 区分 `edit`／`repro`／`mutation`，现有 17 项全为 `edit` 且行为一字不变；代码理解按 FAIL_TO_PASS 判（原始态失败、`reference/` 上通过）；测试编写按变异得分判（原始态全绿 + 杀掉 ≥ `minKilled`，且**不杀**行为保持的等价体）；变异体改动 ≤1 行 1 文件、导出面逐字一致；R-23 门禁：`initial/**` 与任务文本不得出现隐藏件目录名 | 2 次 |
 | NX-39-4 | 四个 phase 注册 ＋ 预注册（零付费） | 新增一份**引用** `screeningIds` 的注册表（现有七份两两互斥，这是第一个包含既有 id 的，须在注释里写清）；六处改动点由类型穷尽性兜底；`repeatCount` 整除成立；R-21 条文改成「四格共用…，差异只在声明的两个维度」；四条 `--plan-only` 各自成立 | 1 次 |
 | NX-39-5 | 跨批次聚合器 ＋ 离线因子预检（零付费） | 聚合器**必须在付费之前建好**（否则口径变成事后挑指标）；预检逐 fixture 量出处理是否真的发生（裁剪 > 0／压缩 applied > 0／预览截断 > 0），R-21 的验收条款要求「不满足时不得开跑对照」；「禁止静默跳过」：一次付费 run 都没跑成也要退 1 | 1 次 |
@@ -31,6 +31,14 @@
 | NX-39-7 | 报告（零付费） | 按参照项目 `BLUEPRINT.md §4` 的口径：通过数/总数 × 重复数，逐条**命名失败形状**，flake 不许一次通过就销案；前三类与后两类**分开呈现**；必报**触顶率**（Context 维压低每轮 token，在同一 token 天花板下天然占便宜，不报则成功率差异可能只是「谁先撞墙」） | 1 次 |
 
 **NX-39-1 已完成（2026-10-14，零付费）**：`src/core/budget.ts` 的 `Counters` 增 `toolErrors`／`cacheReadTokens`（`Usage` 增可选 `cacheReadTokens`），`src/models/deepseek.ts` 的 `normalizeUsage` 补读 `prompt_cache_hit_tokens`（缺省写 `undefined` 而不是 0——「没有这个概念」与「命中 0」不该被压成同一个数；上界取 `input`，超过即抛错），`src/core/agent-loop-runtime.ts` 与 `src/core/session-runtime.ts` 各补实时与折叠两条路径，逐请求延迟**不进 `Counters`** 而在 `summarizeStage` 里由事件时间戳现算（属评测视图而非运行时状态，且**不改事件词表**）。摘要行加 `错误=` 与 `cache=`——cache 是提示优化那一维的主信号，跑的时候当场看得见才有意义。**一处口径判断照实记**：`tool/result` 的 `isError` 不是「工具失败」的同义词，预算耗尽与取消写下的结果同为 `isError: true`，只数 `status !== 'skipped'` 才能让这个指标不随预算松紧漂移。记在 [CHANGES 的 NX-39-1 节](CHANGES.md#nx-39-1-三处指标埋点)。
+
+**NX-39-2 已完成（2026-10-14，零付费，`src/` 有改动）**：两个插件各增 `layout: 'live' | 'frozen'`（缺省 `live` = 历史行为），`src/core/system-prompt-runtime.ts` 增 `stableText()`，`scripts/eval-fixture.ts` 的 `runFixtureTask` 增第六个可选参数 `promptLayout`——**不传就一个插件都不装**，既有各阶段与全部离线用例的系统提示因此逐字不变（理由同 `scripts/demo-context.ts:21-29`）。
+
+**这一步最重要的产出是它推翻了原来的判据。** 计划把这一维挂在 `project-context` 的每轮重读上，但实测：该插件只读 `AGENTS.md`、`package.json` 与几个标记文件，而 `AGENTS.md` 在 17 个 fixture 里只有 `repair` 有、`package.json` 又全部进受保护集合——**agent 改不动它读的任何东西**，因此 `live` 与 `frozen` 在既有 fixture 上渲染出的字节完全相同，这一维会**空转**。而 `runtime-context` 的 `Time: ${new Date().toISOString()}` 是毫秒精度、每轮必然不同：**这是 100% 触发、且就在生产装配里**（`src/index.ts:30`）的真实缺陷。
+
+实测的量级（`boundary` + 两个插件，`live`）：系统提示 831 token，其中**只有 559 落在 `Time:` 之前**（67.3%）——`live` 下每轮请求的最长公共前缀止步于此，其后的 272 token 连同**整段对话历史**每轮重算；`frozen` 下整段提示在会话内逐字不变。
+
+守住的两条边界：`frozen` 只作用于**系统提示那一份**——`project_context` 工具照旧实时读盘（否则冻掉的不只是前缀稳定性，而是实时读的能力）；两臂的**首帧字节逐字相同**（用 `mock.timers` 把时钟拨回同一刻渲染两条臂来钉），因此这一维测的是「同一段文本稳不稳」，不是「换了一段提示文本」。记在 [CHANGES 的 NX-39-2 节](CHANGES.md#nx-39-2-易变提示段落的冻结开关)。
 
 ### NX-38 区分度的获取（设计，零付费）
 
