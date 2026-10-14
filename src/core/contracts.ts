@@ -38,7 +38,11 @@ export interface Loop { run(agent: Agent, input: string | undefined, options?: R
 
 export interface Execution { approval?: <T>(work: () => Promise<T>) => Promise<T>; signal: AbortSignal; sessionId?: string; toolCallId?: string; agent?: Agent }
 export interface ContentBlock { type: string; text?: string; [key: string]: unknown }
-export interface ToolResult { value: unknown; content: ContentBlock[]; isError: boolean }
+// NX-39 新增 previewTruncated：工具结果的**预览**被截断（tool-results 插件把超限的那条截成头尾预览并落盘，
+// 返回值带回 ref）。它与 `command.stdout.truncated` 是两件事——后者是命令采集本身的上限（NX-33 的尾部窗口），
+// 前者是「进历史的那份被换成了预览」。对照 B 与 NX-39 因子 1 的「工具输出有界」半边量的正是后者，因此
+// 字段名取 previewTruncated 而不是 truncated，避免两个截断在同一份日志里同名。
+export interface ToolResult { value: unknown; content: ContentBlock[]; isError: boolean; previewTruncated?: boolean }
 export interface ToolDefinition {
   name: string; description?: string; parameters?: Arguments
   execute(args: Arguments, execution: Execution): unknown | Promise<unknown>
@@ -65,7 +69,11 @@ export interface EventData {
   // requestId 可缺省以兼容旧日志；存在时它与随后的 model/start 相同，使投影归属成为日志中可读的事实，
   // 而不是依赖“同一 run 内最近一个投影”的位置推断。投影已发出但对应 model/start 缺失，即该请求因
   // 上下文溢出或 token 预算未发出。
-  'context/projection': { requestId?: string; estimatedInputTokens: number; reservedOutputTokens: number; safetyMarginTokens: number; removedTaskIds: string[] }
+  // systemPromptDigest 是本轮装配出的系统提示的 sha256（NX-39 因子 2 的读数）。它必须记在投影里而不是
+  // 由评估侧现算：付费跑留下的只有这份日志，而「第 2 轮起系统提示与前一轮逐字相同」这条预注册要求报的量
+  // 除了这里没有第二个来源。**摘要而不是原文**：系统提示含工作区内容，整段入库会让证据体积随轮次膨胀，
+  // 而判据只问「两轮是不是同一串」。
+  'context/projection': { requestId?: string; estimatedInputTokens: number; reservedOutputTokens: number; safetyMarginTokens: number; removedTaskIds: string[]; systemPromptDigest?: string }
   'context/summary-start': { trigger: 'pressure' | 'context-overflow' | 'explicit'; budgetTokens: number; projectedTokens: number; plannedStart: number; plannedEnd: number; plannedNodes: number }
   'context/summary-end': { startSeq: number; outcome: { kind: 'applied' } | { kind: 'declined'; reason: 'summary-failed' | 'summary-empty' | 'summary-not-smaller' | 'turn-started' | 'plan-stale' | 'agent-gone' | 'cancelled' | 'unclosed' } }
   'context/summary': { startSeq: number; trigger: 'pressure' | 'context-overflow' | 'explicit'; budgetTokens: number; projectedTokens: number; shadowedSeqs: number[]; shadowedTokens: number; summaryTokens: number; retainedNodes: number; summary: string; frame: string }
@@ -76,7 +84,7 @@ export interface EventData {
   'user/message': { content: string }
   'assistant/message': { content: string; reasoningContent?: string }
   'assistant/tool_calls': { content?: string | null; reasoningContent?: string; toolCalls: ToolCall[] }
-  'tool/result': { toolCallId: string; name?: string; isError?: boolean; status?: 'completed' | 'skipped' | 'unknown'; content: string }
+  'tool/result': { toolCallId: string; name?: string; isError?: boolean; status?: 'completed' | 'skipped' | 'unknown'; content: string; previewTruncated?: boolean }
 }
 export type SessionEvent = { [K in keyof EventData]: { version: 1; sessionId: string; id: string; taskId?: string; runId?: string; seq: number; type: K; data: EventData[K]; at: string } }[keyof EventData]
 export interface Session { id: string; meta: Arguments; events: SessionEvent[]; createdAt: string }

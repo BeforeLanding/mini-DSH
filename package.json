@@ -18,6 +18,8 @@
     "eval:estimate": "pnpm build && node dist/scripts/eval-estimate.js",
     "eval:ledger-target": "pnpm build && node dist/scripts/eval-ledger-target.js",
     "eval:ledger-verdict": "pnpm build && node dist/scripts/eval-ledger-verdict.js",
+    "eval:ablation-report": "pnpm build && node dist/scripts/eval-ablation-report.js",
+    "eval:factor-precheck": "pnpm build && node dist/scripts/eval-factor-precheck.js",
     "demo:fix": "pnpm build && node dist/scripts/demo-fix.js",
     "demo:resume": "pnpm build && node dist/scripts/demo-resume.js",
     "demo:unknown": "pnpm build && node dist/scripts/demo-unknown.js",

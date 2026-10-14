@@ -136,6 +136,8 @@ export class SessionRuntime {
             // 混进被比较的量正是这类实验最容易犯的错。因此只数真正跑过的：completed（跑完并报错）与
             // unknown（跑过但结果无法判定，它确实是没跑成的调用）。
             if (event.type === 'tool/result' && event.data.isError && event.data.status !== 'skipped') state.counters.toolErrors++
+            // 预览截断与 budget 无关，因此不排除 skipped——预算耗尽时写下的那条结果本来就没有预览可言。
+            if (event.type === 'tool/result' && event.data.previewTruncated === true) state.counters.previewTruncations++
             if (event.type === 'model/usage') {
                 state.usage.push(event.data.usage)
                 state.counters.inputTokens += event.data.usage.inputTokens

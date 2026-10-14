@@ -5,8 +5,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { Context } from '@deepseek-ai/cordis'
-import { ablationIds, comprehensionIds, createFixture, mutationIds, screeningIds, sequenceIds, boundedIds, demoIds, blindIds, ledgerIds, fixtureProcessTimeoutMs, readTaskSequence, readFixtureFile } from '../scripts/coding-fixtures.js'
-import type { FixtureId } from '../scripts/coding-fixtures.js'
+import { ablationIds, categoryOrder, comprehensionIds, createFixture, fixtureCategory, fixtureIds, fixtureKind, historicalCategories, mutationIds, screeningIds, sequenceIds, boundedIds, demoIds, blindIds, ledgerIds, fixtureProcessTimeoutMs, readTaskSequence, readFixtureFile } from '../scripts/coding-fixtures.js'
+import type { FixtureCategory, FixtureId } from '../scripts/coding-fixtures.js'
 import { ablationPhases, batchPhases, evalPolicy, ledgerPhases, phaseCaps } from '../scripts/eval-runner.js'
 import { phaseRegistry } from '../scripts/eval-cli.js'
 import type { ToolCall } from '../src/core/contracts.js'
@@ -412,6 +412,34 @@ test('the ablation registry references the existing batches without touching the
     // 「引用」的可观察后果：四格的四条计划逐字相同，且恰好指向这一份任务集。
     assert.deepEqual(phaseRegistry(phase), [...ablationIds], phase)
   }
+})
+
+// 五类代码任务是**报告口径**的一部分：预注册要求「分类别报分子／分母 × 重复数，前三类与后两类分开呈现」。
+// 因此这张映射表被按值钉住，而不是只断言「每个 fixture 都有一个类别」——后者在有人把 `boundary` 从
+// bug 修复挪到功能实现时照样成立，而那会把一份历史读数的口径悄悄改掉。
+// 前三类的**构成**同样钉住：这 12 项里 bug 修复只有 2 个、功能实现有 8 个（`audit`／`repair` 看着像
+// bug 修复，但它们不在筛查批次里），写错成「4＋6＋2」时这份用例会红。
+test('every fixture has exactly one category, and the screening batch splits two-eight-two', () => {
+  const counts = new Map<FixtureCategory, number>()
+  for (const id of fixtureIds) {
+    const category = fixtureCategory(id)
+    assert.ok(categoryOrder.includes(category), `${id} → ${category}`)
+    counts.set(category, (counts.get(category) ?? 0) + 1)
+  }
+  // fixtureIds 是全部 25 项之并，其中每项都要有类别；上面那个 for 已经把「漏一个」变成 undefined 报错。
+  assert.equal(fixtureIds.length, 25)
+  assert.deepEqual(
+    { bugfix: counts.get('bugfix'), feature: counts.get('feature'), refactor: counts.get('refactor'), comprehension: counts.get('comprehension'), mutation: counts.get('mutation') },
+    { bugfix: 4, feature: 11, refactor: 2, comprehension: 4, mutation: 4 })
+  // 四格任务集（20 项）里，前三类是 12 项、后两类是 8 项——「分开呈现」的两段各自的分母。
+  const inAblation = ablationIds.map(id => fixtureCategory(id))
+  assert.equal(inAblation.filter(category => historicalCategories.includes(category)).length, 12)
+  assert.equal(inAblation.filter(category => !historicalCategories.includes(category)).length, 8)
+  assert.equal(inAblation.filter(category => category === 'bugfix').length, 2)
+  assert.equal(inAblation.filter(category => category === 'refactor').length, 2)
+  // 两个切法是正交的：`kind` 说判据怎么算、`category` 说问的是什么能力，`edit` 这一类里同时住着三种。
+  const kinds = new Set(ablationIds.map(id => `${fixtureKind(id)}/${fixtureCategory(id)}`))
+  assert.deepEqual([...kinds].sort(), ['edit/bugfix', 'edit/feature', 'edit/refactor', 'mutation/mutation', 'repro/comprehension'])
 })
 
 async function runFixtureAcrossBudgetStop(id: FixtureId) {

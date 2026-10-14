@@ -190,5 +190,7 @@ function describe(id: FixtureId, repeat: number, outcome: RunOutcome, spent: { r
   // NX-39：工具错误与缓存命中进摘要行。cache 是提示优化那一维的**主信号**（它改变的是成本不是能力），
   // 跑的时候当场看得见才有意义——跑完再从 report.json 里翻，等于把判据留到了看见结果之后。
   const counters = outcome.counters
-  return `[${spent.runs}] ${id}#${repeat}: ${outcome.status} accepted=${outcome.accepted} 请求=${counters.modelRequests} 工具=${counters.toolCalls} 错误=${counters.toolErrors} token=${counters.totalTokens} cache=${counters.cacheReadTokens} ${reason} 累计 ${spent.requests}/${limits.requests} 请求 ${spent.tokens}/${limits.tokens} token`
+  // 截断数同样进摘要行：因子 1 的「工具输出有界」那一半在四格里只有两格开着，跑的时候当场看得见
+  // 才有意义（同 cache）。
+  return `[${spent.runs}] ${id}#${repeat}: ${outcome.status} accepted=${outcome.accepted} 请求=${counters.modelRequests} 工具=${counters.toolCalls} 错误=${counters.toolErrors} 截断=${counters.previewTruncations} token=${counters.totalTokens} cache=${counters.cacheReadTokens} ${reason} 累计 ${spent.requests}/${limits.requests} 请求 ${spent.tokens}/${limits.tokens} token`
 }

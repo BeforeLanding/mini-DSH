@@ -62,6 +62,34 @@ export function fixtureKind(id: FixtureId): FixtureKind {
   if ((mutationIds as readonly FixtureId[]).includes(id)) return 'mutation'
   return 'edit'
 }
+// NX-39 的五类代码任务。**它与 `fixtureKind` 是两个正交的切法**，不要合并：`kind` 说的是「判据怎么算」
+// （就地改源码 / 交一份复现产物 / 交一套测试），`category` 说的是「这道题问的是什么能力」，而两者在本批
+// 里恰好不一一对应——`edit` 这一类里同时住着 bug 修复、功能实现与重构三种。
+// 这个映射是报告口径的一部分：预注册要求「分类别报分子／分母 × 重复数，前三类与后两类分开呈现」，
+// 而把满分的效率结果与未满分的能力结果混进一张成功率表，是这份实验最容易犯的错。
+export type FixtureCategory = 'bugfix' | 'feature' | 'refactor' | 'comprehension' | 'mutation'
+export const categoryLabels: Readonly<Record<FixtureCategory, string>> = Object.freeze({
+  bugfix: 'bug 修复', feature: '功能实现', refactor: '重构', comprehension: '代码理解', mutation: '测试编写',
+})
+// 逐项列全而不是按注册表推断：`Record<FixtureId, …>` 让「新加一个 fixture 却没说它属于哪一类」变成编译错误，
+// 而按注册表推断（例如「screeningIds 的前四个是 bug 修复」）会在某天重排注册表时静默改掉历史口径。
+// 前三类的划分依据是各 fixture 的 `TASK.md` 正文：`boundary`／`pagination` 是「修复＋先定位回归」，
+// `interface`／`inventory` 是「改接口并同步调用方」，其余八个是新增行为。**这十二个里 bug 修复只有两个、
+// 功能实现有八个**——`audit` 与 `repair` 看着像 bug 修复，但它们不在筛查批次里。
+const categories: Record<FixtureId, FixtureCategory> = {
+  boundary: 'bugfix', pagination: 'bugfix',
+  interface: 'refactor', inventory: 'refactor',
+  options: 'feature', normalize: 'feature', dedupe: 'feature', query: 'feature',
+  retry: 'feature', merge: 'feature', csv: 'feature', summary: 'feature',
+  pipeline: 'feature', audit: 'bugfix', repair: 'bugfix', blind: 'feature', ledger: 'feature',
+  'repro-sessions': 'comprehension', 'repro-money': 'comprehension', 'repro-tally': 'comprehension', 'repro-order': 'comprehension',
+  'mutation-bands': 'mutation', 'mutation-quota': 'mutation', 'mutation-slug': 'mutation', 'mutation-versions': 'mutation',
+}
+export function fixtureCategory(id: FixtureId): FixtureCategory { return categories[id] }
+// 报告里两段的固定次序：前三类（有历史读数、预期饱和）与后两类（无历史读数、本批唯一可能不饱和的）。
+// 次序写死在一处，免得两处报告各排各的。
+export const categoryOrder: readonly FixtureCategory[] = ['bugfix', 'feature', 'refactor', 'comprehension', 'mutation']
+export const historicalCategories: readonly FixtureCategory[] = ['bugfix', 'feature', 'refactor']
 const repository = fileURLToPath(new URL('../../', import.meta.url))
 const fixtures = path.join(repository, 'test', 'fixtures', 'coding')
 // Cold-starting a Node process inside a freshly created temp workspace costs far more on

@@ -8,7 +8,7 @@ import { estimateUsage } from './token-estimator.js'
 import { StreamJournal } from './stream-journal.js'
 import { ModelStreamError } from './model-error.js'
 import type { BudgetPolicy, RunState, Usage, StopReason } from './budget.js'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { BudgetStop } from './budget.js'
 import { resolveBudget } from './budget.js'
 import type { Agent, RunOptions, ToolSchema } from './contracts.js'
@@ -86,7 +86,10 @@ export class AgentLoopRuntime {
                 maxOutputTokens = control.outputAllowance(projection.estimatedInputTokens) ?? 0
                 append(sessionId, 'context/projection', {
                     requestId, estimatedInputTokens: projection.estimatedInputTokens, reservedOutputTokens: maxOutputTokens,
-                    safetyMarginTokens: projection.safetyMarginTokens, removedTaskIds: projection.removedTaskIds })
+                    safetyMarginTokens: projection.safetyMarginTokens, removedTaskIds: projection.removedTaskIds,
+                    // NX-39 因子 2 的读数：本轮装配出的系统提示的摘要。投影是「这一轮要发出去的东西」的记录，
+                    // 系统提示正是其中一部分，记在这里就不必为了量前缀稳定性再多一条事件类型。
+                    systemPromptDigest: createHash('sha256').update(system).digest('hex') })
             }
             recordProjection()
 
@@ -223,6 +226,9 @@ export class AgentLoopRuntime {
                 // 这里只可能记 completed 的（跳过与取消在上面的分支里 continue 掉了），与
                 // session-runtime 折叠时排除 status 'skipped' 的口径严格对齐。
                 if (result.isError) state.counters.toolErrors++
+                // 预览截断同理，只是它由结果投影标出、不从 isError 派生：有界档下超限的结果被换成头尾预览
+                // 并落盘，无界档下同一条结果逐字进历史。这条计数就是「有界」这一半的触发率来源。
+                if (result.previewTruncated) state.counters.previewTruncations++
 
                 const renderedContent = this.tools.renderResult(result)
 
@@ -232,6 +238,9 @@ export class AgentLoopRuntime {
                     isError: result.isError,
                     content: renderedContent,
                     status: 'completed',
+                    // 折叠路径要能重建同一个 previewTruncations，所以这个标记必须落进事件——它不在 content 的
+                    // 语义里（content 是给人看的那串文本），靠正则去认它是把渲染细节当契约。
+                    ...(result.previewTruncated ? { previewTruncated: true } : {}),
                 })
                 await this.sessions.flush(sessionId)
                 onToolResult?.({ ...result, renderedContent, name: call.name, toolCallId: call.id })

@@ -86,7 +86,7 @@ test('delivery report links confirmed session, task and run usage across continu
       { model: 'mock/first', status: 'max_steps', stopReason: 'max_steps' },
       { model: 'mock/second', status: 'running', stopReason: null },
     ])
-    assert.deepEqual(report.taskCounters, { modelRequests: 2, toolCalls: 0, toolErrors: 0, inputTokens: 18, outputTokens: 8, totalTokens: 26, cacheReadTokens: 0, activeDurationMs: 0, approvalDurationMs: 0 })
+    assert.deepEqual(report.taskCounters, { modelRequests: 2, toolCalls: 0, toolErrors: 0, previewTruncations: 0, inputTokens: 18, outputTokens: 8, totalTokens: 26, cacheReadTokens: 0, activeDurationMs: 0, approvalDurationMs: 0 })
     assert.deepEqual(report.taskUsage, { inputTokens: 18, outputTokens: 8, totalTokens: 26, sources: ['provider', 'estimated'], uncertain: true })
     second.counters.modelRequests = 1; second.counters.inputTokens = 11; second.counters.outputTokens = 5; second.counters.totalTokens = 16; second.usage.push(estimated)
     sessions.finishRun(second, 'completed'); await sessions.flush(session.id); await store.close()

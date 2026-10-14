@@ -53,21 +53,22 @@ git log --oneline --reverse | sed -n '12p'                # 43e3829：分界之�
 
 ### 零密钥跑通
 
-下面九条命令**不需要 `.env`、不需要任何密钥、不发出模型请求**，用来确认装配、回归、任务集、评测运行器与四条演示在本机成立。行尾注释是各命令的实际输出：
+下面十条命令**不需要 `.env`、不需要任何密钥、不发出模型请求**，用来确认装配、回归、任务集、评测运行器、因子预检与四条演示在本机成立。行尾注释是各命令的实际输出：
 
 ```powershell
 pnpm install --frozen-lockfile
-pnpm check            # syntax ok: 114 files
-pnpm test             # tests 303 / pass 303 / fail 0 / skipped 0
-pnpm fixtures:check   # 17 项：初始全部失败、参考解全部通过
-pnpm eval:offline     # planned 12 / executed 12 / accepted 12
-pnpm demo:fix         # 退出码 0：项目规则 → 定位 → 修改 → 失败测试 → 再修复 → diff 与证据
-pnpm demo:resume      # 退出码 0：预算停止与同 task 恢复
-pnpm demo:unknown     # 退出码 0：崩溃恢复里的 unknown 与陈旧锁
-pnpm demo:compact     # 退出码 0：单任务长会话的上下文压缩与按事件号回读
+pnpm check              # syntax ok: 122 files
+pnpm test               # tests 344 / pass 344 / fail 0 / skipped 0
+pnpm fixtures:check     # 25 项：初始全部失败、参考解全部通过
+pnpm eval:offline       # planned 12 / executed 12 / accepted 12
+pnpm eval:factor-precheck  # 退出码 0：装置能被驱动到阈值以上，因子 1 的两半都出手
+pnpm demo:fix           # 退出码 0：项目规则 → 定位 → 修改 → 失败测试 → 再修复 → diff 与证据
+pnpm demo:resume        # 退出码 0：预算停止与同 task 恢复
+pnpm demo:unknown       # 退出码 0：崩溃恢复里的 unknown 与陈旧锁
+pnpm demo:compact       # 退出码 0：单任务长会话的上下文压缩与按事件号回读
 ```
 
-各条的覆盖面不同：`pnpm check` 只做类型、构建与产物语法；`pnpm test` **使用模拟模型驱动 Loop，但真实执行 Bash 与文件工具**；`pnpm fixtures:check` 逐项跑独立验收器并核对受保护文件未被改动；`pnpm eval:offline` 验证评测运行器与整批上限核算，它会自己打印一行 `note: 模拟模型驱动，用于验证运行器与整批上限；通过率不作为模型能力证据`。
+各条的覆盖面不同：`pnpm check` 只做类型、构建与产物语法；`pnpm test` **使用模拟模型驱动 Loop，但真实执行 Bash 与文件工具**；`pnpm fixtures:check` 逐项跑独立验收器并核对受保护文件未被改动；`pnpm eval:offline` 验证评测运行器与整批上限核算，它会自己打印一行 `note: 模拟模型驱动，用于验证运行器与整批上限；通过率不作为模型能力证据`；`pnpm eval:factor-precheck` 逐项跑脚本化驱动，回答「装置**能不能**让因子出手」——两半（工具输出有界、主动压缩）在合成驱动下都必须出手，**机制不成立时它退出 1**，按 R-21 不得开跑对照。它报出的逐项数字是**下界**（脚本化序列读不了需要先定位的大日志、也没有模型的自发探索），**不**用来判「仪器成立与否」。
 
 这些命令的绿色**只说明 Harness 在本机成立，不代表真实模型的编程能力**——真实模型的结论见 [NX-08 评测报告](docs/context-budget/NX-08-REPORT.md)（结论受样本量与任务集天花板效应限制）与 [NX-38 评测报告](docs/context-budget/NX-38-REPORT.md)（预注册的两批：批次 A 判「装置能分辨裁与不裁」，批次 B 的自变量未被触发）。
 
@@ -147,13 +148,15 @@ pnpm check
 pnpm test
 ```
 
-当前 269 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读及尾部窗口、上下文压缩、可靠编辑/任务变更、结构化命令、here-doc、Windows Git Bash 临时目录、验证报告、请求 trace、文档锚点与会话锁核验回归测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
+当前 344 条测试，保留原 22 条核心/Cordis 回归，并增加预算、容量、持久化、恢复、续跑、CLI、项目上下文、有界工具/结果回读及尾部窗口、上下文压缩、可靠编辑/任务变更、结构化命令、here-doc、Windows Git Bash 临时目录、验证报告、请求 trace、文档锚点、会话锁核验与两类新判据（复现脚本、变异得分）回归测试。集成测试使用模拟模型，但实际执行 Bash，并验证文件工具、工具卸载和可选/必需插件的失败行为。测试不需要 API Key。
 
-NX-05a 起提供可重复的 [编程任务 fixture](test/fixtures/coding/README.md)，NX-05b 扩展到 12 项，覆盖边界修复、功能扩展、跨文件接口修改、去重、分页、查询重试、合并、CSV、库存与汇总等；此后又加入多阶段序列 `pipeline`、单任务 `audit`、演示夹具 `repair`、`pipeline` 的无公开检查变体 `blind`，以及一套新任务类别 `ledger`（「流水 → 台账」导出，判据的某一段只写在排期说明里、不在工作区），**当前注册表共 17 项 = 筛查 12 项（上列，冻结）+ 这 5 项**（`blind` 与 `pipeline` 是同一套任务，只差工作区里有没有公开 `check.mjs`）。运行 `pnpm fixtures:check` 核验全部 17 项的初始失败/参考通过基线；`pnpm test` 还覆盖模拟模型经真实文件/Bash 工具完成失败→修改→重跑的流程。每次使用新临时工作区，独立验收器保留在工作区外；模拟结果不代表真实模型编程成功率。
+NX-05a 起提供可重复的 [编程任务 fixture](test/fixtures/coding/README.md)，NX-05b 扩展到 12 项，覆盖边界修复、功能扩展、跨文件接口修改、去重、分页、查询重试、合并、CSV、库存与汇总等；此后又加入多阶段序列 `pipeline`、单任务 `audit`、演示夹具 `repair`、`pipeline` 的无公开检查变体 `blind`，一套新任务类别 `ledger`（「流水 → 台账」导出，判据的某一段只写在排期说明里、不在工作区），以及覆盖另两类任务的 `repro-*`（**代码理解**：交一份复现脚本，判据是它在缺陷上非零退出、在参考实现上恰好 0 退出）与 `mutation-*`（**测试编写**：交一套测试，判据是它杀掉足够多的变异体、且**不杀**行为保持的等价实现）各四项。**当前注册表共 25 项 = 筛查 12 项（上列，冻结）+ 这 13 项**（`blind` 与 `pipeline` 是同一套任务，只差工作区里有没有公开 `check.mjs`）。运行 `pnpm fixtures:check` 核验全部 25 项的初始失败/参考通过基线（两个新种类的前提按种类各查各的）；`pnpm test` 还覆盖模拟模型经真实文件/Bash 工具完成失败→修改→重跑的流程。每次使用新临时工作区，独立验收器保留在工作区外；模拟结果不代表真实模型编程成功率。
 
 `pnpm eval:offline` 用模拟模型把 12 个 fixture 跑成一次筛查阶段，用于验证评测运行器与整批上限核算（单次 run 预算与按阶段计数的整批上限见 [PLAN](docs/context-budget/PLAN.md#nx-08-评测批次上限预注册)）。该命令同样不使用真实模型，通过率不作为模型能力证据。
 
 `pnpm eval:screening` 与 `pnpm eval:sequence` 是**会真实计费**的评测入口：前者跑筛查批次的 12 个单任务 fixture，后者跑多阶段 fixture `pipeline` 的诊断烟测（同一会话内按序下发的十四个阶段，用于测量上下文裁剪在哪个阶段被触发）。两者都需要 `.env` 里的 `DEEPSEEK_API_KEY`，按 `--phase` 选择批次；先加 `--plan-only` 可以在不建目录、不出网、不需要密钥的情况下核对「这次要跑什么、上限多少、证据落在哪」。`--tasks` 只能取当前阶段清单内的子集。三个与评测相关的环境变量见 [.env.example](.env.example)。
+
+对照实验收尾用的两条命令都不计费：`pnpm eval:factor-precheck` 在**开跑之前**回答「装置能不能让因子出手」（机制不成立即退出 1）；`pnpm eval:ablation-report` 在**跑完之后**读四格各自的 `runs.jsonl`，按预注册的口径打印分类别成功率、触顶率、每格因子触发率与六类指标，并按固定顺序判定——**缺证据、一次运行都没跑成、或任何一格没跑满，它一律退出 1**，不会把「什么都没跑」印成「天花板未破」。
 
 `pnpm eval:estimate` 打印输入估算器与 DeepSeek 官方离线 tokenizer 的偏差分布（语料与固定参考值见 [test/fixtures/estimation](test/fixtures/estimation/README.md)）。结论：对中文、英文一致高估；对代码与 JSON 不是一致安全，实测有样本低估超过 10% 的容量余量。估算器或语料变化时该命令以非零退出码提示重新测量，不静默沿用旧结论。
 

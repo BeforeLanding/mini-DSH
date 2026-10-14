@@ -16,21 +16,22 @@ import type { ChatRequest, ChatResponse, EventData, SessionEvent, ToolCall } fro
 // 边界；不该等到真实模型烟测才发现读数不对。
 const stageEvent = <K extends keyof EventData>(seq: number, type: K, data: EventData[K], runId = 'run-1', at = '2026-10-01T00:00:00.000Z'): SessionEvent =>
   ({ version: 1, sessionId: 'session-1', id: `event-${seq}`, taskId: 'task-1', runId, seq, type, data, at }) as SessionEvent
-const projection = (seq: number, estimatedInputTokens: number, removedTaskIds: string[], scope: { requestId?: string; runId?: string } = {}) =>
-  stageEvent(seq, 'context/projection', { ...(scope.requestId === undefined ? {} : { requestId: scope.requestId }), estimatedInputTokens, reservedOutputTokens: 4096, safetyMarginTokens: 2048, removedTaskIds }, scope.runId)
+const projection = (seq: number, estimatedInputTokens: number, removedTaskIds: string[], scope: { requestId?: string; runId?: string; digest?: string } = {}) =>
+  stageEvent(seq, 'context/projection', { ...(scope.requestId === undefined ? {} : { requestId: scope.requestId }), estimatedInputTokens, reservedOutputTokens: 4096, safetyMarginTokens: 2048, removedTaskIds, ...(scope.digest === undefined ? {} : { systemPromptDigest: scope.digest }) }, scope.runId)
 const modelStart = (seq: number, requestId: string, at?: string) => stageEvent(seq, 'model/start', { taskId: 'task-1', runId: 'run-1', requestId, estimatedInputTokens: 100 }, 'run-1', at)
 const modelEnd = (seq: number, requestId: string, at?: string) => stageEvent(seq, 'model/end', { requestId, complete: true }, 'run-1', at)
 const modelUsage = (seq: number, requestId: string, source: 'provider' | 'estimated') =>
   stageEvent(seq, 'model/usage', { taskId: 'task-1', runId: 'run-1', requestId, usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12, source, uncertain: source === 'estimated' } })
 
 const counters = (modelRequests: number, totalTokens: number): Counters =>
-  ({ modelRequests, toolCalls: 0, toolErrors: 0, inputTokens: 0, outputTokens: 0, totalTokens, cacheReadTokens: 0, activeDurationMs: 0, approvalDurationMs: 0 })
+  ({ modelRequests, toolCalls: 0, toolErrors: 0, previewTruncations: 0, inputTokens: 0, outputTokens: 0, totalTokens, cacheReadTokens: 0, activeDurationMs: 0, approvalDurationMs: 0 })
 // 逐字段独立求和，而不是复用 eval-fixture 的 sumCounters：用例要给出「应该是多少」，复用实现里的
 // 求和等于用结论证明结论。
 const sumStages = (all: readonly Counters[]): Counters => ({
   modelRequests: all.reduce((total, stage) => total + stage.modelRequests, 0),
   toolCalls: all.reduce((total, stage) => total + stage.toolCalls, 0),
   toolErrors: all.reduce((total, stage) => total + stage.toolErrors, 0),
+  previewTruncations: all.reduce((total, stage) => total + stage.previewTruncations, 0),
   inputTokens: all.reduce((total, stage) => total + stage.inputTokens, 0),
   outputTokens: all.reduce((total, stage) => total + stage.outputTokens, 0),
   totalTokens: all.reduce((total, stage) => total + stage.totalTokens, 0),
@@ -481,6 +482,8 @@ test('a stage summary reports a stage that never pruned without inventing eviden
     firstPrunedProjection: null, removedTaskIds: [], unsentProjections: 0,
     usageSources: { provider: 2, estimated: 0 },
     compactions: { applied: 0, pressure: 0, declined: 0 },
+    // 两条投影都不带 systemPromptDigest（合成的旧日志），因此轮数为 0——不是「都稳定」。
+    promptRounds: { rounds: 0, stable: 0 },
     // 这两次请求都有 model/start 而没有 model/end，因此不成对、不进延迟数组——空的不是「延迟为 0」，
     // 是「没有可配对的请求」。把未闭合的请求按日志末条时间补成一条会把等待记成延迟。
     requestDurationsMs: [], modelDurationMs: 0,
@@ -520,8 +523,36 @@ test('a stage summary neither absorbs other runs nor hides projections that were
     projections: 0, firstPrunedProjection: null, removedTaskIds: [], unsentProjections: 0,
     usageSources: { provider: 0, estimated: 0 },
     compactions: { applied: 0, pressure: 0, declined: 0 },
+    promptRounds: { rounds: 0, stable: 0 },
     requestDurationsMs: [], modelDurationMs: 0,
   })
+})
+
+// NX-39 因子 2（前缀缓存安全）的读数只能从投影里的系统提示摘要来：付费跑留下的没有别的东西。
+// 三条边界各自钉住——同一次请求的两条投影（压缩会在同一 requestId 下再记一条）**只算一轮**；缺摘要的
+// 投影不算轮，更不能被当成「与上一轮相同」（那会让一台没装仪器的装置看起来完全稳定）；摘要按**相邻**比较，
+// 中途变一次又变回去仍要记成不稳定。
+test('a stage summary counts rounds whose system prompt is byte-identical to the previous round', () => {
+  const A = 'a'.repeat(64), B = 'b'.repeat(64)
+  const stable = summarizeStage([
+    projection(1, 100, [], { requestId: 'q1', digest: A }), modelStart(2, 'q1'),
+    projection(3, 200, [], { requestId: 'q2', digest: A }), modelStart(4, 'q2'),
+    projection(5, 300, [], { requestId: 'q3', digest: A }), modelStart(6, 'q3'),
+  ], 'run-1')
+  assert.deepEqual(stable.promptRounds, { rounds: 3, stable: 2 })
+  // live 档的形状：每轮都不同。
+  const live = summarizeStage([
+    projection(1, 100, [], { requestId: 'q1', digest: A }), modelStart(2, 'q1'),
+    projection(3, 200, [], { requestId: 'q2', digest: B }), modelStart(4, 'q2'),
+  ], 'run-1')
+  assert.deepEqual(live.promptRounds, { rounds: 2, stable: 0 })
+  // 压缩：同一 requestId 下的第二条投影与第一条同摘要，两轮不是三轮；后半段变了，稳定数归零。
+  const compacted = summarizeStage([
+    projection(1, 100, [], { requestId: 'q1', digest: A }), modelStart(2, 'q1'),
+    projection(3, 90, [], { requestId: 'q1', digest: A }),
+    projection(4, 200, [], { requestId: 'q2', digest: B }), modelStart(5, 'q2'),
+  ], 'run-1')
+  assert.deepEqual(compacted.promptRounds, { rounds: 2, stable: 0 })
 })
 
 // NX-39 逐请求延迟由 model/start→model/end 的 at 现算，不改事件词表。用**真实毫秒差**断言而不是只断言

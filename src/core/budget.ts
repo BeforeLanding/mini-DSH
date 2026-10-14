@@ -69,8 +69,12 @@ export interface Usage { inputTokens: number; outputTokens: number; totalTokens:
 // （见 session-runtime.ts 的 #foldLatestRun），与 toolCalls/modelRequests 同一条路径，因此续跑与恢复
 // 折叠出来的值一致。逐请求延迟**不在这里**：它由 eval 侧从 model/start→model/end 的 at 时间戳现算，
 // 属于评测视图而不是运行时状态。
-export interface Counters { modelRequests: number; toolCalls: number; toolErrors: number; inputTokens: number; outputTokens: number; totalTokens: number; cacheReadTokens: number; activeDurationMs: number; approvalDurationMs: number }
-export const emptyCounters = (): Counters => ({ modelRequests: 0, toolCalls: 0, toolErrors: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, cacheReadTokens: 0, activeDurationMs: 0, approvalDurationMs: 0 })
+// NX-39 又增 previewTruncations：工具结果的**预览**被截断的次数。它是「工具输出有界」这一半的触发率
+// 来源——有界档下超限结果被换成头尾预览并落盘（带回 ref），无界档下同一条结果逐字进历史。没有它，
+// 「关掉有界掉 0 分」这句话在账面上无法与「有界根本没生效」区分开（预注册的必须报的量）。
+// 名字里写明 preview：`command.stdout.truncated` 是命令采集本身的上限，两件事不能同名。
+export interface Counters { modelRequests: number; toolCalls: number; toolErrors: number; previewTruncations: number; inputTokens: number; outputTokens: number; totalTokens: number; cacheReadTokens: number; activeDurationMs: number; approvalDurationMs: number }
+export const emptyCounters = (): Counters => ({ modelRequests: 0, toolCalls: 0, toolErrors: 0, previewTruncations: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, cacheReadTokens: 0, activeDurationMs: 0, approvalDurationMs: 0 })
 export interface RunState {
   sessionId: string; taskId: string; runId: string; previousRunId?: string; model: string
   policy: Readonly<BudgetPolicy>; counters: Counters; status: 'running' | StopReason

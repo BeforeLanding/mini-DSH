@@ -36,6 +36,7 @@ const sumCounters = (all: readonly Counters[]): Counters => all.reduce((total, c
   modelRequests: total.modelRequests + counters.modelRequests,
   toolCalls: total.toolCalls + counters.toolCalls,
   toolErrors: total.toolErrors + counters.toolErrors,
+  previewTruncations: total.previewTruncations + counters.previewTruncations,
   inputTokens: total.inputTokens + counters.inputTokens,
   outputTokens: total.outputTokens + counters.outputTokens,
   totalTokens: total.totalTokens + counters.totalTokens,
@@ -88,6 +89,15 @@ export function summarizeStage(events: readonly SessionEvent[], runId: string) {
   // 已知偏差：恢复路径补写的 model/end 用的是补写时刻的 at（见 session-runtime 的 recover），因此崩溃
   // 恢复之后的第一次读数会偏大。报告里出现极端离群值时按这条解释，不要当成模型的真实延迟。
   // 保留整个数组而不是只留合计：p50/p95 是延迟口径的正确报法，合计会被单次超时拽偏。
+  // NX-39 因子 2 的读数：把投影按 requestId 归轮（一次压缩会在同一个 requestId 下再记一条投影，同轮取
+  // 最后一条，因为那才是真正发出去的那份）。`stable` 数的是「第 2 轮起与前一轮逐字相同」的轮数——这正是
+  // 预注册要求报的量。没有摘要的投影按「与上一轮不同」处理，不按相同：缺字段说明这条日志早于本项，
+  // 把它当成稳定会让一台坏掉的仪器看起来完全正常。
+  const digests: string[] = []
+  const lastDigestOfRequest = new Map<string, string>()
+  for (const event of projections) if (event.data.systemPromptDigest !== undefined) lastDigestOfRequest.set(String(event.data.requestId), event.data.systemPromptDigest)
+  for (const digest of lastDigestOfRequest.values()) digests.push(digest)
+  const stable = digests.filter((digest, index) => index > 0 && digest === digests[index - 1]).length
   const startedAt = new Map<string, number>()
   for (const event of scope) if (event.type === 'model/start') startedAt.set(event.data.requestId, Date.parse(event.at))
   const requestDurationsMs: number[] = []
@@ -105,6 +115,7 @@ export function summarizeStage(events: readonly SessionEvent[], runId: string) {
     unsentProjections,
     usageSources,
     compactions,
+    promptRounds: { rounds: digests.length, stable },
     requestDurationsMs,
     modelDurationMs: requestDurationsMs.reduce((sum, ms) => sum + ms, 0),
   }

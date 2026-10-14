@@ -307,6 +307,11 @@ export interface RunTaskDetail {
   // 判据弄丢了。评测路径上出现的 trigger 只有 pressure 与 context-overflow（explicit 来自 CLI 的
   // `/compact`，不在这条链路上），因此 `applied > 0 && pressure === 0` 就等价于「压缩由兜底触发」。
   compactions: { applied: number; pressure: number; declined: number }
+  // NX-39 因子 2 的读数（前缀缓存安全）：`rounds` 是本 run 发出过的轮数，`stable` 是其中「第 2 轮起与
+  // 前一轮的系统提示逐字相同」的轮数。取的是每轮 `context/projection` 里那份 sha256，不是原文。
+  // 预注册要求报的量是「第 2 轮起逐字相同的 **run** 占比」，由聚合器按 `rounds > 1 && stable === rounds - 1`
+  // 现算——把判定留在聚合器里，是为了让「怎么算稳定」只有一处定义。
+  promptRounds: { rounds: number; stable: number }
   // NX-39 逐请求延迟（毫秒），按 model/start→model/end 的 at 现算，**不新增事件类型**。保留整个数组
   // 而不是只留合计：p50/p95 是延迟的正确报法，而合计会被单次超时拽偏。未闭合的请求不进数组。
   requestDurationsMs: number[]

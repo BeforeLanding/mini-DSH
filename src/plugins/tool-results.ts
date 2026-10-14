@@ -38,7 +38,10 @@ export function apply(ctx: Context, config: ToolResultsConfig = {}) {
       const value = result.value as CommandResult
       const stdout = await project(value.stdout), stderr = await project(value.stderr)
       const projected = { ...value, stdout, stderr }
+      // NX-39：把「这一份被换成了预览」提到 ToolResult 上，让运行时有可数的信号。只认流自己的
+      // previewTruncated，不认 storageTruncated——后者是存盘时的上限，与进历史的那份是不是预览无关。
       return { value: projected, isError: result.isError || !!stdout.storageError || !!stderr.storageError,
+        previewTruncated: !!stdout.previewTruncated || !!stderr.previewTruncated,
         content: [{ type: 'text', text: JSON.stringify(projected, null, 2) }] }
     }
     const text = ctx.tools.renderResult(result), bytes = Buffer.from(text)
@@ -50,7 +53,8 @@ export function apply(ctx: Context, config: ToolResultsConfig = {}) {
     const tail = utf8Suffix(bytes.subarray(head.length), tailLimit)
     const omittedBytes = bytes.length - head.length - tail.length
     const window = omittedBytes > 0 ? { tail: tail.toString('utf8'), omittedBytes, resumeOffset: head.length } : {}
-    return { ...result, value: { ...saved, preview, ...window }, content: [{ type: 'text', text: `${preview}\n[tool_result ${JSON.stringify({ ...saved, originalBytes: bytes.length, ...window })}; use read_tool_result with ref and offset=0]` }] }
+    return { ...result, value: { ...saved, preview, ...window }, previewTruncated: true,
+      content: [{ type: 'text', text: `${preview}\n[tool_result ${JSON.stringify({ ...saved, originalBytes: bytes.length, ...window })}; use read_tool_result with ref and offset=0]` }] }
   }), 'register tool result projection')
   ctx.effect(() => ctx.tools.register({
     name: 'read_tool_result',
