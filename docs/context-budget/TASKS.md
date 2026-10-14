@@ -1,5 +1,9 @@
 # 任务清单
 
+### README 架构概览图 v1（2026-10-14）
+
+- **done**：将用户确认的架构图片保存到 `docs/images/architecture-v1.png`，在 README 顶部引用。单独一次提交；图片路径有效、`git diff --check` 通过、`pnpm check` 108 文件、`pnpm test` 280/280。实际结果记录在 CHANGES。
+
 更新：2026-10-14。每项只保留当前状态和证据入口；行为、边界、逐步提交与完整验收记录见 [CHANGES](CHANGES.md)。状态：`todo`、`in_progress`、`blocked`、`done`。
 
 ### NX-37 评测证据的来源指纹与 fixture 摘要钉

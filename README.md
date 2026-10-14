@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/BeforeLanding/mini-DSH/actions/workflows/ci.yml/badge.svg)](https://github.com/BeforeLanding/mini-DSH/actions/workflows/ci.yml)
 
+![mini-DSH 当前实现架构：入口与装配、Agent Loop、模型与工具、状态与证据，以及持久化恢复与执行约束](docs/images/architecture-v1.png)
+
 仿 DeepSeek Harness 的 **mini coding agent harness**：用 TypeScript / Cordis 构建的本地编程 Agent 运行环境。开发主线是让模型在真实代码仓库里走完「理解项目规则 → 定位代码 → 修改文件 → 运行检查 → 根据失败修复 → 交付 diff 与验证证据」这条链路；上下文管理、执行预算、权限闸门与持久化恢复贯穿其中。
 
 **范围**：单 Agent、单本地工作区、CLI 交互。核心依赖服务契约，不绑定具体模型或工具；DeepSeek 是首个模型适配器，MCP 只按可选外部插件接入。
