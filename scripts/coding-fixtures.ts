@@ -39,9 +39,11 @@ export const ledgerIds = ['ledger'] as const
 // 之外的新验收器上（`verify.mjs` 转交 `_shared/criteria.mjs`）。因此单独一份注册表。
 export const comprehensionIds = ['repro-sessions', 'repro-money', 'repro-tally', 'repro-order'] as const
 // NX-39「测试编写」类。判据是**变异得分**：agent 的测试在原始源码上必须全绿、杀掉 ≥ `minKilled` 个变异体、
-// 且**不杀**行为保持的等价体。与 comprehensionIds 同形（可改文件为空、判据在工作区之外），但判据的实现
-// 要到 NX-39-4 才落地，因此这里先占好位置、暂不设成员。
-export const mutationIds = [] as const
+// 且**不杀**行为保持的等价体。与 comprehensionIds 同形（可改文件为空、判据在工作区之外）。
+// 「不杀等价体」那一条是这一类的**主要防过拟合机制**：靠比对源码文本或哈希来判定「还是不是原来那份」的
+// 产物，会把与自己文本不同的等价体一并杀掉，于是当场判失败——这正是 ③a 记下的那处已知缺口
+// （repro 判据只看退出码，比对源码文本的产物可绕过）在这里被堵上的方式。
+export const mutationIds = ['mutation-bands', 'mutation-quota', 'mutation-slug', 'mutation-versions'] as const
 export const fixtureIds = [...screeningIds, ...sequenceIds, ...boundedIds, ...demoIds, ...blindIds, ...ledgerIds, ...comprehensionIds, ...mutationIds] as const
 export type FixtureId = typeof fixtureIds[number]
 // 三个种类。既有 17 个 fixture 全是 `edit`（就地改既有源码），行为逐字不变。
@@ -79,8 +81,15 @@ const sources: Record<FixtureId, string[]> = {
   // 配置全部进受保护集合（agent 不得就地改源码来「修好」它），而 agent 要交的产物是**新建**的文件——
   // 它不在 `initial/` 里，因此天然可写，无需另立一条「允许新建」的规则。
   'repro-sessions': [], 'repro-money': [], 'repro-tally': [], 'repro-order': [],
+  // 「测试编写」类同形：`initial/` 里的**正确**实现、公开的 `check.mjs`、规格与配置全部进受保护集合
+  // （agent 不得改源码或改公开检查来「让测试过」），而 agent 要交的 `suite.mjs` 是新建的文件。
+  'mutation-bands': [], 'mutation-quota': [], 'mutation-slug': [], 'mutation-versions': [],
 }
 async function exists(target: string): Promise<boolean> { return fs.stat(target).then(() => true, () => false) }
+// Harness 自己数变异体与等价体的目录项。数不出来（目录不存在）时返回 0，于是读数里报的任何正数都对不上。
+async function countDirectories(directory: string): Promise<number> {
+  try { return (await fs.readdir(directory, { withFileTypes: true })).filter(entry => entry.isDirectory()).length } catch { return 0 }
+}
 // 一个 fixture 要么是单个任务（TASK.md），要么是同一会话内按序下发的多个阶段（TASKS/*.md，按文件名
 // 排序，所以承载顺序的是 01-/02- 这类前缀）。两种布局互斥：若同时接受，读到哪一份就决定了模型被要求
 // 做多少，而读者很难察觉——这正是「任务做大一点就能触发裁剪」那条错误判据的同一类陷阱。
@@ -115,36 +124,71 @@ export interface ReproEvidence {
   passed: boolean
   reason?: string
 }
-export type AcceptanceEvidence = ReproEvidence
+// 「测试编写」类的读数。变异体与等价体的**总数**也在里面，但它们不由验收器说了算——Harness 自己数
+// 目录，两边对不上就当没有读数（见 readEvidence）。否则一个只跑了一个变异体、却自称总数为一的验收器
+// 可以完全自洽地通过。
+export interface MutationEvidence {
+  kind: 'mutation'; artifact: string
+  /** 阈值，来自 `criteria.json`；Harness 用自己的那份比对，不采信读数里这个数。 */
+  minKilled: number
+  /** 原始（正确）源码上必须**恰好 0**。spawn 失败记 null，而 null 永远不被当成成功。 */
+  originalExitCode: number | null
+  mutantsTotal: number; mutantsKilled: number
+  /** 没能跑完的变异体（超时、被输出上限掐掉）。它不是「杀灭」——超时不是发现缺陷——任何一份都判失败。 */
+  mutantsUnrunnable: number
+  equivalentsTotal: number
+  /** 被杀掉的行为保持等价体数，**必须为 0**。跑不完的等价体也记在这里。 */
+  equivalentsKilled: number
+  /** 验收器自己算出的结论；Harness 复算并比对。 */
+  passed: boolean
+  reason?: string
+}
+export type AcceptanceEvidence = ReproEvidence | MutationEvidence
 function evidencePasses(evidence: AcceptanceEvidence): boolean {
   if (evidence.kind === 'repro') return evidence.initialExitCode !== null && evidence.initialExitCode !== 0 && evidence.referenceExitCode === 0
+  if (evidence.kind === 'mutation') return evidence.originalExitCode === 0 && evidence.mutantsUnrunnable === 0 && evidence.mutantsKilled >= evidence.minKilled && evidence.equivalentsKilled === 0
   return false
 }
 export interface Acceptance {
   passed: boolean; exitCode: number | null; output: string; protectedFilesChanged: string[]
   evidence?: AcceptanceEvidence
 }
+// Harness 期望看到的读数形状。它来自 fixture 自己的装配（`criteria.json` 与 `mutants/`／`equivalents/`
+// 的目录项），不是从 report.json 抄回来的——抄回来的话，两边就永远一致，这道比对也就白设了。
+type ExpectedEvidence =
+  | { kind: 'repro' }
+  | { kind: 'mutation'; minKilled: number; mutantsTotal: number; equivalentsTotal: number }
 // report.json 是判据自己写的文件，因此按「不可信输入」读：解析失败、形状不对、或是还没实现的种类，
-// 一律当作**没有读数**，而不是猜一个默认值出来。
-async function readEvidence(reportDirectory: string): Promise<AcceptanceEvidence | undefined> {
+// 一律当作**没有读数**，而不是猜一个默认值出来。变异读数还要与 Harness 自己数的目录对得上：阈值、
+// 变异体总数、等价体总数三项里有一项对不上就整份作废。
+async function readEvidence(reportDirectory: string, expected: ExpectedEvidence): Promise<AcceptanceEvidence | undefined> {
   try {
     const parsed: unknown = JSON.parse(await fs.readFile(path.join(reportDirectory, 'report.json'), 'utf8'))
     if (!parsed || typeof parsed !== 'object') return undefined
     const candidate = parsed as AcceptanceEvidence
-    return candidate.kind === 'repro' && typeof candidate.artifact === 'string' && typeof candidate.passed === 'boolean' ? candidate : undefined
+    if (typeof candidate.artifact !== 'string' || typeof candidate.passed !== 'boolean') return undefined
+    if (expected.kind === 'repro') return candidate.kind === 'repro' ? candidate : undefined
+    if (candidate.kind !== 'mutation') return undefined
+    return candidate.minKilled === expected.minKilled && candidate.mutantsTotal === expected.mutantsTotal && candidate.equivalentsTotal === expected.equivalentsTotal
+      ? candidate : undefined
   } catch { return undefined }
 }
 // `criteria.json` 把「产物叫什么」这件事放在 fixture 自己身上：验收器与 Harness 读的是同一个文件，
 // 因而不会出现两处各写一遍、改一处漏一处。kind 必须与注册表一致——否则一个 fixture 可以声明自己是
 // repro 而注册表把它当 edit 跑，两边都能自洽，谁也不会报错。
-async function readCriteria(source: string, id: FixtureId): Promise<{ artifact: string } | undefined> {
+async function readCriteria(source: string, id: FixtureId): Promise<{ artifact: string; minKilled?: number } | undefined> {
   const kind = fixtureKind(id)
   if (kind === 'edit') return undefined
   const criteria: unknown = JSON.parse(await fs.readFile(path.join(source, 'criteria.json'), 'utf8'))
-  const record = criteria as { kind?: unknown; artifact?: unknown }
+  const record = criteria as { kind?: unknown; artifact?: unknown; minKilled?: unknown }
   if (record.kind !== kind) throw new Error(`fixture ${id} declares kind ${String(record.kind)} but its registry says ${kind}`)
   if (typeof record.artifact !== 'string' || !record.artifact || path.isAbsolute(record.artifact) || record.artifact.split(/[\\/]/).includes('..')) {
     throw new Error(`fixture ${id} declares an invalid criteria artifact: ${String(record.artifact)}`)
+  }
+  if (kind === 'mutation') {
+    // 阈值必须在装配时就合法：验收器也会自己再查一遍，但那时已经是「判据自己声明自己的门槛」了。
+    if (!Number.isSafeInteger(record.minKilled) || (record.minKilled as number) <= 0) throw new Error(`fixture ${id} declares an invalid minKilled: ${String(record.minKilled)}`)
+    return { artifact: record.artifact, minKilled: record.minKilled as number }
   }
   return { artifact: record.artifact }
 }
@@ -167,8 +211,13 @@ export async function createFixture(id: FixtureId) {
     // 参考产物必须来自 fixture 目录，**不能**由工作区推导（R-23）。它在门禁里充当正例：把它放进工作区
     // 之后验收必须通过，而放 weak/ 里那份反例产物必须判不过——判据不是白送的，靠这一对量出来。
     const artifact = criteria === undefined ? undefined : { path: criteria.artifact, content: await fs.readFile(path.join(source, 'oracle', criteria.artifact), 'utf8') }
+    const expected: ExpectedEvidence | undefined = criteria === undefined ? undefined : criteria.minKilled === undefined ? { kind: 'repro' } : {
+      kind: 'mutation', minKilled: criteria.minKilled,
+      mutantsTotal: await countDirectories(path.join(source, 'mutants')),
+      equivalentsTotal: await countDirectories(path.join(source, 'equivalents')),
+    }
     return {
-      id, kind, workspace, tasks, edits, artifact,
+      id, kind, workspace, tasks, edits, artifact, minKilled: criteria?.minKilled,
       async applyReference() {
         // edit：就地改既有源码，与历史逐字相同。
         if (kind === 'edit') {
@@ -202,7 +251,7 @@ export async function createFixture(id: FixtureId) {
         })
         const output = Buffer.from([result.error?.message, result.stdout, result.stderr].filter(Boolean).join('\n')).subarray(0, maxOutputBytes).toString('utf8')
         const marker = `acceptance passed: ${id}`
-        const evidence = reportDirectory === undefined ? undefined : await readEvidence(reportDirectory)
+        const evidence = reportDirectory === undefined || expected === undefined ? undefined : await readEvidence(reportDirectory, expected)
         // 三个条件缺一不可：退出码与标记照旧，且新种类还必须带上**自洽的读数**——验收器没写报告、
         // 或它自己算的结论与复算不一致，都判失败。
         const consistent = evidence !== undefined && evidence.passed === evidencePasses(evidence) && evidence.passed

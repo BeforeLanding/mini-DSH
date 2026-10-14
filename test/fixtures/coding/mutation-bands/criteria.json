@@ -1,0 +1,5 @@
+{
+  "kind": "mutation",
+  "artifact": "suite.mjs",
+  "minKilled": 4
+}

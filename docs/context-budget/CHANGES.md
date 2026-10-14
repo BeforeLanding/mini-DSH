@@ -1,5 +1,84 @@
 # 改动与验收证据
 
+### NX-39-3c 「测试编写」类（变异得分）
+
+给评测集补上五类任务里此前**没有判据**的两类中的第二类。**本步零付费，未发生任何模型调用**，`src/` 一行未动——新增的是 fixture 数据、`_shared/criteria.mjs` 里的一段判据实现、Harness 侧的复算与一道门禁。
+
+**判据换了个方向：被判的不是源码，是 agent 写的那套测试。** 工作区里 `src/<mod>.mjs` 已经**正确实现**规格，另有一份公开的 `check.mjs`（只跑规格里给的例子）。任务要求新建 `suite.mjs`，验收把它放到工作区副本上跑多次：
+
+- 在**当前源码**上必须**恰好退 0**；
+- 在 `mutants/` 的每个**变异体**上：杀掉（退非零）的个数必须 ≥ `criteria.json` 的 `minKilled`；
+- 在 `equivalents/` 的每个**行为保持的等价实现**上必须**仍然退 0**——杀掉任何一个即判失败。
+
+第三句是这一类的**主要防过拟合机制**，也是它比 `repro` 强的地方，下面单独说。
+
+**两类都只有一处可改的源码，`sources[id] = []`。** 于是 `initial/` 里的一切（正确实现、公开 `check.mjs`、`docs/SPEC.md`、`package.json`）自动进受保护集合——agent 不能改源码或改公开检查来「让测试过」——而它新建的 `suite.mjs` 因为不在 `initial/` 里天然可写。
+
+| fixture | 工作区唯一导出 | 变异算子 | 变异体 | 参考套件杀 | 公开检查杀 | `minKilled` |
+|---|---|---|---|---|---|---|
+| `mutation-bands` | `bandOf(score)` | 阈值比较符翻转、边界常量、标签错配 | 6 | **6** | 2 | 4 |
+| `mutation-quota` | `takeWithin(entries, limit)` | 越限判断、负值校验、累加式、收集顺序、`break`→`continue`、空 id | 7 | **7** | 2 | 5 |
+| `mutation-slug` | `slugify(name, options)` | 兜底/长度守卫、首尾连字符、空串判据、截断尾部、折叠 `+` | 6 | **6** | 1 | 4 |
+| `mutation-versions` | `compareVersions(left, right)` | 段数上限、空段正则、相等短路、只比前两段、删去「左小」分支、缺段补零 | 6 | **6** | 2 | 4 |
+
+参考套件杀满、公开检查一个都够不着阈值——**这张表就是「阈值不是白送的」的全部证据**，且它由 `pnpm test` 里的门禁与 `fixtures:check` 各量一遍（CI 只跑前者）。
+
+**两条硬约束，与 `repro` 的「一模块一缺陷」同源。**
+
+1. **一模块一变异**：每个变异体只改**一个文件、一处 hunk**（`countHunks === 1`，含整行删除的那一份），且导出面在 `initial`／每个变异体／每个等价体上**逐字相同**。改动多于一处的变异体，可能被「别的改动」杀掉，读数就不再对应这一处；导出面变了则根本不是同一道题的另一种写法。
+2. **等价体必须是整文件重写**（`countHunks >= 2`）：只改一两处的「等价体」与原文差别太小、太像一次针对性的规避，一个按行号或按片段匹配的产物反而可能蒙混过关。
+
+**设计时被自己纠正的一处**：`mutation-slug` 原本还打算放一个 `base.length > maxLength` → `>=` 的变异体。写下去才发现它**不是变异体而是等价体**——`base` 在此之前已经被去掉了首尾 `-`，于是 `slice(0, base.length)` 恒等于 `base`，两者行为完全一致。这类「看起来像变异、实际是等价」的候选必须当场剔掉，否则参考套件永远杀不掉它，而门禁会把一个正确的 fixture 判红。
+
+**Harness 侧的复算（`scripts/coding-fixtures.ts`）。** `report.json` 是判据自己写的文件，因此按**不可信输入**读。变异读数里除了「通过与否」，还要求 **`minKilled`、变异体总数、等价体总数**三项与 Harness 自己数的**目录项**一致，对不上就整份作废。照抄读数的话，一个只跑了一个变异体、却自称总数为一的验收器可以完全自洽地通过——这条比对正是为它设的。
+
+另一处口径：**「跑不完」不算「杀灭」**。某个变异体上产物超时或被输出上限掐掉时记 `mutantsUnrunnable`，任何一份非零即判失败。超时不是发现了缺陷，把它算成杀灭会让一个会挂死的套件白拿分。等价体那边的 null 直接计成「被杀」（那时已无从判断行为是否保持）。
+
+**反例实跑：变异类五处**（`mutation-bands`，各自装上后看读数）
+
+| 装上的产物 | 读数 | 结论 |
+|---|---|---|
+| 整文件比对源码文本（③a 记下的那类偷懒写法） | `original=0, killed=6/6, **equivalentsKilled=2**` | **判不过**——它把与自己文本不同的等价体一并杀了 |
+| 恒退 0 | `original=0, killed=0/6` | 判不过（杀不够） |
+| 恒非零 | `original=1` | 判不过（正确源码上就失败） |
+| 只测了规格里的一个例子 | `original=0, killed=1/6` | 判不过（杀不够） |
+| 参考套件 | `original=0, killed=6/6, equivalentsKilled=0` | 判过 |
+
+**关键在第一条。** 变异体与等价体都不在工作区里，agent 一个也看不见，因此「比对源码文本」这条路上它唯一能写的就是**整体同一性**判断，而那必然连等价体一起杀掉。**这一类比 `repro` 在结构上就对文本比对免疫。**
+
+**③a 记下的那处「已知可被绕过」，本步只能如实收紧、不能宣称堵上。** ③a 的 README 说 `mutation` 的 `equivalents/` 机制「两类合并到同一份验收器之后可以顺带补上」`repro` 的缺口。两类确实合并进了同一份 `_shared/criteria.mjs`，但**那句话说过头了**——本步实跑了 `repro-money` 的两种偷懒产物来量：
+
+| 装上的产物 | 读数 | 结论 |
+|---|---|---|
+| 整文件比对参考实现文本 | `initial=1, reference=0` | **判过**（判据只看这两个退出码） |
+| 定向 grep（只在源码里找那一个出错的表达式） | `initial=1, reference=0` | **判过** |
+| 参考产物 | `initial=1, reference=0` | 判过 |
+
+根因是**两类的不对称**：`mutation` 的变异体与等价体对 agent 全不可见，所以文本比对只能是整体同一性；`repro` 的**缺陷源码是可见的**，因此「找某个 token」这类定向写法在信息上完全够用。要收紧只能给 `repro` 也配**两侧**的等价体——缺陷侧的等价体堵住「找缺陷 token」，参考侧的等价体堵住「赌一个修法 token」——而即便如此它也只是**抬高门槛**：任何**具体**的 token 都可能恰好同时出现在缺陷与缺陷等价体里、又同时缺席参考与参考等价体。这与「一模块一缺陷」那类可以**证明**的前提不同，是需要如实标注的残余风险，不是可以宣布关掉的缺口。本步不改 `repro` 的判据；这条与「单任务 vs 多阶段」一并留给 NX-39-4／NX-39-5 的预注册环节决定。
+
+**门禁（`test/coding-criteria.test.ts`）**
+
+- 新增 `every mutation fixture ships one-hunk mutants and full rewrites that keep the export surface`：逐 fixture 查「一模块一变异」「只改一个已存在的文件」「导出面逐字一致」「等价体至少两处 hunk」。
+- 新增 `the public check of every mutation fixture kills fewer mutants than the fixture requires`：实跑公开检查，要求它在**正确源码上退 0**、**不杀任何等价体**、且**杀数 < `minKilled`**，并断言 `weak/suite.mjs` 与工作区里的 `check.mjs` **逐字相同**——换成一个精心做弱的稻草人，这条门禁量的就不再是「交到 agent 手上的那一级够不够」。
+- 既有四条（「只把产物放进工作区」「隐藏件不进工作区与任务文本」「`TASK.md` 点名的模块与导出名一致」「模拟模型经 `write_file` 走到判过」）由遍历 `comprehensionIds` 泛化为遍历**两个新注册表**；「命名一致」那条对 `mutation` 多查一件事：**阈值必须写在任务说明里**，否则 agent 无从知道要杀几个。
+- 脚本化那条对 `mutation` 同时是**逐 fixture 的「参考套件杀数 ≥ `minKilled` 且不杀等价体」的证明**——验收本身就要求复算出的 `evidencePasses` 成立。
+
+**验证**
+
+| 命令 | 结果 |
+|---|---|
+| `pnpm typecheck` | 通过 |
+| `pnpm check` | `syntax ok: 116 files` |
+| `pnpm test` | **318/318**（基线 316，新增 2 条），失败、取消、跳过均为 0 |
+| `pnpm lint` | `Checked 126 files … No fixes applied.`（0 诊断；`test/fixtures/**` 在 biome 的忽略范围内，与既有 21 项一致） |
+| `pnpm fixtures:check` | 退出码 0，**25 项**；四个 `mutation` fixture 各自三个读数：missing 判不过、公开检查判不过（附 `weakKills < minKilled`）、参考套件判过（附 `referenceKills ≥ minKilled`） |
+| `pnpm eval:offline` | 退出码 0 |
+| `pnpm eval:estimate` | 退出码 0 |
+
+本步的代码与门禁**一次跑绿**，没有需要修的失败；上面那处 `>=` 的等价体是设计阶段自己发现并剔掉的，不是被测试逮到的。
+
+提交：见本节对应的本地提交。
+
 ### NX-39-3b 「代码理解」类补齐到 4 个
 
 把 NX-39-3a 立起来的 `repro` 种类从 1 个 fixture 补到 4 个。**本步零付费，未发生任何模型调用**，`src/` 一行未动——新增的只有 fixture 数据与两处用例的泛化。
