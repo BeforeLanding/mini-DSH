@@ -3,10 +3,10 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { armPolicy, ledgerPolicy, ledgerPhases, resolvePhasePolicy, runPhase, summarize, phaseCaps, batchCaps, batchPhases, singleRunBudget, evalPolicy, capKeys, toolOutputPolicy } from '../scripts/eval-runner.js'
+import { ablationPhases, ablationPolicy, armPolicy, ledgerPolicy, ledgerPhases, resolvePhasePolicy, runPhase, summarize, phaseCaps, batchCaps, batchPhases, singleRunBudget, evalPolicy, capKeys, promptLayoutPolicy, toolOutputPolicy } from '../scripts/eval-runner.js'
 import type { RunOutcome, ToolOutputMode } from '../scripts/eval-runner.js'
 import { runFixtureTask, scriptedAdapter, summarizeStage, type Fixture, type FixtureAdapter } from '../scripts/eval-fixture.js'
-import { createFixture, screeningIds, sequenceIds } from '../scripts/coding-fixtures.js'
+import { ablationIds, createFixture, screeningIds, sequenceIds } from '../scripts/coding-fixtures.js'
 import { CLI_BUDGET } from '../src/core/budget.js'
 import type { Counters } from '../src/core/budget.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
@@ -72,6 +72,14 @@ test('pre-registered caps match PLAN and the phase caps sum to the whole-batch c
     ledgerA2: { runs: 3, requests: 384, tokens: 24_000_000 },
     ledgerB1: { runs: 3, requests: 384, tokens: 24_000_000 },
     ledgerB2: { runs: 3, requests: 384, tokens: 24_000_000 },
+    // NX-39 的四格：同一份任务集（ablationIds = 筛查 12 ＋ 代码理解 4 ＋ 测试编写 4，共 20 项，全部单任务）
+    // 各 3 次重复，四格合计 240 次运行。上限取逐阶段预算的理论上界——每项 1 个阶段、共 20 个阶段执行单位，
+    // 乘 3 次重复得 60 次运行 × 32 请求 / × 2,000,000 token。四格逐字相同是刻意的：臂间被比较的是两个
+    // 因子，不是预算。
+    baseline: { runs: 60, requests: 1_920, tokens: 120_000_000 },
+    context: { runs: 60, requests: 1_920, tokens: 120_000_000 },
+    prompt: { runs: 60, requests: 1_920, tokens: 120_000_000 },
+    full: { runs: 60, requests: 1_920, tokens: 120_000_000 },
   })
   // 整批只归约预注册的三个对照阶段。把诊断阶段算进去会改变这个数字的含义，因此按值钉死而不是只断言
   // 求和：以前改 armA 只会静默改变和值，现在会直接撞上预注册数字。
@@ -110,6 +118,29 @@ test('pre-registered caps match PLAN and the phase caps sum to the whole-batch c
     assert.equal(phaseCaps[phase].runs, 3, phase)
     // 四条臂的上限逐字相同：臂间的差异只由策略承担，不来自预算。
     assert.deepEqual(phaseCaps[phase], phaseCaps[ledgerPhases[0]], phase)
+  }
+  // NX-39 的四格同理，但这里多一条**前提**要钉住：`ablationIds` 的每一项都必须只有一个阶段。上限的
+  // 算术（每次运行消耗一份单次预算）就建在它上面——混进一个多阶段 fixture，上限会偏紧，而偏紧的表现是
+  // 「一次正常的批次被记成 aborted 并以退出码 1 结束」，与 sequence 那条注释里记过的失效同形。
+  // 阶段数逐 fixture 从 fixture 本身取，所以以后有人改了形状，这条会当场变红而不是静默失准。
+  let ablationStages = 0
+  for (const id of ablationIds) {
+    const fixture = await createFixture(id)
+    ablationStages += fixture.tasks.length
+    await fixture.close()
+  }
+  assert.equal(ablationStages, ablationIds.length, 'every ablation fixture must be single-task')
+  const ablationRepeats = phaseCaps[ablationPhases[0]].runs / ablationIds.length
+  assert.ok(Number.isSafeInteger(ablationRepeats) && ablationRepeats >= 1, 'the ablation caps must divide evenly across the registry')
+  for (const phase of ablationPhases) {
+    // 每次运行跑 registry 里的**一个** fixture，因此总消耗 = 「阶段执行单位总数」× 重复数 × 单次预算。
+    assert.equal(phaseCaps[phase].requests, ablationStages * ablationRepeats * (singleRunBudget.maxModelRequests ?? 0), phase)
+    assert.equal(phaseCaps[phase].tokens, ablationStages * ablationRepeats * (singleRunBudget.maxTotalTokens ?? 0), phase)
+    assert.equal(phaseCaps[phase].runs, 3 * ablationIds.length, phase)
+    // 四格的上限逐字相同：被比较的是两个因子，不是预算。
+    assert.deepEqual(phaseCaps[phase], phaseCaps[ablationPhases[0]], phase)
+    // 四格不进 batchPhases：混进去会让 {18, 3_200, 88_000_000} 不再对应「整批 18 次运行」这条既有结论。
+    assert.ok(!(batchPhases as readonly string[]).includes(phase), phase)
   }
 })
 
@@ -182,16 +213,56 @@ test('the phase policy dispatcher leaves every existing phase byte-identical', (
   // 新阶段不进 batchPhases：混进去会让 batchCaps 的 {18, 3_200, 88_000_000} 不再对应同一件事，
   // 而那是一次独立的预注册动作。
   for (const phase of ledgerPhases) assert.ok(!(batchPhases as readonly string[]).includes(phase), phase)
+  for (const phase of ablationPhases) assert.deepEqual(resolvePhasePolicy(phase, window), ablationPolicy(phase, window), phase)
+})
+
+// NX-39 因子 1：两档之间**只差**输入目标与主动压缩阈值两个字段，其余（含输出的预留与工具预算）逐字段
+// 相等，否则被比较的就不是「上下文管理」。两档各是一个值而不是两个不同的值——这是全因子的意思：
+// `baseline` 与 `prompt` 拿到同一个预算对象，`context` 与 `full` 拿到另一个。
+test('the two levels of the context factor each map to exactly one budget', () => {
+  const window = 1_000_000
+  const off = ablationPolicy('baseline', window), on = ablationPolicy('context', window)
+  // 关档每次调用新建一个冻结对象（与 ledgerPolicy 同形），因此按值比；开档返回的必须是 `evalPolicy`
+  // **本体**（按 === 钉住），否则「开档就是生产默认」只是碰巧相等。
+  assert.deepEqual(ablationPolicy('prompt', window), off)
+  assert.equal(ablationPolicy('full', window), on)
+  // 开 = 生产默认本体（同一个对象引用）。关 = 目标抬到窗口 ⇒ `fits` 的第一个合取项恒真 ⇒ 裁剪永不触发，
+  // 与 ledgerA1 已经跑过的「不裁」配置逐字同构。
+  assert.equal(on, evalPolicy)
+  assert.equal(on.inputTargetTokens, 65_536)
+  assert.equal(off.inputTargetTokens, window)
+  assert.equal(off.compactionBudgetTokens, window)
+  // 差异只能落在这两个字段上：把这两项去掉之后两档必须逐字段相等。
+  const withoutAxis = (policy: Readonly<typeof evalPolicy>) => Object.fromEntries(Object.entries(policy).filter(([key]) => key !== 'inputTargetTokens' && key !== 'compactionBudgetTokens'))
+  assert.deepEqual(withoutAxis(off as typeof evalPolicy), withoutAxis(evalPolicy))
 })
 
 // 对照 B 的自变量是工具输出模式而不是输入目标，因此它落在另一个函数上，且不能顺带改动任何既有阶段——
 // undefined 表示不装载 tool-results 插件，screening / armA / armB / sequence 的行为与历史基线一字不变。
 test('only the diagnostic smoke phase turns on the tool output policy', () => {
   assert.deepEqual(toolOutputPolicy('smoke'), { bounded: false })
-  for (const phase of ['screening', 'armA', 'armB', 'sequence'] as const) assert.equal(toolOutputPolicy(phase), undefined, phase)
+  for (const phase of ['screening', 'armA', 'armB', 'sequence', 'blind', ...ledgerPhases] as const) assert.equal(toolOutputPolicy(phase), undefined, phase)
   // smoke 与两条对照臂落在同一输入目标上：差异只来自工具输出有界性，不来自上下文策略。
   assert.equal(evalPolicy.inputTargetTokens, 65_536)
   assert.equal(armPolicy('armB', 1_000_000), evalPolicy)
+})
+
+// NX-39 因子 1 的第二半与因子 2 的全部，各落在自己的函数上。三条一起断言是为了钉住**它们各自只属于
+// 哪一格**：任何一格错了，四格就不再是 2×2（例如把 `baseline` 的提示布局也冻上，因子 2 的两档就只剩
+// 一个值，「去掉它掉 0 分」会是假零）。
+test('the ablation grid turns on exactly its own two factors', () => {
+  // 因子 1 的第二半：工具输出有界。四格**一律装载**同一个插件（工具表因此逐字相同），只在预览上限上分档。
+  for (const phase of ['baseline', 'prompt'] as const) assert.deepEqual(toolOutputPolicy(phase), { bounded: false }, phase)
+  for (const phase of ['context', 'full'] as const) assert.deepEqual(toolOutputPolicy(phase), { bounded: true }, phase)
+  // 因子 2：提示布局。与工具输出正交——`context` 与 `full` 在因子 1 上同侧，在因子 2 上必须异侧。
+  for (const phase of ['baseline', 'context'] as const) assert.deepEqual(promptLayoutPolicy(phase), { frozen: false }, phase)
+  for (const phase of ['prompt', 'full'] as const) assert.deepEqual(promptLayoutPolicy(phase), { frozen: true }, phase)
+  // 其余每一个阶段都**不装载**两个易变段落插件，既有各臂与全部离线用例的系统提示因此逐字不变。
+  // 逐一点名而不是抽查，是因为「漏装」与「多装」都会静默改掉历史基线。（tool-results 那半边在紧邻的
+  // 上一条用例里逐一点过名。）
+  for (const phase of ['screening', 'armA', 'armB', 'sequence', 'smoke', 'blind', ...ledgerPhases] as const) {
+    assert.equal(promptLayoutPolicy(phase), undefined, phase)
+  }
 })
 
 test('a phase whose run cap equals the planned count completes without a false abort', async () => {

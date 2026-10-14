@@ -5,9 +5,9 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { Context } from '@deepseek-ai/cordis'
-import { createFixture, screeningIds, sequenceIds, boundedIds, demoIds, blindIds, ledgerIds, fixtureProcessTimeoutMs, readTaskSequence, readFixtureFile } from '../scripts/coding-fixtures.js'
+import { ablationIds, comprehensionIds, createFixture, mutationIds, screeningIds, sequenceIds, boundedIds, demoIds, blindIds, ledgerIds, fixtureProcessTimeoutMs, readTaskSequence, readFixtureFile } from '../scripts/coding-fixtures.js'
 import type { FixtureId } from '../scripts/coding-fixtures.js'
-import { batchPhases, evalPolicy, ledgerPhases, phaseCaps } from '../scripts/eval-runner.js'
+import { ablationPhases, batchPhases, evalPolicy, ledgerPhases, phaseCaps } from '../scripts/eval-runner.js'
 import { phaseRegistry } from '../scripts/eval-cli.js'
 import type { ToolCall } from '../src/core/contracts.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
@@ -392,6 +392,26 @@ test('the ledger fixture is reachable through exactly its own four arms and noth
   assert.deepEqual(foreign, [], 'ledger must not be reachable through any other phase registry')
   // 四条臂都进 phaseCaps 且不进 batchPhases：后者会让 {18, 3_200, 88_000_000} 不再对应同一件事。
   for (const phase of ledgerPhases) assert.ok(phaseCaps[phase].runs > 0, phase)
+})
+
+// NX-39 的四格任务集。**这是八份注册表里第一份「引用既有注册表」的**，因此它要钉的东西与前七份相反：
+// 前七份证明互斥，这一份要证明**引用没有变成修改**。`screeningIds` 是 12/12 与 `phaseCaps.screening.runs`
+// 的载体，它的内容与顺序一旦被动过，那些历史结论就不再对应同一件事——而那样改完，`ablationIds` 自己
+// 仍然自洽、四格仍然「计划相同」，谁也不会报错。所以这里按值把它钉死，而不是只断言相等关系。
+test('the ablation registry references the existing batches without touching them', () => {
+  assert.deepEqual([...screeningIds], ['boundary', 'options', 'interface', 'normalize', 'dedupe', 'pagination', 'query', 'retry', 'merge', 'csv', 'inventory', 'summary'])
+  assert.deepEqual([...ablationIds], [...screeningIds, ...comprehensionIds, ...mutationIds])
+  assert.equal(ablationIds.length, 20)
+  // 前七份里其余五份一项都不该出现：混进诊断批次的 fixture 会让「四格只差两个因子」不再成立。
+  const diagnostics: readonly string[] = [...sequenceIds, ...boundedIds, ...demoIds, ...blindIds, ...ledgerIds]
+  for (const id of ablationIds) assert.ok(!diagnostics.includes(id), `${id} must not come from a diagnostic registry`)
+  // 四格都进 phaseCaps 且都不进 batchPhases：后者会让 {18, 3_200, 88_000_000} 不再对应「整批 18 次运行」。
+  for (const phase of ablationPhases) {
+    assert.ok(phaseCaps[phase].runs > 0, phase)
+    assert.ok(!(batchPhases as readonly string[]).includes(phase), phase)
+    // 「引用」的可观察后果：四格的四条计划逐字相同，且恰好指向这一份任务集。
+    assert.deepEqual(phaseRegistry(phase), [...ablationIds], phase)
+  }
 })
 
 async function runFixtureAcrossBudgetStop(id: FixtureId) {

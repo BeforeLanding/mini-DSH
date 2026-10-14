@@ -23,7 +23,13 @@ export type BatchPhase = typeof batchPhases[number]
 // 预算，差异只由 ledgerPolicy 承担。
 export const ledgerPhases = ['ledgerA1', 'ledgerA2', 'ledgerB1', 'ledgerB2'] as const
 export type LedgerPhase = typeof ledgerPhases[number]
-export type PhaseName = BatchPhase | 'sequence' | 'smoke' | 'blind' | LedgerPhase
+// NX-39 的 2×2 全因子四格。名字取的是**该格开着的因子**，不是「对照／实验」：`full` 不是「加了什么」的
+// 那一格，而是两个因子都开的一格——本项报告统一说「2×2 全因子对照实验」，不说「消融实验」，因为
+// `full` 是本次新造、现实里还不存在的配置（`src/index.ts` 的生产装配没有提示冻结）。
+// 与前面各批一样：它们**不进 `batchPhases`**，`batchCaps` 的 {18, 3_200, 88_000_000} 因此一字不变。
+export const ablationPhases = ['baseline', 'context', 'prompt', 'full'] as const
+export type AblationPhase = typeof ablationPhases[number]
+export type PhaseName = BatchPhase | 'sequence' | 'smoke' | 'blind' | LedgerPhase | AblationPhase
 export const phaseCaps: Readonly<Record<PhaseName, BatchCaps>> = Object.freeze({
   screening: { runs: 12, requests: 400, tokens: 8_000_000 },
   // 对照 A 的两臂各 3 次运行（NX-08e2-6 按实测重预注册，NX-08e2-4 之后随序列扩到十四阶段再重算一次；
@@ -81,6 +87,20 @@ export const phaseCaps: Readonly<Record<PhaseName, BatchCaps>> = Object.freeze({
   ledgerA2: { runs: 3, requests: 384, tokens: 24_000_000 },
   ledgerB1: { runs: 3, requests: 384, tokens: 24_000_000 },
   ledgerB2: { runs: 3, requests: 384, tokens: 24_000_000 },
+  // NX-39-4 的四格：同一份任务集（`ablationIds`，20 项）各 3 次重复，四格合计 240 次运行。
+  // 上限取**逐阶段预算的理论上界**，口径同 sequence/smoke/blind/ledger：`ablationIds` 的每一项都是
+  // **单任务** fixture，因此每次运行各有 1 份 singleRunBudget（32 请求 / 2,000,000 token），
+  // 20 项 × 3 次 = 60 次运行 → 60 × 32 = 1,920 请求、60 × 2,000,000 = 120,000,000 token。
+  // **「每项都是单任务」是这张表的算术前提**，由 `test/eval-runner.test.ts` 逐 fixture 读取阶段数钉住：
+  // 混进一个多阶段 fixture，上限就会偏紧，而偏紧的表现是「一次正常的批次被记成 aborted 并退 1」——
+  // 那正是 sequence 的注释里记过的同类失效。
+  // **这不是按实测的预注册**（NX-08e2 的教训：按外推定 token 被实测推翻 64%）：它是上界，只会松不会紧，
+  // 约束的是「不会跑飞」而不是「预计花多少」。四格逐字相同也是刻意的——臂之间被比较的是两个因子，
+  // 不是预算。
+  baseline: { runs: 60, requests: 1_920, tokens: 120_000_000 },
+  context: { runs: 60, requests: 1_920, tokens: 120_000_000 },
+  prompt: { runs: 60, requests: 1_920, tokens: 120_000_000 },
+  full: { runs: 60, requests: 1_920, tokens: 120_000_000 },
 })
 export const batchCaps: Readonly<BatchCaps> = Object.freeze(batchPhases.reduce((totals, name) => ({
   runs: totals.runs + phaseCaps[name].runs,
@@ -126,9 +146,31 @@ export function ledgerPolicy(phase: LedgerPhase, contextWindowTokens: number, in
   }
 }
 
+// NX-39 的四格。**因子 1（上下文管理）的开关落在两处预算字段上，不是落在「装不装插件」上**：
+// 关 = 输入目标抬到窗口（`fits` 的第一个合取项恒真 ⇒ 裁剪永不触发）＋ 主动压缩阈值同样抬到窗口
+// （⇒ `pressure` 永不触发）。这正是 ledgerA1 已经跑过的「不裁 + 关主动压缩」配置，语义与风险都无需重新
+// 论证。开 = 生产默认 `evalPolicy` 本体（输入目标 65,536、主动压缩在 65,536 × 0.8 处出手）。
+// **兜底压缩（context-overflow）不看阈值，两档都仍可能出手**——那是「装不下时唯一的自救通道」，
+// 关掉它要改 `agent-loop-runtime.ts` 的契约，不在本项范围内；因此「关」的准确读法是
+// 「不主动管理，只在顶穿时自救一次」，报告必须按这个读法写。
+// 因子 2（提示优化）**不在这个函数里**，见 promptLayoutPolicy。
+export function ablationPolicy(phase: AblationPhase, contextWindowTokens: number): Readonly<BudgetPolicy> {
+  switch (phase) {
+    case 'baseline':
+    case 'prompt':
+      return Object.freeze({ ...evalPolicy, inputTargetTokens: contextWindowTokens, compactionBudgetTokens: contextWindowTokens })
+    case 'context':
+    case 'full':
+      return evalPolicy
+  }
+}
+
 // 阶段 → 预算策略的**唯一**映射点。既有阶段逐字保持原来的形状：armA/armB 仍只经 armPolicy，其余四个
 // 筛查/诊断阶段仍返回 evalPolicy **本体**（同一个对象引用），因此 screening/sequence/smoke/blind 的预算
-// 与历史基线一字不变。ledgerPolicy 只在四个 ledger 阶段被调用。
+// 与历史基线一字不变。ledgerPolicy 只在四个 ledger 阶段被调用，ablationPolicy 只在四格被调用。
+// **这里不写 `default` 是有意的**：有 default 时给 `PhaseName` 加一个成员不会报错，新阶段会静默拿到
+// `evalPolicy`——而四格里的 `baseline`/`prompt` 恰恰**不能**拿 `evalPolicy`（那会让它们的因子 1 开着，
+// 两格退化成同一格而账面上看不出来）。穷尽列举让类型检查兜住这个失效方式。
 export function resolvePhasePolicy(phase: PhaseName, contextWindowTokens: number, inputTargetTokens?: number): Readonly<BudgetPolicy> {
   switch (phase) {
     case 'armA':
@@ -139,7 +181,15 @@ export function resolvePhasePolicy(phase: PhaseName, contextWindowTokens: number
     case 'ledgerB1':
     case 'ledgerB2':
       return ledgerPolicy(phase, contextWindowTokens, inputTargetTokens)
-    default:
+    case 'baseline':
+    case 'context':
+    case 'prompt':
+    case 'full':
+      return ablationPolicy(phase, contextWindowTokens)
+    case 'screening':
+    case 'sequence':
+    case 'smoke':
+    case 'blind':
       return evalPolicy
   }
 }
@@ -148,12 +198,36 @@ export function resolvePhasePolicy(phase: PhaseName, contextWindowTokens: number
 // 注册 read_tool_result，装与不装会让 tools.schemas() 相差一个条目，而工具表既进入模型请求又进入输入
 // 估算，那样两臂差的就不只是有界性，R-21 的「同一 prompt 与工具」不再成立。
 export interface ToolOutputMode { bounded: boolean }
-// 阶段 → 工具输出模式。只有 smoke（NX-08f 的诊断烟测）返回配置，其余阶段返回 undefined = **不装载**
-// tool-results 插件，screening / armA / armB / sequence 与全部离线用例的行为因此一字不变。
+// 阶段 → 工具输出模式。只有 smoke 与四格返回配置，其余阶段返回 undefined = **不装载** tool-results
+// 插件，screening / armA / armB / sequence / blind 与全部离线用例的行为因此一字不变。
 // smoke 取无界：烟测要回答的正是「模型会不会真的产生大输出」，那是有界臂永远问不出来的问题。
 // 对照 B 正式的两臂（armC 有界 / armD 无界）在 NX-08f-5 按实测预注册时再加进来。
+// **四格一律装载同一个插件，只在预览上限上分档**（与对照 B 的两臂同一条理由，见上面那段的注释）：
+// 插件无条件注册 `read_tool_result`，装与不装会让 `tools.schemas()` 相差一个条目，而工具表既进入模型
+// 请求又进入输入估算——那样四格差的就不只是「上下文管理」，R-21 的「同一 prompt 与工具」不再成立，
+// 因子 1 与因子 2 互相污染。计划书里 `baseline` 那一格写的是「不装 tool-results 插件」，这里**刻意偏离**
+// 成「装、但无界」：可观察行为相同（结果原样进入历史、不截断、不产生 ref），工具表却与其余三格逐字相同。
 export function toolOutputPolicy(phase: PhaseName): ToolOutputMode | undefined {
-  return phase === 'smoke' ? { bounded: false } : undefined
+  switch (phase) {
+    case 'smoke':
+      // 无界的实现是同一个插件把预览上限抬到装得下任何单条结果（见 eval-fixture.ts 的 UNBOUNDED_PREVIEW_BYTES）。
+    case 'baseline':
+    case 'prompt':
+      return { bounded: false }
+    case 'context':
+    case 'full':
+      return { bounded: true }
+    case 'screening':
+    case 'armA':
+    case 'armB':
+    case 'sequence':
+    case 'blind':
+    case 'ledgerA1':
+    case 'ledgerA2':
+    case 'ledgerB1':
+    case 'ledgerB2':
+      return undefined
+  }
 }
 // 对照 C 的自变量：系统提示里的**易变段落**是否在会话内定住（前缀缓存安全）。两臂装载同一批插件、首帧
 // 字节逐字相同，差异只有 layout 一个字段，因此它测的是稳定性本身，不是换了一段提示文本。
@@ -161,6 +235,33 @@ export function toolOutputPolicy(phase: PhaseName): ToolOutputMode | undefined {
 // 记的同一条：把这两个插件补进 runFixtureTask 会改掉 eval:offline / eval:screening 与既有各臂的系统提示，
 // 让已记录的基线与预注册上限不再对应同一件事。因此它与 toolOutputPolicy 一样只在显式给出时生效。
 export interface PromptLayoutMode { frozen: boolean }
+// 阶段 → 提示布局模式。**四格一律装载同一个插件（`runtime-context` 与 `project-context`），只在 layout
+// 上分档**，理由与 toolOutputPolicy 那段逐字相同：装与不装会让系统提示相差整段文本，那样四格差的就不
+// 只是「提示稳不稳」。其余阶段返回 undefined = 两个插件都不装载，既有各阶段与全部离线用例的系统提示
+// 因此一字不变（理由见 scripts/demo-context.ts:21-29）。
+// 因子 2 的方向：`live` 即生产现状（`Time:` 是毫秒精度，每轮必变 → 每轮请求的最长公共前缀止步于
+// `Time:` 之前，其后的系统提示连同整段对话历史每轮重算）；`frozen` 是本次造出来的那一格。
+export function promptLayoutPolicy(phase: PhaseName): PromptLayoutMode | undefined {
+  switch (phase) {
+    case 'baseline':
+    case 'context':
+      return { frozen: false }
+    case 'prompt':
+    case 'full':
+      return { frozen: true }
+    case 'screening':
+    case 'armA':
+    case 'armB':
+    case 'sequence':
+    case 'smoke':
+    case 'blind':
+    case 'ledgerA1':
+    case 'ledgerA2':
+    case 'ledgerB1':
+    case 'ledgerB2':
+      return undefined
+  }
+}
 export const capKeys = ['runs', 'requests', 'tokens'] as const
 
 // 单次 run 预算与整批上限的优先关系：单次预算由 Agent 循环在 run 内强制，触顶只停止该次 run 并给出停止

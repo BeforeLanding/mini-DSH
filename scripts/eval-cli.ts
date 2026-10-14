@@ -1,12 +1,12 @@
-import { blindIds, boundedIds, ledgerIds, screeningIds, sequenceIds } from './coding-fixtures.js'
+import { ablationIds, blindIds, boundedIds, ledgerIds, screeningIds, sequenceIds } from './coding-fixtures.js'
 import type { FixtureId } from './coding-fixtures.js'
-import { batchPhases, ledgerPhases, phaseCaps } from './eval-runner.js'
+import { ablationPhases, batchPhases, ledgerPhases, phaseCaps } from './eval-runner.js'
 import type { LedgerPhase, PhaseName } from './eval-runner.js'
 
 // 真实适配器评测入口的参数解析与计划推算，全部是纯函数：不读环境变量、不碰文件系统、不发请求。
 // 抽出来的理由是「可离线验收」——eval-screening.ts 有顶层 await（协议探测、批次执行），被测试 import
 // 会真的发起付费请求，所以这些判据不能只住在那个文件里。env 一律由调用方传入。
-const phaseNames: readonly PhaseName[] = [...batchPhases, 'sequence', 'smoke', 'blind', ...ledgerPhases]
+const phaseNames: readonly PhaseName[] = [...batchPhases, 'sequence', 'smoke', 'blind', ...ledgerPhases, ...ablationPhases]
 const flagOptions = new Set(['probe-only', 'plan-only'])
 const valueOptions = new Set(['phase', 'tasks', 'infeasible', 'infeasible-reason', 'input-target'])
 
@@ -44,6 +44,14 @@ export function phaseRegistry(phase: PhaseName): readonly FixtureId[] {
     case 'ledgerB1':
     case 'ledgerB2':
       return ledgerIds
+    // NX-39 的四格共用同一份任务集（`ablationIds` = 筛查 12 ＋ 代码理解 4 ＋ 测试编写 4）。四格之间的
+    // 差异只由 eval-runner.ts 的 ablationPolicy 与 promptLayoutPolicy 承担，**不来自跑了哪些任务**，
+    // 也不来自跑了几次——四格的计划因此逐字相同。与 ledger 四条臂同一条理由，只是这里多了一维。
+    case 'baseline':
+    case 'context':
+    case 'prompt':
+    case 'full':
+      return ablationIds
   }
 }
 

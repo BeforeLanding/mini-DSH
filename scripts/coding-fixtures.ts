@@ -44,6 +44,13 @@ export const comprehensionIds = ['repro-sessions', 'repro-money', 'repro-tally',
 // 产物，会把与自己文本不同的等价体一并杀掉，于是当场判失败——这正是 ③a 记下的那处已知缺口
 // （repro 判据只看退出码，比对源码文本的产物可绕过）在这里被堵上的方式。
 export const mutationIds = ['mutation-bands', 'mutation-quota', 'mutation-slug', 'mutation-versions'] as const
+// NX-39-4 的四格任务集。**这是八份注册表里第一份「引用既有注册表」的**——上面每一份都各自独立、两两
+// 互斥，各自的注释都写明互斥是为了让预注册算术（`phaseCaps` 的 runs ÷ registry 长度 = 重复数）与历史
+// 结论（筛查 12/12）对应同一件事。这里刻意打破那个形状，理由是两个因子要的是**同一份任务集**：
+// 四格之间的差异只能来自声明的两个维度，若各格拿不同的任务，「谁的通过率高」就同时包含了任务难度。
+// 它**只引用、不修改** `screeningIds`，因此 `phaseCaps.screening` 与 12/12 的历史结论一字不变；
+// 后来者若想「顺手合并」两批，先看这一条：引用是安全的，改动被引用的那一份不是。
+export const ablationIds = [...screeningIds, ...comprehensionIds, ...mutationIds] as const
 export const fixtureIds = [...screeningIds, ...sequenceIds, ...boundedIds, ...demoIds, ...blindIds, ...ledgerIds, ...comprehensionIds, ...mutationIds] as const
 export type FixtureId = typeof fixtureIds[number]
 // 三个种类。既有 17 个 fixture 全是 `edit`（就地改既有源码），行为逐字不变。

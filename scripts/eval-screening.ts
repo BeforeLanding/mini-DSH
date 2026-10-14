@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
-import { phaseCaps, resolvePhasePolicy, runPhase, summarize, toolOutputPolicy } from './eval-runner.js'
+import { ablationPhases, phaseCaps, promptLayoutPolicy, resolvePhasePolicy, runPhase, summarize, toolOutputPolicy } from './eval-runner.js'
 import type { RunOutcome } from './eval-runner.js'
 import type { FixtureId } from './coding-fixtures.js'
 import { evidenceScope, parseEvalArguments, phaseRegistry, repeatCount, resolveContextWindow, resolveInfeasible, resolveInputTarget, resolveModel, resolvePlanned, resolveRuns } from './eval-cli.js'
@@ -41,6 +41,10 @@ const policy = resolvePhasePolicy(phase, contextWindowTokens, inputTarget)
 // 对照 B 的自变量是工具输出是否有界（见 eval-runner.ts 的 toolOutputPolicy）。undefined 表示不装载
 // tool-results 插件，既有阶段的行为一字不变。
 const toolOutput = toolOutputPolicy(phase)
+// NX-39 因子 2 的自变量是提示布局（见 eval-runner.ts 的 promptLayoutPolicy）。undefined 表示两个易变
+// 段落插件都不装载，既有阶段的行为一字不变。它与 toolOutput 一样必须在这里现取：这个脚本是唯一把策略
+// 送进 runFixtureTask 的地方，判据留在纯函数里、接线留在这里，正是为了「接线漏了」能在离线预演里看出来。
+const promptLayout = promptLayoutPolicy(phase)
 
 // 证据目录按「阶段 + 覆盖范围」分开放，并一次一跑：烟测的单个任务不会挡住整批，也不会混进整批的
 // 记录；同一范围重复运行时直接拒绝写入，避免“整体重跑”被误读成“同一次运行的追加”。
@@ -58,17 +62,25 @@ if (options.planOnly) {
   console.log(`预算：单次 run ${policy.maxModelRequests} 请求 / ${policy.maxToolCalls} 工具 / ${policy.maxActiveDurationMs}ms / ${policy.maxTotalTokens} token；整批 ${caps.requests} 请求 / ${caps.tokens} token，${caps.runs} 次运行`)
   // 每个批次的臂间差异落在**哪个字段**，就在这一行点出来；接着的下一行给出该字段的数值。指着看的读者
   // 不必回去翻预注册。没有对照臂的阶段（screening/sequence/smoke/blind）不加括号。
+  // NX-39 的四格有两个因子，而**因子 1 的开关落在三行上**（输入目标 / 主动压缩 / 工具输出），因子 2 落
+  // 在一行上。预演必须把两个轴都点出来：只打其中一行，读者会以为另外两行四格相同——而它们不同。
+  const ablating = (ablationPhases as readonly string[]).includes(phase)
   const axis = phase === 'armA' || phase === 'armB' ? '对照 A 的臂间差异只在这里'
     : phase === 'ledgerA1' || phase === 'ledgerA2' ? '批次 A 的臂间差异只在这里'
-    : phase === 'ledgerB1' || phase === 'ledgerB2' ? '批次 B 的臂间差异在下一行' : undefined
+    : phase === 'ledgerB1' || phase === 'ledgerB2' ? '批次 B 的臂间差异在下一行'
+    : ablating ? '因子 1（上下文管理）的差异在这三行（本行 / 主动压缩 / 工具输出）' : undefined
   console.log(`上下文：输入目标 ${policy.inputTargetTokens} token${axis === undefined ? '' : `（${axis}）`}`)
   // 有效压缩阈值 = compactionBudgetTokens ?? 输入目标（budget.ts 的设计）。批次 B 的臂间差异正是它：
   // ledgerB1 与 ledgerB2 的预演输出应当**只差这一行**，这就是「自变量在花钱之前可见」的意思。
+  // 四格里同样是它：关掉因子 1 的两格把阈值抬到窗口，主动压缩因此一次都不出手。
   const compactionThreshold = policy.compactionBudgetTokens ?? policy.inputTargetTokens
   console.log(`主动压缩：阈值 ${compactionThreshold} token${policy.compactionBudgetTokens === undefined ? '（缺省 = 输入目标）' : ''}`)
   // 对照 B 的臂间差异是工具输出模式而不是输入目标，预演里看不见它就等于预演失效——这正是这个分支存在的
   // 理由。只打语义不打数值：具体的预览上限属于驱动侧的实现细节，写在这里会多出第二处需要同步的常量。
   console.log(`工具输出：${toolOutput ? (toolOutput.bounded ? '有界（超出预览上限即截断并落盘，可用 read_tool_result 回读）' : '无界（结果原样进入历史，不截断）') : '不装载 tool-results 插件（既有阶段的行为）'}`)
+  // 因子 2 的那一行。它必须单独打印而不是并进上面：四格里 `baseline` 与 `context` 差在因子 1、`baseline`
+  // 与 `prompt` 差在因子 2，把两个轴混成一行，预演就回答不了「这一格到底改了什么」。
+  console.log(`提示布局：${promptLayout ? (promptLayout.frozen ? '冻结（会话内逐字稳定，前缀缓存安全）' : '实时（毫秒时间戳每轮重算，公共前缀止步于它之前）') : '不装载易变段落插件（既有阶段的行为）'}${ablating ? '（因子 2（提示优化）的差异只在这里）' : ''}`)
   console.log(`模型：${process.env.MINI_DSH_EVAL_MODEL ?? process.env.MINI_DSH_MODEL ?? '(未设置)'}；端点：${baseUrl}；窗口：${contextWindowTokens}`)
   console.log(`证据目录：${evidenceDirectory}`)
   console.log('只做计划预演，未建立目录、未发出请求')
@@ -119,6 +131,7 @@ const report = await runPhase(phase, runs, caps, async task => {
     policy,
     path.join(sessionDirectory, task.id),
     toolOutput,
+    promptLayout,
   )
   spent.runs += 1
   spent.requests += outcome.counters.modelRequests

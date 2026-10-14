@@ -1,9 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { derivePruningTarget, evidenceScope, ledgerRunPeaks, parseEvalArguments, phaseRegistry, repeatCount, resolveContextWindow, resolveInfeasible, resolveInputTarget, resolveModel, resolvePlanned, resolveRuns } from '../scripts/eval-cli.js'
-import { ledgerPhases, phaseCaps } from '../scripts/eval-runner.js'
+import { ablationPhases, ledgerPhases, phaseCaps } from '../scripts/eval-runner.js'
 import type { PhaseName } from '../scripts/eval-runner.js'
-import { ledgerIds, screeningIds, sequenceIds } from '../scripts/coding-fixtures.js'
+import { ablationIds, ledgerIds, screeningIds, sequenceIds } from '../scripts/coding-fixtures.js'
 
 // 入口脚本本身有顶层 await（协议探测、付费批次），被 import 就会花钱，所以真实的参数与计划判据全部
 // 住在 eval-cli.ts 的纯函数里，由这里离线钉住。
@@ -47,7 +47,7 @@ test('both comparison arms plan the same sequence task set', () => {
 // 的机制（runPhase 遍历的是 registry 那 1 个 fixture），于是「每臂 3 次运行」的预注册一条命令只兑现 1 次；
 // --plan-only 还把上限当计划打印，让它在花钱之前看不出破绽。这条断言把两者钉死在一起，是当时缺的那一环。
 test('every phase schedules exactly as many runs as its cap pre-registers', () => {
-  const phases: readonly PhaseName[] = ['screening', 'armA', 'armB', 'sequence', 'smoke', 'blind', ...ledgerPhases]
+  const phases: readonly PhaseName[] = ['screening', 'armA', 'armB', 'sequence', 'smoke', 'blind', ...ledgerPhases, ...ablationPhases]
   for (const phase of phases) assert.equal(resolveRuns(phase).length, phaseCaps[phase].runs, phase)
   // 两臂的差异只能来自上下文策略，不能来自跑了几次或跑了哪些任务，因此执行清单必须逐字相同。
   assert.deepEqual(resolveRuns('armA'), resolveRuns('armB'))
@@ -84,7 +84,7 @@ test('arguments are parsed into one options object with screening as the default
   assert.deepEqual(parseEvalArguments(['--phase=sequence', '--tasks=pipeline']), { phase: 'sequence', tasks: 'pipeline', probeOnly: false, planOnly: false })
   // 逐字钉住这份清单：新阶段只加进 phaseNames 却漏了别处时，这条会当场点名，而不是让 `--phase ledgerA1`
   // 在运行期被当成未知阶段拒收。
-  assert.throws(() => parseEvalArguments(['--phase', 'bogus']), /unknown phase: bogus; expected one of screening, armA, armB, sequence, smoke, blind, ledgerA1, ledgerA2, ledgerB1, ledgerB2/)
+  assert.throws(() => parseEvalArguments(['--phase', 'bogus']), /unknown phase: bogus; expected one of screening, armA, armB, sequence, smoke, blind, ledgerA1, ledgerA2, ledgerB1, ledgerB2, baseline, context, prompt, full/)
   assert.throws(() => parseEvalArguments(['--phase']), /--phase needs a value/)
   assert.throws(() => parseEvalArguments(['--plan-only=yes']), /--plan-only takes no value/)
   assert.throws(() => parseEvalArguments(['--unknown']), /unknown option: --unknown/)
@@ -102,6 +102,26 @@ test('the four ledger arms plan the same fixture the same number of times', () =
   }
   // 四条臂的计划逐字相同：一次运行是整条四阶段序列，重复 3 次。
   for (const phase of ledgerPhases.slice(1)) assert.deepEqual(resolveRuns(phase), resolveRuns(ledgerPhases[0]), phase)
+})
+
+// NX-39 的四格共用同一份任务集（ablationIds = 筛查 12 ＋ 代码理解 4 ＋ 测试编写 4），各 3 次重复。
+// 臂之间的差异只能来自两个因子：计划一旦不同，「谁的通过率高」就同时包含了任务难度，四格不再是 2×2。
+// 这条同时钉住 `phaseCaps` 的 runs 能被 registry 长度整除——`repeatCount` 的整除约束就在这里生效。
+test('the four ablation cells plan the same task set the same number of times', () => {
+  assert.deepEqual([...ablationIds], [...screeningIds, 'repro-sessions', 'repro-money', 'repro-tally', 'repro-order', 'mutation-bands', 'mutation-quota', 'mutation-slug', 'mutation-versions'])
+  assert.equal(ablationIds.length, 20)
+  for (const phase of ablationPhases) {
+    assert.deepEqual(phaseRegistry(phase), [...ablationIds], phase)
+    assert.deepEqual(resolvePlanned(phase), [...ablationIds], phase)
+    assert.equal(evidenceScope(phase, resolvePlanned(phase)), 'full', phase)
+    assert.equal(repeatCount(phaseCaps[phase].runs, phaseRegistry(phase).length), 3, phase)
+    assert.equal(resolveRuns(phase).length, 20 * 3, phase)
+  }
+  // 四格的执行清单逐字相同：差异只由策略承担，不来自跑了哪些任务、也不来自跑了几次。这条也是这条注册表
+  // 「引用而非修改」的可观察后果——它若改动了 screeningIds，本条的期望值会跟着一起错，而不是当场报错，
+  // 因此 screeningIds 自身另有一条按值钉住的断言（见 coding-fixtures.test.ts）。
+  for (const phase of ablationPhases.slice(1)) assert.deepEqual(resolveRuns(phase), resolveRuns(ablationPhases[0]), phase)
+  assert.deepEqual(resolveRuns('baseline').slice(0, 2), [{ id: 'boundary', repeat: 0 }, { id: 'boundary', repeat: 1 }])
 })
 
 // --input-target 是批次 A 第二臂唯一的自变量，且只由 ledgerA2 消费。两条越界各自失败，理由与 --tasks 的
