@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### NX-42 20-task Harness Benchmark v2 方案
+
+2026-10-15，设计范围，零付费。新增 [完整方案](NX-42-EVAL-V2-PLAN.md)，PLAN纳入规范入口，R-24明确V2对旧R-21/R-23的有限改动：完整规格公开、隐藏验收实现及输入；预算停止进入可靠完成率，旧批次保持旧口径。TASKS列后续独立验收步骤，PROGRESS标明仅设计完成。未新增fixture或修改生产/评测源码；工作区既有NX-40改动不属于本步。
+
+实际验证：`node D:/Agent/tmp/nx42-doc-check.cjs` 通过（20个独立ID、五类各4题、S/M/O/L各5题、106处相对链接、240正式+40校准、预算算术、`git diff --check`）；`node scripts/build.js` 退出0；`node scripts/check-syntax.js` 退出0（122文件）。`pnpm check` 在沙箱无输出挂起后中断，按AGENTS允许的Node命令完成等价构建/语法检查。`node --test dist/test/*.test.js` 沙箱首跑因Git Bash的 `NtCreateDirectoryObject ... 0xC0000022` 失败并中断；按AGENTS在正常用户权限复核，同一命令 **350/350通过、0失败**（约15.35秒，日志 `D:/Agent/tmp/nx42-test-normal.log`）。这是当前工作区现有套件的检查，不代表尚未实现的V2通过了功能验收；未新增测试，未调用模型。只暂存本次NX-42文档块，既有NX-40改动保持未暂存。
+
 ### NX-39-3d 重构类补「行为不变」断言
 
 给两个**重构**类 fixture（`interface`／`inventory`）补上它们此前缺的那一半判据。**本步零付费、不出网**，`src/` 一行未动。
