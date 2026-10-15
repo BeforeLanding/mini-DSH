@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### NX-42-10a 公开题目明确文件范围
+
+2026-10-15，针对1M校准 TC01/0 的四组行为检查全过、但 Full 改动 `package.json` 导致验收失败，检查25道V2题的 `meta.json` 与公开题面。将精确的既有文件可修改范围与新建交付文件写入全部46份 `TASK.md`／`TASKS/*.md`，多阶段题每阶段重复说明，避免旧任务被裁剪后看不见边界。`createV2Fixture` 在发题前检查题面与元数据逐字一致，新增离线遍历测试；受保护文件的实际验收规则未放宽，初始项目和隐藏验证器未改。此修订改变公开提示文本，因此旧2M/1M付费批次只作历史诊断，不与新题面的正式运行直接合并；正式清单需重新冻结并重新校准。
+
+验收：`node scripts/build.js` 退出0；`node scripts/check-syntax.js` 为138文件；`node --test dist/test/eval-v2-fixtures.test.js` 4通过、27项隔离测试在本机配置下跳过；正常权限 `node --test dist/test/*.test.js` 为365通过、30跳过、0失败；`git diff --check` 通过。受限沙箱内的 Bash/候选执行用例失败，正常权限复核通过；`pnpm` 引导在沙箱内无输出，使用等价 Node 命令。
+
 ### NX-42-9d 1M档校准完整结果与正式批次边界
 
 2026-10-15，北京时间20:43～21:30错峰运行；清单digest `483e4161e1782013cfa949191e42749521ebcd1128330105bae7e91d51c73b36`，本地证据 `D:/Agent/outputs/nx42-calibration-1m-20261015/`。20/20完整执行、无基础设施中止。Baseline可靠成功6/10、产物通过10/10；Full可靠成功5/10、产物通过8/10，Full−Baseline=-10个百分点，仅是校准读数，不作正式统计推断。失败分别为Baseline四次 `token_budget`；Full四次 `token_budget`、一次验收失败。按预注册，Baseline处于3～8区间；Full的C机制在10/10 episode出现（压力压缩7/10、覆盖4个独立根；预览截断10/10；旧任务裁剪覆盖UC01和RC01），P稳定提示在10/10出现，因此选择1M为正式候选档位，**不等于Harness有效**。
