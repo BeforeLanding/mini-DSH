@@ -74,9 +74,41 @@ function r03() {
   return records.map(record => JSON.stringify(record)).join('\n') + '\n'
 }
 
+function bc01() {
+  const rows = []
+  for (let index = 0; index < 360; index += 1) {
+    const at = new Date(Date.UTC(2024, 0, 1 + Math.floor(index / 24), index % 24, 30)).toISOString()
+    const offsetMinutes = [-480, -120, 0, 120, 330][index % 5]
+    rows.push({ eventId: `evt-${index}`, at, offsetMinutes, expectedLocalDay: new Date(Date.parse(at) + offsetMinutes * 60_000).toISOString().slice(0, 10) })
+  }
+  return rows.map(row => JSON.stringify(row)).join('\n') + '\n'
+}
+
+function fc01() {
+  const rows = []
+  for (let index = 0; index < 320; index += 1) {
+    const feature = `feature-${index % 24}`
+    const prerequisite = `platform-${index % 7}`
+    const prerequisiteEnabled = index % 6 !== 0
+    rows.push({ deployment: `rollout-${String(index).padStart(4, '0')}`, feature, ownFlag: true, requires: [prerequisite], prerequisiteEnabled, observedDirectOnly: true, expectedWithDependencies: prerequisiteEnabled })
+  }
+  return rows.map(row => JSON.stringify(row)).join('\n') + '\n'
+}
+
+function tc01() {
+  const rows = []
+  for (let index = 0; index < 360; index += 1) {
+    const id = `hook-${String(Math.floor(index / 3)).padStart(4, '0')}`
+    const attempt = index % 3
+    rows.push({ received: index, id, at: 1_000_000 + Math.floor(index / 3) * 1000 + (attempt === 2 ? 400_000 : 0), signatureState: attempt === 1 ? 'same-valid-signature' : attempt === 2 ? 'valid-but-expired' : 'valid', expectedAccepted: attempt === 0 })
+  }
+  return rows.map(row => JSON.stringify(row)).join('\n') + '\n'
+}
+
 for (const [id, filename, content] of [
   ['U03', 'incident.ndjson', u03()], ['B03', 'batches.ndjson', b03()],
   ['F03', 'imports.ndjson', f03()], ['R03', 'regressions.ndjson', r03()], ['T03', 'incident.ndjson', t03()],
+  ['BC01', 'events.ndjson', bc01()], ['FC01', 'decisions.ndjson', fc01()], ['TC01', 'webhooks.ndjson', tc01()],
 ]) {
   const directory = path.join(root, id, 'initial', id === 'R03' ? 'cases' : 'logs')
   await fs.mkdir(directory, { recursive: true })

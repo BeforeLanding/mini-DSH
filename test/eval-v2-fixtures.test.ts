@@ -2,12 +2,48 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { createHash } from 'node:crypto'
 import { createV2Fixture, harnessV2Root } from '../scripts/eval-v2-fixtures.js'
 import { runFixtureTask, scriptedAdapter } from '../scripts/eval-fixture.js'
 import { evalPolicy } from '../scripts/eval-runner.js'
 
 const runtimeRoot = process.env.MINI_DSH_V2_RUNTIME
 const isolation = runtimeRoot ? { runtimeRoot, distro: 'Ubuntu' } : undefined
+
+test('calibration projects have independent initial trees and no hidden verifier in candidate files', async () => {
+  const digests = new Map<string, string>()
+  for (const id of ['UC01', 'BC01', 'FC01', 'RC01', 'TC01'] as const) {
+    const root = path.join(harnessV2Root, id, 'initial')
+    const files: string[] = []
+    const visit = async (directory: string) => {
+      for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+        const target = path.join(directory, entry.name)
+        if (entry.isDirectory()) await visit(target)
+        else files.push(target)
+      }
+    }
+    await visit(root)
+    assert.ok(!files.some(file => /^(?:verify\.mjs|oracle(?:[\\/]|$)|reference(?:[\\/]|$))/i.test(path.relative(root, file))))
+    const hash = createHash('sha256')
+    for (const file of files.sort()) hash.update(path.relative(root, file)).update(await fs.readFile(file))
+    const digest = hash.digest('hex')
+    assert.ok(![...digests.values()].includes(digest), `${id} duplicates a calibration project`)
+    digests.set(id, digest)
+    const formal = path.join(harnessV2Root, `${id[0]}04`, 'initial')
+    const formalFiles: string[] = []
+    const visitFormal = async (directory: string) => {
+      for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+        const target = path.join(directory, entry.name)
+        if (entry.isDirectory()) await visitFormal(target)
+        else formalFiles.push(target)
+      }
+    }
+    await visitFormal(formal)
+    const formalHash = createHash('sha256')
+    for (const file of formalFiles.sort()) formalHash.update(path.relative(formal, file)).update(await fs.readFile(file))
+    assert.notEqual(digest, formalHash.digest('hex'), `${id} duplicates a formal project`)
+  }
+})
 
 test('U01 has four independent behavior groups and rejects initial, two distinct bad probes, and protected-file edits', { skip: !isolation }, async () => {
   const fixture = await createV2Fixture('U01', isolation)
@@ -143,4 +179,94 @@ test('information tasks ship relevant searchable diagnostics across a multi-modu
     assert.ok(Buffer.byteLength(content) > 16 * 1024, `${id} must have a realistic bounded-output opportunity`)
     assert.ok(content.trim().split(/\r?\n/).every(line => typeof JSON.parse(line) === 'object'))
   }
+})
+
+test('U04 has four advancing reference stages and a final rule that revokes the temporary grant', { skip: !isolation }, async () => {
+  const fixture = await createV2Fixture('U04', isolation)
+  try {
+    assert.equal(fixture.tasks.length, 4)
+    for (let stage = 1; stage <= 4; stage += 1) {
+      await fixture.applyStageReference(stage)
+      assert.equal(await fixture.verifyStageReference(stage), true, `stage ${stage}`)
+    }
+  } finally { await fixture.close() }
+  const final = await createV2Fixture('U04', isolation)
+  try {
+    assert.equal((await final.evaluate()).passed, false)
+    await final.applyReference()
+    assert.equal((await final.evaluate()).passed, true)
+    for (const negative of ['negative-a', 'negative-b'] as const) {
+      await final.applyCounterexample(negative)
+      assert.equal((await final.evaluate()).passed, false)
+    }
+  } finally { await final.close() }
+})
+
+for (const id of ['B04', 'F04', 'R04', 'T04'] as const) test(`${id} has four checked stages and a final four-group contract`, { skip: !isolation }, async () => {
+  const staged = await createV2Fixture(id, isolation)
+  try {
+    assert.equal(staged.tasks.length, 4)
+    for (let stage = 1; stage <= 4; stage += 1) {
+      await staged.applyStageReference(stage)
+      assert.equal(await staged.verifyStageReference(stage), true, `${id} stage ${stage}`)
+    }
+  } finally { await staged.close() }
+  const final = await createV2Fixture(id, isolation)
+  try {
+    const initial = await final.evaluate()
+    assert.equal(initial.passed, false)
+    if (id === 'R04') assert.equal(initial.groups[0]?.passed, true, 'refactor starts with correct business behavior')
+    await final.applyReference()
+    const reference = await final.evaluate()
+    assert.equal(reference.passed, true, `${id}: ${JSON.stringify(reference.groups)}`)
+    for (const negative of ['negative-a', 'negative-b'] as const) {
+      await final.applyCounterexample(negative)
+      const result = await final.evaluate()
+      assert.equal(result.passed, false, `${id}/${negative}`)
+      assert.ok(result.groups.some(group => !group.passed))
+    }
+  } finally { await final.close() }
+})
+
+for (const id of ['BC01', 'FC01', 'TC01'] as const) test(`${id} calibration root rejects initial and counterexample states`, { skip: !isolation }, async () => {
+  const fixture = await createV2Fixture(id, isolation)
+  try {
+    assert.equal(fixture.tasks.length, 1)
+    assert.equal((await fixture.evaluate()).passed, false, `${id} initial`)
+    await fixture.applyReference()
+    const reference = await fixture.evaluate()
+    assert.equal(reference.passed, true, `${id}: ${JSON.stringify(reference.groups)} ${reference.output}`)
+    assert.equal(reference.groups.length, 4)
+    for (const negative of ['negative-a', 'negative-b'] as const) {
+      await fixture.applyCounterexample(negative)
+      const result = await fixture.evaluate()
+      assert.equal(result.passed, false, `${id}/${negative}`)
+      assert.ok(result.groups.some(group => !group.passed), `${id}/${negative} must fail a contract group`)
+    }
+  } finally { await fixture.close() }
+})
+
+for (const id of ['UC01', 'RC01'] as const) test(`${id} calibration root has four verified stages and final rejection cases`, { skip: !isolation }, async () => {
+  const staged = await createV2Fixture(id, isolation)
+  try {
+    assert.equal(staged.tasks.length, 4)
+    for (let stage = 1; stage <= 4; stage += 1) {
+      await staged.applyStageReference(stage)
+      assert.equal(await staged.verifyStageReference(stage), true, `${id} stage ${stage}`)
+    }
+  } finally { await staged.close() }
+  const final = await createV2Fixture(id, isolation)
+  try {
+    const initial = await final.evaluate()
+    assert.equal(initial.passed, false)
+    if (id === 'RC01') assert.equal(initial.groups[0]?.passed, true, 'refactor begins with correct scheduling')
+    await final.applyReference()
+    const reference = await final.evaluate()
+    assert.equal(reference.passed, true, `${id}: ${JSON.stringify(reference.groups)} ${reference.output}`)
+    for (const negative of ['negative-a', 'negative-b'] as const) {
+      await final.applyCounterexample(negative)
+      const result = await final.evaluate()
+      assert.equal(result.passed, false, `${id}/${negative}`)
+    }
+  } finally { await final.close() }
 })

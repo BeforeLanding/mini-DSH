@@ -6,13 +6,14 @@ import { fileURLToPath } from 'node:url'
 import { readTaskSequence } from './coding-fixtures.js'
 import type { FixtureKind } from './coding-fixtures.js'
 import type { V2IsolationConfig } from './eval-v2-isolation.js'
+import { createIsolatedCommandRunner } from './eval-v2-isolation.js'
 
 export const harnessV2Ids = ['U01', 'U02', 'U03', 'U04', 'B01', 'B02', 'B03', 'B04', 'F01', 'F02', 'F03', 'F04', 'R01', 'R02', 'R03', 'R04', 'T01', 'T02', 'T03', 'T04', 'UC01', 'BC01', 'FC01', 'RC01', 'TC01'] as const
 export type HarnessV2Id = typeof harnessV2Ids[number]
 export const harnessV2Root = fileURLToPath(new URL('../../test/fixtures/harness-v2/', import.meta.url))
 
 export interface V2ContractGroup { name: string; passed: boolean; detail?: string }
-interface V2Meta { kind: FixtureKind; editable: string[]; artifact?: string; groups: [string, string, string, string] }
+interface V2Meta { kind: FixtureKind; editable: string[]; artifact?: string; groups: [string, string, string, string]; stages?: 4 }
 interface V2Acceptance { passed: boolean; exitCode: number | null; output: string; protectedFilesChanged: string[]; groups: V2ContractGroup[] }
 
 const under = (root: string, relative: string): string => {
@@ -41,6 +42,7 @@ function validMeta(value: unknown): value is V2Meta {
     && Array.isArray(meta.groups) && meta.groups.length === 4
     && meta.groups.every(name => typeof name === 'string' && name.length > 0)
     && new Set(meta.groups).size === 4
+    && (meta.stages === undefined || meta.stages === 4)
 }
 
 export async function createV2Fixture(id: HarnessV2Id, isolation?: Omit<V2IsolationConfig, 'workspace'>) {
@@ -62,6 +64,14 @@ export async function createV2Fixture(id: HarnessV2Id, isolation?: Omit<V2Isolat
   try {
     await fs.cp(initial, workspace, { recursive: true, errorOnExist: true })
     const tasks = await readTaskSequence(source)
+    if (tasks.length !== (meta.stages ?? 1)) throw new Error(`V2 task stage count mismatch: ${id}`)
+    const overlay = async (folder: string) => {
+      for (const file of await regularFiles(folder)) {
+        const target = under(workspace, file)
+        await fs.mkdir(path.dirname(target), { recursive: true })
+        await fs.copyFile(under(folder, file), target)
+      }
+    }
     return {
       id, kind: meta.kind, workspace, tasks, edits, artifact,
       async applyReference() {
@@ -70,12 +80,17 @@ export async function createV2Fixture(id: HarnessV2Id, isolation?: Omit<V2Isolat
       },
       async applyCounterexample(name: 'negative-a' | 'negative-b') {
         await this.applyReference()
-        const negative = path.join(source, name)
-        for (const file of await regularFiles(negative)) {
-          const target = under(workspace, file)
-          await fs.mkdir(path.dirname(target), { recursive: true })
-          await fs.copyFile(under(negative, file), target)
-        }
+        await overlay(path.join(source, name))
+      },
+      async applyStageReference(index: number) {
+        if (meta.stages !== 4 || !Number.isInteger(index) || index < 1 || index > 4) throw new Error(`V2 fixture has no stage ${index}`)
+        await overlay(path.join(source, 'reference-stages', String(index).padStart(2, '0')))
+      },
+      async verifyStageReference(index: number): Promise<boolean> {
+        if (!isolation || meta.stages !== 4 || !Number.isInteger(index) || index < 1 || index > 4) throw new Error(`V2 stage ${index} cannot be verified`)
+        const runner = createIsolatedCommandRunner({ ...isolation, workspace })
+        const result = await runner({ executable: 'ignored', args: [], command: `node check-stage-${String(index).padStart(2, '0')}.mjs`, cwd: workspace, signal: new AbortController().signal, timeoutMs: 10_000 })
+        return result.status === 'exited' && result.exitCode === 0
       },
       async evaluateAt(candidate: string): Promise<V2Acceptance> {
         if (!isolation) throw new Error('V2 hidden acceptance requires Linux isolation for candidate code')
