@@ -173,6 +173,9 @@ export class CompactionRuntime {
       // 会整段消失，而这正是 §13.3「约束丢失」要防的东西——只要正文非空且更短就写成 applied，
       // 等于把「模型没写完」伪装成「压缩成功」。主循环把 complete=false 升级成停止原因，这里对齐。
       incomplete = response.complete === false
+      // Close flushes the last buffered stream fragment. It must precede
+      // model/end, otherwise durable replay rejects the entire session log.
+      journal.close()
       this.#settle(sessionId, state, requestId, response.usage ?? estimateUsage(inputTokens, response), !incomplete)
     } catch (error) {
       journal.close()

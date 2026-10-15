@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### NX-42-9a 付费校准发现的摘要流事件顺序修复
+
+2026-10-15，首次20次校准在第6次停止；RC01/0/full 的原始日志里第651号 `model/end` 后仍有同请求第652号 `model/fragment`，`decodeLog` 以 `fragment after model end` 拒绝，批次只完成5次有效观察。原因是摘要成功路径先调用 `#settle` 写 usage/end，再在 `finally` 关闭 `StreamJournal`，最后缓冲片段因而迟到。现在成功路径在 `#settle` 前关闭 journal；异常路径原本已先关闭，保持不变。`test/compaction-runtime.test.ts` 的真实缓冲片段回归断言 fragment 早于 end，`node scripts/build.js`、`node scripts/check-syntax.js`（138文件）、正常权限 `node --test dist/test/*.test.js`（362通过、30跳过、0失败）及 `git diff --check` 通过。受限沙箱的 Bash 子进程测试失败，按 AGENTS 在正常权限复核。旧批次保留为不完整诊断证据，不与新批次拼接。
+
 ### NX-42-8 付费执行入口接线与离线准入
 
 新增`eval:v2-run`：默认拒绝执行，须显式给冻结清单、全新证据目录、正金额上限及`--execute`；`--validate-only`只复核完整计划、逐文件hash与WSL bubblewrap隔离探针，不加载模型凭证或发送请求。付费路径以校准2臂/正式4臂为完整配对block串行调度；按价格快照最贵token类别及10%余量预留下一block，余额不足即标incomplete。两次协议探测单独留证，供应商回显不符即停止；每个episode独立session/阶段快照/验收副本，逐次写`runs.jsonl`，最终报告保留计划分母与缺失。异常时尝试从已落盘事件恢复用量并停止，未闭合供应商请求费用仍有不确定性。当前事件无法结构化拆出工具策略拒绝或预期失败测试，报告明确标未知，不填0。新增[运行手册](NX-42-V2-RUNBOOK.md)。

@@ -127,7 +127,7 @@ test('a third compaction still addresses the earliest originals, not the first s
 
 test('the summary call is a real request counted into the same run', async () => {
   let calls = 0
-  const { h, run } = longSingleTaskSession(async () => { calls++; return { content: 'summary body', usage: { inputTokens: 10, outputTokens: 4, totalTokens: 14, source: 'provider', uncertain: false } } })
+  const { h, run } = longSingleTaskSession(async request => { calls++; request.onContent?.('summary body'); return { content: 'summary body', usage: { inputTokens: 10, outputTokens: 4, totalTokens: 14, source: 'provider', uncertain: false } } })
   await compaction(h).compact(attemptFor(run, h.session.id))
 
   assert.equal(calls, 1)
@@ -140,6 +140,7 @@ test('the summary call is a real request counted into the same run', async () =>
   const order = events(h).map(event => event.type)
   assert.ok(order.indexOf('context/summary-start') < order.indexOf('model/start'))
   assert.ok(order.indexOf('context/summary') < order.indexOf('context/summary-end'))
+  assert.ok(order.indexOf('model/fragment') < order.indexOf('model/end'), 'buffered summary text must be durable before model/end')
 })
 
 test('a budget shortage stops the run instead of being recorded as a summary decline', async () => {
