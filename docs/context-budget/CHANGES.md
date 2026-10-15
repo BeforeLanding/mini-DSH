@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### NX-42-1 V2 manifest 与只读计划入口
+
+在独立工作树 `nx42-benchmark-v2` 上新增 `scripts/eval-v2-plan.ts`、`scripts/eval-v2.ts` 与 `eval:v2` 命令；记录20个正式题目ID、5个独立校准ID、四组策略、固定种子`20261015`的配对block调度、每题预算与总上限。参数必须显式给 `--split`、`--tier`、`--window`、`--evidence-root`；`--plan-only`输出计划，尚未实现的执行路径在任何模型调用/写目录前报错。新用例只覆盖计划长度、配对、共同预算和非法/冲突参数，未预先声称缺失的fixture可执行。主工作区NX-40改动仍留原处。
+
+实际验收：`node scripts/build.js`退出0；`node scripts/check-syntax.js`为125文件；`node --test dist/test/eval-v2-plan.test.js`为2/2；完整`node --test dist/test/*.test.js`在正常用户权限下348/348、0失败（沙箱的Git Bash无法启动，因此复用仓库约定的复核方式）；V2 CLI预演输出20题×4组×3次=240、`fixturesPresent=0`，证据根目录不存在；Biome检查3个新TS文件通过；`git diff --check`退出0。没有调用模型。提交号见本步独立提交，不把尚未落地的fixture或执行器视为已完成。
+
 ### NX-42 20-task Harness Benchmark v2 方案
 
 2026-10-15，设计范围，零付费。新增 [完整方案](NX-42-EVAL-V2-PLAN.md)，PLAN纳入规范入口，R-24明确V2对旧R-21/R-23的有限改动：完整规格公开、隐藏验收实现及输入；预算停止进入可靠完成率，旧批次保持旧口径。TASKS列后续独立验收步骤，PROGRESS标明仅设计完成。未新增fixture或修改生产/评测源码；工作区既有NX-40改动不属于本步。
