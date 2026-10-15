@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { deriveV2Observation } from '../scripts/eval-v2-observation.js'
+import { deriveV2Observation, recoverV2UnverifiedEvents } from '../scripts/eval-v2-observation.js'
 import type { RunOutcome } from '../scripts/eval-runner.js'
 import type { SessionEvent } from '../src/core/contracts.js'
 
@@ -31,4 +31,27 @@ test('V2 observation separates summary requests and skipped tools from executed 
   assert.equal(row.metrics.policyRejected, null)
   assert.equal(row.metrics.pressureCompactions, 1)
   assert.deepEqual(row.metrics.prunedTaskIds, ['prior'])
+})
+
+test('a journal with a fragment after model end still recovers its paid usage once', () => {
+  const usage = { inputTokens: 100, outputTokens: 20, totalTokens: 120, cacheReadTokens: 80, source: 'provider', uncertain: false }
+  const line = (type: string, data: object) => JSON.stringify({ type, data, at: '2026-10-15T00:00:00.000Z', runId: 'run', taskId: 'task' })
+  const raw = [
+    line('model/start', { taskId: 'task', runId: 'run', requestId: 'req' }),
+    line('model/usage', { taskId: 'task', runId: 'run', requestId: 'req', usage }),
+    line('model/end', { requestId: 'req', complete: true }),
+    line('model/fragment', { requestId: 'req', content: 'late', reasoningContent: '' }),
+    'broken JSON',
+    line('model/usage', { taskId: 'task', runId: 'run', requestId: 'req', usage }),
+  ].join('\n')
+  const events = recoverV2UnverifiedEvents(raw)
+  assert.equal(events.filter(event => event.type === 'model/usage').length, 1)
+  assert.ok(events.some(event => event.type === 'model/fragment'))
+  const row = deriveV2Observation({ taskId: 'RC01', repeat: 0, arm: 'full', block: 0 }, {
+    status: 'error', accepted: null, error: 'fragment after model end',
+    counters: { modelRequests: 1, toolCalls: 0, toolErrors: 0, previewTruncations: 0, inputTokens: 100, outputTokens: 20, totalTokens: 120, cacheReadTokens: 80, activeDurationMs: 0, approvalDurationMs: 0 },
+  } as RunOutcome, events, false)
+  assert.equal(row.metrics.providerTokens, 120)
+  assert.equal(row.evidenceComplete, false)
+  assert.equal(row.failureReason, 'infrastructure')
 })

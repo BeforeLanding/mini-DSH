@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### NX-42-9b 损坏证据下的付费用量恢复
+
+2026-10-15，首批 RC01/0/full 运行的原始日志含 1,171,214 token 的阶段终态，但严格解码失败后运行器写入了零用量，导致中止报告少计费用。现在异常路径保留严格解码失败状态，同时逐行恢复结构有效的事件、去重同请求 usage，并写每题 `error.json`；失败仍停止批次、`evidenceComplete=false`，已落盘模型用量和峰时价估算不再归零。原批次原始 usage 独立复算为6次 3,316,676输入、153,195输出、1,798,272缓存命中，按冻结峰时价约$0.6501（错峰单价约$0.3251，另有探测），原 `report.json` 的$0.5097低估，不作为账单引用。新增日志次序损坏/重复usage/坏行回归；`node scripts/build.js`、`node scripts/check-syntax.js`（138文件）、正常权限 `node --test dist/test/*.test.js`（363通过、30跳过、0失败）与 `git diff --check`通过。后续重新冻结并完整重跑，不把旧批次拼入结果。
+
 ### NX-42-9a 付费校准发现的摘要流事件顺序修复
 
 2026-10-15，首次20次校准在第6次停止；RC01/0/full 的原始日志里第651号 `model/end` 后仍有同请求第652号 `model/fragment`，`decodeLog` 以 `fragment after model end` 拒绝，批次只完成5次有效观察。原因是摘要成功路径先调用 `#settle` 写 usage/end，再在 `finally` 关闭 `StreamJournal`，最后缓冲片段因而迟到。现在成功路径在 `#settle` 前关闭 journal；异常路径原本已先关闭，保持不变。`test/compaction-runtime.test.ts` 的真实缓冲片段回归断言 fragment 早于 end，`node scripts/build.js`、`node scripts/check-syntax.js`（138文件）、正常权限 `node --test dist/test/*.test.js`（362通过、30跳过、0失败）及 `git diff --check` 通过。受限沙箱的 Bash 子进程测试失败，按 AGENTS 在正常权限复核。旧批次保留为不完整诊断证据，不与新批次拼接。

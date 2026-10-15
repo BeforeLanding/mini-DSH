@@ -1,11 +1,38 @@
 import type { SessionEvent } from '../src/core/contracts.js'
+import { validatePayload } from '../src/core/event-validation.js'
 import type { RunOutcome } from './eval-runner.js'
 import type { V2Episode } from './eval-v2-plan.js'
 import type { V2Observation } from './eval-v2-report.js'
 
+// A semantically invalid journal must fail acceptance, but its already-billed
+// provider usage must not disappear from the amount ledger. This parser only
+// recovers individually valid lines; it never makes the episode admissible.
+export function recoverV2UnverifiedEvents(raw: string): SessionEvent[] {
+  const events: SessionEvent[] = []
+  const usageRequests = new Set<string>()
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line) continue
+    try {
+      const value: unknown = JSON.parse(line)
+      if (!value || typeof value !== 'object' || Array.isArray(value)) continue
+      const event = value as Record<string, unknown>
+      if (typeof event.type !== 'string' || !event.data || typeof event.data !== 'object' || Array.isArray(event.data)) continue
+      validatePayload(event.type, event.data as Record<string, unknown>)
+      if (event.type === 'model/usage') {
+        const data = event.data as { requestId: string; usage: { inputTokens: number; cacheReadTokens?: number } }
+        const cache = data.usage.cacheReadTokens ?? 0
+        if (!Number.isSafeInteger(cache) || cache < 0 || cache > data.usage.inputTokens || usageRequests.has(data.requestId)) continue
+        usageRequests.add(data.requestId)
+      }
+      events.push(value as SessionEvent)
+    } catch { /* Preserve valid later usage even if one line is damaged. */ }
+  }
+  return events
+}
+
 export function deriveV2Observation(episode: V2Episode, outcome: RunOutcome, events: readonly SessionEvent[], evidenceComplete: boolean): V2Observation {
   const stages = outcome.tasks ?? []
-  const scope = events.filter(event => event.runId && stages.some(stage => stage.taskId === event.taskId))
+  const scope = stages.length ? events.filter(event => event.runId && stages.some(stage => stage.taskId === event.taskId)) : events
   const summaryIds = new Set<string>()
   const summaryStarts = new Map<string, number>()
   const durations = new Map<string, number>()
