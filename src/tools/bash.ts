@@ -2,7 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import fs from 'node:fs'
 import path from 'node:path'
 import { positiveLimit } from '../core/bounded-text.js'
-import { runCommand, commandFailed, type CommandResult } from '../core/command-runner.js'
+import { runCommand, commandFailed, type CommandResult, type CommandOptions } from '../core/command-runner.js'
 import { TaskVerification, verificationFiles } from '../core/task-verification.js'
 import { isRecord } from '../core/event-store.js'
 import type { SessionRuntime } from '../core/session-runtime.js'
@@ -10,7 +10,7 @@ import type { SessionRuntime } from '../core/session-runtime.js'
 export const name = 'mini-tool-bash'
 export const inject = ['tools', 'sandbox']
 
-export function apply(ctx: Context, config: { executable?: string; workspace?: string; maxCaptureBytes?: number; timeoutMs?: number; maxVerificationFiles?: number; maxVerificationFileBytes?: number } = {}) {
+export function apply(ctx: Context, config: { executable?: string; workspace?: string; maxCaptureBytes?: number; timeoutMs?: number; maxVerificationFiles?: number; maxVerificationFileBytes?: number; commandRunner?: (options: CommandOptions) => Promise<CommandResult> } = {}) {
   const maxCaptureBytes = positiveLimit(config.maxCaptureBytes, 8 * 1024 * 1024, 'maxCaptureBytes')
   const timeoutMs = positiveLimit(config.timeoutMs, 30_000, 'timeoutMs', 2_147_483_647)
   const maxVerificationFiles = positiveLimit(config.maxVerificationFiles, 100, 'maxVerificationFiles', 10000)
@@ -50,7 +50,7 @@ export function apply(ctx: Context, config: { executable?: string; workspace?: s
       exec.signal.throwIfAborted()
       ctx.sandbox.assertCommand(command)
       if (resolveCwd() !== directory) throw new Error('cwd changed before command execution')
-      const result = await runCommand({ executable, args: ['-lc', command], command, cwd: directory, signal: exec.signal, maxCaptureBytes, timeoutMs })
+      const result = await (config.commandRunner ?? runCommand)({ executable, args: ['-lc', command], command, cwd: directory, signal: exec.signal, maxCaptureBytes, timeoutMs })
       if (journal && verificationId && paths) {
         // Cancelled collection must not bypass the signal to perform fresh file reads.
         const after = exec.signal.aborted ? paths.map(file => ({ path: file, error: 'cancelled; post-check file version unavailable' })) : await verificationFiles(paths, file => ctx.sandbox.resolvePath(file), maxVerificationFileBytes, exec.signal, true)

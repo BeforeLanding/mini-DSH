@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### NX-42-3 V2 候选隔离与候选退出后的隐藏验收
+
+V2评测的 Bash 工具可注入命令执行器；旧装配保持原有 `runCommand`。新增 [隔离器与固定运行时说明](NX-42-V2-ISOLATION.md)：在 WSL Ubuntu bubblewrap 中只读挂载公共执行环境和锁定的Node运行时，只把当题候选工作区读写挂载；清空环境变量并取消网络命名空间。V2 fixture 无隔离配置时在创建工作区和模型适配器前直接拒绝。`coding-fixtures.ts` 增加 `evaluateAt`，旧 `evaluate` 行为不变；V2在Agent与会话关闭后复制最后快照到外部验收副本，宿主运行隐藏验证器。运行时准备脚本下载固定版本Ubuntu包、验证逐包 SHA-256 再解压，不安装到WSL系统。
+
+实测环境：WSL2 `Ubuntu`、bubblewrap 0.11.1、Linux Node 22.22.1；Docker服务不可启动，因此采用同样具备文件系统与网络命名空间的bubblewrap。`node scripts/build.js`、`node scripts/check-syntax.js`和Biome检查通过；设置 `MINI_DSH_V2_RUNTIME` 后完整离线套件在正常用户权限下357/357通过、0跳过、0失败。3个隔离探针证明：候选Bash/Node无法读取工作区旁的真实诱饵，正常回读/公开检查可用；候选文件工具越界被拒；取消后无延迟写入；实际 `boundary` fixture 在隔离Bash中运行并在外部副本通过验收。固定运行时准备脚本以已下载的13个包复核哈希与解压通过，并用重建产物再次通过隔离探针。未调用付费模型。
+
 ### NX-42-2 V2 episode 共享预算、停止和快照
 
 新增 `eval-v2-episode.ts`：每阶段从整题 64请求/128工具/累计token/600秒剩余量生成 `send` 预算；整题 watchdog 传取消信号；非completed阶段立刻停止；在下一阶段之前把候选工作区保存到外部目录并记录合同文本与文件快照SHA-256、阶段及累计计数。摘要请求与token使用现有 `RunState.counters`，核心压缩运行时已按 `model/start`、`model/usage` 入账；provider usage迟到的超额另记 `tokenOvershoot`。快照失败抛错，不返回可误读为成功的结果。`eval-fixture.ts` 仅在显式传入V2快照目录时使用此路径，旧阶段调用与结果保留。

@@ -72,21 +72,9 @@ test('V2 watchdog cancels the active stage and prevents the next stage', async (
   assert.equal(calls, 1)
 })
 
-test('V2 fixture path saves real stage snapshots and keeps the old fixture path available', async () => {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-v2-episode-'))
-  try {
-    const outcome = await runFixtureTask('ledger', () => ({
-      provider: 'test', model: 'complete', capabilities: { complete: { contextWindowTokens: 1_000_000 } },
-      chat: async () => ({ content: 'done' }),
-    }), { ...policy, maxModelRequests: 1, maxTotalTokens: 2_000_000 }, undefined, undefined, undefined, path.join(directory, 'snapshots'))
-    assert.equal(outcome.status, 'max_steps')
-    assert.equal(outcome.episode?.stages.length, 1)
-    const snapshot = outcome.episode?.stages[0]
-    assert.ok(snapshot)
-    assert.equal(snapshot.contractHash.length, 64)
-    assert.equal(snapshot.snapshotHash.length, 64)
-    assert.ok((await fs.stat(path.join(snapshot.snapshotPath, 'src', 'parse.mjs'))).isFile())
-  } finally { await fs.rm(directory, { recursive: true, force: true }) }
+test('V2 fixture refuses to start without Linux isolation', async () => {
+  await assert.rejects(runFixtureTask('boundary', () => { throw new Error('adapter must not be constructed') }, policy,
+    undefined, undefined, undefined, path.join(os.tmpdir(), 'snapshots')), /requires Linux candidate isolation/)
 })
 
 test('snapshot rejects symlinks and an in-workspace destination', async () => {

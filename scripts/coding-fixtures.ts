@@ -265,12 +265,12 @@ export async function createFixture(id: FixtureId) {
         // fixtures:check 逮到：那次 reference 态报 initialExitCode=0 且受保护文件被改。
         if (artifact) await fs.writeFile(path.join(workspace, artifact.path), artifact.content)
       },
-      async evaluate({ timeoutMs = fixtureProcessTimeoutMs, maxOutputBytes = 32 * 1024 } = {}): Promise<Acceptance> {
+      async evaluateAt(candidateWorkspace: string, { timeoutMs = fixtureProcessTimeoutMs, maxOutputBytes = 32 * 1024 } = {}): Promise<Acceptance> {
         if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || !Number.isSafeInteger(maxOutputBytes) || maxOutputBytes <= 0) throw new Error('invalid acceptance limits')
         const protectedFilesChanged: string[] = []
         for (const { filename, content } of protectedFiles) {
           try {
-            const candidate = path.join(workspace, filename)
+            const candidate = path.join(candidateWorkspace, filename)
             if (!(await fs.lstat(candidate)).isFile() || !(await fs.readFile(candidate)).equals(content)) protectedFilesChanged.push(filename)
           } catch { protectedFilesChanged.push(filename) }
         }
@@ -281,8 +281,8 @@ export async function createFixture(id: FixtureId) {
           await fs.rm(reportDirectory, { recursive: true, force: true })
           await fs.mkdir(reportDirectory, { recursive: true })
         }
-        const result = spawnSync(process.execPath, [path.join(source, 'verify.mjs'), workspace, ...(reportDirectory === undefined ? [] : [reportDirectory])], {
-          cwd: workspace, encoding: 'utf8', timeout: timeoutMs, maxBuffer: maxOutputBytes, windowsHide: true,
+        const result = spawnSync(process.execPath, [path.join(source, 'verify.mjs'), candidateWorkspace, ...(reportDirectory === undefined ? [] : [reportDirectory])], {
+          cwd: candidateWorkspace, encoding: 'utf8', timeout: timeoutMs, maxBuffer: maxOutputBytes, windowsHide: true,
         })
         const output = Buffer.from([result.error?.message, result.stdout, result.stderr].filter(Boolean).join('\n')).subarray(0, maxOutputBytes).toString('utf8')
         const marker = `acceptance passed: ${id}`
@@ -293,6 +293,7 @@ export async function createFixture(id: FixtureId) {
         return { passed: result.status === 0 && !result.error && output.trim() === marker && !protectedFilesChanged.length && (artifact === undefined || consistent),
           exitCode: result.status, output, protectedFilesChanged, ...(evidence === undefined ? {} : { evidence }) }
       },
+      async evaluate(options: { timeoutMs?: number; maxOutputBytes?: number } = {}): Promise<Acceptance> { return this.evaluateAt(workspace, options) },
       async close() {
         if (path.dirname(directory) !== path.resolve(os.tmpdir()) || !path.basename(directory).startsWith(`mini-dsh-fixture-${id}-`)) throw new Error('invalid fixture cleanup path')
         await fs.rm(directory, { recursive: true, force: true })
