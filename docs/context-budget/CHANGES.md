@@ -1,5 +1,53 @@
 # 改动与验收证据
 
+### NX-42-8 付费执行入口接线与离线准入
+
+新增`eval:v2-run`：默认拒绝执行，须显式给冻结清单、全新证据目录、正金额上限及`--execute`；`--validate-only`只复核完整计划、逐文件hash与WSL bubblewrap隔离探针，不加载模型凭证或发送请求。付费路径以校准2臂/正式4臂为完整配对block串行调度；按价格快照最贵token类别及10%余量预留下一block，余额不足即标incomplete。两次协议探测单独留证，供应商回显不符即停止；每个episode独立session/阶段快照/验收副本，逐次写`runs.jsonl`，最终报告保留计划分母与缺失。异常时尝试从已落盘事件恢复用量并停止，未闭合供应商请求费用仍有不确定性。当前事件无法结构化拆出工具策略拒绝或预期失败测试，报告明确标未知，不填0。新增[运行手册](NX-42-V2-RUNBOOK.md)。
+
+离线验收：`node scripts/build.js`、`node scripts/check-syntax.js`（138文件）、Biome全仓149文件零诊断、`git diff --check`通过；固定WSL运行时下完整`node --test dist/test/*.test.js` 392/392通过、0失败、0跳过，随后最新报告/接线/拒绝付费默认用例5/5通过；四阶段真实Harness烟测1/1通过。既有`fixtures:check`退出0；旧`eval:offline`在受限沙箱因Git Bash权限失败，正常权限复核12/12。`pnpm check`引导无输出挂起30秒后中断，按AGENTS允许的Node命令完成等价构建与检查。正式/校准plan-only分别为20/20题、240 episode与5/5题、20 episode；存于`D:/Agent/tmp/nx42-{formal,calibration}-plan.json`，SHA-256分别为`31B715B1557BA0205A52D1CFEDE48C2D5680F05FE447E1742EEEB3490053C490`与`D79CB53674397F7424263B334121842726ED420E422D04FBBC556F5FEF8208CF`。校准预提交清单摘要`682d41aa07cd6494f6fecae568b6b24f1457623b2c878f7ddbbfce9babcee4d7`经`--validate-only`验证5题/20 episode/隔离通过、付费请求0；正式冻结将在选定预算档后进行。尚无真实模型运行与成功率。
+
+### NX-42-7 V2报告与冻结清单
+
+新增独立`eval:v2-report`与`eval:v2-freeze`：冻结清单含计划顺序、四臂配置、20/5题完整文件及隐藏验收hash、源码/提示/规则hash、模型与端点、预算档、Git提交和外部提供的价格快照；冻结CLI仅从干净提交生成、输出拒绝覆盖。报告对计划episode严格去重，缺失仍保留固定分母与上下界，可靠成功同时要求完整阶段、四组合同、受保护文件和证据；六类指标分别给出使用量/分布，唯一主比较使用按类别分层、问题根成对抽样的10,000次bootstrap。校准报告不生成正式效应结论。不会将未运行项伪装为失败执行。
+
+离线验收：`node scripts/build.js`、`node scripts/check-syntax.js`（134文件）、Biome检查3个改动TS文件、`git diff --check`通过；`node --test dist/test/eval-v2-report.test.js` 3/3通过，合成240条配对观测检验点估计、各指标、缺失范围、重复拒绝与冻结摘要完整性。未调用模型；实际付费证据尚不存在，不能声称观察到Full优于Baseline。
+
+### NX-42-6 五类多阶段题与独立校准根问题
+
+补齐U04政策演进与授权撤销、B04折扣税基与退款符号、F04增量报告去重/导出、R04购物车状态迁移、T04规格演进后的测试维护，五题各有四份阶段任务和可逐阶段检验的参考状态；终态四组合同均以外部隐藏验收执行。另建UC01同步版本/墓碑、BC01本地日偏移、FC01功能旗标依赖、RC01调度队列二叉堆迁移、TC01 webhook回放测试五个独立校准根，覆盖单任务信息定位和四阶段任务，不复用正式题的初始项目。各题初始失败、参考通过、两个反例失败，校准初始树与对应正式题有不同摘要。诊断生成器补充三份校准信息日志。
+
+实际验收：`node scripts/build.js`、`node scripts/check-syntax.js`（131文件）、Biome检查3个改动脚本/测试文件、`git diff --check`通过；设置固定WSL bubblewrap运行时后，完整`node --test dist/test/*.test.js`为385/385通过、0失败、0跳过；新增校准工程独立性测试另行构建/运行1/1通过。plan-only准备度为20/20正式题及5/5校准题。尚未调用付费模型，当前CLI仍只支持预演。
+
+### NX-42-5 五类大信息定位题与可搜索诊断材料
+
+新增U03多请求计费日志与源码关联复现、B03多批次退款符号错误修复、F03依据迁移记录实现v1导入兼容、R03抽取跨市场共享规则并保留合法差异、T03从跨租户告警事故编写回归测试。五题各有12个以上相关源码模块，诊断日志或案例为39–101KB的确定性可搜索NDJSON；[生成器](../../scripts/eval-v2-generate-diagnostics.mjs)记录构造过程。每题仍允许grep和脚本聚合，不以强制读满日志当难度。U/T理解或测试类保留行为等价体；R03初始业务行为两组通过而共享结构组失败。五题均有四组合同，初始/参考/两种反例在隔离环境下逐项通过门禁；额外检查源码模块数、诊断材料大小与JSON结构。
+
+实际验收：`node scripts/build.js`、`node scripts/check-syntax.js`（131文件）、Biome检查改动脚本/测试及`git diff --check`通过；设置固定WSL运行时后，完整`node --test dist/test/*.test.js`在正常用户权限下375/375通过、0失败、0跳过。plan-only准备度15/20正式题；尚无L类和校准题，没有调用付费模型。
+
+### NX-42-4 五类基本/跨模块10题与四组验收
+
+新增独立 `harness-v2` fixture注册表与加载器，不改变旧 `coding` fixture注册表或历史批次。S题为U01配置覆盖复现、B01分页边界、F01可选slug分隔符、R01金额计算/显示拆分、T01阈值边界测试；M题为U02异步重试后的租户缓存污染复现、B02重试与取消竞态、F02查询条件跨解析/服务/调用方、R02三消费者接口迁移、T02有状态限额测试。每题单独初始工程、需求、参考产物、两个不同反例与四个等权合同组；理解与测试类使用候选新增产物及缺陷/正确或变异/等价体读数，重构类验证初始态保留旧业务行为而缺新接口。隐藏验证器在宿主编排，候选代码只在bubblewrap挂载的独立副本中执行，输入与期望分离；验收记录四组结果和保护文件变更。
+
+隔离门禁对10题逐项验证初始不通过、参考通过、两个反例不通过；U01另验证保护文件被改时失败。U01/B01还经真实Harness的脚本化模型接线通过四组验收（仅用于框架验证，不作为自主模型成功率）。`node scripts/build.js`和`node scripts/check-syntax.js`通过，Biome检查5个改动TS文件通过，`git diff --check`通过；设置固定WSL运行时后完整离线套件369/369通过、0失败、0跳过。plan-only准备度为10/20正式题，剩余O/L及校准题尚未实现。没有调用付费模型。
+
+### NX-42-3 V2 候选隔离与候选退出后的隐藏验收
+
+V2评测的 Bash 工具可注入命令执行器；旧装配保持原有 `runCommand`。新增 [隔离器与固定运行时说明](NX-42-V2-ISOLATION.md)：在 WSL Ubuntu bubblewrap 中只读挂载公共执行环境和锁定的Node运行时，只把当题候选工作区读写挂载；清空环境变量并取消网络命名空间。V2 fixture 无隔离配置时在创建工作区和模型适配器前直接拒绝。`coding-fixtures.ts` 增加 `evaluateAt`，旧 `evaluate` 行为不变；V2在Agent与会话关闭后复制最后快照到外部验收副本，宿主运行隐藏验证器。运行时准备脚本下载固定版本Ubuntu包、验证逐包 SHA-256 再解压，不安装到WSL系统。
+
+实测环境：WSL2 `Ubuntu`、bubblewrap 0.11.1、Linux Node 22.22.1；Docker服务不可启动，因此采用同样具备文件系统与网络命名空间的bubblewrap。`node scripts/build.js`、`node scripts/check-syntax.js`和Biome检查通过；设置 `MINI_DSH_V2_RUNTIME` 后完整离线套件在正常用户权限下357/357通过、0跳过、0失败。3个隔离探针证明：候选Bash/Node无法读取工作区旁的真实诱饵，正常回读/公开检查可用；候选文件工具越界被拒；取消后无延迟写入；实际 `boundary` fixture 在隔离Bash中运行并在外部副本通过验收。固定运行时准备脚本以已下载的13个包复核哈希与解压通过，并用重建产物再次通过隔离探针。未调用付费模型。
+
+### NX-42-2 V2 episode 共享预算、停止和快照
+
+新增 `eval-v2-episode.ts`：每阶段从整题 64请求/128工具/累计token/600秒剩余量生成 `send` 预算；整题 watchdog 传取消信号；非completed阶段立刻停止；在下一阶段之前把候选工作区保存到外部目录并记录合同文本与文件快照SHA-256、阶段及累计计数。摘要请求与token使用现有 `RunState.counters`，核心压缩运行时已按 `model/start`、`model/usage` 入账；provider usage迟到的超额另记 `tokenOvershoot`。快照失败抛错，不返回可误读为成功的结果。`eval-fixture.ts` 仅在显式传入V2快照目录时使用此路径，旧阶段调用与结果保留。
+
+离线验收：`node scripts/build.js`通过；`node scripts/check-syntax.js`为127文件；新6个测试覆盖第二阶段剩余额度、用尽不发下一阶段、output_limit提前停止、快照失败、watchdog取消、真实fixture快照；`node --test dist/test/*.test.js`在正常用户权限下354/354通过、0失败；Biome检查3个改动TS文件通过；`git diff --check`通过。未调用付费模型。V2 CLI执行仍等待新题库及隔离验收，不能把本步视为完整Benchmark可运行。
+
+### NX-42-1 V2 manifest 与只读计划入口
+
+在独立工作树 `nx42-benchmark-v2` 上新增 `scripts/eval-v2-plan.ts`、`scripts/eval-v2.ts` 与 `eval:v2` 命令；记录20个正式题目ID、5个独立校准ID、四组策略、固定种子`20261015`的配对block调度、每题预算与总上限。参数必须显式给 `--split`、`--tier`、`--window`、`--evidence-root`；`--plan-only`输出计划，尚未实现的执行路径在任何模型调用/写目录前报错。新用例只覆盖计划长度、配对、共同预算和非法/冲突参数，未预先声称缺失的fixture可执行。主工作区NX-40改动仍留原处。
+
+实际验收：`node scripts/build.js`退出0；`node scripts/check-syntax.js`为125文件；`node --test dist/test/eval-v2-plan.test.js`为2/2；完整`node --test dist/test/*.test.js`在正常用户权限下348/348、0失败（沙箱的Git Bash无法启动，因此复用仓库约定的复核方式）；V2 CLI预演输出20题×4组×3次=240、`fixturesPresent=0`，证据根目录不存在；Biome检查3个新TS文件通过；`git diff --check`退出0。没有调用模型。提交号见本步独立提交，不把尚未落地的fixture或执行器视为已完成。
+
 ### NX-42 20-task Harness Benchmark v2 方案
 
 2026-10-15，设计范围，零付费。新增 [完整方案](NX-42-EVAL-V2-PLAN.md)，PLAN纳入规范入口，R-24明确V2对旧R-21/R-23的有限改动：完整规格公开、隐藏验收实现及输入；预算停止进入可靠完成率，旧批次保持旧口径。TASKS列后续独立验收步骤，PROGRESS标明仅设计完成。未新增fixture或修改生产/评测源码；工作区既有NX-40改动不属于本步。

@@ -1,0 +1,2 @@
+import { calculateTotal } from './pricing.mjs'
+export function renderReceipt(lines) { return `Amount: $${(calculateTotal(lines) / 100).toFixed(2)}` }

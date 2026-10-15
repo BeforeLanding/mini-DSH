@@ -1,0 +1,1 @@
+export const normalize = request => ({ role: request.role, resource: request.resource, action: request.action, region: request.region ?? 'US', legacyToken: request.legacyToken === true, migrationGrant: request.migrationGrant === true })

@@ -1,6 +1,10 @@
 import { Context } from '@deepseek-ai/cordis'
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import { createFixture } from './coding-fixtures.js'
 import type { FixtureId } from './coding-fixtures.js'
+import { createV2Fixture } from './eval-v2-fixtures.js'
+import type { HarnessV2Id } from './eval-v2-fixtures.js'
 import { evalPolicy } from './eval-runner.js'
 import type { AcceptanceDetail, PromptLayoutMode, RunOutcome, RunTaskDetail, ToolOutputMode } from './eval-runner.js'
 import { BudgetStop, emptyCounters } from '../src/core/budget.js'
@@ -20,8 +24,12 @@ import * as runtimeContext from '../src/plugins/runtime-context.js'
 import * as projectContext from '../src/plugins/project-context.js'
 import * as files from '../src/tools/files.js'
 import * as bash from '../src/tools/bash.js'
+import { runV2Stages, snapshotWorkspace } from './eval-v2-episode.js'
+import type { V2EpisodeResult } from './eval-v2-episode.js'
+import { createIsolatedCommandRunner } from './eval-v2-isolation.js'
+import type { V2IsolationConfig } from './eval-v2-isolation.js'
 
-export type Fixture = Awaited<ReturnType<typeof createFixture>>
+export type Fixture = Awaited<ReturnType<typeof createFixture>> | Awaited<ReturnType<typeof createV2Fixture>>
 // 「无界」仍是同一插件，只是把预览上限抬到任何单条结果都装得下：bash 单流采集上限 8 MiB，经
 // JSON.stringify 转义后最坏约翻倍，64 MiB 留足余量，因此不会走到截断分支、也不会产生 ref。
 // 模式类型与阶段→模式的映射住在 eval-runner（策略住在策略模块），这里只负责按模式装配。
@@ -134,12 +142,16 @@ export function summarizeStage(events: readonly SessionEvent[], runId: string) {
 // 不带这两者（理由见 scripts/demo-context.ts:21-29），补上它们会改掉既有各臂的系统提示。给出模式时两臂
 // 的装配逐字相同，差异只有 layout。
 export async function runFixtureTask(
-  id: FixtureId, makeAdapter: (fixture: Fixture) => FixtureAdapter,
+  id: FixtureId | HarnessV2Id, makeAdapter: (fixture: Fixture) => FixtureAdapter,
   budget: Readonly<BudgetPolicy> = evalPolicy, sessionDirectory?: string,
   toolOutput?: ToolOutputMode, promptLayout?: PromptLayoutMode,
-): Promise<RunOutcome> {
-  const fixture = await createFixture(id), root = new Context()
+  v2SnapshotDirectory?: string,
+  v2Isolation?: Omit<V2IsolationConfig, 'workspace'>,
+): Promise<RunOutcome & { episode?: V2EpisodeResult }> {
+  if (v2SnapshotDirectory && !v2Isolation) throw new Error('V2 fixture execution requires Linux candidate isolation')
+  const fixture = await (/^[UBFRT](?:0[1-4]|C01)$/.test(id) ? createV2Fixture(id as HarnessV2Id, v2Isolation) : createFixture(id as FixtureId)), root = new Context()
   let store: JsonlStore | undefined
+  let disposed = false
   try {
     for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
     await root.plugin(sandbox, { workspace: fixture.workspace, autoApprove: true })
@@ -151,7 +163,8 @@ export async function runFixtureTask(
       await root.plugin(runtimeContext, { workspace: fixture.workspace, profile: 'coding', layout })
       await root.plugin(projectContext, { layout })
     }
-    await root.plugin(files); await root.plugin(bash)
+    await root.plugin(files)
+    await root.plugin(bash, v2Isolation ? { commandRunner: createIsolatedCommandRunner({ ...v2Isolation, workspace: fixture.workspace }) } : {})
     // 有界走生产默认（positiveLimit 的 16 KiB 预览），无界抬到 UNBOUNDED_PREVIEW_BYTES。两者注册的工具
     // 与 schema 逐字相同，差异只在结果是否被投影截断。
     if (toolOutput) await root.plugin(toolResults, { maxPreviewBytes: toolOutput.bounded ? undefined : UNBOUNDED_PREVIEW_BYTES })
@@ -165,7 +178,22 @@ export async function runFixtureTask(
     const agent = root.agents.create({ sessionId: session.id, model: `${adapter.provider}/${adapter.model}`, loop: root.agentLoop, budget })
     let error: string | undefined
     const stages: RunTaskDetail[] = []
-    for (const stage of fixture.tasks) {
+    let episode: V2EpisodeResult | undefined
+    if (v2SnapshotDirectory) {
+      episode = await runV2Stages({
+        tasks: fixture.tasks, policy: budget,
+        send: async (stage, remaining, signal) => { await agent.send(stage, { budget: remaining, signal }) },
+        latestRun: () => root.sessions.latestRun(session.id),
+        snapshot: index => snapshotWorkspace(fixture.workspace, v2SnapshotDirectory, index),
+      })
+      for (const recorded of episode.stages) {
+        if (recorded.runId) stages.push({
+          taskId: recorded.taskId ?? '', status: recorded.status, counters: recorded.counters,
+          ...summarizeStage(root.sessions.visibleEvents(session.id), recorded.runId),
+        })
+      }
+      error = episode.error
+    } else for (const stage of fixture.tasks) {
       try {
         await agent.send(stage)
       } catch (cause) {
@@ -181,20 +209,34 @@ export async function runFixtureTask(
       // 而每一份都会进入阶段累计用量。预算触顶不属于这一类，它由状态承载并继续下一阶段。
       if (error !== undefined) break
     }
-    const acceptance = await fixture.evaluate()
+    let acceptance: Awaited<ReturnType<typeof fixture.evaluate>>
+    if (episode && v2SnapshotDirectory) {
+      // The candidate has completely exited before the hidden verifier sees a copy of its final files.
+      if (store) await root.sessions.close()
+      await root.fiber.dispose()
+      disposed = true
+      const finalSnapshot = episode.stages.at(-1) ?? await snapshotWorkspace(fixture.workspace, v2SnapshotDirectory, 0)
+      const source = 'snapshotPath' in finalSnapshot ? finalSnapshot.snapshotPath : finalSnapshot.path
+      const acceptanceCopy = path.join(path.dirname(v2SnapshotDirectory), 'acceptance-copy')
+      await fs.cp(source, acceptanceCopy, { recursive: true, errorOnExist: true, force: false })
+      acceptance = await fixture.evaluateAt(acceptanceCopy)
+    } else acceptance = await fixture.evaluate()
     const detail: AcceptanceDetail = {
       passed: acceptance.passed, exitCode: acceptance.exitCode, output: acceptance.output, protectedFilesChanged: acceptance.protectedFilesChanged,
-      ...(acceptance.evidence === undefined ? {} : { evidence: acceptance.evidence }),
+      ...('evidence' in acceptance && acceptance.evidence !== undefined ? { evidence: acceptance.evidence } : {}),
+      ...('groups' in acceptance ? { groups: acceptance.groups } : {}),
     }
     // 预算校验或装配在 beginRun 之前失败时不会留下 run 状态；此时按基础设施失败报告，不用非空断言把
     // 缺失状态伪装成一次真实的运行结论。
     const last = stages.at(-1)
-    if (!last) return { status: 'error', counters: emptyCounters(), accepted: acceptance.passed, acceptance: detail, error: error ?? 'no run was recorded' }
-    return { status: last.status, counters: sumCounters(stages.map(stage => stage.counters)), accepted: acceptance.passed, acceptance: detail, tasks: stages, ...(error === undefined ? {} : { error }) }
+    if (!last) return { status: episode?.status ?? 'error', counters: episode?.counters ?? emptyCounters(), accepted: acceptance.passed, acceptance: detail, ...(!episode || error ? { error: error ?? 'no run was recorded' } : {}), ...(episode ? { episode } : {}) }
+    return { status: episode?.status ?? last.status, counters: episode?.counters ?? sumCounters(stages.map(stage => stage.counters)), accepted: acceptance.passed, acceptance: detail, tasks: stages, ...(error === undefined ? {} : { error }), ...(episode ? { episode } : {}) }
   } finally {
     // 先等写入队列排空再关存储：失败会抛出，使证据没落盘的 run 不以成功结论结束。
-    if (store) await root.sessions.close()
-    await root.fiber.dispose()
+    if (!disposed) {
+      if (store) await root.sessions.close()
+      await root.fiber.dispose()
+    }
     await fixture.close()
   }
 }

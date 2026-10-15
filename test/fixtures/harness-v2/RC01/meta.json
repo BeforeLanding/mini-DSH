@@ -1,0 +1,1 @@
+{"kind":"edit","editable":["src/state/legacy.mjs","src/state/heap.mjs","src/actions/enqueue.mjs","src/actions/cancel.mjs","src/actions/next.mjs","src/api/scheduler.mjs"],"stages":4,"groups":["priority-and-stability","cancellation","heap-representation","legacy-detached"]}

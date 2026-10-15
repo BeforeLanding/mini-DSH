@@ -1,0 +1,1 @@
+{"kind":"edit","editable":["src/aggregate/ledger.mjs"],"groups":["refund-batch","unaffected-batches","order-independent","empty-and-small"]}

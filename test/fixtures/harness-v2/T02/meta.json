@@ -1,0 +1,1 @@
+{"kind":"mutation","editable":[],"artifact":"suite.mjs","groups":["correct-state-machine","capacity-mutant","reset-and-rejection-mutants","equivalent-state-machine"]}

@@ -1,0 +1,1 @@
+{"kind":"edit","editable":["src/lookup.mjs","src/greeting.mjs","src/audit.mjs","src/badge.mjs"],"groups":["new-lookup-shape","old-greeting","all-consumers","error-propagation"]}

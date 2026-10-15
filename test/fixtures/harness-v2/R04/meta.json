@@ -1,0 +1,1 @@
+{"kind":"edit","editable":["src/state/legacy.mjs","src/state/cart.mjs","src/actions/add.mjs","src/actions/remove.mjs","src/consumers/checkout.mjs","src/consumers/badge.mjs","src/consumers/summary.mjs","src/api/cart.mjs"],"stages":4,"groups":["business-behavior","all-consumers","map-representation","legacy-detached"]}
