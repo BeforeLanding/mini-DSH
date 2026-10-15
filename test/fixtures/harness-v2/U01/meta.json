@@ -1,0 +1,6 @@
+{
+  "kind": "repro",
+  "editable": [],
+  "artifact": "repro.mjs",
+  "groups": ["defect-detected", "reference-accepted", "equivalent-branch", "equivalent-spread"]
+}

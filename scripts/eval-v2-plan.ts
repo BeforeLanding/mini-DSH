@@ -26,7 +26,7 @@ export const calibrationTasks: readonly V2Task[] = Object.freeze(families.map(([
 export const v2Arms = ['baseline', 'context', 'prompt', 'full'] as const
 export const calibrationArms = ['baseline', 'full'] as const
 export const v2ScheduleSeed = 20261015
-const fixtureRoot = fileURLToPath(new URL('../../test/fixtures/coding/', import.meta.url))
+const fixtureRoot = fileURLToPath(new URL('../../test/fixtures/harness-v2/', import.meta.url))
 
 const positive = (value: string, flag: string): number => {
   const parsed = Number(value)

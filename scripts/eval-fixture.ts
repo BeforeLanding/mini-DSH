@@ -3,6 +3,8 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createFixture } from './coding-fixtures.js'
 import type { FixtureId } from './coding-fixtures.js'
+import { createV2Fixture } from './eval-v2-fixtures.js'
+import type { HarnessV2Id } from './eval-v2-fixtures.js'
 import { evalPolicy } from './eval-runner.js'
 import type { AcceptanceDetail, PromptLayoutMode, RunOutcome, RunTaskDetail, ToolOutputMode } from './eval-runner.js'
 import { BudgetStop, emptyCounters } from '../src/core/budget.js'
@@ -27,7 +29,7 @@ import type { V2EpisodeResult } from './eval-v2-episode.js'
 import { createIsolatedCommandRunner } from './eval-v2-isolation.js'
 import type { V2IsolationConfig } from './eval-v2-isolation.js'
 
-export type Fixture = Awaited<ReturnType<typeof createFixture>>
+export type Fixture = Awaited<ReturnType<typeof createFixture>> | Awaited<ReturnType<typeof createV2Fixture>>
 // 「无界」仍是同一插件，只是把预览上限抬到任何单条结果都装得下：bash 单流采集上限 8 MiB，经
 // JSON.stringify 转义后最坏约翻倍，64 MiB 留足余量，因此不会走到截断分支、也不会产生 ref。
 // 模式类型与阶段→模式的映射住在 eval-runner（策略住在策略模块），这里只负责按模式装配。
@@ -140,14 +142,14 @@ export function summarizeStage(events: readonly SessionEvent[], runId: string) {
 // 不带这两者（理由见 scripts/demo-context.ts:21-29），补上它们会改掉既有各臂的系统提示。给出模式时两臂
 // 的装配逐字相同，差异只有 layout。
 export async function runFixtureTask(
-  id: FixtureId, makeAdapter: (fixture: Fixture) => FixtureAdapter,
+  id: FixtureId | HarnessV2Id, makeAdapter: (fixture: Fixture) => FixtureAdapter,
   budget: Readonly<BudgetPolicy> = evalPolicy, sessionDirectory?: string,
   toolOutput?: ToolOutputMode, promptLayout?: PromptLayoutMode,
   v2SnapshotDirectory?: string,
   v2Isolation?: Omit<V2IsolationConfig, 'workspace'>,
 ): Promise<RunOutcome & { episode?: V2EpisodeResult }> {
   if (v2SnapshotDirectory && !v2Isolation) throw new Error('V2 fixture execution requires Linux candidate isolation')
-  const fixture = await createFixture(id), root = new Context()
+  const fixture = await (/^[UBFRT](?:0[1-4]|C01)$/.test(id) ? createV2Fixture(id as HarnessV2Id, v2Isolation) : createFixture(id as FixtureId)), root = new Context()
   let store: JsonlStore | undefined
   let disposed = false
   try {
@@ -221,7 +223,8 @@ export async function runFixtureTask(
     } else acceptance = await fixture.evaluate()
     const detail: AcceptanceDetail = {
       passed: acceptance.passed, exitCode: acceptance.exitCode, output: acceptance.output, protectedFilesChanged: acceptance.protectedFilesChanged,
-      ...(acceptance.evidence === undefined ? {} : { evidence: acceptance.evidence }),
+      ...('evidence' in acceptance && acceptance.evidence !== undefined ? { evidence: acceptance.evidence } : {}),
+      ...('groups' in acceptance ? { groups: acceptance.groups } : {}),
     }
     // 预算校验或装配在 beginRun 之前失败时不会留下 run 状态；此时按基础设施失败报告，不用非空断言把
     // 缺失状态伪装成一次真实的运行结论。

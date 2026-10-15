@@ -1,0 +1,2 @@
+region=eu
+retries=4

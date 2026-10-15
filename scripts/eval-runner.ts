@@ -278,6 +278,7 @@ export interface AcceptanceDetail {
   // 报告必须能回答「它是怎么被算出来的」，而不只是「通过没通过」——对这两类来说，「通过」可以是
   // 判据失效的结果（例如产物恒为 0），读数才看得出区别。
   evidence?: AcceptanceEvidence
+  groups?: { name: string; passed: boolean; detail?: string }[]
 }
 // 一个 fixture 可以是一个任务，也可以是同一会话内按序下发的多个阶段任务（见 coding-fixtures.ts 的
 // readTaskSequence）。RunOutcome 描述整次 fixture 运行：status 取最后一个阶段，counters 是各阶段之和，
