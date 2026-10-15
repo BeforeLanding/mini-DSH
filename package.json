@@ -17,6 +17,8 @@
     "eval:sequence": "pnpm build && node dist/scripts/eval-screening.js --phase sequence",
     "eval:estimate": "pnpm build && node dist/scripts/eval-estimate.js",
     "eval:v2": "pnpm build && node dist/scripts/eval-v2.js",
+    "eval:v2-freeze": "pnpm build && node dist/scripts/eval-v2-freeze.js",
+    "eval:v2-report": "pnpm build && node dist/scripts/eval-v2-report.js",
     "eval:ledger-target": "pnpm build && node dist/scripts/eval-ledger-target.js",
     "eval:ledger-verdict": "pnpm build && node dist/scripts/eval-ledger-verdict.js",
     "eval:ablation-report": "pnpm build && node dist/scripts/eval-ablation-report.js",
