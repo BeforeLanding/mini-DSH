@@ -106,3 +106,41 @@ test('new repro and edit tasks run through the actual isolated Harness with four
     }
   } finally { await fs.rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }) }
 })
+
+for (const id of ['U03', 'B03', 'F03', 'R03', 'T03'] as const) test(`${id} information task has independently checked reference and counterexamples`, { skip: !isolation }, async () => {
+  const fixture = await createV2Fixture(id, isolation)
+  try {
+    const initial = await fixture.evaluate()
+    assert.equal(initial.passed, false, `${id} initial`)
+    if (id === 'R03') {
+      assert.equal(initial.groups[0]?.passed, true)
+      assert.equal(initial.groups[1]?.passed, true)
+      assert.equal(initial.groups[2]?.passed, false)
+    }
+    await fixture.applyReference()
+    const reference = await fixture.evaluate()
+    assert.equal(reference.passed, true, `${id}: ${JSON.stringify(reference.groups)}`)
+    for (const negative of ['negative-a', 'negative-b'] as const) {
+      await fixture.applyCounterexample(negative)
+      const result = await fixture.evaluate()
+      assert.equal(result.passed, false, `${id}/${negative}`)
+      assert.ok(result.groups.some(group => !group.passed), `${id}/${negative} must fail a contract group`)
+    }
+  } finally { await fixture.close() }
+})
+
+test('information tasks ship relevant searchable diagnostics across a multi-module project', async () => {
+  for (const id of ['U03', 'B03', 'F03', 'R03', 'T03'] as const) {
+    const source = path.join(harnessV2Root, id, 'initial', 'src')
+    const visit = async (directory: string): Promise<number> => {
+      let count = 0
+      for (const entry of await fs.readdir(directory, { withFileTypes: true })) count += entry.isDirectory() ? await visit(path.join(directory, entry.name)) : entry.name.endsWith('.mjs') ? 1 : 0
+      return count
+    }
+    assert.ok((await visit(source)) >= 12, `${id} must have at least twelve source modules`)
+    const diagnostic = path.join(harnessV2Root, id, 'initial', id === 'R03' ? 'cases/regressions.ndjson' : `logs/${id === 'B03' ? 'batches' : id === 'F03' ? 'imports' : 'incident'}.ndjson`)
+    const content = await fs.readFile(diagnostic, 'utf8')
+    assert.ok(Buffer.byteLength(content) > 16 * 1024, `${id} must have a realistic bounded-output opportunity`)
+    assert.ok(content.trim().split(/\r?\n/).every(line => typeof JSON.parse(line) === 'object'))
+  }
+})

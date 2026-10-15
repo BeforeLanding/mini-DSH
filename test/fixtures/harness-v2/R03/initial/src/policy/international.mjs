@@ -1,0 +1,1 @@
+export const MAX_INTERNATIONAL_KG = 10
