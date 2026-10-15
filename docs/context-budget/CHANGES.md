@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### NX-42-8 付费执行入口接线与离线准入
+
+新增`eval:v2-run`：默认拒绝执行，须显式给冻结清单、全新证据目录、正金额上限及`--execute`；`--validate-only`只复核完整计划、逐文件hash与WSL bubblewrap隔离探针，不加载模型凭证或发送请求。付费路径以校准2臂/正式4臂为完整配对block串行调度；按价格快照最贵token类别及10%余量预留下一block，余额不足即标incomplete。两次协议探测单独留证，供应商回显不符即停止；每个episode独立session/阶段快照/验收副本，逐次写`runs.jsonl`，最终报告保留计划分母与缺失。异常时尝试从已落盘事件恢复用量并停止，未闭合供应商请求费用仍有不确定性。当前事件无法结构化拆出工具策略拒绝或预期失败测试，报告明确标未知，不填0。新增[运行手册](NX-42-V2-RUNBOOK.md)。
+
+离线验收：`node scripts/build.js`、`node scripts/check-syntax.js`（138文件）、Biome全仓149文件零诊断、`git diff --check`通过；固定WSL运行时下完整`node --test dist/test/*.test.js` 392/392通过、0失败、0跳过，随后最新报告/接线/拒绝付费默认用例5/5通过；四阶段真实Harness烟测1/1通过。既有`fixtures:check`退出0；旧`eval:offline`在受限沙箱因Git Bash权限失败，正常权限复核12/12。`pnpm check`引导无输出挂起30秒后中断，按AGENTS允许的Node命令完成等价构建与检查。正式/校准plan-only分别为20/20题、240 episode与5/5题、20 episode；存于`D:/Agent/tmp/nx42-{formal,calibration}-plan.json`，SHA-256分别为`31B715B1557BA0205A52D1CFEDE48C2D5680F05FE447E1742EEEB3490053C490`与`D79CB53674397F7424263B334121842726ED420E422D04FBBC556F5FEF8208CF`。校准预提交清单摘要`682d41aa07cd6494f6fecae568b6b24f1457623b2c878f7ddbbfce9babcee4d7`经`--validate-only`验证5题/20 episode/隔离通过、付费请求0；正式冻结将在选定预算档后进行。尚无真实模型运行与成功率。
+
 ### NX-42-7 V2报告与冻结清单
 
 新增独立`eval:v2-report`与`eval:v2-freeze`：冻结清单含计划顺序、四臂配置、20/5题完整文件及隐藏验收hash、源码/提示/规则hash、模型与端点、预算档、Git提交和外部提供的价格快照；冻结CLI仅从干净提交生成、输出拒绝覆盖。报告对计划episode严格去重，缺失仍保留固定分母与上下界，可靠成功同时要求完整阶段、四组合同、受保护文件和证据；六类指标分别给出使用量/分布，唯一主比较使用按类别分层、问题根成对抽样的10,000次bootstrap。校准报告不生成正式效应结论。不会将未运行项伪装为失败执行。

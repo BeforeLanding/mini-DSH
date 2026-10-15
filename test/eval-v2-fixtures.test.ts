@@ -270,3 +270,16 @@ for (const id of ['UC01', 'RC01'] as const) test(`${id} calibration root has fou
     }
   } finally { await final.close() }
 })
+
+test('a four-stage V2 task runs through one isolated Harness episode with four durable snapshots', { skip: !isolation }, async () => {
+  assert.ok(isolation)
+  const directory = await fs.mkdtemp(path.join(harnessV2Root, 'temporary-stage-evidence-'))
+  try {
+    const outcome = await runFixtureTask('B04', scriptedAdapter, { ...evalPolicy, maxModelRequests: 64, maxToolCalls: 128, maxTotalTokens: 2_000_000, maxActiveDurationMs: 600_000, contextWindowTokens: 1_000_000 },
+      undefined, undefined, undefined, path.join(directory, 'snapshots'), isolation)
+    assert.equal(outcome.status, 'completed', outcome.error)
+    assert.equal(outcome.episode?.stages.length, 4)
+    assert.equal(outcome.episode?.stages.every(stage => Boolean(stage.snapshotHash)), true)
+    assert.equal(outcome.accepted, true, outcome.acceptance?.output)
+  } finally { await fs.rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }) }
+})
