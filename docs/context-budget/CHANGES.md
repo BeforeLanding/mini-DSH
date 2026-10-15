@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### NX-42-2 V2 episode 共享预算、停止和快照
+
+新增 `eval-v2-episode.ts`：每阶段从整题 64请求/128工具/累计token/600秒剩余量生成 `send` 预算；整题 watchdog 传取消信号；非completed阶段立刻停止；在下一阶段之前把候选工作区保存到外部目录并记录合同文本与文件快照SHA-256、阶段及累计计数。摘要请求与token使用现有 `RunState.counters`，核心压缩运行时已按 `model/start`、`model/usage` 入账；provider usage迟到的超额另记 `tokenOvershoot`。快照失败抛错，不返回可误读为成功的结果。`eval-fixture.ts` 仅在显式传入V2快照目录时使用此路径，旧阶段调用与结果保留。
+
+离线验收：`node scripts/build.js`通过；`node scripts/check-syntax.js`为127文件；新6个测试覆盖第二阶段剩余额度、用尽不发下一阶段、output_limit提前停止、快照失败、watchdog取消、真实fixture快照；`node --test dist/test/*.test.js`在正常用户权限下354/354通过、0失败；Biome检查3个改动TS文件通过；`git diff --check`通过。未调用付费模型。V2 CLI执行仍等待新题库及隔离验收，不能把本步视为完整Benchmark可运行。
+
 ### NX-42-1 V2 manifest 与只读计划入口
 
 在独立工作树 `nx42-benchmark-v2` 上新增 `scripts/eval-v2-plan.ts`、`scripts/eval-v2.ts` 与 `eval:v2` 命令；记录20个正式题目ID、5个独立校准ID、四组策略、固定种子`20261015`的配对block调度、每题预算与总上限。参数必须显式给 `--split`、`--tier`、`--window`、`--evidence-root`；`--plan-only`输出计划，尚未实现的执行路径在任何模型调用/写目录前报错。新用例只覆盖计划长度、配对、共同预算和非法/冲突参数，未预先声称缺失的fixture可执行。主工作区NX-40改动仍留原处。

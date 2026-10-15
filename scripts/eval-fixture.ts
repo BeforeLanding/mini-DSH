@@ -20,6 +20,8 @@ import * as runtimeContext from '../src/plugins/runtime-context.js'
 import * as projectContext from '../src/plugins/project-context.js'
 import * as files from '../src/tools/files.js'
 import * as bash from '../src/tools/bash.js'
+import { runV2Stages, snapshotWorkspace } from './eval-v2-episode.js'
+import type { V2EpisodeResult } from './eval-v2-episode.js'
 
 export type Fixture = Awaited<ReturnType<typeof createFixture>>
 // 「无界」仍是同一插件，只是把预览上限抬到任何单条结果都装得下：bash 单流采集上限 8 MiB，经
@@ -137,7 +139,8 @@ export async function runFixtureTask(
   id: FixtureId, makeAdapter: (fixture: Fixture) => FixtureAdapter,
   budget: Readonly<BudgetPolicy> = evalPolicy, sessionDirectory?: string,
   toolOutput?: ToolOutputMode, promptLayout?: PromptLayoutMode,
-): Promise<RunOutcome> {
+  v2SnapshotDirectory?: string,
+): Promise<RunOutcome & { episode?: V2EpisodeResult }> {
   const fixture = await createFixture(id), root = new Context()
   let store: JsonlStore | undefined
   try {
@@ -165,7 +168,22 @@ export async function runFixtureTask(
     const agent = root.agents.create({ sessionId: session.id, model: `${adapter.provider}/${adapter.model}`, loop: root.agentLoop, budget })
     let error: string | undefined
     const stages: RunTaskDetail[] = []
-    for (const stage of fixture.tasks) {
+    let episode: V2EpisodeResult | undefined
+    if (v2SnapshotDirectory) {
+      episode = await runV2Stages({
+        tasks: fixture.tasks, policy: budget,
+        send: async (stage, remaining, signal) => { await agent.send(stage, { budget: remaining, signal }) },
+        latestRun: () => root.sessions.latestRun(session.id),
+        snapshot: index => snapshotWorkspace(fixture.workspace, v2SnapshotDirectory, index),
+      })
+      for (const recorded of episode.stages) {
+        if (recorded.runId) stages.push({
+          taskId: recorded.taskId ?? '', status: recorded.status, counters: recorded.counters,
+          ...summarizeStage(root.sessions.visibleEvents(session.id), recorded.runId),
+        })
+      }
+      error = episode.error
+    } else for (const stage of fixture.tasks) {
       try {
         await agent.send(stage)
       } catch (cause) {
@@ -189,8 +207,8 @@ export async function runFixtureTask(
     // 预算校验或装配在 beginRun 之前失败时不会留下 run 状态；此时按基础设施失败报告，不用非空断言把
     // 缺失状态伪装成一次真实的运行结论。
     const last = stages.at(-1)
-    if (!last) return { status: 'error', counters: emptyCounters(), accepted: acceptance.passed, acceptance: detail, error: error ?? 'no run was recorded' }
-    return { status: last.status, counters: sumCounters(stages.map(stage => stage.counters)), accepted: acceptance.passed, acceptance: detail, tasks: stages, ...(error === undefined ? {} : { error }) }
+    if (!last) return { status: episode?.status ?? 'error', counters: episode?.counters ?? emptyCounters(), accepted: acceptance.passed, acceptance: detail, ...(!episode || error ? { error: error ?? 'no run was recorded' } : {}), ...(episode ? { episode } : {}) }
+    return { status: episode?.status ?? last.status, counters: episode?.counters ?? sumCounters(stages.map(stage => stage.counters)), accepted: acceptance.passed, acceptance: detail, tasks: stages, ...(error === undefined ? {} : { error }), ...(episode ? { episode } : {}) }
   } finally {
     // 先等写入队列排空再关存储：失败会抛出，使证据没落盘的 run 不以成功结论结束。
     if (store) await root.sessions.close()
