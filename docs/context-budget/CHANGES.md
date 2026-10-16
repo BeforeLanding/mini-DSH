@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### NX-42-20 正式1M清单冻结与零费用预检
+
+2026-10-16。在校准选定1M后，将同一模型、窗口、thinking、provider默认采样与峰时价格快照用于正式split，在干净提交`51a93ffa186ac7995739f6f681f0a52db7dc9f75`冻结清单`dc9ed2d5e8069e0d89b316836eeceadac5947a27e25cead6dc6831d78f07a718`，保存在`D:/Agent/tmp/nx42-formal-1m-manifest.json`（工作树外，不包含密钥）。清单包含20个独立正式题、Baseline/Context Manager/Prompt Optimizer/Full四组、每题每组三次，共240个episode；`eval-v2-run --validate-only`的Linux隔离与冻结文件校验通过，`paidRequests:0`。首次在受限沙箱内预检被隔离环境拒绝；同一清单在正常权限下复验通过，没有改动清单或代码。
+
+本次1M校准20次的峰时估算$2.6090含探针预留，扣除探针后按12倍episode数机械外推约$31.07；正式题可能更长，Context Manager和Prompt Optimizer两臂尚无同版本付费观测，故不把该外推当预测上界或批准额度。按校准约50分钟主动时间外推，正式串行运行约10小时量级，也会受服务延迟和任务差异影响。正式批次未发送任何模型请求，须先确定独立金额上限并取得用户授权；1M校准的$8授权只覆盖已结束的20次。
+
 ### NX-42-19 新冻结1M校准完整读数
 
 2026-10-16。提交`e5b0c39`的干净工作树冻结1M清单，digest`b4a3bcbb055ed7e789e4524d8becd43e03ff4d831e6112c7c9e12701b6531edd`，零费用隔离预检通过。用户单批授权$8上限后，在`D:/Agent/outputs/nx42-post-report-1m-20261016/`执行20/20 episode，无缺失、无基础设施错误、未停批；峰时价快照估算$2.609041296（含探针预留，实际账单另核）。独立用`eval-v2-report`从冻结清单及`runs.jsonl`重算，原/新报告的`observationsDigest`均为`67f1947355f99536c690f7104777c87b026d1f52ed80aba5ae23af25673a7154`，主差值均为−0.1。两档均只有每类一个校准根，分层bootstrap区间退化成点值，不能解释为精确置信区间。
