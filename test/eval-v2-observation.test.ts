@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { deriveV2Observation, recoverV2UnverifiedEvents } from '../scripts/eval-v2-observation.js'
+import { deriveV2Observation, diagnoseV2Error, recoverV2UnverifiedEvents } from '../scripts/eval-v2-observation.js'
 import type { RunOutcome } from '../scripts/eval-runner.js'
 import type { SessionEvent } from '../src/core/contracts.js'
 
@@ -31,6 +31,23 @@ test('V2 observation separates summary requests and skipped tools from executed 
   assert.equal(row.metrics.policyRejected, null)
   assert.equal(row.metrics.pressureCompactions, 1)
   assert.deepEqual(row.metrics.prunedTaskIds, ['prior'])
+})
+
+test('V2 error evidence retains a bounded diagnostic while redacting credentials and exposing interrupted usage', () => {
+  const events = [
+    { type: 'model/usage', data: { usage: { source: 'estimated' } } },
+    { type: 'model/end', data: { complete: false } },
+  ] as SessionEvent[]
+  const diagnostic = diagnoseV2Error(`DeepSeek stream error Bearer secret-token api_key=secret-token ${'x'.repeat(1000)}`, events, 'secret-token')
+  assert.equal(diagnostic.kind, 'provider_stream')
+  assert.equal(diagnostic.providerHttpStatus, null)
+  assert.equal(diagnostic.lastModelComplete, false)
+  assert.equal(diagnostic.lastUsageSource, 'estimated')
+  assert.ok(diagnostic.message.length <= 512)
+  assert.doesNotMatch(diagnostic.message, /secret-token/)
+  const http = diagnoseV2Error('DeepSeek API 429: rate limit', [], 'secret-token')
+  assert.equal(http.kind, 'provider_http')
+  assert.equal(http.providerHttpStatus, 429)
 })
 
 test('a journal with a fragment after model end still recovers its paid usage once', () => {

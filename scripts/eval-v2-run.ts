@@ -8,7 +8,7 @@ import { decodeLog } from '../src/core/event-store.js'
 import type { SessionEvent } from '../src/core/contracts.js'
 import { runFixtureTask } from './eval-fixture.js'
 import type { RunOutcome } from './eval-runner.js'
-import { deriveV2Observation, recoverV2UnverifiedEvents } from './eval-v2-observation.js'
+import { deriveV2Observation, diagnoseV2Error, recoverV2UnverifiedEvents } from './eval-v2-observation.js'
 import { createIsolatedCommandRunner, windowsToWslPath } from './eval-v2-isolation.js'
 import { reportV2, verifyV2FrozenFiles } from './eval-v2-report.js'
 import type { V2Manifest, V2Observation } from './eval-v2-report.js'
@@ -142,7 +142,7 @@ for (let index = 0; index < manifest.episodes.length; index += blockSize) {
           if (dirs.length === 1 && dirs[0]!.isDirectory()) events = recoverV2UnverifiedEvents(await fs.readFile(path.join(sessionDirectory, dirs[0]!.name, 'events.jsonl'), 'utf8'))
         } catch { /* Missing journal: provider charges may remain unknown. */ }
       }
-      await fs.writeFile(path.join(episodeDirectory, 'error.json'), `${JSON.stringify({ reason, recoveredEvents: events.length })}\n`, { flag: 'wx' })
+      await fs.writeFile(path.join(episodeDirectory, 'error.json'), `${JSON.stringify({ ...diagnoseV2Error(reason, events), recoveredEvents: events.length })}\n`, { flag: 'wx' })
       outcome = recoverPartialOutcome(events, reason)
       stopped = true
       stopReason = 'infrastructure_or_evidence_error'
@@ -150,10 +150,7 @@ for (let index = 0; index < manifest.episodes.length; index += blockSize) {
     const observation = deriveV2Observation(episode, outcome, events, evidenceComplete)
     if (observation.failureReason === 'infrastructure' || observation.status === 'error') {
       if (!stopped) {
-        await fs.writeFile(path.join(episodeDirectory, 'error.json'), `${JSON.stringify({
-          kind: 'provider_or_runtime_error',
-          providerHttpStatus: observation.providerHttpStatus ?? null,
-        })}\n`, { flag: 'wx' })
+        await fs.writeFile(path.join(episodeDirectory, 'error.json'), `${JSON.stringify(diagnoseV2Error(outcome.error ?? outcome.status, events))}\n`, { flag: 'wx' })
         stopReason = 'infrastructure_or_provider_error'
       }
       stopped = true

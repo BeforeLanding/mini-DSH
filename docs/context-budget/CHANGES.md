@@ -1,5 +1,12 @@
 # 改动与验收证据
 
+### NX-42-15 脱敏保存V2底层错误
+
+2026-10-16。第二次2M批次证明仅记录HTTP码仍不足：第11条响应流已产生部分内容却无完整结束，`error.json`的状态为null、没有错误消息。现在返回型与抛出型失败统一写诊断：provider HTTP码、`provider_http`/`provider_stream`/`transport`/`incomplete_stream`/`runtime`类别、最后一次模型请求是否完整、最后一次usage来源，以及最多512字符的错误消息。消息遮盖当前API Key、Bearer令牌、`sk-`形态和查询参数中的key；不保存原始流或候选内容。历史证据不补造错误消息，旧批次根因仍未知。
+
+验证：`node scripts/build.js`、`node scripts/check-syntax.js`（138文件）、Biome 149文件零诊断、V2针对性测试7/7（含凭证遮盖、长度与流状态边界）、正常权限完整`node --test dist/test/*.test.js`（368通过、30跳过、0失败）、`git diff --check`通过。没有付费模型调用；新错误诊断的真实服务端类别须等待下一次单独授权批次。
+
+
 ### NX-42-14 修复后2M校准在流中断后停批
 
 2026-10-16，冻结提交`e63dc97e62520cf0c946ec28862fb5e8fe10f08e`、清单摘要`ac045b41f2342c6e5085207f52b5ce6211977410064fd94b9c833f7ccd7c7203`，5题×Baseline/Full×2次共20次，用户单批授权上限$10。执行前`--validate-only`确认5题、20次、隔离通过、付费请求0；模型协议探测回显`deepseek-flash`。证据目录`D:/Agent/outputs/nx42-infra-guard-2m-20261016/`记录11条后按新闸门停止，未执行9条，估算$1.863641244（实际账单可能因未闭合请求而更高）。原报告与独立重算报告的`observationsDigest`和主结论一致：`invalid=[FC01/1/full]`、`incomplete=true`、主效应与区间均为null。不能用已执行子集选2M/1M档，也不能据此宣称Full改善或退化。

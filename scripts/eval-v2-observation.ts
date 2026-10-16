@@ -4,6 +4,26 @@ import type { RunOutcome } from './eval-runner.js'
 import type { V2Episode } from './eval-v2-plan.js'
 import type { V2Observation } from './eval-v2-report.js'
 
+export function diagnoseV2Error(message: string, events: readonly SessionEvent[], secret = process.env.DEEPSEEK_API_KEY): {
+  kind: string; providerHttpStatus: number | null; message: string; lastModelComplete: boolean | null; lastUsageSource: string | null
+} {
+  const providerStatus = message.match(/DeepSeek API ([1-5]\d\d):/)
+  const end = events.filter(event => event.type === 'model/end').at(-1)
+  const usage = events.filter(event => event.type === 'model/usage').at(-1)
+  let safe = secret ? message.replaceAll(secret, '[REDACTED]') : message
+  safe = safe.replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]')
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, '[REDACTED]')
+    .replace(/([?&]api[_-]?key=)[^\s&]+/gi, '$1[REDACTED]')
+    .replace(/[\r\n\t]+/g, ' ').slice(0, 512)
+  return {
+    kind: providerStatus ? 'provider_http' : /stream/i.test(message) ? 'provider_stream' : /fetch failed|ECONN|ETIMEDOUT|socket|terminated/i.test(message) ? 'transport' : end?.type === 'model/end' && !end.data.complete ? 'incomplete_stream' : 'runtime',
+    providerHttpStatus: providerStatus ? Number(providerStatus[1]) : null,
+    message: safe,
+    lastModelComplete: end?.type === 'model/end' ? end.data.complete : null,
+    lastUsageSource: usage?.type === 'model/usage' ? usage.data.usage.source : null,
+  }
+}
+
 // A semantically invalid journal must fail acceptance, but its already-billed
 // provider usage must not disappear from the amount ledger. This parser only
 // recovers individually valid lines; it never makes the episode admissible.

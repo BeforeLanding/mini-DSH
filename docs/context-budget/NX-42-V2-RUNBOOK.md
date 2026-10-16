@@ -14,6 +14,6 @@
 
 ## 付费批次边界
 
-取得**该批次单独的金额授权**后，运行`pnpm eval:v2-run -- --manifest <manifest.json> --evidence-root <新目录> --max-usd <授权美元上限> --execute`。脚本在模型调用前检查配置、未占用证据目录、固定WSL候选隔离和可读取的凭证；两次小型模型协议探测记入证据。金额上限按当前价格的最贵token类别为一个完整配对block预留保守额度，不够下一block时停止并标为incomplete。异常证据、模型回显不符或provider/runtime错误立即停止；后者记录可识别的HTTP状态码，并使主效应不可估计。网络请求被中断而未留下provider usage时，token推算费用可能低于实际账单，须对照供应商账单。正式批次金额与授权在校准实耗后另行确定，不能沿用校准授权。
+取得**该批次单独的金额授权**后，运行`pnpm eval:v2-run -- --manifest <manifest.json> --evidence-root <新目录> --max-usd <授权美元上限> --execute`。脚本在模型调用前检查配置、未占用证据目录、固定WSL候选隔离和可读取的凭证；两次小型模型协议探测记入证据。金额上限按当前价格的最贵token类别为一个完整配对block预留保守额度，不够下一block时停止并标为incomplete。异常证据、模型回显不符或provider/runtime错误立即停止；后者在外部`error.json`记录脱敏限长消息、类别、可识别的HTTP状态码和最后一次请求状态，并使主效应不可估计。网络请求被中断而未留下provider usage时，token推算费用可能低于实际账单，须对照供应商账单。正式批次金额与授权在校准实耗后另行确定，不能沿用校准授权。
 
 每个episode保存独立session、四阶段快照和候选退出后的验收读数；`runs.jsonl`逐行落盘，`manifest.json`、`probe.json`、`report.json`共存于新证据目录。未运行的episode保留固定计划分母和成功率范围，不能写成已经执行的失败。单独重生报告用`pnpm eval:v2-report -- --manifest <manifest.json> --runs <runs.jsonl> --output <新report.json>`，输出拒绝覆盖；报告的`observationsDigest`钉住输入记录顺序。报告对结构化数据能分出已执行工具错误与跳过，但当前事件没有独立的“策略/参数拒绝”分类，也无法可靠把预期失败测试与意外命令错误拆开，这两项按未知披露，不赋零值。
