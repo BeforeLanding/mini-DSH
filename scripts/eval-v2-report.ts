@@ -203,6 +203,7 @@ export function reportV2(manifest: V2Manifest, observations: readonly V2Observat
     return {
       arm: arm.name, planned, executed: rows.length, reliableSuccesses: successes, rateLower: successes / planned,
       rateUpper: (successes + planned - rows.length + rows.filter(row => row.failureReason === 'infrastructure' || row.status === 'error').length) / planned,
+      artifactAccepted: rows.filter(row => row.accepted === true).length,
       failureReasons: reasons,
       modelRounds: { main: stats(numbers('mainRequests')), summary: stats(numbers('summaryRequests')), all: stats(rows.map(row => row.metrics.mainRequests + row.metrics.summaryRequests)) },
       tools: { calls: stats(numbers('toolCalls')), errors: stats(numbers('toolErrors')), policyRejected: rows.some(row => row.metrics.policyRejected !== null) ? stats(numbers('policyRejected')) : null, skipped: stats(numbers('toolSkipped')),
