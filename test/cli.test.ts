@@ -55,7 +55,15 @@ test('CLI and scripted model deliver versioned verification, restore reports wit
       if (step === calls.length) {
         const report = JSON.parse(messages.at(-1)!.content!)
         assert.equal(report.files[0].verification, 'covered')
-        assert.deepEqual(report.checks.map((check: { status: string }) => check.status), ['failed', 'passed'])
+        assert.deepEqual(report.checks.map((check: { status: string }) => check.status), ['failed'])
+        assert.equal(report.verificationNextOffset, 1)
+        step += 1
+        return { toolCalls: [{ id: 'report-next', name: 'task_report', arguments: { verificationOffset: report.verificationNextOffset } }] }
+      }
+      if (step === calls.length + 1) {
+        const report = JSON.parse(messages.at(-1)!.content!)
+        assert.deepEqual(report.checks.map((check: { status: string }) => check.status), ['passed'])
+        assert.equal(report.verificationsEof, true)
         return { content: '交付：检查失败与成功均保留；未断言任务验收。' }
       }
       return { toolCalls: [calls[step++]] }

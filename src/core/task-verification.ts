@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import type { SessionRuntime } from './session-runtime.js'
 import type { CommandResult } from './command-runner.js'
 import { commandFailed } from './command-runner.js'
@@ -146,4 +146,22 @@ export async function taskReport(sessions: Sessions, sessionId: string, resolve:
   const allUsage = runs.flatMap(run => run.usage)
   const taskUsage = { inputTokens: taskCounters.inputTokens, outputTokens: taskCounters.outputTokens, totalTokens: taskCounters.totalTokens, sources: [...new Set(allUsage.map(item => item.source))], uncertain: allUsage.some(item => item.uncertain) }
   return { sessionId, taskId: changes.taskId, currentRunId: current?.runId ?? null, runStatus: current?.status ?? verification.runStatus, stopReason: current?.stopReason ?? null, runs, taskCounters, taskUsage, acceptance: 'not_asserted', files, unverifiedFiles: files.filter(f => f.verification === 'unverified').map(f => f.path), fileNextOffset: changes.nextOffset, filesEof: changes.eof, checks: records, verificationTotal: verification.total, verificationNextOffset: verification.nextOffset, verificationsEof: verification.eof, scope: 'file-tool changes; checks cover only declared files/commands; logs in verification events and original Bash result; no automatic task acceptance' }
+}
+
+// The model only needs status and page cursors for routine delivery checks. Full
+// verification records remain available through an explicit maxRecords request.
+export function compactTaskReport(report: Awaited<ReturnType<typeof taskReport>>) {
+  return {
+    ...report,
+    detail: 'summary' as const,
+    runs: report.runs.map(run => ({ runId: run.runId, model: run.model, status: run.status, counters: run.counters, startedAt: run.startedAt, finishedAt: run.finishedAt })),
+    files: report.files.map(file => ({ path: file.path, status: file.status, verification: file.verification, coveredBy: file.coveredBy })),
+    checks: report.checks.map(check => ({
+      verificationId: check.verificationId, runId: check.runId, status: check.status, freshness: check.freshness,
+      command: check.command.slice(0, 240), commandBytes: Buffer.byteLength(check.command),
+      commandSha256: createHash('sha256').update(check.command).digest('hex'),
+      files: check.files.map(file => file.path),
+      ...(check.commandResult ? { commandResult: { status: check.commandResult.status, exitCode: check.commandResult.exitCode, timedOut: check.commandResult.timedOut, cancelled: check.commandResult.cancelled } } : {}),
+    })),
+  }
 }
