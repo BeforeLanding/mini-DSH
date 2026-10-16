@@ -1,5 +1,12 @@
 # 改动与验收证据
 
+### NX-42-14 修复后2M校准在流中断后停批
+
+2026-10-16，冻结提交`e63dc97e62520cf0c946ec28862fb5e8fe10f08e`、清单摘要`ac045b41f2342c6e5085207f52b5ce6211977410064fd94b9c833f7ccd7c7203`，5题×Baseline/Full×2次共20次，用户单批授权上限$10。执行前`--validate-only`确认5题、20次、隔离通过、付费请求0；模型协议探测回显`deepseek-flash`。证据目录`D:/Agent/outputs/nx42-infra-guard-2m-20261016/`记录11条后按新闸门停止，未执行9条，估算$1.863641244（实际账单可能因未闭合请求而更高）。原报告与独立重算报告的`observationsDigest`和主结论一致：`invalid=[FC01/1/full]`、`incomplete=true`、主效应与区间均为null。不能用已执行子集选2M/1M档，也不能据此宣称Full改善或退化。
+
+前10条无基础设施错误：TC01/0 Baseline成功、Full `output_limit`；BC01、RC01、FC01首轮两臂均可靠成功；UC01/0 Baseline成功、Full `timeout`且产物验收通过。第11条FC01/1/full前三次模型请求有完整provider usage，第四次已有64条流式片段、约3506个估算输出token，却以`model/end complete=false`结束并使用估算usage；该episode四个模型请求、14次工具调用、0次工具错误，最终`status:error`。`error.json`只有`providerHttpStatus:null`，错误消息没有落盘；HTTP响应之后的流式中断、服务事件错误或传输异常目前无法区分。下一步加脱敏、有限长度的错误诊断，再决定是否另行授权新批次；不拼接两次无效批次。
+
+
 # NX-42-13 2M校准受污染与基础设施错误闸门
 
 2026-10-16。提交`96709c6`与清单`8f87513ce332e8dbe71df41df41e0f1a0cc4dd550e5cadfbf349b2600c42dac6`冻结了紧凑`task_report`修复后的2M校准。用户单批授权上限$10；证据目录`D:/Agent/outputs/nx42-post-report-2m-20261016`保存20/20条、估算$1.169460192。前6条里有3条`completed`、TC01/0/full为`output_limit`、RC01/0/baseline为`token_budget`、RC01/0/full为`error`；其后14条跨Baseline/Full、不同题型，全部首次模型请求即`error`、无工具调用。总计15条基础设施失败（Baseline 7、Full 8）。旧报告的点估计-0.1把这些异常当作任务失败，不可解释为Harness效果。按新代码重算，`observationsDigest=54bfda2f543855abd531698a47f9cbdb9aa0ac3a9f81df4ebf59d6e6589a7bc5`保持不变，`invalid=15`、`incomplete=true`、主效应与区间均为null。原报告与新报告均留在证据目录/工作树外；不改历史观测、不拼接批次。
