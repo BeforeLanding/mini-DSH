@@ -117,6 +117,7 @@ export interface V2Observation {
   protectedFilesChanged: string[]
   evidenceComplete: boolean
   failureReason?: string
+  providerHttpStatus?: number
   metrics: {
     mainRequests: number; summaryRequests: number; toolCalls: number; toolErrors: number; policyRejected: number | null; toolSkipped: number
     inputTokens: number; outputTokens: number; summaryTokens: number; cacheReadTokens: number
@@ -140,10 +141,12 @@ function validateObservation(record: V2Observation): void {
     !Array.isArray(record.metrics.prunedTaskIds) || record.metrics.prunedTaskIds.some(value => typeof value !== 'string')) throw new Error(`invalid V2 metrics: ${record.taskId}`)
   if (record.metrics.toolErrors > record.metrics.toolCalls) throw new Error(`V2 tool errors exceed calls: ${record.taskId}`)
   if (record.metrics.policyRejected !== null && (!Number.isSafeInteger(record.metrics.policyRejected) || record.metrics.policyRejected < 0)) throw new Error(`invalid V2 policy rejections: ${record.taskId}`)
+  if (record.providerHttpStatus !== undefined && (!Number.isInteger(record.providerHttpStatus) || record.providerHttpStatus < 100 || record.providerHttpStatus > 599)) throw new Error(`invalid V2 provider status: ${record.taskId}`)
   if (!['baseline', 'context', 'prompt', 'full'].includes(record.arm) || !Number.isInteger(record.repeat) || record.repeat < 0) throw new Error('invalid V2 arm/repeat')
 }
 
 function bootstrapDelta(manifest: V2Manifest, observations: readonly V2Observation[], first: AblationPhase, second: AblationPhase): { estimate: number | null; lower95: number | null; upper95: number | null; complete: boolean } {
+  if (observations.some(record => record.failureReason === 'infrastructure' || record.status === 'error')) return { estimate: null, lower95: null, upper95: null, complete: false }
   const arms = [first, second] as const
   const roots = manifest.tasks.map(task => task.id)
   const expectedRepeats = manifest.split === 'formal' ? 3 : 2
@@ -184,6 +187,8 @@ export function reportV2(manifest: V2Manifest, observations: readonly V2Observat
     seen.set(key, record)
   }
   const missing = [...expected.keys()].filter(key => !seen.has(key))
+  const invalid = observations.filter(record => record.failureReason === 'infrastructure' || record.status === 'error')
+    .map(record => `${record.taskId}/${record.repeat}/${record.arm}`)
   const arms = manifest.arms.map(arm => {
     const rows = observations.filter(record => record.arm === arm.name)
     const planned = manifest.episodes.filter(episode => episode.arm === arm.name).length
@@ -197,7 +202,7 @@ export function reportV2(manifest: V2Manifest, observations: readonly V2Observat
     }
     return {
       arm: arm.name, planned, executed: rows.length, reliableSuccesses: successes, rateLower: successes / planned,
-      rateUpper: (successes + planned - rows.length) / planned, artifactAccepted: rows.filter(row => row.accepted === true).length,
+      rateUpper: (successes + planned - rows.length + rows.filter(row => row.failureReason === 'infrastructure' || row.status === 'error').length) / planned,
       failureReasons: reasons,
       modelRounds: { main: stats(numbers('mainRequests')), summary: stats(numbers('summaryRequests')), all: stats(rows.map(row => row.metrics.mainRequests + row.metrics.summaryRequests)) },
       tools: { calls: stats(numbers('toolCalls')), errors: stats(numbers('toolErrors')), policyRejected: rows.some(row => row.metrics.policyRejected !== null) ? stats(numbers('policyRejected')) : null, skipped: stats(numbers('toolSkipped')),
@@ -230,10 +235,10 @@ export function reportV2(manifest: V2Manifest, observations: readonly V2Observat
     }),
   }))
   return { protocol: manifest.protocol, manifestDigest: manifest.digest, observationsDigest: sha(observations.map(record => stable(record)).join('\n')),
-    split: manifest.split, planned: manifest.episodes.length, executed: observations.length, incomplete: missing.length > 0,
-    missing, arms, primary, exploratory, pairs,
-    measurementLimits: ['Policy/parameter rejection has no structured event subtype in the current Harness; null means not measurable, never zero.', 'A failed test command is counted as a tool error but cannot be reliably separated from an unexpected command error without a structured check marker.', 'A provider call interrupted before usage is durable may cost more than the token-derived estimate; the runner stops the batch after an evidence failure.'],
-    interpretation: manifest.split === 'calibration' ? 'calibration-only' : !primary.complete ? 'incomplete' : primary.estimate! >= 0.10 && primary.lower95! > 0 ? 'supported-improvement' : 'no-supported-improvement',
+    split: manifest.split, planned: manifest.episodes.length, executed: observations.length, incomplete: missing.length > 0 || invalid.length > 0,
+    missing, invalid, arms, primary, exploratory, pairs,
+    measurementLimits: ['Policy/parameter rejection has no structured event subtype in the current Harness; null means not measurable, never zero.', 'A failed test command is counted as a tool error but cannot be reliably separated from an unexpected command error without a structured check marker.', 'A provider call interrupted before usage is durable may cost more than the token-derived estimate; the runner stops the batch after an infrastructure or evidence failure.'],
+    interpretation: missing.length || invalid.length ? 'incomplete' : manifest.split === 'calibration' ? 'calibration-only' : !primary.complete ? 'incomplete' : primary.estimate! >= 0.10 && primary.lower95! > 0 ? 'supported-improvement' : 'no-supported-improvement',
     thresholdClaimSupported: manifest.split === 'formal' && primary.complete && primary.lower95! >= 0.10 }
 }
 

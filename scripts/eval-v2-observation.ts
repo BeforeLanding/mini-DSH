@@ -52,10 +52,12 @@ export function deriveV2Observation(episode: V2Episode, outcome: RunOutcome, eve
   const prunedTaskIds = [...new Set(stages.flatMap(stage => stage.removedTaskIds))]
   const stablePromptRuns = stages.filter(stage => stage.promptRounds.rounds > 1 && stage.promptRounds.stable === stage.promptRounds.rounds - 1).length
   const acceptanceGroups = outcome.acceptance?.groups?.map(group => ({ name: group.name, passed: group.passed })) ?? []
+  const providerStatus = outcome.error?.match(/DeepSeek API ([1-5]\d\d):/)
   return {
     taskId: episode.taskId, repeat: episode.repeat, arm: episode.arm, status: outcome.status, accepted: outcome.accepted,
     acceptanceGroups, protectedFilesChanged: outcome.acceptance?.protectedFilesChanged ?? [], evidenceComplete,
     ...(outcome.error ? { failureReason: 'infrastructure' } : outcome.status !== 'completed' ? { failureReason: outcome.status } : outcome.accepted === false ? { failureReason: 'acceptance' } : {}),
+    ...(providerStatus ? { providerHttpStatus: Number(providerStatus[1]) } : {}),
     metrics: {
       mainRequests: Math.max(0, outcome.counters.modelRequests - summaryIds.size), summaryRequests: summaryIds.size,
       toolCalls: outcome.counters.toolCalls, toolErrors: outcome.counters.toolErrors, policyRejected: null, toolSkipped,

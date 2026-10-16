@@ -54,4 +54,11 @@ test('a journal with a fragment after model end still recovers its paid usage on
   assert.equal(row.metrics.providerTokens, 120)
   assert.equal(row.evidenceComplete, false)
   assert.equal(row.failureReason, 'infrastructure')
+  const providerFailure = deriveV2Observation({ taskId: 'RC01', repeat: 0, arm: 'full', block: 0 }, {
+    status: 'error', accepted: null, error: 'DeepSeek API 429: rate limited', counters: {
+      modelRequests: 1, toolCalls: 0, toolErrors: 0, previewTruncations: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0,
+      cacheReadTokens: 0, activeDurationMs: 0, approvalDurationMs: 0,
+    },
+  } as RunOutcome, [], false)
+  assert.equal(providerFailure.providerHttpStatus, 429)
 })

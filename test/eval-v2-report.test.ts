@@ -59,6 +59,15 @@ test('V2 report keeps the fixed denominator, missing range, six measures and roo
   assert.equal(full.rateUpper, (full.reliableSuccesses + full.planned - full.executed) / full.planned)
   assert.throws(() => reportV2(manifest, [...records, records[0]!]), /duplicate/)
   assert.throws(() => reportV2({ ...manifest, model: 'changed' }, records), /integrity/)
+  const errored = records.map((row, index) => index === 0 ? { ...row, status: 'error', failureReason: 'infrastructure', providerHttpStatus: 429 } : row)
+  const invalid = reportV2(manifest, errored)
+  assert.equal(invalid.incomplete, true)
+  assert.deepEqual(invalid.invalid, [`${records[0]!.taskId}/${records[0]!.repeat}/${records[0]!.arm}`])
+  assert.equal(invalid.primary.complete, false)
+  assert.equal(invalid.primary.estimate, null)
+  assert.equal(invalid.thresholdClaimSupported, false)
+  const invalidArm = invalid.arms.find(arm => arm.arm === records[0]!.arm)!
+  assert.equal(invalidArm.rateUpper, (invalidArm.reliableSuccesses + 1) / invalidArm.planned)
 })
 
 test('reliable success requires terminal completion, four groups, clean protection and complete evidence', () => {
