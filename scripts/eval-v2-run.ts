@@ -44,7 +44,7 @@ try {
     if (result.status !== 'exited' || result.exitCode !== 0 || !result.stdout.text.includes('v22.22.1')) throw new Error('V2 Linux isolation preflight failed')
   } finally { await fs.rm(sentinel, { force: true }) }
 } finally {
-  if (path.dirname(preflight) === path.resolve(os.tmpdir()) && path.basename(preflight).startsWith('mini-dsh-v2-preflight-')) await fs.rm(preflight, { recursive: true, force: true })
+  if (path.dirname(preflight) === path.resolve(os.tmpdir()) && path.basename(preflight).startsWith('mini-dsh-v2-preflight-')) await fs.rm(preflight, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
 }
 if (validateOnly) {
   console.log(JSON.stringify({ manifestDigest: manifest.digest, tasks: manifest.tasks.length, episodes: manifest.episodes.length, isolation: 'passed', paidRequests: 0 }))
