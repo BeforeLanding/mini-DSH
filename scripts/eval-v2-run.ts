@@ -148,6 +148,16 @@ for (let index = 0; index < manifest.episodes.length; index += blockSize) {
       stopReason = 'infrastructure_or_evidence_error'
     }
     const observation = deriveV2Observation(episode, outcome, events, evidenceComplete)
+    if (observation.failureReason === 'infrastructure' || observation.status === 'error') {
+      if (!stopped) {
+        await fs.writeFile(path.join(episodeDirectory, 'error.json'), `${JSON.stringify({
+          kind: 'provider_or_runtime_error',
+          providerHttpStatus: observation.providerHttpStatus ?? null,
+        })}\n`, { flag: 'wx' })
+        stopReason = 'infrastructure_or_provider_error'
+      }
+      stopped = true
+    }
     observations.push(observation)
     await fs.appendFile(runLog, `${JSON.stringify(observation)}\n`)
     const tokens = observation.metrics

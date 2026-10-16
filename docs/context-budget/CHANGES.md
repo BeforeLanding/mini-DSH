@@ -1,5 +1,13 @@
 # 改动与验收证据
 
+# NX-42-13 2M校准受污染与基础设施错误闸门
+
+2026-10-16。提交`96709c6`与清单`8f87513ce332e8dbe71df41df41e0f1a0cc4dd550e5cadfbf349b2600c42dac6`冻结了紧凑`task_report`修复后的2M校准。用户单批授权上限$10；证据目录`D:/Agent/outputs/nx42-post-report-2m-20261016`保存20/20条、估算$1.169460192。前6条里有3条`completed`、TC01/0/full为`output_limit`、RC01/0/baseline为`token_budget`、RC01/0/full为`error`；其后14条跨Baseline/Full、不同题型，全部首次模型请求即`error`、无工具调用。总计15条基础设施失败（Baseline 7、Full 8）。旧报告的点估计-0.1把这些异常当作任务失败，不可解释为Harness效果。按新代码重算，`observationsDigest=54bfda2f543855abd531698a47f9cbdb9aa0ac3a9f81df4ebf59d6e6589a7bc5`保持不变，`invalid=15`、`incomplete=true`、主效应与区间均为null。原报告与新报告均留在证据目录/工作树外；不改历史观测、不拼接批次。
+
+旧V2驱动只在`runFixtureTask`抛出时停批；模型调用错误被episode捕获并作为`status:error`返回，因此连续发送14条无效请求。V2报告也只按缺失行数认定`incomplete`。现改为返回型provider/runtime错误也在该条后停批，写不含密钥和原始响应的`error.json`（能识别时含HTTP状态码）；报告单列`invalid`，任何基础设施错误使配对主效应不可估计，成功率上界把这些记录按未知处理。只读余额接口显示账户仍有可用CNY余额，故不能据此归因为余额耗尽；旧证据未持久化错误信息，429/500/网络异常无法区分。新版本需干净提交重新冻结，任何后续付费批次另取金额授权。本批账单实扣未知，$1.1695仅按落盘token和价格快照估算。
+
+验证：`node scripts/build.js`、`node scripts/check-syntax.js`（138文件）、`node_modules/.bin/biome.CMD check .`（149文件，零诊断）、针对性V2测试6/6、正常权限`node --test dist/test/*.test.js`（367通过、30跳过、0失败）、`node dist/scripts/check-coding-fixtures.js`退出0、正常权限`node dist/scripts/eval-offline.js`（12/12）和`git diff --check`通过。受限沙箱里Bash子进程无法正常工作，完整测试及离线评测的首跑假失败；按AGENTS允许的正常权限复核通过。未为这项离线修复新增付费调用。
+
 ### NX-42-12 缩小默认任务报告，保留完整分页
 
 2026-10-16，对修复后1M批次的RC01/UC01事件做阶段级分解，见[轨迹诊断](NX-42-POSTFIX-TRACE.md)。RC01第二轮第3阶段Full反复拿到`task_report`的16KiB首尾预览（完整内容约23～58KB，中间缺失、非完整JSON），并在同阶段调用9次摘要；9次摘要后下一次投影均低于压力线，说明旧版无效压缩循环已被抑制，新增历史又使其越线。UC01第二轮第4阶段也连续3次收到截断报告。自写检查的非零退出仍属模型任务轨迹，未修改工具错误口径。
