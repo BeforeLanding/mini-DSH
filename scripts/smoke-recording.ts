@@ -146,7 +146,37 @@ export function createSmokeRecorder(options: { file: string; workspace: string; 
   return { chat, fixture, counts, get totalTokens() { return totalTokens }, close: () => { if (!closed) { closed = true; fs.closeSync(fd) } } }
 }
 
-export function createSmokeReplay(options: { file: string; workspace: string; version: SmokeVersion; wire: SmokeWireOptions; recordedProjectWorkspace?: string }) {
+function normalizeBashResults(material: Json, fixtureRoot: string): Json {
+  if (!material || typeof material !== 'object' || Array.isArray(material)) return material
+  const messages = material.messages
+  if (!Array.isArray(messages)) return material
+  const bashCalls = new Set<string>()
+  const normalized = messages.map(message => {
+    if (!message || typeof message !== 'object' || Array.isArray(message)) return message
+    if (message.role === 'assistant' && Array.isArray(message.tool_calls)) {
+      for (const call of message.tool_calls) {
+        if (call && typeof call === 'object' && !Array.isArray(call) && call.function && typeof call.function === 'object' && !Array.isArray(call.function) && call.function.name === 'bash' && typeof call.id === 'string') bashCalls.add(call.id)
+      }
+    }
+    if (message.role !== 'tool' || typeof message.tool_call_id !== 'string' || !bashCalls.has(message.tool_call_id) || typeof message.content !== 'string') return message
+    let result: { [key: string]: unknown }
+    try { result = JSON.parse(message.content) as { [key: string]: unknown } } catch { throw new Error('smoke replay invalid Bash result; no API fallback') }
+    if (result.type !== 'command' || result.version !== 1 || typeof result.cwd !== 'string' || typeof result.durationMs !== 'number' || !Number.isFinite(result.durationMs) || result.durationMs < 0) throw new Error('smoke replay invalid Bash result; no API fallback')
+    const root = fixtureRoot.replace(/[\\/]$/, '')
+    const cwd = result.cwd
+    const relative = cwd === root || cwd === workspaceToken ? '' : cwd.startsWith(`${root}\\`) || cwd.startsWith(`${root}/`) ? cwd.slice(root.length + 1) : cwd.startsWith(`${workspaceToken}/`) ? cwd.slice(workspaceToken.length + 1) : null
+    if (relative === null || (relative !== '' && relative.split(/[\\/]/).some(part => !part || part === '.' || part === '..'))) throw new Error('smoke replay Bash cwd outside registered fixture; no API fallback')
+    const cwdMatches = [...message.content.matchAll(/("cwd"\s*:\s*)("(?:\\.|[^"\\])*")/g)]
+    const durationMatches = [...message.content.matchAll(/("durationMs"\s*:\s*)(-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)/g)]
+    if (cwdMatches.length !== 1 || durationMatches.length !== 1) throw new Error('smoke replay ambiguous Bash result; no API fallback')
+    const content = message.content.replace(cwdMatches[0]![0], `${cwdMatches[0]![1]}"${workspaceToken}${relative ? `/${relative.replaceAll('\\', '/')}` : ''}"`)
+      .replace(durationMatches[0]![0], `${durationMatches[0]![1]}0`)
+    return { ...message, content }
+  })
+  return { ...material, messages: normalized }
+}
+
+export function createSmokeReplay(options: { file: string; workspace: string; version: SmokeVersion; wire: SmokeWireOptions; recordedProjectWorkspace?: string; recordedBashFixtureWorkspace?: string }) {
   const records = fs.readFileSync(options.file, 'utf8').trim().split(/\r?\n/).map(line => JSON.parse(line) as Record)
   const header = records.shift()
   if (header?.kind !== 'header' || header.format !== 'mini-dsh-smoke-recording-v1') throw new Error('invalid smoke recording header')
@@ -155,8 +185,11 @@ export function createSmokeReplay(options: { file: string; workspace: string; ve
   const streams = { main: 0, summary: 0 }
   let cursor = 0
   const chat: Adapter['chat'] = async request => {
+    if (request.purpose === 'main' || request.purpose === 'summary') {
+      if (streams[request.purpose] >= header.limits[request.purpose]) throw new ModelNotDispatchedError('recorded request ceiling reached; no API fallback', 'request_limit')
+    }
     const material = requestMaterial(request, options.wire, options.workspace)
-    const entry = records[cursor++]
+    const entry = records[cursor]
     if (options.recordedProjectWorkspace && typeof material === 'object' && !Array.isArray(material) && material !== null && typeof material.system === 'string') {
       const lines = material.system.split('\n')
       const index = lines.indexOf('## Project Context')
@@ -167,7 +200,11 @@ export function createSmokeReplay(options: { file: string; workspace: string; ve
       lines[index + 3] = JSON.stringify(project)
       material.system = lines.join('\n')
     }
-    if (entry?.kind !== 'start' || entry.purpose !== request.purpose || entry.fingerprint !== requestFingerprint(material) || stable(entry.request) !== stable(material)) throw new Error('smoke replay request fingerprint/order mismatch; no API fallback')
+    if (entry?.kind !== 'start' || entry.purpose !== request.purpose || entry.fingerprint !== requestFingerprint(entry.request)) throw new Error('smoke replay request fingerprint/order mismatch; no API fallback')
+    const expected = options.recordedBashFixtureWorkspace ? normalizeBashResults(entry.request, options.recordedBashFixtureWorkspace) : entry.request
+    const actual = options.recordedBashFixtureWorkspace ? normalizeBashResults(material, options.workspace) : material
+    if (requestFingerprint(expected) !== requestFingerprint(actual) || stable(expected) !== stable(actual)) throw new Error('smoke replay request fingerprint/order mismatch; no API fallback')
+    cursor++
     streams[entry.purpose]++
     while (records[cursor]?.kind === 'chunk' || records[cursor]?.kind === 'provider-event') {
       const chunk = records[cursor++] as Chunk | ProviderEvent

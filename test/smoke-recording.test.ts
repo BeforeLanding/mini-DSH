@@ -159,3 +159,43 @@ test('strict replay permits only the declared project workspace remap and still 
     await assert.rejects(badTools.chat({ ...request('main', 'same'), system: system(restored), tools: [{ type: 'function', function: { name: 'changed', description: 'synthetic', parameters: {} } }] }), /fingerprint\/order mismatch/)
   } finally { await fs.rm(directory, { recursive: true, force: true }) }
 })
+
+test('Bash replay normalizes only registered fixture cwd and duration while rejecting changed result semantics', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-replay-bash-'))
+  try {
+    const original = path.join(directory, 'original'), restored = path.join(directory, 'restored')
+    await fs.mkdir(original); await fs.mkdir(restored)
+    await fs.writeFile(path.join(original, 'same.txt'), 'same'); await fs.writeFile(path.join(restored, 'same.txt'), 'same')
+    const file = path.join(directory, 'recording.jsonl')
+    const call = { id: 'bash-1', type: 'function' as const, function: { name: 'bash', arguments: JSON.stringify({ command: 'node check.mjs', cwd: '.' }) } }
+    const result = (cwd: string, durationMs: number) => JSON.stringify({ type: 'command', version: 1, command: 'node check.mjs', cwd, status: 'exited', exitCode: 0, signal: null, durationMs, timedOut: false, cancelled: false, stdout: { text: 'pass\n', bytes: 5, truncated: false }, stderr: { text: '', bytes: 0, truncated: false } }, null, 2)
+    const messages = (cwd: string, durationMs: number) => [{ role: 'assistant' as const, content: '', tool_calls: [call] }, { role: 'tool' as const, tool_call_id: 'bash-1', content: result(cwd, durationMs) }]
+    const recorder = createSmokeRecorder({ file, workspace: original, version, wire, limits: { main: 1, summary: 0 }, delegate: async () => ({ content: 'OK', complete: true }) })
+    await recorder.chat({ ...request('main', 'same'), messages: messages(original, 960.4) })
+    recorder.close()
+    const replay = () => createSmokeReplay({ file, workspace: restored, version, wire, recordedBashFixtureWorkspace: original })
+    const base = { ...request('main', 'same'), messages: messages(restored, 5.2) }
+    const accepted = replay()
+    assert.equal((await accepted.chat(base)).content, 'OK'); accepted.assertConsumed()
+    const rootOnly = replay()
+    assert.equal((await rootOnly.chat({ ...base, messages: messages(restored, 960.4) })).content, 'OK')
+    const durationOnly = createSmokeReplay({ file, workspace: original, version, wire, recordedBashFixtureWorkspace: original })
+    assert.equal((await durationOnly.chat({ ...base, messages: messages(original, 1) })).content, 'OK')
+    type CommandResult = { command: string; cwd: string; exitCode: number; timedOut: boolean; cancelled: boolean; stdout: { text: string; truncated: boolean } }
+    for (const [name, mutate] of [
+      ['stdout', (x: CommandResult) => { x.stdout.text = 'fail\n' }],
+      ['exitCode', (x: CommandResult) => { x.exitCode = 1 }],
+      ['command', (x: CommandResult) => { x.command = 'node other.mjs' }],
+      ['timeout', (x: CommandResult) => { x.timedOut = true }],
+      ['cancel', (x: CommandResult) => { x.cancelled = true }],
+      ['truncation', (x: CommandResult) => { x.stdout.truncated = true }],
+      ['relative cwd', (x: CommandResult) => { x.cwd = path.join(restored, 'src') }],
+      ['outside cwd', (x: CommandResult) => { x.cwd = directory }],
+    ] as const) {
+      const changed = JSON.parse(result(restored, 5.2)); mutate(changed)
+      await assert.rejects(replay().chat({ ...base, messages: [{ role: 'assistant' as const, content: '', tool_calls: [call] }, { role: 'tool' as const, tool_call_id: 'bash-1', content: JSON.stringify(changed, null, 2) }] }), /no API fallback/, name)
+    }
+    const changedCall = { ...call, function: { ...call.function, arguments: JSON.stringify({ command: 'node other.mjs', cwd: '.' }) } }
+    await assert.rejects(replay().chat({ ...base, messages: [{ role: 'assistant' as const, content: '', tool_calls: [changedCall] }, base.messages[1]!] }), /no API fallback/)
+  } finally { await fs.rm(directory, { recursive: true, force: true }) }
+})
