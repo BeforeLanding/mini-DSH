@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### NX-44-1 专用 smoke 录制与严格离线回放
+
+2026-10-17。为模型请求增加不进入 provider wire 的 `purpose=main|summary`，在 smoke adapter 边界独占写入完整请求材料和固定 wire 配置、可重算 SHA-256 指纹、流片段、结束响应、usage、finishReason、错误、fixture 初始字节与版本信息；不写凭证。回放适配器无网络后端，逐条检查请求、分流顺序与 fixture，缺失或额外请求直接失败。历史日志仍不具备严格回放条件。详见 [NX-44](NX-44-SMOKE.md)。
+
+验证：`node scripts/build.js`、`node scripts/check-syntax.js`（143 文件）、`node --test dist/test/smoke-recording.test.js` 2/2、Biome 157 文件零诊断；普通权限完整 `node --test dist/test/*.test.js` 为 372 通过、30 跳过、0 失败。脚本化证据 `D:/Agent/outputs/mini-dsh-smoke-offline-20261017/recording.jsonl` 已离线录制 2 次主请求和 1 次摘要、从快照恢复 fixture 并严格回放，付费请求 0。录制文件仅含合成材料，不提交到仓库。新增目的字段使 `DECISIONS.md` 的 unknown 代码行号失效，已按当前源码更新并通过锚点测试。
+
 ### NX-43 零付费测试准备
 
 2026-10-17。第一独立步骤：只读脚本从八批原始 `manifest.json`、`report.json`、`runs.jsonl` 建立逐批版本索引，SHA-256 固定来源；另按事件号诊断 TC01 和 RC01，输出不含推理正文、工具结果与命令的结构摘要。结构 JSON 存在 `D:/Agent/outputs/mini-dsh-history-index-20261017.json` 与 `D:/Agent/outputs/mini-dsh-failure-audit-20261017.json`。原始批次文件未修改；无模型调用。

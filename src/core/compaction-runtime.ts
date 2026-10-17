@@ -164,6 +164,7 @@ export class CompactionRuntime {
     let incomplete = false
     try {
       const response = await this.#llm.chat({
+        purpose: 'summary',
         maxOutputTokens, system: attempt.system, messages, tools: attempt.tools, signal: attempt.signal,
         onReasoning: chunk => { if (attempt.signal.aborted || journal.closed) return; journal.add('reasoning', chunk) },
         onContent: chunk => { if (attempt.signal.aborted || journal.closed) return; journal.add('content', chunk) },

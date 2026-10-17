@@ -14,6 +14,7 @@ export interface Message {
 export interface ToolSchema { type: 'function'; function: { name: string; description: string; parameters: Arguments } }
 
 export interface ChatRequest {
+  purpose?: 'main' | 'summary'
   maxOutputTokens?: number
   system?: string; messages?: Message[]; tools?: ToolSchema[]; model?: string
   signal?: AbortSignal; onReasoning?: (chunk: string) => void; onContent?: (chunk: string) => void

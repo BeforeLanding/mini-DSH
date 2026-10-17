@@ -143,6 +143,7 @@ export class AgentLoopRuntime {
             const journal = new StreamJournal(requestId, data => append(sessionId, 'model/fragment', data))
             const response = await control.wait(() => this.llm.chat(
                 {
+                    purpose: 'main',
                     maxOutputTokens,
                     system,
                     messages,
