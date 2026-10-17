@@ -1,8 +1,12 @@
 # 改动与验收证据
 
+### NX-44-4 逐请求金额闸门
+
+2026-10-17。把 `--max-usd` 从整批储备门槛延伸为运行中闸门：每次调用前按冻结的 1M 输入及该次输出上限预留峰时金额，provider usage 返回后逐次累计，部分流有真实 usage 也计费；usage 缺失禁止后续请求。`smoke-report.json` 记录估算已用美元、usage 不确定性和实际发出请求数。模拟模型金额/未知/部分流边界测试通过；`node scripts/build.js`、`node scripts/check-syntax.js`（151 文件）、Biome 165 文件、`git diff --check` 通过，正常权限完整测试 379 通过、30 跳过、0 失败（409 总数），不接真实 API。此改动使先前生成的 smoke manifest 失效，须在本步提交后按最终 HEAD 重新冻结。
+
 ### NX-44-3 最终冻结与待授权预算
 
-2026-10-17。代码与测试提交后，最终 freeze 只生成在仓库外 `D:/Agent/outputs/mini-dsh-smoke-freeze-final-20261017/`；该目录的 `manifest.json`、校验输出和交接说明按最终 HEAD 记录代码、fixture、工具 schema、三场景、模型参数与官方峰时价格。冻结命令不读取凭证，`smoke-run --validate-only` 不调用 provider。官方 `deepseek-flash` 峰时价分别为缓存命中输入 $0.006、未命中输入 $0.30、输出 $1.20／百万 token；520,000 token 的 80/20 无缓存示例约 $0.2496，全按输出价加 20% 储备为 $0.7488，建议单批最高授权 $1.00。价格与执行命令见 [NX-44](NX-44-SMOKE.md) 和仓库外交接；本步未执行真实 smoke。
+2026-10-17。代码与测试提交后，最终 freeze 只生成在仓库外 `D:/Agent/outputs/mini-dsh-smoke-freeze-final-v2-20261017/`；该目录的 `manifest.json`、校验输出和交接说明按最终 HEAD 记录代码、fixture、工具 schema、三场景、模型参数与官方峰时价格。先前的 `mini-dsh-smoke-freeze-final-20261017` 在金额闸门改动前生成，已失效。冻结命令不读取凭证，`smoke-run --validate-only` 不调用 provider。官方 `deepseek-flash` 峰时价分别为缓存命中输入 $0.006、未命中输入 $0.30、输出 $1.20／百万 token；520,000 token 的 80/20 无缓存示例约 $0.2496，全按输出价加 20% 储备为 $0.7488，建议单批最高授权 $1.00。价格与执行命令见 [NX-44](NX-44-SMOKE.md) 和仓库外交接；本步未执行真实 smoke。
 
 ### NX-44-2 固定 smoke 场景与独立运行入口
 

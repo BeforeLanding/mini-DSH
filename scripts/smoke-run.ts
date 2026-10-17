@@ -7,6 +7,7 @@ import { assertCleanCode, verifySmokeManifest, type SmokeManifest } from './smok
 import { smokeScenarios, smokeTotalRequests, smokeTotalTokens } from './smoke-plan.js'
 import { runProtocolSmoke, runRecallSmoke, runRepairSmoke } from './smoke-scenarios.js'
 import { createIsolatedCommandRunner, windowsToWslPath } from './eval-v2-isolation.js'
+import { createSmokeAmountGuard } from './smoke-cost.js'
 
 const args = process.argv.slice(2)
 const validateOnly = args.length === 3 && args[0] === '--manifest' && args[2] === '--validate-only'
@@ -15,7 +16,7 @@ if (!validateOnly && !execute) throw new Error('usage: smoke-run --manifest FILE
 const manifest = JSON.parse(await fs.readFile(path.resolve(args[1]!), 'utf8')) as SmokeManifest
 assertCleanCode()
 await verifySmokeManifest(manifest)
-if (!Number.isFinite(manifest.price.peakOutputPerMillion) || manifest.price.peakOutputPerMillion <= 0 || manifest.price.currency !== 'USD') throw new Error('invalid smoke price snapshot')
+if (![manifest.price.peakInputPerMillion, manifest.price.peakOutputPerMillion, manifest.price.peakCacheReadPerMillion].every(value => Number.isFinite(value) && value >= 0) || manifest.price.peakInputPerMillion <= 0 || manifest.price.peakOutputPerMillion <= 0 || manifest.price.currency !== 'USD') throw new Error('invalid smoke price snapshot')
 const reserveUsd = smokeTotalTokens * Math.max(manifest.price.peakInputPerMillion, manifest.price.peakOutputPerMillion, manifest.price.peakCacheReadPerMillion) / 1_000_000 * 1.2
 if (validateOnly) {
   console.log(JSON.stringify({ protocol: manifest.protocol, manifestDigest: manifest.digest, codeSHA: manifest.codeSHA, scenarios: smokeScenarios.map(item => item.id), maxRequests: smokeTotalRequests, maxTotalTokens: smokeTotalTokens, reserveUsd, paidRequests: 0 }))
@@ -42,9 +43,10 @@ try {
 dotenv.config({ quiet: true })
 if (!process.env.DEEPSEEK_API_KEY) throw new Error('DEEPSEEK_API_KEY required for authorized smoke')
 const adapter = createDeepSeekAdapter({ apiKey: process.env.DEEPSEEK_API_KEY, baseUrl: manifest.wire.baseUrl, models: [manifest.model], thinking: manifest.wire.thinking, contextWindowTokens: 1_000_000 })
+const amount = createSmokeAmountGuard(adapter.chat, manifest.price, maxUsd)
 await fs.mkdir(evidenceRoot)
 await fs.writeFile(path.join(evidenceRoot, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
-const env = { manifest, evidenceRoot, runtimeRoot, adapter }
+const env = { manifest, evidenceRoot, runtimeRoot, adapter: { ...adapter, chat: amount.chat } }
 const results: unknown[] = []
 for (const scenario of smokeScenarios) {
   try {
@@ -58,6 +60,6 @@ for (const scenario of smokeScenarios) {
     break
   }
 }
-await fs.writeFile(path.join(evidenceRoot, 'smoke-report.json'), `${JSON.stringify({ protocol: manifest.protocol, manifestDigest: manifest.digest, codeSHA: manifest.codeSHA, maxUsd, reserveUsd, formalEffectStatistic: false, results }, null, 2)}\n`, { flag: 'wx' })
+await fs.writeFile(path.join(evidenceRoot, 'smoke-report.json'), `${JSON.stringify({ protocol: manifest.protocol, manifestDigest: manifest.digest, codeSHA: manifest.codeSHA, maxUsd, reserveUsd, chargedUsdPeakEstimate: amount.spentUsd, usageUnknown: amount.usageUnknown, dispatchedRequests: amount.calls, formalEffectStatistic: false, results }, null, 2)}\n`, { flag: 'wx' })
 console.log(JSON.stringify({ evidenceRoot, scenariosAttempted: results.length, allPassed: results.length === smokeScenarios.length && results.every(item => (item as { status: string }).status === 'passed'), formalEffectStatistic: false }))
 if (results.length !== smokeScenarios.length || results.some(item => (item as { status: string }).status !== 'passed')) process.exitCode = 1
