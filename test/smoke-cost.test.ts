@@ -2,7 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { ModelStreamError } from '../src/core/model-error.js'
 import { ModelNotDispatchedError } from '../src/core/model-dispatch.js'
-import { createSmokeAmountGuard, peakUsageUsd } from '../scripts/smoke-cost.js'
+import { createSmokeAmountGuard, peakUsageUsd, smokeReserveUsd } from '../scripts/smoke-cost.js'
+import { selectSmokeScenarios } from '../scripts/smoke-plan.js'
 import type { SmokeManifest } from '../scripts/smoke-manifest.js'
 
 const price: SmokeManifest['price'] = { source: 'official', capturedAt: '2026-10-17T05:48:29Z', currency: 'USD', peakCacheReadPerMillion: 0.006, peakInputPerMillion: 0.30, peakOutputPerMillion: 1.20 }
@@ -18,6 +19,25 @@ test('peak cost separates cache read, cache miss and output and reserves the nex
   await assert.rejects(guarded.chat(request), /amount ceiling cannot reserve/)
   assert.equal(calls, 1)
   assert.equal(guarded.calls, 1)
+})
+
+test('repair-only reserve covers the capped tokens plus margin and one largest final request', async () => {
+  const selected = selectSmokeScenarios('repair')
+  const reserve = smokeReserveUsd(selected, price)
+  assert.equal(reserve.tokenBudgetUsd, 0.24)
+  assert.ok(Math.abs(reserve.marginUsd - 0.048) < 1e-12)
+  assert.ok(Math.abs(reserve.finalRequestUsd - 0.3196608) < 1e-12)
+  assert.ok(Math.abs(reserve.reserveUsd - 0.6076608) < 1e-12)
+  let calls = 0
+  const main = createSmokeAmountGuard(async () => { calls++; return { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, source: 'provider', uncertain: false } } }, price, 0.65)
+  await main.chat(request)
+  assert.equal(calls, 1)
+  const summary = createSmokeAmountGuard(async () => { calls++; return { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, source: 'provider', uncertain: false } } }, price, 0.31)
+  await summary.chat({ ...request, purpose: 'summary', maxOutputTokens: 8192 })
+  assert.equal(calls, 2)
+  const insufficient = createSmokeAmountGuard(async () => { calls++; return {} }, price, 0.3098)
+  await assert.rejects(insufficient.chat({ ...request, purpose: 'summary', maxOutputTokens: 8192 }), /amount ceiling/)
+  assert.equal(calls, 2)
 })
 
 test('unknown usage and partial stream usage never become zero-cost retries', async () => {

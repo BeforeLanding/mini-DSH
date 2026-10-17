@@ -4072,3 +4072,9 @@ NX-07 最终验收：a 5ef5b2e、b 21ee528、c 04f5c4b、d dd45f75、e 6c03300�
 
 验证：`node scripts/build.js`；正常权限 `node --test dist/test/smoke-plan.test.js dist/test/smoke-scenarios.test.js` 7/7。覆盖 repair 单独调度且仅产生 `repair/`、重复/乱序/未知选择拒绝、选择变更导致 digest 变化、主请求上限篡改即使重算 digest 仍拒绝。仅模拟 adapter，真实请求 0。
 
+# NX-44 smoke-v2 短修复重测：所选场景费用预留（2026-10-17）
+
+执行入口的金额下限现按所选场景计算：每场景累计 token 上限按三种峰时费率的最高值计，另加该部分 20% 缓冲，再加每场景可能跨越 token 上限的最后一次最大请求。repair 为 `$0.24 + $0.048 + $0.3196608 = $0.6076608`；最后一次主请求按 1M 输入及 16,384 输出，摘要为 8,192 输出，前者更大，故同时覆盖两种结尾。最后请求中可能有 token 仍落在 20 万额度内，所以该相加有保守重叠，20% 缓冲又在其外，并非精确最小费用。逐请求金额闸门仍用已知 provider usage 累计，下一请求前检查最多 1M 输入及实际输出上限；usage 缺失标未知且不再派发，绝不按零记。结果报告保存预留分解与实际已知估算。
+
+验证：`node scripts/build.js`；正常权限 `node --test dist/test/smoke-cost.test.js dist/test/smoke-scenarios.test.js` 覆盖 repair 的数值分解、主/摘要派发和拒绝、预算停止后保存候选并独立验收。仅模拟 adapter，真实请求 0。
+

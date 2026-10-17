@@ -7,7 +7,7 @@ import { assertCleanCode, verifySmokeManifest, type SmokeManifest } from './smok
 import { selectSmokeScenarios } from './smoke-plan.js'
 import { runSmokeScenario } from './smoke-scenarios.js'
 import { createIsolatedCommandRunner, windowsToWslPath } from './eval-v2-isolation.js'
-import { createSmokeAmountGuard } from './smoke-cost.js'
+import { createSmokeAmountGuard, smokeReserveUsd } from './smoke-cost.js'
 
 const args = process.argv.slice(2)
 const validateOnly = args.length === 5 && args[0] === '--manifest' && args[2] === '--scenarios' && args[4] === '--validate-only'
@@ -20,13 +20,14 @@ await verifySmokeManifest(manifest, args[3]!)
 if (![manifest.price.peakInputPerMillion, manifest.price.peakOutputPerMillion, manifest.price.peakCacheReadPerMillion].every(value => Number.isFinite(value) && value >= 0) || manifest.price.peakInputPerMillion <= 0 || manifest.price.peakOutputPerMillion <= 0 || manifest.price.currency !== 'USD') throw new Error('invalid smoke price snapshot')
 const maxRequests = selected.reduce((sum, item) => sum + item.maxMainRequests + item.maxSummaryRequests, 0)
 const maxTotalTokens = selected.reduce((sum, item) => sum + item.maxTotalTokens, 0)
-const reserveUsd = maxTotalTokens * Math.max(manifest.price.peakInputPerMillion, manifest.price.peakOutputPerMillion, manifest.price.peakCacheReadPerMillion) / 1_000_000 * 1.2
+const reserve = smokeReserveUsd(selected, manifest.price)
+const reserveUsd = reserve.reserveUsd
 if (validateOnly) {
-  console.log(JSON.stringify({ protocol: manifest.protocol, manifestDigest: manifest.digest, codeSHA: manifest.codeSHA, scenarios: selected.map(item => item.id), maxRequests, maxTotalTokens, reserveUsd, paidRequests: 0 }))
+  console.log(JSON.stringify({ protocol: manifest.protocol, manifestDigest: manifest.digest, codeSHA: manifest.codeSHA, scenarios: selected.map(item => item.id), maxRequests, maxTotalTokens, reserve, paidRequests: 0 }))
   process.exit(0)
 }
 const maxUsd = Number(args[7])
-if (!Number.isFinite(maxUsd) || maxUsd < reserveUsd) throw new Error(`--max-usd must reserve all scenarios: at least $${reserveUsd.toFixed(4)}`)
+if (!Number.isFinite(maxUsd) || maxUsd < reserveUsd) throw new Error(`--max-usd must reserve selected scenarios: at least $${reserveUsd.toFixed(4)}`)
 const evidenceRoot = path.resolve(args[5]!)
 if (await fs.stat(evidenceRoot).catch(() => undefined)) throw new Error('smoke evidence root must not exist')
 const runtimeRoot = process.env.MINI_DSH_V2_RUNTIME
@@ -63,6 +64,6 @@ for (const scenario of selected) {
     break
   }
 }
-await fs.writeFile(path.join(evidenceRoot, 'smoke-report.json'), `${JSON.stringify({ protocol: manifest.protocol, manifestDigest: manifest.digest, codeSHA: manifest.codeSHA, maxUsd, reserveUsd, chargedUsdPeakEstimate: amount.spentUsd, usageUnknown: amount.usageUnknown, dispatchedRequests: amount.calls, formalEffectStatistic: false, results }, null, 2)}\n`, { flag: 'wx' })
+await fs.writeFile(path.join(evidenceRoot, 'smoke-report.json'), `${JSON.stringify({ protocol: manifest.protocol, manifestDigest: manifest.digest, codeSHA: manifest.codeSHA, selectedScenarios: selected.map(item => item.id), maxUsd, reserve, chargedUsdPeakEstimate: amount.spentUsd, usageUnknown: amount.usageUnknown, dispatchedRequests: amount.calls, formalEffectStatistic: false, results }, null, 2)}\n`, { flag: 'wx' })
 console.log(JSON.stringify({ evidenceRoot, scenariosAttempted: results.length, allPassed: results.length === selected.length && results.every(item => (item as { status: string }).status === 'passed'), formalEffectStatistic: false }))
 if (results.length !== selected.length || results.some(item => (item as { status: string }).status !== 'passed')) process.exitCode = 1

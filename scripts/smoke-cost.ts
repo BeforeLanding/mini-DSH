@@ -3,8 +3,20 @@ import { ModelNotDispatchedError } from '../src/core/model-dispatch.js'
 import type { Adapter } from '../src/core/contracts.js'
 import type { Usage } from '../src/core/budget.js'
 import type { SmokeManifest } from './smoke-manifest.js'
+import { smokeBudget, type SmokeScenario } from './smoke-plan.js'
 
 type Price = SmokeManifest['price']
+export function smokeReserveUsd(selected: readonly SmokeScenario[], price: Price) {
+  const maxRate = Math.max(price.peakCacheReadPerMillion, price.peakInputPerMillion, price.peakOutputPerMillion)
+  const tokenBudgetUsd = selected.reduce((sum, item) => sum + item.maxTotalTokens * maxRate / 1_000_000, 0)
+  const marginUsd = tokenBudgetUsd * 0.2
+  const finalRequestUsd = selected.reduce((sum, item) => {
+    const contextTokens = smokeBudget(item).contextWindowTokens!
+    const outputs = [item.maxMainRequests > 0 ? item.maxOutputTokens : 0, item.maxSummaryRequests > 0 ? item.maxSummaryOutputTokens : 0]
+    return sum + contextTokens * price.peakInputPerMillion / 1_000_000 + Math.max(...outputs) * price.peakOutputPerMillion / 1_000_000
+  }, 0)
+  return { tokenBudgetUsd, marginUsd, finalRequestUsd, reserveUsd: tokenBudgetUsd + marginUsd + finalRequestUsd }
+}
 export function peakUsageUsd(usage: Usage, price: Price) {
   const cached = usage.cacheReadTokens ?? 0
   if (usage.source !== 'provider' || !Number.isSafeInteger(cached) || cached < 0 || cached > usage.inputTokens) throw new Error('smoke price requires valid provider usage')
