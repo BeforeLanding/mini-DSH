@@ -108,7 +108,7 @@ export function resolveV2Plan(options: V2Options) {
   const arms = resolveV2Arms(options.window, options.tier).filter(arm => options.split === 'formal' || arm.name === 'baseline' || arm.name === 'full')
   const perEpisode = arms[0]!.budget
   return {
-    protocol: 'NX-42-eval-v2', scheduleSeed: v2ScheduleSeed, split: options.split, tier: options.tier, evidenceRoot: options.evidenceRoot,
+    protocol: 'NX-42-eval-v2.1', scheduleSeed: v2ScheduleSeed, split: options.split, tier: options.tier, evidenceRoot: options.evidenceRoot,
     modelWindowTokens: options.window, tasks, arms, episodes,
     caps: { runs: episodes.length, modelRequests: episodes.length * perEpisode.maxModelRequests!, toolCalls: episodes.length * perEpisode.maxToolCalls!, totalTokens: episodes.length * perEpisode.maxTotalTokens!, activeDurationMs: episodes.length * perEpisode.maxActiveDurationMs! },
     readiness: { fixturesPresent: tasks.filter(task => fs.existsSync(path.join(fixtureRoot, task.id))).length, fixturesPlanned: tasks.length },

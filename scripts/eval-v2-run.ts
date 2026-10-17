@@ -19,6 +19,7 @@ if (!validateOnly && (args.length !== 7 || args[0] !== '--manifest' || args[2] !
   throw new Error('usage: eval:v2-run --manifest FILE --evidence-root NEW_DIRECTORY --max-usd POSITIVE_NUMBER --execute; or --manifest FILE --validate-only')
 }
 const manifest = JSON.parse(await fs.readFile(args[1]!, 'utf8')) as V2Manifest
+if (manifest.protocol !== 'NX-42-eval-v2.1') throw new Error('historical V2 manifest cannot run with the changed tool composition; freeze a new v2.1 manifest')
 const evidenceRoot = path.resolve(args[3] ?? os.tmpdir())
 const maxUsd = validateOnly ? 0 : Number(args[5])
 if (!validateOnly && (!Number.isFinite(maxUsd) || maxUsd <= 0)) throw new Error('--max-usd must be a positive finite amount')

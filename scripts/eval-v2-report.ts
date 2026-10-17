@@ -20,7 +20,7 @@ export interface V2FreezeInput {
 }
 export interface V2FrozenFile { path: string; sha256: string }
 export interface V2Manifest extends V2FreezeInput {
-  protocol: 'NX-42-eval-v2'
+  protocol: 'NX-42-eval-v2' | 'NX-42-eval-v2.1'
   scheduleSeed: number
   tasks: readonly { id: string; family: string; shape: string; groups: string[]; files: V2FrozenFile[] }[]
   arms: ReturnType<typeof resolveV2Arms>
@@ -36,6 +36,7 @@ const sourcePaths = [
   'scripts/eval-v2-plan.ts', 'scripts/eval-v2-episode.ts', 'scripts/eval-v2-fixtures.ts',
   'scripts/eval-v2-isolation.ts', 'scripts/eval-fixture.ts', 'scripts/eval-runner.ts',
   'scripts/eval-v2-report.ts', 'scripts/eval-v2-freeze.ts', 'scripts/eval-v2.ts', 'scripts/eval-v2-runtime.sha256',
+  'scripts/eval-capabilities.mjs',
   'scripts/eval-v2-observation.ts', 'scripts/eval-v2-run.ts',
   'scripts/eval-v2-prepare-runtime.sh', 'scripts/coding-fixtures.ts', 'scripts/eval-provenance.ts',
   'test/fixtures/harness-v2/_shared/probe.mjs',
@@ -87,7 +88,7 @@ export async function freezeV2(input: V2FreezeInput): Promise<V2Manifest> {
     ...(await listFiles(path.join(repository, 'src'))).map(file => ({ path: `src/${file.path}`, sha256: file.sha256 })),
   ].sort((a, b) => a.path.localeCompare(b.path, 'en'))
   const arms = resolveV2Arms(input.window, input.tier).filter(arm => input.split === 'formal' || arm.name === 'baseline' || arm.name === 'full')
-  const fields = { protocol: 'NX-42-eval-v2' as const, scheduleSeed: v2ScheduleSeed, ...input, tasks: frozenTasks, arms, episodes: resolveV2Episodes(input.split), sourceFiles }
+  const fields = { protocol: 'NX-42-eval-v2.1' as const, scheduleSeed: v2ScheduleSeed, ...input, tasks: frozenTasks, arms, episodes: resolveV2Episodes(input.split), sourceFiles }
   return { ...fields, digest: sha(stable(fields)) }
 }
 

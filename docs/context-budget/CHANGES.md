@@ -6,6 +6,10 @@
 
 验证：`node scripts/eval-history-audit.mjs D:/Agent/outputs` 得 8 批、137 条、已知估算 `$17.11320996`；`node scripts/eval-failure-audit.mjs D:/Agent/outputs/nx42-post-report-1m-20261016` 得两条 TC01 `length` 的结构事件和四条 RC01 分类。未知 usage 独立标记。脚本只读原件且不调用模型。
 
+第二独立步骤：提取生产、demo 与 v2 共用装配，四臂注册相同 `read_history`；旧 fixture 路径显式保留 legacy。能力脚本验证四臂与生产核心工具 schema 一致，差异限于登记的 C/P 字段。新冻结协议改为 `NX-42-eval-v2.1`，付费运行入口在读取环境或 provider 前拒绝旧 v2 manifest；旧报告仍只作历史证据。未生成新的正式 manifest、未执行真实 eval。交付说明与最小 smoke 清单见 [NX-43](NX-43-TEST-PREP.md)。
+
+验证：`pnpm check` 因受限环境访问 npm registry 失败；替代 `node scripts/build.js` 通过，`node scripts/check-syntax.js` 为 140 文件通过，Biome 154 文件零诊断。沙箱内完整测试因 Bash/symlink 权限失败；正常用户权限最终 `node --test dist/test/*.test.js` 为 370 通过、30 跳过、0 失败。针对性回读、预算、unknown、部分响应和 schema 测试 40/40；`node dist/scripts/demo-compact.js` 完整通过。`node scripts/eval-capabilities.mjs` 输出四臂一致的 schema SHA 与白名单差异；`git diff --check` 通过。所有这些为零付费验证。
+
 ### NX-42-20 正式1M清单冻结与零费用预检
 
 2026-10-16。在校准选定1M后，将同一模型、窗口、thinking、provider默认采样与峰时价格快照用于正式split，在干净提交`51a93ffa186ac7995739f6f681f0a52db7dc9f75`冻结清单`dc9ed2d5e8069e0d89b316836eeceadac5947a27e25cead6dc6831d78f07a718`，保存在`D:/Agent/tmp/nx42-formal-1m-manifest.json`（工作树外，不包含密钥）。清单包含20个独立正式题、Baseline/Context Manager/Prompt Optimizer/Full四组、每题每组三次，共240个episode；`eval-v2-run --validate-only`的Linux隔离与冻结文件校验通过，`paidRequests:0`。首次在受限沙箱内预检被隔离环境拒绝；同一清单在正常权限下复验通过，没有改动清单或代码。
