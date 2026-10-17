@@ -5,11 +5,11 @@ import os from 'node:os'
 import path from 'node:path'
 import { smokeScenarios, smokeBudget, smokeTotalRequests, smokeTotalTokens, selectSmokeScenarios } from '../scripts/smoke-plan.js'
 import { runProtocolSmoke, runRecallSmoke } from '../scripts/smoke-scenarios.js'
-import { smokeWire, smokeModel, smokeProtocol, digestManifest, currentCodeSHA, currentToolSchemaSHA, smokeFixtureSourceSHA, verifySmokeManifest, type SmokeManifest } from '../scripts/smoke-manifest.js'
+import { smokeWire, smokeModel, smokeModelVersionLabel, smokeProtocol, digestManifest, currentCodeSHA, currentToolSchemaSHA, smokeFixtureSourceSHA, verifySmokeManifest, type SmokeManifest } from '../scripts/smoke-manifest.js'
 import type { Adapter } from '../src/core/contracts.js'
 
 const syntheticUsage = { inputTokens: 20, outputTokens: 10, totalTokens: 30, source: 'provider' as const, uncertain: false }
-const manifest: SmokeManifest = { protocol: smokeProtocol, digest: 'a'.repeat(64), codeSHA: 'b'.repeat(40), toolSchemaSha256: 'c'.repeat(64), fixtureSourceSha256: 'd'.repeat(64), model: smokeModel, modelVersionLabel: 'DeepSeek-V4.1-Flash', echoedModel: smokeModel, wire: smokeWire, scenarios: smokeScenarios,
+const manifest: SmokeManifest = { protocol: smokeProtocol, digest: 'a'.repeat(64), codeSHA: 'b'.repeat(40), toolSchemaSha256: 'c'.repeat(64), fixtureSourceSha256: 'd'.repeat(64), model: smokeModel, modelVersionLabel: smokeModelVersionLabel, echoedModel: smokeModel, wire: smokeWire, scenarios: smokeScenarios,
   price: { source: 'official', capturedAt: '2026-10-17T00:00:00Z', currency: 'USD', peakCacheReadPerMillion: 0.006, peakInputPerMillion: 0.30, peakOutputPerMillion: 1.20 } }
 
 test('the dedicated smoke schedule has fixed request, token, output and time ceilings', () => {

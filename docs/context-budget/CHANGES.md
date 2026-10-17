@@ -4078,3 +4078,11 @@ NX-07 最终验收：a 5ef5b2e、b 21ee528、c 04f5c4b、d dd45f75、e 6c03300�
 
 验证：`node scripts/build.js`；正常权限 `node --test dist/test/smoke-cost.test.js dist/test/smoke-scenarios.test.js` 覆盖 repair 的数值分解、主/摘要派发和拒绝、预算停止后保存候选并独立验收。仅模拟 adapter，真实请求 0。
 
+# NX-44 smoke-v2 短修复重测：回放、版本核价与阶段验收（2026-10-17）
+
+官方价格页本次显示 `deepseek-flash` 的版本标签为 `DeepSeek-V4.1-Flash-1017`，旧标签已过时；只更新冻结元数据的标签，模型 ID、thinking、采样、题面和各上限未改。峰时价格三项与提案相同，版本变化使新批不能当旧批的同版效果对照。详细合同与运行后完整 Harness 回放步骤见 [短修复重测](NX-44-REPAIR-RETEST.md)。
+
+所选 repair 的合成录制在恢复的初始 fixture 上通过 adapter 严格回放、额外请求无 API 回退；同一条单请求轨迹通过完整 Harness 重建与指纹核对，命令执行在测试中显式禁用。真实多请求/摘要轨迹尚未产生，不能预报完整 Harness 回放结果。预算拒绝后退出候选保存和独立验收测试继续通过。既有锁定 WSL/bwrap 运行时路径 `D:/Agent/tmp/nx42-runtime/unpack` 实际存在，隔离探针 3/3 通过。
+
+检查：`node scripts/build.js`、顺序执行的 `node scripts/check-syntax.js`（153 文件）、Biome（167 文件零诊断）、`git diff --check` 通过；正常权限 `node --test dist/test/*.test.js` 为 419 项中 389 通过、30 跳过、0 失败。`pnpm` 引导在前一阶段受环境限制，本阶段按 AGENTS 允许的固定依赖 Node 命令替代。真实模型请求 0，未推送。最终清单必须在本地提交后的干净 HEAD 上另行冻结。
+
