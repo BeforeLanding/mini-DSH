@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### NX-44-2 固定 smoke 场景与独立运行入口
+
+2026-10-17。新增独立的协议、压缩回读、短修复 smoke 清单和入口；最多 2+5+7 次模型请求、合计 520,000 token，分别限定单次输出、主动时间、墙钟时间、超时与工具调用。修复录制器在 provider usage 缺失或累计预算越界时重复写终止记录的问题：现在只写一条错误终止并阻止所有后续 provider 调用。DeepSeek 流响应保留回显模型和 system fingerprint 供协议探针检查，不改变请求提示、thinking、压缩阈值或完成语义。`--validate-only` 只做冻结校验，不读凭证；`--execute` 先做现有 WSL/bwrap 隔离预检。三项结果独立于正式评测统计。官方价格与冻结须在此提交后按最终 HEAD 写工作树外。详见 [NX-44](NX-44-SMOKE.md)。
+
+验证：`node scripts/build.js`、`node scripts/check-syntax.js`（149 文件）、Biome 163 文件、`git diff --check` 均通过。模拟协议和按事件号回读、专用清单、provider 流事件及录制器停止语义的针对性测试 11/11；正常权限下完整 `node --test dist/test/*.test.js` 为 377 通过、30 跳过、0 失败（407 总数）。沙箱内 Bash/链接类测试因权限失败，已在正常权限下复验。真实模型请求 0，隔离运行时当前未配置，真实预检未执行。
+
 ### NX-44-1 专用 smoke 录制与严格离线回放
 
 2026-10-17。为模型请求增加不进入 provider wire 的 `purpose=main|summary`，在 smoke adapter 边界独占写入完整请求材料和固定 wire 配置、可重算 SHA-256 指纹、流片段、结束响应、usage、finishReason、错误、fixture 初始字节与版本信息；不写凭证。回放适配器无网络后端，逐条检查请求、分流顺序与 fixture，缺失或额外请求直接失败。历史日志仍不具备严格回放条件。详见 [NX-44](NX-44-SMOKE.md)。

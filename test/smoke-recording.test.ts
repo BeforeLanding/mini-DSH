@@ -20,6 +20,7 @@ test('recording retains reconstructible requests, fixture bytes, streams and sep
     let calls = 0
     const recorder = createSmokeRecorder({ file, workspace, version, wire, limits: { main: 2, summary: 1 }, delegate: async input => {
       calls++
+      input.onProviderEvent?.({ model: 'test', choices: [{ delta: { tool_calls: [{ index: 0, function: { name: 'synthetic_tool' } }] } }] })
       input.onReasoning?.('synthetic reasoning')
       input.onContent?.(`chunk-${calls}`)
       return { content: `chunk-${calls}`, reasoningContent: 'synthetic reasoning', finishReason: 'stop', complete: true, usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6, source: 'provider', uncertain: false } }
@@ -37,19 +38,22 @@ test('recording retains reconstructible requests, fixture bytes, streams and sep
     assert.equal(records[1].request.messages[0].content, 'first')
     assert.equal(records[1].request.wire.thinking, 'enabled')
     assert.deepEqual(records.filter(entry => entry.kind === 'end').map(entry => entry.response.usage.totalTokens), [6, 6, 6])
+    assert.equal(records.filter(entry => entry.kind === 'provider-event').length, 3)
     const restored = path.join(directory, 'restored')
     assert.equal(restoreSmokeFixture(file, restored), snapshotFixture(workspace).sha256)
     assert.equal(await fs.readFile(path.join(restored, 'sentinel.txt'), 'utf8'), 'offline sentinel')
     assert.equal(requestFingerprint(requestMaterial(request('main', `${workspace}/sentinel.txt`), wire, workspace)), requestFingerprint(requestMaterial(request('main', `${restored}/sentinel.txt`), wire, restored)))
     const replay = createSmokeReplay({ file, workspace, version, wire })
     const seen: string[] = []
+    const providerEvents: unknown[] = []
     for (const [purpose, content] of [['main', 'first'], ['summary', 'summarize'], ['main', 'last']] as const) {
-      const answer = await replay.chat({ ...request(purpose, content), onContent: text => seen.push(text) })
+      const answer = await replay.chat({ ...request(purpose, content), onContent: text => seen.push(text), onProviderEvent: event => providerEvents.push(event) })
       assert.equal(answer.complete, true)
     }
     replay.assertConsumed()
     assert.deepEqual(replay.streams, { main: 2, summary: 1 })
     assert.deepEqual(seen, ['chunk-1', 'chunk-2', 'chunk-3'])
+    assert.equal(providerEvents.length, 3)
     await assert.rejects(replay.chat(request('main', 'extra')), /no API fallback/)
     const mismatch = createSmokeReplay({ file, workspace, version, wire })
     await assert.rejects(mismatch.chat(request('main', 'changed')), /fingerprint\/order mismatch/)
@@ -84,5 +88,24 @@ test('a recorded incomplete model response cannot execute a partial tool call du
     replay.assertConsumed()
     assert.equal(effects, 0)
     assert.equal(second.sessions.latestRun(second.session.id)?.status, 'output_limit')
+  } finally { await fs.rm(directory, { recursive: true, force: true }) }
+})
+
+test('missing provider usage ends one request once and blocks every later provider call', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-record-usage-'))
+  try {
+    const workspace = path.join(directory, 'fixture')
+    await fs.mkdir(workspace)
+    const file = path.join(directory, 'recording.jsonl')
+    let calls = 0
+    const recorder = createSmokeRecorder({ file, workspace, version, wire, limits: { main: 2, summary: 0, requireProviderUsage: true }, delegate: async () => { calls++; return { content: 'unknown usage', complete: true, finishReason: 'stop' } } })
+    await assert.rejects(recorder.chat(request('main', 'first')), /provider usage missing/)
+    await assert.rejects(recorder.chat(request('main', 'second')), /no provider call made/)
+    recorder.close()
+    assert.equal(calls, 1)
+    const entries = (await fs.readFile(file, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
+    assert.equal(entries.filter(item => item.kind === 'end').length, 1)
+    assert.equal(entries.at(-1).status, 'error')
+    assert.match(entries.at(-1).error, /usage missing/)
   } finally { await fs.rm(directory, { recursive: true, force: true }) }
 })

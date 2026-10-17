@@ -18,8 +18,9 @@ export interface ChatRequest {
   maxOutputTokens?: number
   system?: string; messages?: Message[]; tools?: ToolSchema[]; model?: string
   signal?: AbortSignal; onReasoning?: (chunk: string) => void; onContent?: (chunk: string) => void
+  onProviderEvent?: (event: unknown) => void
 }
-export interface ChatResponse { usage?: Usage; finishReason?: string; complete?: boolean; content?: string; reasoningContent?: string; toolCalls?: ToolCall[] }
+export interface ChatResponse { usage?: Usage; finishReason?: string; complete?: boolean; content?: string; reasoningContent?: string; toolCalls?: ToolCall[]; observedModel?: string; systemFingerprint?: string }
 export interface Adapter { capabilities?: Record<string, { contextWindowTokens: number }>; models?: string[]; chat(request: ChatRequest): Promise<ChatResponse> }
 //standardized interface for LLM adapters. The Adapter interface defines the capabilities, available models, and a chat method.
 

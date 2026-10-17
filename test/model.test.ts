@@ -39,6 +39,20 @@ test('usage validation excludes cache/reasoning double counting and rejects inva
   assert.throws(() => normalizeUsage({ ...usage, total_tokens: 99 }), /usage/)
   assert.throws(() => normalizeUsage({ ...usage, completion_tokens: -1 }), /usage/)
 })
+test('DeepSeek exposes parsed provider stream events for controlled smoke recording', async () => {
+  const observed: unknown[] = []
+  const adapter = createDeepSeekAdapter({ apiKey: 'mock', fetch: async () => new Response(
+    event({ model: 'deepseek-flash', choices: [{ delta: { tool_calls: [{ index: 0, id: 'p', function: { name: 'echo_probe', arguments: '{"value":"OK"}' } }] } }] }) +
+    event({ model: 'deepseek-flash', choices: [{ finish_reason: 'tool_calls', delta: {} }], usage }) + 'data: [DONE]\n',
+  ) })
+  const result = await adapter.chat({ onProviderEvent: item => observed.push(item) })
+  assert.equal(result.observedModel, 'deepseek-flash')
+  assert.equal(result.finishReason, 'tool_calls')
+  assert.equal(result.toolCalls?.[0]?.name, 'echo_probe')
+  assert.equal(observed.length, 2)
+  assert.equal((observed[0] as { choices: { delta: { tool_calls: unknown[] } }[] }).choices[0].delta.tool_calls.length, 1)
+  assert.deepEqual((observed[1] as { usage: unknown }).usage, usage)
+})
 test('malformed provider results and duplicate tool IDs fail with a single terminal state', async () => {
   const h = harness(async () => ({ toolCalls: [{ id: 'same', name: 'write', arguments: {} }, { id: 'same', name: 'write', arguments: {} }] }))
   let effects = 0

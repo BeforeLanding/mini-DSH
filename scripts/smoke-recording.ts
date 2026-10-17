@@ -13,7 +13,7 @@ export interface SmokeWireOptions {
   includeUsage: true
 }
 export interface SmokeVersion { codeSHA: string; fixtureId: string; manifestDigest: string; toolSchemaSha256: string }
-export interface SmokeLimits { main: number; summary: number }
+export interface SmokeLimits { main: number; summary: number; maxTotalTokens?: number; maxMainOutputTokens?: number; maxSummaryOutputTokens?: number; maxWallDurationMs?: number; requireProviderUsage?: boolean }
 type Json = null | string | number | boolean | Json[] | { [key: string]: Json }
 
 function stable(value: unknown): string {
@@ -63,8 +63,9 @@ export function snapshotFixture(workspace: string) {
 interface Header { kind: 'header'; format: 'mini-dsh-smoke-recording-v1'; version: SmokeVersion; fixture: ReturnType<typeof snapshotFixture>; wire: SmokeWireOptions; limits: SmokeLimits }
 interface Start { kind: 'start'; index: number; purpose: 'main' | 'summary'; fingerprint: string; request: Json }
 interface Chunk { kind: 'chunk'; index: number; channel: 'content' | 'reasoning'; text: string }
+interface ProviderEvent { kind: 'provider-event'; index: number; event: unknown }
 interface End { kind: 'end'; index: number; status: 'returned' | 'error'; response: ChatResponse; error?: string }
-type Record = Header | Start | Chunk | End
+type Record = Header | Start | Chunk | ProviderEvent | End
 
 export function restoreSmokeFixture(recordingFile: string, destination: string) {
   const first = fs.readFileSync(recordingFile, 'utf8').split(/\r?\n/, 1)[0]
@@ -93,29 +94,49 @@ export function createSmokeRecorder(options: { file: string; workspace: string; 
   const write = (entry: Record) => { fs.writeSync(fd, `${JSON.stringify(entry)}\n`); fs.fsyncSync(fd) }
   write({ kind: 'header', format: 'mini-dsh-smoke-recording-v1', version: options.version, fixture, wire: options.wire, limits: options.limits })
   const counts = { main: 0, summary: 0 }
+  let totalTokens = 0
+  let blocked = false
+  const startedAt = Date.now()
   let index = 0
   let closed = false
   const chat: Adapter['chat'] = async request => {
     if (closed) throw new Error('smoke recorder is closed')
+    if (blocked) throw new Error('smoke recorder stopped after missing usage or exceeded budget; no provider call made')
     const material = requestMaterial(request, options.wire, options.workspace)
     const purpose = request.purpose!
+    if (options.limits.maxWallDurationMs !== undefined && Date.now() - startedAt >= options.limits.maxWallDurationMs) throw new Error('smoke wall duration ceiling exceeded; no provider call made')
+    const outputCeiling = purpose === 'main' ? options.limits.maxMainOutputTokens : options.limits.maxSummaryOutputTokens
+    if (outputCeiling !== undefined && request.maxOutputTokens! > outputCeiling) throw new Error(`smoke ${purpose} output ceiling exceeded; no provider call made`)
+    if (options.limits.maxTotalTokens !== undefined && totalTokens >= options.limits.maxTotalTokens) throw new Error('smoke cumulative token ceiling exceeded; no provider call made')
     if (++counts[purpose] > options.limits[purpose]) throw new Error(`smoke ${purpose} request ceiling exceeded; no provider call made`)
     const current = index++
     write({ kind: 'start', index: current, purpose, fingerprint: requestFingerprint(material), request: material })
+    let response: ChatResponse
     try {
-      const response = await options.delegate({ ...request,
+      response = await options.delegate({ ...request,
+        onProviderEvent: event => { write({ kind: 'provider-event', index: current, event }); request.onProviderEvent?.(event) },
         onContent: text => { write({ kind: 'chunk', index: current, channel: 'content', text }); request.onContent?.(text) },
         onReasoning: text => { write({ kind: 'chunk', index: current, channel: 'reasoning', text }); request.onReasoning?.(text) },
       })
-      write({ kind: 'end', index: current, status: 'returned', response })
-      return response
     } catch (error) {
       const partial = error instanceof ModelStreamError ? error.partial : { complete: false }
-      write({ kind: 'end', index: current, status: 'error', response: partial, error: error instanceof Error ? error.message : String(error) })
+      // Provider error bodies are untrusted and can echo request headers. Keep only
+      // the typed failure category; the partial stream and usage remain available.
+      write({ kind: 'end', index: current, status: 'error', response: partial, error: error instanceof Error ? error.name : 'unknown error' })
       throw error
     }
+    if (response.usage?.source === 'provider') totalTokens += response.usage.totalTokens
+    else if (options.limits.requireProviderUsage) blocked = true
+    if (options.limits.maxTotalTokens !== undefined && totalTokens > options.limits.maxTotalTokens) blocked = true
+    if (blocked) {
+      const error = response.usage?.source !== 'provider' ? 'smoke provider usage missing; further calls stopped' : 'smoke cumulative token ceiling exceeded after provider response'
+      write({ kind: 'end', index: current, status: 'error', response, error })
+      throw new Error(error)
+    }
+    write({ kind: 'end', index: current, status: 'returned', response })
+    return response
   }
-  return { chat, fixture, counts, close: () => { if (!closed) { closed = true; fs.closeSync(fd) } } }
+  return { chat, fixture, counts, get totalTokens() { return totalTokens }, close: () => { if (!closed) { closed = true; fs.closeSync(fd) } } }
 }
 
 export function createSmokeReplay(options: { file: string; workspace: string; version: SmokeVersion; wire: SmokeWireOptions }) {
@@ -131,10 +152,11 @@ export function createSmokeReplay(options: { file: string; workspace: string; ve
     const entry = records[cursor++]
     if (entry?.kind !== 'start' || entry.purpose !== request.purpose || entry.fingerprint !== requestFingerprint(material) || stable(entry.request) !== stable(material)) throw new Error('smoke replay request fingerprint/order mismatch; no API fallback')
     streams[entry.purpose]++
-    while (records[cursor]?.kind === 'chunk') {
-      const chunk = records[cursor++] as Chunk
+    while (records[cursor]?.kind === 'chunk' || records[cursor]?.kind === 'provider-event') {
+      const chunk = records[cursor++] as Chunk | ProviderEvent
       if (chunk.index !== entry.index) throw new Error('smoke replay stream index mismatch')
-      if (chunk.channel === 'content') request.onContent?.(chunk.text)
+      if (chunk.kind === 'provider-event') request.onProviderEvent?.(chunk.event)
+      else if (chunk.channel === 'content') request.onContent?.(chunk.text)
       else request.onReasoning?.(chunk.text)
     }
     const end = records[cursor++]
