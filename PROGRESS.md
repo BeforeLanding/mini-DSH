@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- **NX-44 真实 smoke 零付费准备**：专用录制与严格离线回放、三项固定 smoke 日程及独立入口已完成离线验收；完整测试 377 通过、30 跳过。下一步按最终提交 HEAD 冻结清单，附官方价格和保守预算后等待单独授权。旧日志不能严格回放，真实请求仍为 0；见 [NX-44](docs/context-budget/NX-44-SMOKE.md)。
+- **NX-44 真实 smoke 零付费准备**：专用录制与严格离线回放、三项固定 smoke 日程及独立入口已完成离线验收；完整测试 377 通过、30 跳过。最终清单与官方价格快照保存在仓库外 `D:/Agent/outputs/mini-dsh-smoke-freeze-final-20261017/`；真实请求仍为 0，执行待单独授权。旧日志不能严格回放；见 [NX-44](docs/context-budget/NX-44-SMOKE.md)。
 
 - **NX-43 零付费测试准备**：八批历史证据重新索引，TC01/RC01 按事件复核；生产和新版 v2 共用装配并包含 `read_history`，四臂工具 schema 一致，离线门禁通过。旧正式 manifest 属于旧装配，需新协议 v2.1 重新冻结；严格回放缺完整请求指纹，真实 smoke 待单独估价和授权。见 [NX-43](docs/context-budget/NX-43-TEST-PREP.md)。
 

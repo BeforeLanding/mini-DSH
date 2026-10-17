@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### NX-44-3 最终冻结与待授权预算
+
+2026-10-17。代码与测试提交后，最终 freeze 只生成在仓库外 `D:/Agent/outputs/mini-dsh-smoke-freeze-final-20261017/`；该目录的 `manifest.json`、校验输出和交接说明按最终 HEAD 记录代码、fixture、工具 schema、三场景、模型参数与官方峰时价格。冻结命令不读取凭证，`smoke-run --validate-only` 不调用 provider。官方 `deepseek-flash` 峰时价分别为缓存命中输入 $0.006、未命中输入 $0.30、输出 $1.20／百万 token；520,000 token 的 80/20 无缓存示例约 $0.2496，全按输出价加 20% 储备为 $0.7488，建议单批最高授权 $1.00。价格与执行命令见 [NX-44](NX-44-SMOKE.md) 和仓库外交接；本步未执行真实 smoke。
+
 ### NX-44-2 固定 smoke 场景与独立运行入口
 
 2026-10-17。新增独立的协议、压缩回读、短修复 smoke 清单和入口；最多 2+5+7 次模型请求、合计 520,000 token，分别限定单次输出、主动时间、墙钟时间、超时与工具调用。修复录制器在 provider usage 缺失或累计预算越界时重复写终止记录的问题：现在只写一条错误终止并阻止所有后续 provider 调用。DeepSeek 流响应保留回显模型和 system fingerprint 供协议探针检查，不改变请求提示、thinking、压缩阈值或完成语义。`--validate-only` 只做冻结校验，不读凭证；`--execute` 先做现有 WSL/bwrap 隔离预检。三项结果独立于正式评测统计。官方价格与冻结须在此提交后按最终 HEAD 写工作树外。详见 [NX-44](NX-44-SMOKE.md)。
