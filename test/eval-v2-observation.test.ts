@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { deriveV2Observation, diagnoseV2Error, recoverV2UnverifiedEvents } from '../scripts/eval-v2-observation.js'
+import { deriveV2Observation, developmentBatchStopReason, diagnoseV2Error, recoverV2UnverifiedEvents } from '../scripts/eval-v2-observation.js'
 import type { RunOutcome } from '../scripts/eval-runner.js'
 import type { SessionEvent } from '../src/core/contracts.js'
 
@@ -31,6 +31,19 @@ test('V2 observation separates summary requests and skipped tools from executed 
   assert.equal(row.metrics.policyRejected, null)
   assert.equal(row.metrics.pressureCompactions, 1)
   assert.deepEqual(row.metrics.prunedTaskIds, ['prior'])
+})
+
+test('development continues ordinary task failures but stops on unknown usage or evidence faults', () => {
+  const row = { status: 'max_steps', failureReason: 'max_steps', evidenceComplete: false } as ReturnType<typeof deriveV2Observation>
+  const start = { type: 'model/start', data: { requestId: 'a' } } as SessionEvent
+  const usage = { type: 'model/usage', data: { requestId: 'a', usage: { source: 'provider' } } } as SessionEvent
+  assert.equal(developmentBatchStopReason(row, [start, usage]), null)
+  assert.equal(developmentBatchStopReason(row, [start]), 'usage_unknown')
+  assert.equal(developmentBatchStopReason(row, [start, { type: 'model/usage', data: { requestId: 'a', usage: { source: 'estimated' } } } as SessionEvent]), 'usage_unknown')
+  assert.equal(developmentBatchStopReason(row, [start, { type: 'model/rejected', data: { requestId: 'a' } } as SessionEvent]), null)
+  assert.equal(developmentBatchStopReason(row, [{ type: 'model/rejected', data: { requestId: 'a', reason: 'amount_limit' } } as SessionEvent]), 'amount_cap_before_request')
+  assert.equal(developmentBatchStopReason({ ...row, status: 'completed', failureReason: undefined }, [start, usage]), 'evidence_incomplete')
+  assert.equal(developmentBatchStopReason({ ...row, status: 'error', failureReason: 'infrastructure' }, [start, usage]), 'infrastructure_or_provider_error')
 })
 
 test('V2 error evidence retains a bounded diagnostic while redacting credentials and exposing interrupted usage', () => {

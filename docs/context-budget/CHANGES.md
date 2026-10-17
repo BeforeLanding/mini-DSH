@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### NX-45 开发探索：运行门禁、费用与证据边界（2026-10-17，步骤二）
+
+开发 split 使用现有 v2.1 runner/隔离/快照/验收路径，执行前增加独立协议、干净冻结 HEAD、官方价格来源、模型版本和工具 schema 校验；六题任务与规则文件均钉 SHA。原 calibration/formal 路径保留。24 条按 12 个完整 block 调度，余额不足整块保守预留不启动；逐请求复用既有金额闸门，主/摘要均计费，未知 provider usage、provider/运行错误、已完成却缺证据、金额拒绝停批，普通任务失败继续记入固定分母。整题预算由 `runV2Stages` 跨阶段扣减，退出候选快照与独立验收沿用既有组件。
+
+`node scripts/build.js`、`node scripts/check-syntax.js`（153 文件）、定向 21/21、Biome 7 文件零诊断；`node scripts/eval-capabilities.mjs` 实测 Baseline/Full schema 同为 `59cf172ac95b4f3b8f21c919cf81730fac77d4a6ab5c56c65b93b94b1ba6d204`，差异仅四个白名单字段。正常用户权限 `MINI_DSH_V2_RUNTIME=D:/Agent/tmp/nx42-runtime/unpack node --test dist/test/eval-v2-fixtures.test.js`：31 通过、0 跳过，覆盖六题初始/参考/反例及 UC01/RC01 四阶段自检。完整离线套件 393 通过、30 跳过、0 失败；首次仅旧 manifest 拒绝文案用例失败，恢复历史错误文案后复绿。真实模型请求 0。
+
 ### NX-45 开发探索：独立协议与固定 24 项日程（2026-10-17，步骤一）
 
 基线 `7befdb4`。在现有 v2.1 计划/冻结/报告组件内增加 `NX-45-dev-2arm-v1`，六题按结构固定为 UC01、BC01、FC01、RC01、TC01、U01；每题两个重复，每个 block 含 Baseline/Full 各一条，先行臂 6:6 平衡。两臂沿用 `resolveV2Arms` 的 1M 整题预算，报告每臂固定分母 12，产物验收与可靠完成分开，解释固定为 `development-only`，正式改善阈值不适用。未修改原 calibration/formal 日程。`node scripts/build.js` 通过，`node --test dist/test/eval-v2-plan.test.js dist/test/eval-v2-report.test.js` 7/7；plan-only 读数为 24 条、总上限 24M token/1536 请求/3072 工具调用。真实模型请求 0。

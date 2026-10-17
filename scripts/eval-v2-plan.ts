@@ -87,6 +87,18 @@ export function resolveV2Arms(window: number, tier: V2Tier): readonly V2Arm[] {
   }))
 }
 
+export function developmentReserveUsd(price: { inputPerMillion: number; outputPerMillion: number; cacheReadPerMillion: number }) {
+  if ([price.inputPerMillion, price.outputPerMillion, price.cacheReadPerMillion].some(value => !Number.isFinite(value) || value < 0)) throw new Error('invalid development price')
+  const budget = resolveV2Arms(1_000_000, '1m')[0]!.budget
+  const maxRate = Math.max(price.inputPerMillion, price.outputPerMillion, price.cacheReadPerMillion)
+  const tokenBudgetUsd = budget.maxTotalTokens! * maxRate / 1_000_000
+  const marginUsd = tokenBudgetUsd * 0.2
+  const finalRequestUsd = price.inputPerMillion + budget.maxOutputTokens! * price.outputPerMillion / 1_000_000
+  const perEpisodeUsd = tokenBudgetUsd + marginUsd + finalRequestUsd
+  const probeUsd = 16_384 * maxRate / 1_000_000
+  return { tokenBudgetUsd, marginUsd, finalRequestUsd, perEpisodeUsd, probeUsd, batchUsd: perEpisodeUsd * 24 + probeUsd }
+}
+
 export function resolveV2Episodes(split: V2Split): readonly V2Episode[] {
   const tasks = tasksForV2Split(split)
   const arms = armsForV2Split(split)

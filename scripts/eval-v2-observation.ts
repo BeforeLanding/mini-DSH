@@ -95,3 +95,17 @@ export function deriveV2Observation(episode: V2Episode, outcome: RunOutcome, eve
     },
   }
 }
+
+// A task-level failure remains an observation. Missing provider usage or an
+// incomplete journal makes the monetary/evidence ledger unsafe for later work.
+export function developmentBatchStopReason(record: V2Observation, events: readonly SessionEvent[]): string | null {
+  if (events.some(event => event.type === 'model/rejected' && event.data.reason === 'amount_limit')) return 'amount_cap_before_request'
+  if (events.some(event => event.type === 'model/rejected' && event.data.reason === 'usage_unknown')) return 'usage_unknown'
+  if (record.failureReason === 'infrastructure' || record.status === 'error') return 'infrastructure_or_provider_error'
+  const rejected = new Set(events.flatMap(event => event.type === 'model/rejected' ? [event.data.requestId] : []))
+  const dispatched = events.flatMap(event => event.type === 'model/start' && !rejected.has(event.data.requestId) ? [event.data.requestId] : [])
+  const providerUsage = new Set(events.flatMap(event => event.type === 'model/usage' && event.data.usage.source === 'provider' ? [event.data.requestId] : []))
+  if (dispatched.some(id => !providerUsage.has(id)) || events.some(event => event.type === 'model/usage' && event.data.usage.source !== 'provider')) return 'usage_unknown'
+  if (record.status === 'completed' && !record.evidenceComplete) return 'evidence_incomplete'
+  return null
+}

@@ -85,8 +85,13 @@ test('reliable success requires terminal completion, four groups, clean protecti
 })
 
 test('development report keeps twelve per-arm denominators and never makes a formal improvement claim', async () => {
-  const manifest = await freezeV2({ ...config, split: 'development', tier: '1m', window: 1_000_000 })
+  const developmentConfig = { ...config, split: 'development' as const, tier: '1m' as const, window: 1_000_000,
+    model: 'deepseek/deepseek-flash', echoedModel: 'deepseek-flash', modelVersion: 'DeepSeek-V4.1-Flash-1017',
+    priceSnapshot: { ...config.priceSnapshot, source: 'https://api-docs.deepseek.com/quick_start/pricing/' } }
+  const manifest = await freezeV2(developmentConfig)
   assert.equal(manifest.protocol, 'NX-45-dev-2arm-v1')
+  assert.match(manifest.toolSchemaSha256!, /^[a-f0-9]{64}$/)
+  await verifyV2FrozenFiles(manifest)
   assert.equal(manifest.episodes.length, 24)
   const rows = manifest.episodes.map(episode => ({ ...observation(episode.taskId, episode.repeat, episode.arm, episode.arm === 'full'),
     acceptanceGroups: manifest.tasks.find(task => task.id === episode.taskId)!.groups.map(name => ({ name, passed: episode.arm === 'full' })) }))
@@ -101,6 +106,7 @@ test('development report keeps twelve per-arm denominators and never makes a for
   assert.equal(incomplete.incomplete, true)
   assert.equal(incomplete.missing.length, 1)
   assert.equal(incomplete.primary.complete, false)
-  await assert.rejects(freezeV2({ ...config, split: 'development', tier: '2m' }), /shared 1m/)
+  await assert.rejects(freezeV2({ ...developmentConfig, tier: '2m' }), /shared 1m/)
+  await assert.rejects(freezeV2({ ...developmentConfig, model: 'deepseek/other' }), /model contract/)
   assert.throws(() => reportV2({ ...manifest, protocol: 'NX-42-eval-v2.1' }, rows), /integrity/)
 })
