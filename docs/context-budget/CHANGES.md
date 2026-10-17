@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### NX-43 零付费测试准备
+
+2026-10-17。第一独立步骤：只读脚本从八批原始 `manifest.json`、`report.json`、`runs.jsonl` 建立逐批版本索引，SHA-256 固定来源；另按事件号诊断 TC01 和 RC01，输出不含推理正文、工具结果与命令的结构摘要。结构 JSON 存在 `D:/Agent/outputs/mini-dsh-history-index-20261017.json` 与 `D:/Agent/outputs/mini-dsh-failure-audit-20261017.json`。原始批次文件未修改；无模型调用。
+
+验证：`node scripts/eval-history-audit.mjs D:/Agent/outputs` 得 8 批、137 条、已知估算 `$17.11320996`；`node scripts/eval-failure-audit.mjs D:/Agent/outputs/nx42-post-report-1m-20261016` 得两条 TC01 `length` 的结构事件和四条 RC01 分类。未知 usage 独立标记。脚本只读原件且不调用模型。
+
 ### NX-42-20 正式1M清单冻结与零费用预检
 
 2026-10-16。在校准选定1M后，将同一模型、窗口、thinking、provider默认采样与峰时价格快照用于正式split，在干净提交`51a93ffa186ac7995739f6f681f0a52db7dc9f75`冻结清单`dc9ed2d5e8069e0d89b316836eeceadac5947a27e25cead6dc6831d78f07a718`，保存在`D:/Agent/tmp/nx42-formal-1m-manifest.json`（工作树外，不包含密钥）。清单包含20个独立正式题、Baseline/Context Manager/Prompt Optimizer/Full四组、每题每组三次，共240个episode；`eval-v2-run --validate-only`的Linux隔离与冻结文件校验通过，`paidRequests:0`。首次在受限沙箱内预检被隔离环境拒绝；同一清单在正常权限下复验通过，没有改动清单或代码。
