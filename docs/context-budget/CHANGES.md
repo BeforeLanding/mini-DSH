@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### NX-44 smoke-v2 repair 六轮零付费回放收口（2026-10-17）
+
+基线 `98c8971`、工作树干净。`createSmokeReplay` 显式登记原 fixture 根，仅对 Bash `command` 结果的 `cwd` 根和 `durationMs` 制作指纹比较副本；保留原始录制指纹核验、结果文本其余字节比较、实际 session 耗时。录制六次主请求用尽时模拟预派发 `request_limit`，不消耗第七条，也无 provider 后备。新增反例覆盖 stdout、exitCode、命令、超时、取消、截断与相对/根外路径。`node scripts/build.js`、`node scripts/check-syntax.js`（153 文件）、定向 6/6；正常权限完整测试 390 通过、30 跳过、0 失败。沙箱内 WSL 拒绝导致第一次本地回放在 Bash stdout/exitCode 差异处拒绝，正常权限复跑通过。
+
+新证据 `D:/Agent/outputs/mini-dsh-repair-smoke-evidence-v2-20261017/replay-limited-audit.json`：首分歧无，6/6 主、0/0 摘要响应消费完毕，runStatus `max_steps`，候选 hash `967728a506d88c31b1d9e491ce01bec148491bbd7cd64273538f0f9accee503b` 与原候选相同，独立验收 passed；真实网络请求 0、新增模型费用 $0。回放 amountGuard `$0.012265848` 标为模拟记账，原录制 33,668 provider token 及历史峰时估价另列。轨迹与边界见 [复盘](NX-44-REPAIR-REPLAY.md)。原录制、原 smoke 结论不改，不推送。
+
 ### NX-44-4 逐请求金额闸门
 
 2026-10-17。把 `--max-usd` 从整批储备门槛延伸为运行中闸门：每次调用前按冻结的 1M 输入及该次输出上限预留峰时金额，provider usage 返回后逐次累计，部分流有真实 usage 也计费；usage 缺失禁止后续请求。`smoke-report.json` 记录估算已用美元、usage 不确定性和实际发出请求数。模拟模型金额/未知/部分流边界测试通过；`node scripts/build.js`、`node scripts/check-syntax.js`（151 文件）、Biome 165 文件、`git diff --check` 通过，正常权限完整测试 379 通过、30 跳过、0 失败（409 总数），不接真实 API。此改动使先前生成的 smoke manifest 失效，须在本步提交后按最终 HEAD 重新冻结。
