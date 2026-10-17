@@ -4034,3 +4034,9 @@ NX-07 最终验收：a 5ef5b2e、b 21ee528、c 04f5c4b、d dd45f75、e 6c03300�
 `5969363` 删除已跟踪源码/测试/脚本中的行注释、块注释和行尾注释，同时清理 CI 版本旁注、`.env.example` 注释及 README 运行代码块注释。URL、正则和字符串内容、中文说明文档及实际 `.env` 保留。编译器生成的 sourceMappingURL 是既有调试映射指令，sourceMap 配置继续保留。
 
 完整提交顺序可用 `git log --reverse --oneline cfee2b5..7110917` 查阅；具体设计参数见 [PLAN](PLAN.md)，逐项需求和证据见 [REQUIREMENTS](REQUIREMENTS.md)、[TASKS](TASKS.md)。
+# NX-44 后续零付费修复：编辑换行兼容（2026-10-17）
+
+原始 repair fixture 与 seq 53、85 的 `expectedHash` 分别一致，精确文本匹配均为 0；仅 CRLF/LF 归一化后各有 1 个候选。`replaceUnique` 只将 CRLF 与 LF 视为等价，先按归一化全文检查唯一性，再用原文件边界替换，未修改区域字节保持原样；`edit_file` schema 说明同步。孤立 CR、真正不匹配、重复候选及旧 hash 仍拒绝。原始证据未改。
+
+验证：`node scripts/build.js` 通过；`node --test dist/test/file-edit.test.js dist/test/file-tools.test.js` 正常权限 7/7；只读原始 fixture/成功编辑重建 seq 53、85 均唯一匹配。`pnpm check` 在当前环境引导 60 秒无输出，终止后用固定依赖的 Node 构建替代；完整测试留待阶段末运行。
+

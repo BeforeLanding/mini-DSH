@@ -55,9 +55,21 @@ export function replaceUnique(original: string, oldText: unknown, newText: unkno
   if (typeof oldText !== 'string' || !oldText) throw new Error('oldText is required')
   if (typeof newText !== 'string') throw new Error('newText must be a string')
   const index = original.indexOf(oldText)
-  if (index < 0) throw new Error('oldText not found; read the exact text including line endings')
-  if (original.indexOf(oldText, index + 1) >= 0) throw new Error('oldText is not unique; refusing an ambiguous edit; include more surrounding text')
-  return { text: original.slice(0, index) + newText + original.slice(index + oldText.length), line: original.slice(0, index).split('\n').length }
+  // Only CRLF and LF are equivalent. Keep a boundary map into the original so
+  // replacement never normalizes bytes outside the selected span.
+  const boundaries = [0]
+  let normalized = ''
+  for (let offset = 0; offset < original.length; offset++) {
+    if (original[offset] === '\r' && original[offset + 1] === '\n') offset++
+    normalized += original[offset]!
+    boundaries.push(offset + 1)
+  }
+  const needle = oldText.replace(/\r\n/g, '\n')
+  const match = normalized.indexOf(needle)
+  if (match < 0) throw new Error('oldText not found; read the exact text including line endings')
+  if (normalized.indexOf(needle, match + 1) >= 0) throw new Error('oldText is not unique; refusing an ambiguous edit; include more surrounding text')
+  const start = index >= 0 ? index : boundaries[match]!, end = index >= 0 ? index + oldText.length : boundaries[match + needle.length]!
+  return { text: original.slice(0, start) + newText + original.slice(end), line: original.slice(0, start).split('\n').length }
 }
 
 // A single bounded-cost hunk: equal prefix/suffix lines are omitted, interior stays exact.

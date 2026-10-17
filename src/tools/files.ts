@@ -144,7 +144,7 @@ export function apply(ctx: Context, config: FilesConfig = {}) {
       async execute(args, exec) { return mutate('write_file', args, exec) },
     },
     {
-      name: 'edit_file', description: 'Replace one unique exact oldText, preserving line endings, after approval showing range and diff. Pass expectedHash from read_file to reject stale edits. Returns diff and hashes.',
+      name: 'edit_file', description: 'Replace one unique oldText; CRLF and LF may match while untouched bytes are preserved. Other text must match exactly. Approval shows range and diff. Pass expectedHash from read_file to reject stale edits. Returns diff and hashes.',
       parameters: parameters({ path: string, oldText: string, newText: string, expectedHash: string }, ['path', 'oldText', 'newText']),
       async execute(args, exec) { return mutate('edit_file', args, exec) },
     },
