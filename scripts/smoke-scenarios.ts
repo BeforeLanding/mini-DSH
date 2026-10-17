@@ -139,5 +139,11 @@ export async function runRepairSmoke(env: SmokeEnvironment, scenario: SmokeScena
   } finally { await fixture.close() }
 }
 
+export function runSmokeScenario(env: SmokeEnvironment, scenario: SmokeScenario) {
+  if (scenario.id === 'protocol') return runProtocolSmoke(env, scenario)
+  if (scenario.id === 'recall') return runRecallSmoke(env, scenario)
+  return runRepairSmoke(env, scenario)
+}
+
 // Scripted fixture helper is used only by offline tests. It never contacts a provider.
 export const scriptedSmokeUsage = usage

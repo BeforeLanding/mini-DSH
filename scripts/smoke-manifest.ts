@@ -4,7 +4,7 @@ import os from 'node:os'
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { createHarness } from '../src/app/create-harness.js'
-import { smokeScenarios } from './smoke-plan.js'
+import { smokeScenarios, selectSmokeScenarios } from './smoke-plan.js'
 import type { SmokeWireOptions } from './smoke-recording.js'
 
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex')
@@ -52,15 +52,15 @@ export interface SmokeManifest {
   price: { source: string; capturedAt: string; currency: 'USD'; peakCacheReadPerMillion: number; peakInputPerMillion: number; peakOutputPerMillion: number }
 }
 export function digestManifest(manifest: Omit<SmokeManifest, 'digest'>) { return sha(JSON.stringify(manifest)) }
-export async function freezeSmokeManifest(priceCapturedAt: string, echoedModel = smokeModel): Promise<SmokeManifest> {
+export async function freezeSmokeManifest(priceCapturedAt: string, scenarioSelection: string, echoedModel = smokeModel): Promise<SmokeManifest> {
   assertCleanCode()
-  const base: Omit<SmokeManifest, 'digest'> = { protocol: smokeProtocol, codeSHA: currentCodeSHA(), toolSchemaSha256: await currentToolSchemaSHA(), fixtureSourceSha256: smokeFixtureSourceSHA(), model: smokeModel, modelVersionLabel: 'DeepSeek-V4.1-Flash', echoedModel, wire: smokeWire, scenarios: smokeScenarios,
+  const base: Omit<SmokeManifest, 'digest'> = { protocol: smokeProtocol, codeSHA: currentCodeSHA(), toolSchemaSha256: await currentToolSchemaSHA(), fixtureSourceSha256: smokeFixtureSourceSHA(), model: smokeModel, modelVersionLabel: 'DeepSeek-V4.1-Flash', echoedModel, wire: smokeWire, scenarios: selectSmokeScenarios(scenarioSelection),
     price: { source: 'https://api-docs.deepseek.com/quick_start/pricing/', capturedAt: priceCapturedAt, currency: 'USD' as const, peakCacheReadPerMillion: 0.006, peakInputPerMillion: 0.30, peakOutputPerMillion: 1.20 } }
   return { ...base, digest: digestManifest(base) }
 }
-export async function verifySmokeManifest(manifest: SmokeManifest) {
+export async function verifySmokeManifest(manifest: SmokeManifest, scenarioSelection: string) {
   const { digest, ...base } = manifest
-  if (manifest.protocol !== smokeProtocol || manifest.codeSHA !== currentCodeSHA() || JSON.stringify(manifest.scenarios) !== JSON.stringify(smokeScenarios) ||
+  if (manifest.protocol !== smokeProtocol || manifest.codeSHA !== currentCodeSHA() || JSON.stringify(manifest.scenarios) !== JSON.stringify(selectSmokeScenarios(scenarioSelection)) ||
     JSON.stringify(manifest.wire) !== JSON.stringify(smokeWire) || manifest.model !== smokeModel || manifest.modelVersionLabel !== 'DeepSeek-V4.1-Flash' || manifest.fixtureSourceSha256 !== smokeFixtureSourceSHA() ||
     manifest.toolSchemaSha256 !== await currentToolSchemaSHA() || digest !== digestManifest(base)) throw new Error('smoke manifest/code/scenario/schema mismatch')
 }

@@ -23,6 +23,14 @@ export const smokeScenarios: readonly SmokeScenario[] = Object.freeze([
   { id: 'repair', maxMainRequests: 6, maxSummaryRequests: 1, maxTotalTokens: 200_000, maxOutputTokens: 16_384, maxSummaryOutputTokens: 8_192, maxActiveDurationMs: 600_000, maxWallDurationMs: 660_000, requestTimeoutMs: 180_000, maxToolCalls: 32, fixture: 'coding-repair' },
 ])
 
+export function selectSmokeScenarios(value: string): readonly SmokeScenario[] {
+  const ids = value.split(',')
+  if (!ids.length || ids.some(id => !id || id.trim() !== id) || new Set(ids).size !== ids.length) throw new Error('smoke scenarios must be a nonempty, unique comma-separated list')
+  const selected = ids.map(id => smokeScenarios.find(item => item.id === id))
+  if (selected.some(item => !item) || selected.some((item, index) => index > 0 && smokeScenarios.indexOf(item!) <= smokeScenarios.indexOf(selected[index - 1]!))) throw new Error('smoke scenarios must use the fixed protocol,recall,repair order')
+  return selected as readonly SmokeScenario[]
+}
+
 export function smokeBudget(scenario: SmokeScenario): Readonly<BudgetPolicy> {
   return { ...CLI_BUDGET, contextWindowTokens: 1_000_000,
     maxModelRequests: scenario.maxMainRequests + scenario.maxSummaryRequests,

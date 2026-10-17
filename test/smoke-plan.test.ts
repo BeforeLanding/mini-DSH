@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { smokeScenarios, smokeBudget, smokeTotalRequests, smokeTotalTokens } from '../scripts/smoke-plan.js'
+import { smokeScenarios, smokeBudget, smokeTotalRequests, smokeTotalTokens, selectSmokeScenarios } from '../scripts/smoke-plan.js'
 import { runProtocolSmoke, runRecallSmoke } from '../scripts/smoke-scenarios.js'
-import { smokeWire, smokeModel, smokeProtocol, type SmokeManifest } from '../scripts/smoke-manifest.js'
+import { smokeWire, smokeModel, smokeProtocol, digestManifest, currentCodeSHA, currentToolSchemaSHA, smokeFixtureSourceSHA, verifySmokeManifest, type SmokeManifest } from '../scripts/smoke-manifest.js'
 import type { Adapter } from '../src/core/contracts.js'
 
 const syntheticUsage = { inputTokens: 20, outputTokens: 10, totalTokens: 30, source: 'provider' as const, uncertain: false }
@@ -25,6 +25,20 @@ test('the dedicated smoke schedule has fixed request, token, output and time cei
     assert.equal(policy.requestTimeoutMs, scenario.requestTimeoutMs)
     assert.ok(scenario.maxWallDurationMs > scenario.maxActiveDurationMs)
   }
+})
+
+test('explicit selection fixes order and the manifest digest and rejects changed scenario fields', async () => {
+  assert.deepEqual(selectSmokeScenarios('repair').map(item => item.id), ['repair'])
+  for (const invalid of ['', 'repair,repair', 'repair,protocol', 'unknown', 'repair, recall']) assert.throws(() => selectSmokeScenarios(invalid))
+  const { digest: _oldDigest, ...base } = { ...manifest, codeSHA: currentCodeSHA(), toolSchemaSha256: await currentToolSchemaSHA(), fixtureSourceSha256: smokeFixtureSourceSHA(), scenarios: selectSmokeScenarios('repair') }
+  const selected = { ...base, digest: digestManifest(base) }
+  await verifySmokeManifest(selected, 'repair')
+  await assert.rejects(verifySmokeManifest(selected, 'protocol'), /mismatch/)
+  const altered = { ...selected, scenarios: [{ ...selected.scenarios[0]!, maxMainRequests: 7 }] }
+  const { digest: _discard, ...alteredBase } = altered
+  altered.digest = digestManifest(alteredBase)
+  await assert.rejects(verifySmokeManifest(altered, 'repair'), /mismatch/)
+  assert.notEqual(selected.digest, digestManifest({ ...base, scenarios: smokeScenarios }))
 })
 
 test('scripted protocol probe records exactly two requests with no provider fallback', async () => {

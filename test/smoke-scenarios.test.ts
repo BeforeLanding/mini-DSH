@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { runRepairSmoke } from '../scripts/smoke-scenarios.js'
-import { smokeScenarios } from '../scripts/smoke-plan.js'
+import { runRepairSmoke, runSmokeScenario } from '../scripts/smoke-scenarios.js'
+import { smokeScenarios, selectSmokeScenarios } from '../scripts/smoke-plan.js'
 import { ModelNotDispatchedError } from '../src/core/model-dispatch.js'
 import type { SmokeManifest } from '../scripts/smoke-manifest.js'
 
@@ -43,5 +43,15 @@ test('repair smoke distinguishes a completed model run from failing artifact acc
     assert.equal(result.artifactAcceptance, 'failed')
     assert.equal(result.runErrorType, null)
     assert.deepEqual(result.counts, { main: 1, summary: 0 })
+  } finally { await fs.rm(root, { recursive: true, force: true }) }
+})
+
+test('selected repair dispatch creates no protocol or recall evidence', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-repair-selected-'))
+  try {
+    const adapter = { chat: async () => ({ content: 'synthetic stop', complete: true, finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 2, totalTokens: 7, source: 'provider' as const, uncertain: false } }) }
+    for (const scenario of selectSmokeScenarios('repair')) await runSmokeScenario({ manifest, evidenceRoot: root, runtimeRoot: root, adapter }, scenario)
+    assert.deepEqual(await fs.readdir(root), ['repair'])
+    assert.equal((await fs.readFile(path.join(root, 'repair', 'recording.jsonl'), 'utf8')).includes('"kind":"start"'), true)
   } finally { await fs.rm(root, { recursive: true, force: true }) }
 })

@@ -4066,3 +4066,9 @@ NX-07 最终验收：a 5ef5b2e、b 21ee528、c 04f5c4b、d dd45f75、e 6c03300�
 
 验证：`node scripts/build.js` 通过；`node --test dist/test/file-edit.test.js dist/test/file-tools.test.js` 正常权限 7/7；只读原始 fixture/成功编辑重建 seq 53、85 均唯一匹配。`pnpm check` 在当前环境引导 60 秒无输出，终止后用固定依赖的 Node 构建替代；完整测试留待阶段末运行。
 
+# NX-44 smoke-v2 短修复重测：显式场景冻结与调度（2026-10-17）
+
+冻结与运行入口均要求 `--scenarios`，只接受非空、无重复、按固定顺序的场景 ID；本次只选 `repair`。清单只写所选场景且场景数据参与 digest；运行前同时比对 CLI 选择、清单场景与源码固定日程，执行循环只遍历清单所选项。代码 SHA、工具 schema、fixture、wire 仍照旧核对；无新模型或题面入口。
+
+验证：`node scripts/build.js`；正常权限 `node --test dist/test/smoke-plan.test.js dist/test/smoke-scenarios.test.js` 7/7。覆盖 repair 单独调度且仅产生 `repair/`、重复/乱序/未知选择拒绝、选择变更导致 digest 变化、主请求上限篡改即使重算 digest 仍拒绝。仅模拟 adapter，真实请求 0。
+
