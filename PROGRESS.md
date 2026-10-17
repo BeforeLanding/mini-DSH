@@ -4,6 +4,8 @@
 
 ## 当前状态
 
+- **NX-45 两臂开发探索零付费准备**：独立 `NX-45-dev-2arm-v1` 协议固定六题、12 个配对 block、24 条 episode，Baseline/Full 每完整 episode 共用 1M token、64 请求、128 工具、600 秒主动时间；U01 从原正式候选池改归开发集，不再作为未接触留出题。六题隔离验收 31/31，完整离线测试 393 通过、30 跳过，能力差异仅四项白名单字段；预计费用量级 $3–5，保守预留 $42.25152，建议本批上限 $43。协议见 [NX-45](docs/context-budget/NX-45-DEVELOPMENT.md)。最终 manifest 须在本次文档提交后从干净 HEAD 冻结；本阶段真实模型请求 0、未推送，24 次探索仍待单独授权。
+
 - **NX-44 smoke-v2 repair 零付费回放已收口**：在隔离 fixture 中，限定归一化 Bash `cwd` 根与 `durationMs` 后六条真实响应全部消费，首分歧无，候选 hash 与真实退出候选一致，独立验收通过；原运行因 6 次主请求上限为 `max_steps`，没有补记 completed。实际网络请求与新增模型费用均为 0；模拟 amountGuard 读数不作实际消费。见 [回放复盘](docs/context-budget/NX-44-REPAIR-REPLAY.md)。下一版两臂探索仅建议统一 1M 整题预算，未执行。
 
 - **NX-44 smoke-v2 仅短修复重测已完成离线实现，待最终冻结**：冻结/运行显式选择 repair 且清单 digest 包含选择，金额下限按 repair 计为 $0.6076608，拟议上限 $0.65；官方版本标签更新为 DeepSeek-V4.1-Flash-1017，模型 ID 与参数不变。合成 repair 的 adapter 与单请求完整 Harness 严格回放通过，预算停止后候选仍保存并独立验收；完整测试 389 通过、30 跳过，隔离 3/3，付费请求 0。见 [短修复重测](docs/context-budget/NX-44-REPAIR-RETEST.md)。本地提交不推送，须在最终干净 HEAD 冻结新 manifest；真实执行待另行授权。
