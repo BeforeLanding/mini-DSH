@@ -143,6 +143,33 @@ test('the summary call is a real request counted into the same run', async () =>
   assert.ok(order.indexOf('model/fragment') < order.indexOf('model/end'), 'buffered summary text must be durable before model/end')
 })
 
+test('cached summary usage is counted once per request and replay matches live counters', async () => {
+  const values = [7, 0, undefined]
+  const { h, run } = longSingleTaskSession(async () => ({ content: 'summary body', usage: {
+    inputTokens: 20, outputTokens: 3, totalTokens: 23, source: 'provider', uncertain: false,
+    ...(values[0] === undefined ? {} : { cacheReadTokens: values.shift() }),
+  } }))
+  // A main request already settled by the loop: cache hits are a subset of input.
+  const main = { inputTokens: 100, outputTokens: 5, totalTokens: 105, cacheReadTokens: 40, source: 'provider' as const, uncertain: false }
+  h.sessions.append(h.session.id, 'model/start', { taskId: run.taskId, runId: run.runId, requestId: 'main', estimatedInputTokens: 100 }, run)
+  h.sessions.append(h.session.id, 'model/usage', { taskId: run.taskId, runId: run.runId, requestId: 'main', usage: main }, run)
+  h.sessions.append(h.session.id, 'model/end', { requestId: 'main', complete: true }, run)
+  run.usage.push(main)
+  run.counters.modelRequests++
+  run.counters.inputTokens += 100; run.counters.outputTokens += 5; run.counters.totalTokens += 105; run.counters.cacheReadTokens += 40
+  const runtime = compaction(h)
+  for (let i = 0; i < 3; i++) {
+    if (i) for (const tail of ['tail-a', 'tail-b', 'tail-c']) h.sessions.append(h.session.id, 'assistant/message', { content: tail }, run)
+    assert.equal((await runtime.compact(attemptFor(run, h.session.id))).kind, 'applied')
+  }
+  assert.equal(run.counters.cacheReadTokens, 47)
+  assert.equal(run.counters.inputTokens, 160)
+  assert.equal(run.counters.totalTokens, 174)
+  assert.equal(h.sessions.latestRun(h.session.id)?.counters.cacheReadTokens, 47)
+  assert.deepEqual(h.sessions.latestRun(h.session.id)?.counters, run.counters)
+  assert.equal(events(h).filter(event => event.type === 'model/usage').length, 4)
+})
+
 test('a budget shortage stops the run instead of being recorded as a summary decline', async () => {
   let calls = 0
   const { h, run } = longSingleTaskSession(async () => { calls++; return { content: 'summary body' } })
@@ -234,12 +261,15 @@ test('protecting an unknown tool group keeps the range closed and leaves it out 
 test('restore reads the recorded summary instead of asking the model again', async () => {
   let calls = 0
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-compaction-'))
-  const { h, run } = longSingleTaskSession(async () => { calls++; return { content: 'summary body' } })
+  const { h, run } = longSingleTaskSession(async () => { calls++; return { content: 'summary body', usage: {
+    inputTokens: 30, outputTokens: 4, totalTokens: 34, cacheReadTokens: 12, source: 'provider', uncertain: false,
+  } } })
   const store = await JsonlStore.open(root, h.session.id)
   try {
     h.sessions.attachStore(h.session.id, store)
     assert.equal((await compaction(h).compact(attemptFor(run, h.session.id))).kind, 'applied')
     assert.equal(calls, 1)
+    h.sessions.finishRun(run, 'token_budget')
     const before = h.sessions.deriveMessages(h.session.id)
     await h.sessions.flush(h.session.id)
     await store.close()
@@ -250,6 +280,11 @@ test('restore reads the recorded summary instead of asking the model again', asy
     assert.equal(calls, 1, 'restore must not call the model')
     assert.deepEqual(restored.deriveMessages(h.session.id), before)
     assert.equal(restored.latestRun(h.session.id)?.counters.modelRequests, 1)
+    assert.equal(restored.latestRun(h.session.id)?.counters.cacheReadTokens, 12)
+    assert.equal(restored.latestRun(h.session.id)?.status, 'token_budget')
+    const resumed = restored.beginRun(h.session.id, policy, 'mock/test', true)
+    assert.equal(resumed.previousRunId, run.runId)
+    assert.equal(resumed.counters.cacheReadTokens, 0)
     await reopened.close()
   } finally {
     await h.sessions.close().catch(() => {})

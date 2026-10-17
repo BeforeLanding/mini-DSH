@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### NX-45 摘要 usage 缓存累计修复（2026-10-17）
+
+`CompactionRuntime.#settle` 现在同主请求及 `SessionRuntime` 事件折叠一致，将每次摘要返回的 `cacheReadTokens ?? 0` 累加一次。缓存命中仍包含在 `inputTokens` 内，不加到 `totalTokens`，不改变 token 预算或金额闸门。模拟测试覆盖主请求及多次摘要的命中、字段缺失/显式 0、实时与日志重建一致，以及 `token_budget` 停止后的持久化恢复和继续。`node scripts/build.js`、`node scripts/check-syntax.js`、`node --test dist/test/compaction-runtime.test.js` 通过（14/14）；完整 `node --test dist/test/*.test.js` 在正常用户权限下 394 通过、30 跳过、0 失败。沙箱内 Bash/软链用例受权限限制，单独核查后在正常权限下通过；`pnpm` 在本机无输出等待，故使用仓库规则允许的 Node 后备命令。真实模型调用 0。
+
 ### NX-45 开发探索：协议交接与最终冻结准备（2026-10-17，步骤三）
 
 [NX-45 协议](NX-45-DEVELOPMENT.md)逐题列选择依据和既有真实曝光（五个 C 题 26–28 条，U01 无真实运行但本次改归开发集），固定 12 个配对 block、每臂 12 条分母、可靠完成与产物验收独立口径、普通失败继续/基础设施和未知费用停批、价格与报告结构。官方 `deepseek-flash` 当前版本 `DeepSeek-V4.1-Flash-1017`，思考模式启用且适配器不发送 temperature/top_p；峰时输入命中/未命中/输出价每百万 token 为 $0.006/$0.30/$1.20。三批既有 1M 校准共 60 条按当前峰时价重算后，24 条量级约 $3–5；独立保守公式为 24 × ($1.20+$0.24+$0.3196608) + $0.0196608 = $42.25152，建议本批授权上限 $43。该金额不是执行授权，也不按 NX-44 短 smoke 线性外推。最终干净 HEAD 的仓库外 manifest 与 digest 在本步提交后生成；不会在仓库内写自引用清单。未调用真实模型、未推送。

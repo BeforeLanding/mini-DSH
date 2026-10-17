@@ -111,6 +111,7 @@ export class CompactionRuntime {
     state.counters.inputTokens += usage.inputTokens
     state.counters.outputTokens += usage.outputTokens
     state.counters.totalTokens += usage.totalTokens
+    state.counters.cacheReadTokens += usage.cacheReadTokens ?? 0
     this.#sessions.append(sessionId, 'model/usage', { taskId: state.taskId, runId: state.runId, requestId, usage }, state)
     this.#sessions.append(sessionId, 'model/end', { requestId, complete }, state)
   }
