@@ -83,7 +83,7 @@
 | 代码 | `src/core/context-runtime.ts:6` | `assertToolProtocol` 对孤立结果、缺失结果、重复或空 id 三种情况直接抛错，不静默丢弃 |
 | 代码 | `src/core/context-runtime.ts:40` | 组内只要还有未配对的调用、或 run 尚未结束，该组就被标成 `protected` |
 | 代码 | `src/core/context-runtime.ts:75` | 返回投影之前再跑一次 `assertToolProtocol`，裁剪不可能产出坏投影 |
-| 代码 | `src/core/agent-loop-runtime.ts:268` | 异常路径为每个在途调用补结果，按「进过工具入口没有」区分 `unknown` 与 `skipped` |
+| 代码 | `src/core/agent-loop-runtime.ts:276` | 异常路径为每个在途调用补结果，按「进过工具入口没有」区分 `unknown` 与 `skipped` |
 | 代码 | `src/core/pending-tools.ts:2` | `pendingTools` 是「已声明未配对」的唯一判定，恢复与错误路径共用同一份实现 |
 | 测试 | `test/context.test.ts` · `history groups entire tasks including multiple runs and never splits pending tools` | 带在途工具的组被判 `protected`；`assertToolProtocol` 对缺结果与孤立结果分别抛错 |
 | 测试 | `test/budget.test.ts` · `a batch with one tool allowance executes only the first and pairs all skipped results` | 一批三个工具只执行第一个，其余各有 `skipped` 结果，投影仍然合法 |
@@ -116,8 +116,8 @@
 | 代码 | `src/core/file-edit.ts:21` | `snapshot` 一次读齐真实位置、字节指纹与权限位，解码用 `ignoreBOM` 保持字节精确 |
 | 代码 | `src/core/file-edit.ts:48` | `checkHash` 先校验 `expectedHash` 的形状，再比对内容是否冲突 |
 | 代码 | `src/core/file-edit.ts:53` | `replaceUnique` 对「找不到」与「不唯一」分别拒绝，不做模糊匹配 |
-| 代码 | `src/core/file-edit.ts:91` | 先落同目录的 `temporary` 文件，写入并 sync 之后复核路径，最后 `rename` 替换 |
-| 代码 | `src/core/file-edit.ts:109` | `rename` 成功之后的清理失败不会把一次已提交的编辑倒置成失败 |
+| 代码 | `src/core/file-edit.ts:104` | 先落同目录的 `temporary` 文件，写入并 sync 之后复核路径，最后 `rename` 替换 |
+| 代码 | `src/core/file-edit.ts:117` | `rename` 成功之后的清理失败不会把一次已提交的编辑倒置成失败 |
 | 代码 | `src/tools/files.ts:78` | 审批通过之后才提交；提交后出错报的是「已提交但结果不确定」，不是「编辑失败」 |
 | 测试 | `test/file-edit.test.ts` · `file editing preserves exact Unicode/BOM/CRLF bytes and rejects ambiguous or unsupported text` | BOM 与 CRLF 逐字节往返；歧义与找不到的 `oldText` 被拒 |
 | 测试 | `test/file-edit.test.ts` · `atomic editing detects changed and newly created targets and cleans failed/cancelled temporary files` | 目标被改动时报冲突；失败或取消之后目录里不残留临时文件 |

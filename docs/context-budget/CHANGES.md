@@ -4034,6 +4034,10 @@ NX-07 最终验收：a 5ef5b2e、b 21ee528、c 04f5c4b、d dd45f75、e 6c03300�
 `5969363` 删除已跟踪源码/测试/脚本中的行注释、块注释和行尾注释，同时清理 CI 版本旁注、`.env.example` 注释及 README 运行代码块注释。URL、正则和字符串内容、中文说明文档及实际 `.env` 保留。编译器生成的 sourceMappingURL 是既有调试映射指令，sourceMap 配置继续保留。
 
 完整提交顺序可用 `git log --reverse --oneline cfee2b5..7110917` 查阅；具体设计参数见 [PLAN](PLAN.md)，逐项需求和证据见 [REQUIREMENTS](REQUIREMENTS.md)、[TASKS](TASKS.md)。
+# NX-44 后续零付费修复：阶段验收（2026-10-17）
+
+四项行为独立提交 `cfe3008`、`96d3fd0`、`09b3841`、`3d61209`。阶段末 `node scripts/build.js`、`node scripts/check-syntax.js`（153 文件）、Biome（167 文件）、`git diff --check` 均通过；正常权限 `node --test dist/test/*.test.js` 416 总计、386 通过、30 跳过、0 失败。首次完整测试仅文档锚点 3 处偏移，修正 `DECISIONS.md` 后复验全绿。`pnpm check` 在当前环境引导停滞，按仓库允许的固定依赖 Node 命令替代。阶段真实模型请求 0。仓库要求推送，但 GitHub remote 推送被自动审批以“目的地未由本轮授权确认”为由拦截；没有绕过。
+
 # NX-44 后续零付费修复：严格回放动态字段（2026-10-17）
 
 原始 repair 首请求 system 的第 15 行是 `Time: 2026-10-17T06:52:17.366Z`，来自 `runtime-context` 的实时时钟；第 25 行是 `project-context` 序列化 JSON 中的原 fixture 绝对工作区路径，隔离恢复时自然不同。Harness 增加仅供调用者显式注入的时钟来源；回放适配器只允许声明的 project-context `workspace` 字段映射，仍完整核对 system/messages/tools 与原始请求指纹。录制本身、生产默认动态行为和历史原始证据均未改。
