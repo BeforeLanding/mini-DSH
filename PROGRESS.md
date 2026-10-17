@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- **NX-45 两臂开发探索零付费准备**：独立 `NX-45-dev-2arm-v1` 协议固定六题、12 个配对 block、24 条 episode，Baseline/Full 每完整 episode 共用 1M token、64 请求、128 工具、600 秒主动时间；U01 从原正式候选池改归开发集，不再作为未接触留出题。六题隔离验收 31/31，完整离线测试 393 通过、30 跳过，能力差异仅四项白名单字段；预计费用量级 $3–5，保守预留 $42.25152，建议本批上限 $43。协议见 [NX-45](docs/context-budget/NX-45-DEVELOPMENT.md)。最终 manifest 须在本次文档提交后从干净 HEAD 冻结；本阶段真实模型请求 0、未推送，24 次探索仍待单独授权。
+- **NX-45 开发探索已执行，本次零付费收口**：原 24 条 episode 已完成并封存，固定分母每臂 12；可靠完成 Baseline 11/12、Full 10/12，产物验收 11/12、12/12。摘要 cache usage 漏计已修复，原始事件独立重算 Full 缓存 3,993,600，含探针峰时 usage 估价 $1.840532208；原证据不改。新目录保存哈希、逐条差异和可复算脚本，见[费用更正](docs/context-budget/NX-45-USAGE-CORRECTION.md)及[探索报告](docs/context-budget/NX-45-EXPLORATION-RESULT.md)。本阶段真实模型请求 0、不推送或重跑；下一步仅建议在另行冻结的开发批次检验公开证据收尾与重复回读提醒，不据本批宣称泛化改善。
 
 - **NX-44 smoke-v2 repair 零付费回放已收口**：在隔离 fixture 中，限定归一化 Bash `cwd` 根与 `durationMs` 后六条真实响应全部消费，首分歧无，候选 hash 与真实退出候选一致，独立验收通过；原运行因 6 次主请求上限为 `max_steps`，没有补记 completed。实际网络请求与新增模型费用均为 0；模拟 amountGuard 读数不作实际消费。见 [回放复盘](docs/context-budget/NX-44-REPAIR-REPLAY.md)。下一版两臂探索仅建议统一 1M 整题预算，未执行。
 
