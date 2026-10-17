@@ -4034,6 +4034,12 @@ NX-07 最终验收：a 5ef5b2e、b 21ee528、c 04f5c4b、d dd45f75、e 6c03300�
 `5969363` 删除已跟踪源码/测试/脚本中的行注释、块注释和行尾注释，同时清理 CI 版本旁注、`.env.example` 注释及 README 运行代码块注释。URL、正则和字符串内容、中文说明文档及实际 `.env` 保留。编译器生成的 sourceMappingURL 是既有调试映射指令，sourceMap 配置继续保留。
 
 完整提交顺序可用 `git log --reverse --oneline cfee2b5..7110917` 查阅；具体设计参数见 [PLAN](PLAN.md)，逐项需求和证据见 [REQUIREMENTS](REQUIREMENTS.md)、[TASKS](TASKS.md)。
+# NX-44 后续零付费修复：严格回放动态字段（2026-10-17）
+
+原始 repair 首请求 system 的第 15 行是 `Time: 2026-10-17T06:52:17.366Z`，来自 `runtime-context` 的实时时钟；第 25 行是 `project-context` 序列化 JSON 中的原 fixture 绝对工作区路径，隔离恢复时自然不同。Harness 增加仅供调用者显式注入的时钟来源；回放适配器只允许声明的 project-context `workspace` 字段映射，仍完整核对 system/messages/tools 与原始请求指纹。录制本身、生产默认动态行为和历史原始证据均未改。
+
+验证：`node scripts/build.js`；`node --test dist/test/smoke-recording.test.js` 正常权限 5/5，路径映射正例以及 system、messages、tools 负例。对旧 repair 轨迹恢复隔离 fixture 后，注入录制时间并映射项目路径，system 25 行完全一致，messages、模型和输出上限也一致；新 `edit_file` schema 描述与旧录制不同，严格回放在第一个请求指纹处拒绝，0 响应、0 工具、0 付费。结构结果：`D:/Agent/outputs/mini-dsh-nx44-fix-20261017/old-repair-first-divergence.json`。旧批次 adapter 边界严格回放仍是历史审计结论；新源码不能冒充旧轨迹的完整 Harness 回放通过。
+
 # NX-44 后续零付费修复：停止后候选与独立验收（2026-10-17）
 
 原运行器仅在 `agent.send` 正常返回后复制候选，异常路径先清理临时 fixture，历史 repair 因此没有产物验收。现在等待 run/工具结束及 session 关闭，保存退出候选快照后才运行独立验收；结果分别记录 `runStatus`、`artifactAcceptance`、`evidenceStatus`，另列原始 run、保存及验收错误类型。保存失败保持 `save_failed`，验收异常保持 `error`，不以任何一项覆盖其他结论。NX-44 历史原始批次仍为“产物未验收”。

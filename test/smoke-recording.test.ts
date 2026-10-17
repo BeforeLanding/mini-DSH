@@ -135,3 +135,27 @@ test('recorder separates request ceiling and delegated pre-dispatch refusal from
     replay.assertConsumed()
   } finally { await fs.rm(directory, { recursive: true, force: true }) }
 })
+
+test('strict replay permits only the declared project workspace remap and still checks system, messages and tools', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-replay-path-'))
+  try {
+    const original = path.join(directory, 'original'), restored = path.join(directory, 'restored')
+    await fs.mkdir(original); await fs.mkdir(restored)
+    await fs.writeFile(path.join(original, 'same.txt'), 'same')
+    await fs.writeFile(path.join(restored, 'same.txt'), 'same')
+    const file = path.join(directory, 'recording.jsonl')
+    const system = (workspace: string) => `## Runtime Context\nTime: fixed\n## Project Context\nguidance\nlimits\n${JSON.stringify({ workspace, directory: '.', rules: [] })}`
+    const recorder = createSmokeRecorder({ file, workspace: original, version, wire, limits: { main: 1, summary: 0 }, delegate: async () => ({ content: 'OK', complete: true, finishReason: 'stop' }) })
+    await recorder.chat({ ...request('main', 'same'), system: system(original) })
+    recorder.close()
+    const replay = createSmokeReplay({ file, workspace: restored, version, wire, recordedProjectWorkspace: original })
+    assert.equal((await replay.chat({ ...request('main', 'same'), system: system(restored) })).content, 'OK')
+    replay.assertConsumed()
+    const changed = createSmokeReplay({ file, workspace: restored, version, wire, recordedProjectWorkspace: original })
+    await assert.rejects(changed.chat({ ...request('main', 'changed'), system: system(restored) }), /fingerprint\/order mismatch/)
+    const badSystem = createSmokeReplay({ file, workspace: restored, version, wire, recordedProjectWorkspace: original })
+    await assert.rejects(badSystem.chat({ ...request('main', 'same'), system: system(restored).replace('Time: fixed', 'Time: changed') }), /fingerprint\/order mismatch/)
+    const badTools = createSmokeReplay({ file, workspace: restored, version, wire, recordedProjectWorkspace: original })
+    await assert.rejects(badTools.chat({ ...request('main', 'same'), system: system(restored), tools: [{ type: 'function', function: { name: 'changed', description: 'synthetic', parameters: {} } }] }), /fingerprint\/order mismatch/)
+  } finally { await fs.rm(directory, { recursive: true, force: true }) }
+})

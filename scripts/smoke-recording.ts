@@ -146,7 +146,7 @@ export function createSmokeRecorder(options: { file: string; workspace: string; 
   return { chat, fixture, counts, get totalTokens() { return totalTokens }, close: () => { if (!closed) { closed = true; fs.closeSync(fd) } } }
 }
 
-export function createSmokeReplay(options: { file: string; workspace: string; version: SmokeVersion; wire: SmokeWireOptions }) {
+export function createSmokeReplay(options: { file: string; workspace: string; version: SmokeVersion; wire: SmokeWireOptions; recordedProjectWorkspace?: string }) {
   const records = fs.readFileSync(options.file, 'utf8').trim().split(/\r?\n/).map(line => JSON.parse(line) as Record)
   const header = records.shift()
   if (header?.kind !== 'header' || header.format !== 'mini-dsh-smoke-recording-v1') throw new Error('invalid smoke recording header')
@@ -157,6 +157,16 @@ export function createSmokeReplay(options: { file: string; workspace: string; ve
   const chat: Adapter['chat'] = async request => {
     const material = requestMaterial(request, options.wire, options.workspace)
     const entry = records[cursor++]
+    if (options.recordedProjectWorkspace && typeof material === 'object' && !Array.isArray(material) && material !== null && typeof material.system === 'string') {
+      const lines = material.system.split('\n')
+      const index = lines.indexOf('## Project Context')
+      if (index < 0 || index + 3 >= lines.length) throw new Error('smoke replay project context path mapping unavailable; no API fallback')
+      const project = JSON.parse(lines[index + 3]!) as { workspace?: string }
+      if (project.workspace !== options.workspace) throw new Error('smoke replay project context workspace mismatch; no API fallback')
+      project.workspace = options.recordedProjectWorkspace
+      lines[index + 3] = JSON.stringify(project)
+      material.system = lines.join('\n')
+    }
     if (entry?.kind !== 'start' || entry.purpose !== request.purpose || entry.fingerprint !== requestFingerprint(material) || stable(entry.request) !== stable(material)) throw new Error('smoke replay request fingerprint/order mismatch; no API fallback')
     streams[entry.purpose]++
     while (records[cursor]?.kind === 'chunk' || records[cursor]?.kind === 'provider-event') {

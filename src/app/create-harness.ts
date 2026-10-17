@@ -25,6 +25,7 @@ export interface HarnessConfig {
   autoApprove?: boolean
   projectDirectory?: string
   contextLayout?: 'live' | 'frozen'
+  runtimeTime?: () => string
   projectContext?: boolean
   toolOutputMaxPreviewBytes?: number
   toolOutput?: boolean
@@ -36,7 +37,7 @@ export async function createHarness(config: HarnessConfig) {
   const root = new Context()
   try {
     for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
-    await root.plugin(runtimeContext, { workspace: config.workspace, profile: config.profile, ...(config.contextLayout ? { layout: config.contextLayout } : {}) })
+    await root.plugin(runtimeContext, { workspace: config.workspace, profile: config.profile, ...(config.contextLayout ? { layout: config.contextLayout } : {}), ...(config.runtimeTime ? { now: config.runtimeTime } : {}) })
     await root.plugin(sandbox, { workspace: config.workspace, ...(config.autoApprove === undefined ? {} : { autoApprove: config.autoApprove }) })
     if (config.toolOutput !== false) await root.plugin(toolResults, { maxPreviewBytes: config.toolOutputMaxPreviewBytes })
     if (!config.legacyNoReadHistory) await root.plugin(readHistory)
