@@ -10,7 +10,7 @@ import type { SmokeWireOptions } from './smoke-recording.js'
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex')
 export const smokeWire: SmokeWireOptions = { provider: 'deepseek', baseUrl: 'https://api.deepseek.com', thinking: 'enabled', sampling: 'provider-default', stream: true, includeUsage: true }
 export const smokeModel = 'deepseek-flash'
-export const smokeProtocol = 'NX-44-smoke-v1'
+export const smokeProtocol = 'NX-44-smoke-v2'
 const repo = path.resolve(import.meta.dirname, '..', '..')
 
 function git(...args: string[]) { return execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim() }

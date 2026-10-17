@@ -4034,6 +4034,10 @@ NX-07 最终验收：a 5ef5b2e、b 21ee528、c 04f5c4b、d dd45f75、e 6c03300�
 `5969363` 删除已跟踪源码/测试/脚本中的行注释、块注释和行尾注释，同时清理 CI 版本旁注、`.env.example` 注释及 README 运行代码块注释。URL、正则和字符串内容、中文说明文档及实际 `.env` 保留。编译器生成的 sourceMappingURL 是既有调试映射指令，sourceMap 配置继续保留。
 
 完整提交顺序可用 `git log --reverse --oneline cfee2b5..7110917` 查阅；具体设计参数见 [PLAN](PLAN.md)，逐项需求和证据见 [REQUIREMENTS](REQUIREMENTS.md)、[TASKS](TASKS.md)。
+# NX-44 后续零付费修复：新冻结协议边界（2026-10-17）
+
+`edit_file` 的模型可见 schema 文案已因明确 CRLF/LF 契约而变化，旧 smoke manifest 的代码 SHA、schema SHA 及结果均不可作为同一实验重用。将后续冻结协议标识设为 `NX-44-smoke-v2`；既有三项日程、修复题面、模型参数、6 次主请求、阈值与评分标准未改。短修复重测只给拟议清单，正式执行需新专用入口或新冻结文件、新证据目录和单独金额授权。本步不调用模型。
+
 # NX-44 后续零付费修复：阶段验收（2026-10-17）
 
 四项行为独立提交 `cfe3008`、`96d3fd0`、`09b3841`、`3d61209`。阶段末 `node scripts/build.js`、`node scripts/check-syntax.js`（153 文件）、Biome（167 文件）、`git diff --check` 均通过；正常权限 `node --test dist/test/*.test.js` 416 总计、386 通过、30 跳过、0 失败。首次完整测试仅文档锚点 3 处偏移，修正 `DECISIONS.md` 后复验全绿。`pnpm check` 在当前环境引导停滞，按仓库允许的固定依赖 Node 命令替代。阶段真实模型请求 0。仓库要求推送，但 GitHub remote 推送被自动审批以“目的地未由本轮授权确认”为由拦截；没有绕过。
