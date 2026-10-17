@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### NX-45 开发探索：独立协议与固定 24 项日程（2026-10-17，步骤一）
+
+基线 `7befdb4`。在现有 v2.1 计划/冻结/报告组件内增加 `NX-45-dev-2arm-v1`，六题按结构固定为 UC01、BC01、FC01、RC01、TC01、U01；每题两个重复，每个 block 含 Baseline/Full 各一条，先行臂 6:6 平衡。两臂沿用 `resolveV2Arms` 的 1M 整题预算，报告每臂固定分母 12，产物验收与可靠完成分开，解释固定为 `development-only`，正式改善阈值不适用。未修改原 calibration/formal 日程。`node scripts/build.js` 通过，`node --test dist/test/eval-v2-plan.test.js dist/test/eval-v2-report.test.js` 7/7；plan-only 读数为 24 条、总上限 24M token/1536 请求/3072 工具调用。真实模型请求 0。
+
 ### NX-44 smoke-v2 repair 六轮零付费回放收口（2026-10-17）
 
 基线 `98c8971`、工作树干净。`createSmokeReplay` 显式登记原 fixture 根，仅对 Bash `command` 结果的 `cwd` 根和 `durationMs` 制作指纹比较副本；保留原始录制指纹核验、结果文本其余字节比较、实际 session 耗时。录制六次主请求用尽时模拟预派发 `request_limit`，不消耗第七条，也无 provider 后备。新增反例覆盖 stdout、exitCode、命令、超时、取消、截断与相对/根外路径。`node scripts/build.js`、`node scripts/check-syntax.js`（153 文件）、定向 6/6；正常权限完整测试 390 通过、30 跳过、0 失败。沙箱内 WSL 拒绝导致第一次本地回放在 Bash stdout/exitCode 差异处拒绝，正常权限复跑通过。
