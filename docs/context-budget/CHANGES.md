@@ -4034,6 +4034,12 @@ NX-07 最终验收：a 5ef5b2e、b 21ee528、c 04f5c4b、d dd45f75、e 6c03300�
 `5969363` 删除已跟踪源码/测试/脚本中的行注释、块注释和行尾注释，同时清理 CI 版本旁注、`.env.example` 注释及 README 运行代码块注释。URL、正则和字符串内容、中文说明文档及实际 `.env` 保留。编译器生成的 sourceMappingURL 是既有调试映射指令，sourceMap 配置继续保留。
 
 完整提交顺序可用 `git log --reverse --oneline cfee2b5..7110917` 查阅；具体设计参数见 [PLAN](PLAN.md)，逐项需求和证据见 [REQUIREMENTS](REQUIREMENTS.md)、[TASKS](TASKS.md)。
+# NX-44 后续零付费修复：停止后候选与独立验收（2026-10-17）
+
+原运行器仅在 `agent.send` 正常返回后复制候选，异常路径先清理临时 fixture，历史 repair 因此没有产物验收。现在等待 run/工具结束及 session 关闭，保存退出候选快照后才运行独立验收；结果分别记录 `runStatus`、`artifactAcceptance`、`evidenceStatus`，另列原始 run、保存及验收错误类型。保存失败保持 `save_failed`，验收异常保持 `error`，不以任何一项覆盖其他结论。NX-44 历史原始批次仍为“产物未验收”。
+
+验证：`node scripts/build.js` 通过；`node --test dist/test/smoke-scenarios.test.js` 正常权限 2/2，模拟请求拒绝后的候选保存和独立验收、正常模型返回但产物失败的分离状态。完整测试留待阶段末。
+
 # NX-44 后续零付费修复：预派发状态和计数（2026-10-17）
 
 最小复现：NX-44 repair seq 91 为已准备并落盘的 `model/start`，recorder 在实际 provider 前拒绝第 7 次主请求；旧通用 catch 生成 seq 92 的 8,238 estimated token。现在 `ModelNotDispatchedError` 明确表示次数/金额/未知用量等派发前拒绝；追加 `model/rejected` 终态并修正实时及恢复计数，不写 model/usage，原先的动作前落盘仍在。已派发但网络中断继续计一次请求、缺 provider usage 继续为未知。`request_trace` 标出 rejected；录制内准备后拒绝有独立终态。旧证据不追溯更改。

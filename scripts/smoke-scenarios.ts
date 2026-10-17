@@ -102,20 +102,40 @@ export async function runRepairSmoke(env: SmokeEnvironment, scenario: SmokeScena
   const abort = new AbortController()
   const timer = setTimeout(() => abort.abort(), scenario.maxWallDurationMs)
   let events: SessionEvent[] = []
-  let status: string | undefined
-  let candidate: string | undefined
-  try {
-    await agent.send(fixture.tasks[0]!, { signal: abort.signal, budget })
-    await harness.root.sessions.flush(session.id)
-    events = harness.root.sessions.visibleEvents(session.id)
-    status = harness.root.sessions.latestRun(session.id)?.status
-    candidate = path.join(directory, 'candidate')
-    await fs.cp(fixture.workspace, candidate, { recursive: true, errorOnExist: true, force: false })
-  } finally { clearTimeout(timer); await harness.root.sessions.close(); await harness.dispose(); recorder.close() }
-  if (!candidate) throw new Error('repair candidate snapshot missing')
-  const accepted = await fixture.evaluateAt(candidate)
+  let runError: unknown, evidenceError: unknown, acceptanceError: unknown
+  let runStatus = 'unknown'
+  try { await agent.send(fixture.tasks[0]!, { signal: abort.signal, budget }) }
+  catch (error) { runError = error }
+  finally {
+    clearTimeout(timer)
+    try {
+      await harness.root.sessions.flush(session.id)
+      events = harness.root.sessions.visibleEvents(session.id)
+      runStatus = harness.root.sessions.latestRun(session.id)?.status ?? 'unknown'
+    } catch (error) { evidenceError = error }
+    try { await harness.root.sessions.close() } catch (error) { evidenceError ??= error }
+    try { await harness.dispose() } catch (error) { evidenceError ??= error }
+    try { recorder.close() } catch (error) { evidenceError ??= error }
+  }
+  const candidate = path.join(directory, 'candidate')
+  let evidenceStatus: 'saved' | 'save_failed' = 'save_failed'
+  if (evidenceError === undefined) {
+    try {
+      await fs.cp(fixture.workspace, candidate, { recursive: true, errorOnExist: true, force: false })
+      evidenceStatus = 'saved'
+    } catch (error) { evidenceError = error }
+  }
+  let artifactAcceptance: 'passed' | 'failed' | 'not_run' | 'error' = 'not_run'
+  if (evidenceStatus === 'saved') {
+    try { artifactAcceptance = (await fixture.evaluateAt(candidate)).passed ? 'passed' : 'failed' }
+    catch (error) { acceptanceError = error; artifactAcceptance = 'error' }
+  }
   const unknownSideEffects = events.filter(event => event.type === 'tool/result' && event.data.status === 'unknown').length
-  return { status: accepted.passed && status === 'completed' && unknownSideEffects === 0 && Date.now() - startedAt <= scenario.maxWallDurationMs ? 'passed' : 'failed', runStatus: status, accepted: accepted.passed, unknownSideEffects, wallDurationMs: Date.now() - startedAt, counts: recorder.counts, totalTokens: recorder.totalTokens, events: eventEvidence(events) }
+  return { status: artifactAcceptance === 'passed' && runStatus === 'completed' && evidenceStatus === 'saved' && !runError && !acceptanceError && unknownSideEffects === 0 && Date.now() - startedAt <= scenario.maxWallDurationMs ? 'passed' : 'failed',
+    runStatus, artifactAcceptance, evidenceStatus, runErrorType: runError instanceof Error ? runError.name : runError === undefined ? null : 'unknown',
+    evidenceErrorType: evidenceError instanceof Error ? evidenceError.name : evidenceError === undefined ? null : 'unknown',
+    acceptanceErrorType: acceptanceError instanceof Error ? acceptanceError.name : acceptanceError === undefined ? null : 'unknown',
+    unknownSideEffects, wallDurationMs: Date.now() - startedAt, counts: recorder.counts, totalTokens: recorder.totalTokens, events: eventEvidence(events) }
   } finally { await fixture.close() }
 }
 
