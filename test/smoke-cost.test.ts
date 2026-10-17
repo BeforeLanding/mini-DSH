@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { ModelStreamError } from '../src/core/model-error.js'
+import { ModelNotDispatchedError } from '../src/core/model-dispatch.js'
 import { createSmokeAmountGuard, peakUsageUsd } from '../scripts/smoke-cost.js'
 import type { SmokeManifest } from '../scripts/smoke-manifest.js'
 
@@ -30,4 +31,16 @@ test('unknown usage and partial stream usage never become zero-cost retries', as
   await assert.rejects(partial.chat(request), ModelStreamError)
   assert.equal(partial.spentUsd, 0.03612)
   assert.equal(partial.usageUnknown, false)
+})
+
+test('network interruption after dispatch remains unknown and a nested pre-dispatch rejection does not', async () => {
+  const interrupted = createSmokeAmountGuard(async () => { throw new Error('synthetic network disconnect') }, price, 1)
+  await assert.rejects(interrupted.chat(request), /disconnect/)
+  assert.equal(interrupted.calls, 1)
+  assert.equal(interrupted.usageUnknown, true)
+  const rejected = createSmokeAmountGuard(async () => { throw new ModelNotDispatchedError('synthetic request cap', 'request_limit') }, price, 1)
+  await assert.rejects(rejected.chat(request), ModelNotDispatchedError)
+  assert.equal(rejected.calls, 0)
+  assert.equal(rejected.spentUsd, 0)
+  assert.equal(rejected.usageUnknown, false)
 })

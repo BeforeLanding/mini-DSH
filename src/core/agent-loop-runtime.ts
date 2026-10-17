@@ -7,6 +7,7 @@ import type { CompactionTrigger, DeclineReason } from './compaction-runtime.js'
 import { estimateUsage } from './token-estimator.js'
 import { StreamJournal } from './stream-journal.js'
 import { ModelStreamError } from './model-error.js'
+import { ModelNotDispatchedError } from './model-dispatch.js'
 import type { BudgetPolicy, RunState, Usage, StopReason } from './budget.js'
 import { createHash, randomUUID } from 'node:crypto'
 import { BudgetStop } from './budget.js'
@@ -155,6 +156,12 @@ export class AgentLoopRuntime {
                 agent.model,
             ), policy.requestTimeoutMs ?? 180_000).catch(error => {
                 journal.close()
+                if (error instanceof ModelNotDispatchedError) {
+                    state.counters.modelRequests--
+                    append(sessionId, 'model/rejected', { requestId, reason: error.reason })
+                    if (error.reason === 'request_limit') throw new BudgetStop('max_steps', state)
+                    throw error
+                }
                 const partial = error instanceof ModelStreamError ? error.partial : { content: journal.content, reasoningContent: journal.reasoningContent, usage: undefined }
                 settle(partial.usage ?? estimateUsage(estimatedInputTokens, partial))
                 append(sessionId, 'model/end', { requestId, complete: false })

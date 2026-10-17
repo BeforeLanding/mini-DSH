@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createSmokeRecorder, createSmokeReplay, restoreSmokeFixture, snapshotFixture, requestFingerprint, requestMaterial, type SmokeWireOptions, type SmokeVersion } from '../scripts/smoke-recording.js'
 import { harness } from './harness.js'
+import { ModelNotDispatchedError } from '../src/core/model-dispatch.js'
 
 const wire: SmokeWireOptions = { provider: 'deepseek', baseUrl: 'https://api.deepseek.com', thinking: 'enabled', sampling: 'provider-default', stream: true, includeUsage: true }
 const version: SmokeVersion = { codeSHA: 'a'.repeat(40), fixtureId: 'synthetic', manifestDigest: 'b'.repeat(64), toolSchemaSha256: 'c'.repeat(64) }
@@ -29,6 +30,7 @@ test('recording retains reconstructible requests, fixture bytes, streams and sep
     await recorder.chat(request('summary', 'summarize'))
     await recorder.chat(request('main', 'last'))
     await assert.rejects(recorder.chat(request('main', 'over cap')), /ceiling exceeded/)
+    assert.deepEqual(recorder.counts, { main: 2, summary: 1 })
     recorder.close()
     assert.equal(calls, 3)
     const records = (await fs.readFile(file, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
@@ -107,5 +109,29 @@ test('missing provider usage ends one request once and blocks every later provid
     assert.equal(entries.filter(item => item.kind === 'end').length, 1)
     assert.equal(entries.at(-1).status, 'error')
     assert.match(entries.at(-1).error, /usage missing/)
+  } finally { await fs.rm(directory, { recursive: true, force: true }) }
+})
+
+test('recorder separates request ceiling and delegated pre-dispatch refusal from actual calls', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-record-reject-'))
+  try {
+    const workspace = path.join(directory, 'fixture')
+    await fs.mkdir(workspace)
+    const file = path.join(directory, 'recording.jsonl')
+    let calls = 0
+    const recorder = createSmokeRecorder({ file, workspace, version, wire, limits: { main: 1, summary: 0 }, delegate: async () => {
+      calls++
+      throw new ModelNotDispatchedError('synthetic amount cap', 'amount_limit')
+    } })
+    await assert.rejects(recorder.chat(request('main', 'first')), /amount cap/)
+    assert.equal(recorder.counts.main, 0)
+    assert.equal(calls, 1)
+    const rows = (await fs.readFile(file, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
+    assert.deepEqual(rows.map(row => row.kind), ['header', 'start', 'end'])
+    assert.equal(rows.at(-1).status, 'rejected')
+    recorder.close()
+    const replay = createSmokeReplay({ file, workspace, version, wire })
+    await assert.rejects(replay.chat(request('main', 'first')), ModelNotDispatchedError)
+    replay.assertConsumed()
   } finally { await fs.rm(directory, { recursive: true, force: true }) }
 })

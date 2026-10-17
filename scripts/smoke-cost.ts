@@ -1,4 +1,5 @@
 import { ModelStreamError } from '../src/core/model-error.js'
+import { ModelNotDispatchedError } from '../src/core/model-dispatch.js'
 import type { Adapter } from '../src/core/contracts.js'
 import type { Usage } from '../src/core/budget.js'
 import type { SmokeManifest } from './smoke-manifest.js'
@@ -18,10 +19,10 @@ export function createSmokeAmountGuard(delegate: Adapter['chat'], price: Price, 
   let usageUnknown = false
   let calls = 0
   const chat: Adapter['chat'] = async request => {
-    if (usageUnknown) throw new Error('smoke usage unknown; no further provider call made')
-    if (!Number.isSafeInteger(request.maxOutputTokens) || request.maxOutputTokens! <= 0) throw new Error('smoke amount guard requires output ceiling')
+    if (usageUnknown) throw new ModelNotDispatchedError('smoke usage unknown; no further provider call made', 'usage_unknown')
+    if (!Number.isSafeInteger(request.maxOutputTokens) || request.maxOutputTokens! <= 0) throw new ModelNotDispatchedError('smoke amount guard requires output ceiling', 'other_limit')
     const reserve = price.peakInputPerMillion + request.maxOutputTokens! * price.peakOutputPerMillion / 1_000_000
-    if (spentUsd + reserve > maxUsd) throw new Error('smoke amount ceiling cannot reserve the next request; no provider call made')
+    if (spentUsd + reserve > maxUsd) throw new ModelNotDispatchedError('smoke amount ceiling cannot reserve the next request; no provider call made', 'amount_limit')
     calls++
     try {
       const response = await delegate(request)
@@ -29,6 +30,7 @@ export function createSmokeAmountGuard(delegate: Adapter['chat'], price: Price, 
       else spentUsd += peakUsageUsd(response.usage, price)
       return response
     } catch (error) {
+      if (error instanceof ModelNotDispatchedError) { calls--; throw error }
       const partial = error instanceof ModelStreamError ? error.partial : undefined
       if (partial?.usage?.source === 'provider') spentUsd += peakUsageUsd(partial.usage, price)
       else usageUnknown = true

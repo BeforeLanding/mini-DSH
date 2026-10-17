@@ -68,6 +68,7 @@ export interface EventData {
   'run/start': { state: RunState }
   'run/finish': { state: RunState }
   'model/start': { taskId: string; runId: string; requestId: string; estimatedInputTokens?: number }
+  'model/rejected': { requestId: string; reason: 'request_limit' | 'amount_limit' | 'usage_unknown' | 'other_limit' }
   // requestId 可缺省以兼容旧日志；存在时它与随后的 model/start 相同，使投影归属成为日志中可读的事实，
   // 而不是依赖“同一 run 内最近一个投影”的位置推断。投影已发出但对应 model/start 缺失，即该请求因
   // 上下文溢出或 token 预算未发出。

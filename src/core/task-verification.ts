@@ -79,7 +79,7 @@ function taskRunReport(events: SessionEvent[], taskId: string | null) {
     const usage = events.flatMap(event => event.type === 'model/usage' && event.runId === runId ? [event.data.usage] : [])
     const counters = finish?.type === 'run/finish' ? finish.data.state.counters : {
       ...emptyCounters(),
-      modelRequests: events.filter(event => event.type === 'model/start' && event.runId === runId).length,
+      modelRequests: events.filter(event => event.type === 'model/start' && event.runId === runId && !events.some(other => other.type === 'model/rejected' && other.data.requestId === event.data.requestId)).length,
       toolCalls: events.filter(event => event.type === 'tool/start' && event.runId === runId).length,
       inputTokens: usage.reduce((total, item) => total + item.inputTokens, 0),
       outputTokens: usage.reduce((total, item) => total + item.outputTokens, 0),

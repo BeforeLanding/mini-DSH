@@ -209,12 +209,13 @@ export function parseLog(text: string, sessionId: string): SessionEvent[] {
       if (requests.has(parsed.data.requestId)) throw new Error('duplicate model request')
       requests.add(parsed.data.requestId)
     }
-    if (parsed.type === 'model/usage' || parsed.type === 'model/end' || parsed.type === 'model/fragment') {
+    if (parsed.type === 'model/usage' || parsed.type === 'model/end' || parsed.type === 'model/fragment' || parsed.type === 'model/rejected') {
       const requestId = parsed.data.requestId
       if (!requests.has(requestId)) throw new Error('missing model request start')
-      if (parsed.type === 'model/usage') { if (usages.has(requestId)) throw new Error('duplicate model usage'); usages.add(requestId) }
+      if (parsed.type === 'model/usage') { if (usages.has(requestId) || ends.has(requestId)) throw new Error('duplicate or terminal model usage'); usages.add(requestId) }
       if (parsed.type === 'model/end') { if (ends.has(requestId)) throw new Error('duplicate model end'); ends.add(requestId) }
       if (parsed.type === 'model/fragment' && ends.has(requestId)) throw new Error('fragment after model end')
+      if (parsed.type === 'model/rejected') { if (ends.has(requestId) || usages.has(requestId)) throw new Error('model rejection after dispatch result'); ends.add(requestId) }
     }
     ids.add(event.id)
     events.push(parsed)

@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { ModelStreamError } from '../src/core/model-error.js'
+import { ModelNotDispatchedError } from '../src/core/model-dispatch.js'
 import type { Adapter, ChatRequest, ChatResponse } from '../src/core/contracts.js'
 
 export interface SmokeWireOptions {
@@ -64,7 +65,7 @@ interface Header { kind: 'header'; format: 'mini-dsh-smoke-recording-v1'; versio
 interface Start { kind: 'start'; index: number; purpose: 'main' | 'summary'; fingerprint: string; request: Json }
 interface Chunk { kind: 'chunk'; index: number; channel: 'content' | 'reasoning'; text: string }
 interface ProviderEvent { kind: 'provider-event'; index: number; event: unknown }
-interface End { kind: 'end'; index: number; status: 'returned' | 'error'; response: ChatResponse; error?: string }
+interface End { kind: 'end'; index: number; status: 'returned' | 'error' | 'rejected'; response: ChatResponse; error?: string }
 type Record = Header | Start | Chunk | ProviderEvent | End
 
 export function restoreSmokeFixture(recordingFile: string, destination: string) {
@@ -100,15 +101,16 @@ export function createSmokeRecorder(options: { file: string; workspace: string; 
   let index = 0
   let closed = false
   const chat: Adapter['chat'] = async request => {
-    if (closed) throw new Error('smoke recorder is closed')
-    if (blocked) throw new Error('smoke recorder stopped after missing usage or exceeded budget; no provider call made')
+    if (closed) throw new ModelNotDispatchedError('smoke recorder is closed', 'other_limit')
+    if (blocked) throw new ModelNotDispatchedError('smoke recorder stopped after missing usage or exceeded budget; no provider call made', 'usage_unknown')
     const material = requestMaterial(request, options.wire, options.workspace)
     const purpose = request.purpose!
-    if (options.limits.maxWallDurationMs !== undefined && Date.now() - startedAt >= options.limits.maxWallDurationMs) throw new Error('smoke wall duration ceiling exceeded; no provider call made')
+    if (options.limits.maxWallDurationMs !== undefined && Date.now() - startedAt >= options.limits.maxWallDurationMs) throw new ModelNotDispatchedError('smoke wall duration ceiling exceeded; no provider call made', 'other_limit')
     const outputCeiling = purpose === 'main' ? options.limits.maxMainOutputTokens : options.limits.maxSummaryOutputTokens
-    if (outputCeiling !== undefined && request.maxOutputTokens! > outputCeiling) throw new Error(`smoke ${purpose} output ceiling exceeded; no provider call made`)
-    if (options.limits.maxTotalTokens !== undefined && totalTokens >= options.limits.maxTotalTokens) throw new Error('smoke cumulative token ceiling exceeded; no provider call made')
-    if (++counts[purpose] > options.limits[purpose]) throw new Error(`smoke ${purpose} request ceiling exceeded; no provider call made`)
+    if (outputCeiling !== undefined && request.maxOutputTokens! > outputCeiling) throw new ModelNotDispatchedError(`smoke ${purpose} output ceiling exceeded; no provider call made`, 'other_limit')
+    if (options.limits.maxTotalTokens !== undefined && totalTokens >= options.limits.maxTotalTokens) throw new ModelNotDispatchedError('smoke cumulative token ceiling exceeded; no provider call made', 'other_limit')
+    if (counts[purpose] >= options.limits[purpose]) throw new ModelNotDispatchedError(`smoke ${purpose} request ceiling exceeded; no provider call made`, 'request_limit')
+    counts[purpose]++
     const current = index++
     write({ kind: 'start', index: current, purpose, fingerprint: requestFingerprint(material), request: material })
     let response: ChatResponse
@@ -119,6 +121,11 @@ export function createSmokeRecorder(options: { file: string; workspace: string; 
         onReasoning: text => { write({ kind: 'chunk', index: current, channel: 'reasoning', text }); request.onReasoning?.(text) },
       })
     } catch (error) {
+      if (error instanceof ModelNotDispatchedError) {
+        counts[purpose]--
+        write({ kind: 'end', index: current, status: 'rejected', response: { complete: false }, error: error.reason })
+        throw error
+      }
       const partial = error instanceof ModelStreamError ? error.partial : { complete: false }
       // Provider error bodies are untrusted and can echo request headers. Keep only
       // the typed failure category; the partial stream and usage remain available.
@@ -161,6 +168,7 @@ export function createSmokeReplay(options: { file: string; workspace: string; ve
     }
     const end = records[cursor++]
     if (end?.kind !== 'end' || end.index !== entry.index) throw new Error('smoke replay missing terminal response')
+    if (end.status === 'rejected') throw new ModelNotDispatchedError('recorded pre-dispatch rejection', end.error === 'request_limit' || end.error === 'amount_limit' || end.error === 'usage_unknown' ? end.error : 'other_limit')
     if (end.status === 'error') throw new ModelStreamError(end.error ?? 'recorded stream error', end.response)
     return end.response
   }

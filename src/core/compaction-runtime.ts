@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { deriveEventMessage, planCompaction, surfaceSeqs } from './compaction-plan.js'
 import { ModelStreamError } from './model-error.js'
+import { ModelNotDispatchedError } from './model-dispatch.js'
 import { StreamJournal } from './stream-journal.js'
 import { estimateMessage } from './message-estimator.js'
 import { estimateInput, estimateUsage } from './token-estimator.js'
@@ -181,9 +182,14 @@ export class CompactionRuntime {
     } catch (error) {
       journal.close()
       failure = error
+      if (error instanceof ModelNotDispatchedError) {
+        state.counters.modelRequests--
+        this.#sessions.append(sessionId, 'model/rejected', { requestId, reason: error.reason }, state)
+      } else {
       // 照主循环：ModelStreamError 带着供应商已经返回的部分正文与真实用量，不能被统一估算盖掉。
       const partial = error instanceof ModelStreamError ? error.partial : { content: journal.content, reasoningContent: journal.reasoningContent, usage: undefined }
       this.#settle(sessionId, state, requestId, partial.usage ?? estimateUsage(inputTokens, partial), false)
+      }
     } finally { journal.close() }
 
     // 写 context/summary 之前复查取消与主动预算。§5.1 的闭集里没有 timeout／token_budget，`check()` 抛出的

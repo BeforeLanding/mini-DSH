@@ -39,6 +39,7 @@ export function requestTrace(sessions: Sessions, sessionId: string, offset = 0, 
     const preceding = [...events].reverse().find(event => event.type === 'context/projection' && event.runId === start.runId && event.seq < start.seq)
     const projection = linked ?? preceding
     const end = window.find(event => event.type === 'model/end' && event.data.requestId === start.data.requestId)
+    const rejected = window.find(event => event.type === 'model/rejected' && event.data.requestId === start.data.requestId)
     const usage = window.find(event => event.type === 'model/usage' && event.data.requestId === start.data.requestId)
     const response = window.find(event => event.type === 'assistant/message' || event.type === 'assistant/tool_calls')
     const run = runSummary(events, start.data.runId)
@@ -69,6 +70,8 @@ export function requestTrace(sessions: Sessions, sessionId: string, offset = 0, 
       projection: projection?.type === 'context/projection' ? projection.data : null,
       projectionLink: linked ? 'requestId' as const : preceding ? 'positional' as const : null,
       usage: usage?.type === 'model/usage' ? usage.data.usage : null,
+      dispatchStatus: rejected?.type === 'model/rejected' ? 'rejected' as const : end ? 'returned' as const : 'unknown' as const,
+      rejectionReason: rejected?.type === 'model/rejected' ? rejected.data.reason : null,
       completion: end?.type === 'model/end' ? { complete: end.data.complete, finishReason: end.data.finishReason ?? null } : null,
       response: response?.type === 'assistant/message' ? { kind: 'message' as const } : response?.type === 'assistant/tool_calls' ? { kind: 'tool_calls' as const, toolCalls } : { kind: 'missing' as const },
     }

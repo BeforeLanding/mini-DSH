@@ -63,7 +63,7 @@ export class SessionRuntime {
             this.append(id, 'context/summary-end', { startSeq: event.seq, outcome }, event)
         }
         for (const event of visible) {
-            if (event.type !== 'model/start' || visible.some(e => e.type === 'model/usage' && e.data.requestId === event.data.requestId)) continue
+            if (event.type !== 'model/start' || visible.some(e => (e.type === 'model/usage' || e.type === 'model/rejected') && e.data.requestId === event.data.requestId)) continue
             const chunks = visible.filter(e => e.type === 'model/fragment' && e.data.requestId === event.data.requestId)
             const content = chunks.map(e => e.type === 'model/fragment' ? e.data.content : '').join('')
             const reasoningContent = chunks.map(e => e.type === 'model/fragment' ? e.data.reasoningContent : '').join('')
@@ -128,6 +128,7 @@ export class SessionRuntime {
                 state.estimatedInputTokens = event.data.estimatedInputTokens
             }
             if (event.type === 'model/start') state.counters.modelRequests++
+            if (event.type === 'model/rejected') state.counters.modelRequests--
             if (event.type === 'tool/start') state.counters.toolCalls++
             // NX-39：错误数从 tool/result 的 isError 派生，与 toolCalls 同一条折叠路径。
             // 但 isError **不是**「工具失败」的同义词：预算耗尽与取消写下的 tool/result 同样是 isError: true、

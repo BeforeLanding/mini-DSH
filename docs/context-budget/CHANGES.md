@@ -4034,6 +4034,12 @@ NX-07 最终验收：a 5ef5b2e、b 21ee528、c 04f5c4b、d dd45f75、e 6c03300�
 `5969363` 删除已跟踪源码/测试/脚本中的行注释、块注释和行尾注释，同时清理 CI 版本旁注、`.env.example` 注释及 README 运行代码块注释。URL、正则和字符串内容、中文说明文档及实际 `.env` 保留。编译器生成的 sourceMappingURL 是既有调试映射指令，sourceMap 配置继续保留。
 
 完整提交顺序可用 `git log --reverse --oneline cfee2b5..7110917` 查阅；具体设计参数见 [PLAN](PLAN.md)，逐项需求和证据见 [REQUIREMENTS](REQUIREMENTS.md)、[TASKS](TASKS.md)。
+# NX-44 后续零付费修复：预派发状态和计数（2026-10-17）
+
+最小复现：NX-44 repair seq 91 为已准备并落盘的 `model/start`，recorder 在实际 provider 前拒绝第 7 次主请求；旧通用 catch 生成 seq 92 的 8,238 estimated token。现在 `ModelNotDispatchedError` 明确表示次数/金额/未知用量等派发前拒绝；追加 `model/rejected` 终态并修正实时及恢复计数，不写 model/usage，原先的动作前落盘仍在。已派发但网络中断继续计一次请求、缺 provider usage 继续为未知。`request_trace` 标出 rejected；录制内准备后拒绝有独立终态。旧证据不追溯更改。
+
+验证：`node scripts/build.js` 通过；`node --test dist/test/context.test.js dist/test/smoke-cost.test.js dist/test/smoke-recording.test.js dist/test/compaction-runtime.test.js` 正常权限 31/31。覆盖请求次数、金额、派发后网络中断、正常 usage 及录制回放拒绝；完整测试留待阶段末。
+
 # NX-44 后续零付费修复：编辑换行兼容（2026-10-17）
 
 原始 repair fixture 与 seq 53、85 的 `expectedHash` 分别一致，精确文本匹配均为 0；仅 CRLF/LF 归一化后各有 1 个候选。`replaceUnique` 只将 CRLF 与 LF 视为等价，先按归一化全文检查唯一性，再用原文件边界替换，未修改区域字节保持原样；`edit_file` schema 说明同步。孤立 CR、真正不匹配、重复候选及旧 hash 仍拒绝。原始证据未改。

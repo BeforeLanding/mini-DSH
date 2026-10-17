@@ -4,6 +4,22 @@ import { estimateInput, estimateText } from '../src/core/token-estimator.js'
 import { harness } from './harness.js'
 import { requestTrace } from '../src/core/task-trace.js'
 import { assertToolProtocol, groupHistory, ContextBudgetRuntime } from '../src/core/context-runtime.js'
+import { ModelNotDispatchedError } from '../src/core/model-dispatch.js'
+
+test('pre-dispatch rejection records no model usage or provider request', async () => {
+  let calls = 0
+  const h = harness(async () => { calls++; throw new ModelNotDispatchedError('synthetic request cap', 'request_limit') })
+  await assert.rejects(h.agent.send('synthetic'), /max_steps/)
+  const state = h.sessions.latestRun(h.session.id)!
+  assert.equal(calls, 1)
+  assert.equal(state.status, 'max_steps')
+  assert.equal(state.counters.modelRequests, 0)
+  assert.deepEqual(state.usage, [])
+  assert.equal(h.session.events.filter(event => event.type === 'model/start').length, 1)
+  assert.equal(h.session.events.filter(event => event.type === 'model/rejected').length, 1)
+  assert.equal(h.session.events.filter(event => event.type === 'model/usage').length, 0)
+  assert.equal(requestTrace(h.sessions, h.session.id).requests[0]?.dispatchStatus, 'rejected')
+})
 test('token estimator covers Unicode, schemas, reasoning and protocol envelope', () => {
   assert.equal(estimateText('abc'), 1)
   assert.equal(estimateText('中文🙂'), 3)
