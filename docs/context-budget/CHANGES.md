@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### NX-46 生产显式配置选择（2026-10-18，步骤一）
+
+`src/index.ts` 改用 `productionHarnessConfig` 把现有 `MINI_DSH_PROFILE`、工作区和项目目录映射到同一 `createHarness`，另接受 `MINI_DSH_CONTEXT_LAYOUT=live|frozen` 与正安全整数 `MINI_DSH_TOOL_PREVIEW_BYTES`。默认仍是 live 和 tool-results 的 16 KiB 预览；不改 CLI_BUDGET、评测两臂、工具 schema 或 read_history。非法值在装配前报错。定向 `node scripts/build.js`、`node --test dist/test/production-config.test.js dist/test/harness-composition.test.js` 通过（5/5）；测试还证实 frozen 时间与项目规则的系统提示快照跨同进程新会话不更新，`project_context` 工具实时重读，重建 Harness 后快照更新。真实模型请求 0。
+
 ### NX-45 开发探索结论与末尾轨迹（2026-10-17）
 
 按固定每臂 12 条分母保留逐题两次结果：可靠完成 Baseline 11/12、Full 10/12，产物验收分别 11/12、12/12。Full 峰时 usage 估价较低，但请求、工具与主动时间更多。只读 UC01/0/Full 与 RC01/0/Full 的末段事件，区分有目的的公开验证修正与可见的重复报告/文件回读，不从隐藏验收设计在线停止条件。开发题已曝光，模型版本与 1M/64/128/600 秒固定预算约束均在[结果报告](NX-45-EXPLORATION-RESULT.md)列明；不声称成功率提升、显著性、泛化或单机制归因。未实现新完成协议或上下文策略，真实模型请求 0。
