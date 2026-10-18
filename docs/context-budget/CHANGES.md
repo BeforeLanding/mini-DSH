@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### NX-47 frozen 生命周期文档（2026-10-18，步骤二）
+
+README 将旧的「快照持续整个 Harness／新会话不刷新」更正为按 sessionId 和 reset 可见段保存、刷新与恢复；写明旧日志缺快照时按当前环境取样并标记、`project_context` 当前磁盘与提示快照可能不同、让新规则生效需 `/reset` 或新会话，以及 JSONL 内容与跨版本事件序号边界。生产默认 live、评测协议和历史证据未改。文档锚点检查随 `pnpm test` 执行；真实模型请求 0。
+
 ### NX-47 frozen 按会话持久化快照（2026-10-18，步骤一）
 
 沿 CLI 的创建／`MINI_DSH_SESSION_ID` 恢复／`/reset` 和 AgentLoop 的装配路径检查后，新增 `context/snapshot` JSONL 事件，分别存 `runtime:environment` 与 `project:context` 的原文及来源。首次组装后即 flush，模型派发前已有持久记录；同会话后续轮次和重启恢复复用它，新 sessionId 或 reset 可见段重新取样。旧会话有既往 `model/start` 却无快照时以当前环境取样，标 `legacy-current` 并在 CLI 提示原始快照不可恢复；`project_context` 保持实时读盘。无 sessionId 的独立提示检查仍沿用 `stableText`。生产默认 live、预算、权限、提示正文和工具 schema 不变。新的 frozen 日志会多两条事件，后续事件序号变化；旧严格回放若比较事件序号或新旧实现的记录，可能出现差异，未放宽比较、未改旧日志。定向 `node --test dist/test/production-config.test.js` 6/6，`pnpm check` 语法 156 文件，`pnpm test` 400 通过／30 跳过，`pnpm lint` 170 文件 0 诊断；测试全为离线，真实模型请求 0。
