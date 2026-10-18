@@ -120,7 +120,8 @@ export async function executeDiagnosticEpisodes(options: {
         if (options.spentUsd && options.spentUsd() + reserve.probeUsd > options.maxUsd!) { stopped = true; stopReason = 'amount_cap_exceeded_after_provider_usage' }
       }
       console.log(JSON.stringify({ episode, status: record.observation.status, accepted: record.observation.accepted,
-        diagnosticExecuted: record.diagnosticExecuted, diagnosticReported: record.diagnosticReported, reliable: record.reliable }))
+        diagnosticExecuted: record.diagnosticExecuted, diagnosticBeforeEdit: record.diagnosticBeforeEdit,
+        diagnosticValueVisible: record.diagnosticValueVisible, diagnosticReported: record.diagnosticReported, reliable: record.reliable }))
       if (stopped) break
     }
     if (stopped) break

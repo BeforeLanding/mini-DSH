@@ -4,7 +4,9 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { ChatRequest, ChatResponse } from '../src/core/contracts.js'
+import type { SessionEvent } from '../src/core/contracts.js'
 import type { Fixture } from '../scripts/eval-fixture.js'
+import { diagnosticValue } from '../scripts/eval-diagnostic-fixture.js'
 import { diagnosticSchedule, diagnosticReport, diagnosticReserve, freezeDiagnostic, observeDiagnostic, verifyDiagnosticManifest, diagnosticStopReason } from '../scripts/eval-diagnostic-plan.js'
 import type { DiagnosticConfig } from '../scripts/eval-diagnostic-plan.js'
 import { executeDiagnosticEpisodes } from '../scripts/eval-diagnostic-run.js'
@@ -70,7 +72,8 @@ test('NX-51 scripted full schedule records completion, real retrieval, budgets a
       assert.ok(row.observation.metrics.toolCalls <= 128)
       assert.ok(row.observation.metrics.inputTokens + row.observation.metrics.outputTokens <= 1_000_000)
       assert.equal(row.observation.acceptanceGroups.length, 4)
-      if (row.reliable) { assert.equal(row.diagnosticExecuted, true); assert.equal(row.diagnosticReported, true); assert.equal(row.observation.accepted, true) }
+      if (row.reliable) { assert.equal(row.diagnosticExecuted, true); assert.equal(row.diagnosticBeforeEdit, true)
+        assert.equal(row.diagnosticValueVisible, true); assert.equal(row.diagnosticReported, true); assert.equal(row.observation.accepted, true) }
     }
     const failed = rows.find(row => row.episode.repeat === 2 && row.episode.bytes === 4096 && row.episode.arm === 'baseline')!
     assert.equal(failed.diagnosticExecuted, false)
@@ -86,14 +89,16 @@ test('NX-51 scripted full schedule records completion, real retrieval, budgets a
 test('NX-51 report preserves missing rows and diagnosis failure separately from artifact acceptance', async () => {
   const manifest = await freezeDiagnostic(config, 'a'.repeat(40))
   const episode = manifest.episodes[0]!
+  const counters = { modelRequests: 1, toolCalls: 0, toolErrors: 0, previewTruncations: 0,
+    inputTokens: 100, outputTokens: 10, totalTokens: 110, cacheReadTokens: 0, activeDurationMs: 1, approvalDurationMs: 0 }
   const record = observeDiagnostic(episode, {
-    status: 'completed', counters: { modelRequests: 1, toolCalls: 0, toolErrors: 0, previewTruncations: 0,
-      inputTokens: 100, outputTokens: 10, totalTokens: 110, cacheReadTokens: 0, activeDurationMs: 1, approvalDurationMs: 0 },
+    status: 'completed', counters,
     accepted: true, acceptance: { passed: true, exitCode: 0, output: '', protectedFilesChanged: [],
       groups: ['positive-offset-rollover', 'negative-offset-rollover', 'ordinary-day', 'empty-and-sort'].map(name => ({ name, passed: true })) },
   }, [], true, 120, config.priceSnapshot, false)
   assert.equal(record.observation.accepted, true)
   assert.equal(record.diagnosticExecuted, false)
+  assert.equal(record.diagnosticValueVisible, false)
   assert.equal(record.reliable, false)
   const report = diagnosticReport(manifest, [record])
   assert.equal(report.executed, 1); assert.equal(report.missing.length, 11)
@@ -101,6 +106,20 @@ test('NX-51 report preserves missing rows and diagnosis failure separately from 
   assert.equal(report.groups[0]!.reliable, 0)
   assert.equal(report.groups[0]!.failureClasses.diagnostic_not_run, 1)
   assert.equal(diagnosticStopReason(record, []), null, 'ordinary diagnosis failure continues the batch')
+  const guessed = observeDiagnostic(episode, {
+    status: 'completed', counters, accepted: true,
+    acceptance: { passed: true, exitCode: 0, output: '', protectedFilesChanged: [],
+      groups: record.observation.acceptanceGroups },
+  }, [
+    { seq: 1, type: 'assistant/tool_calls', data: { toolCalls: [{ id: 'diag', name: 'bash', arguments: { command: 'node diagnostic.mjs' } }] } },
+    { seq: 2, type: 'tool/result', data: { toolCallId: 'diag', name: 'bash', content: 'truncated preview', isError: false } },
+    { seq: 3, type: 'assistant/message', data: { content: `DIAGNOSTIC_VALUE=${diagnosticValue(0)}` } },
+  ] as SessionEvent[], true, 120, config.priceSnapshot, false)
+  assert.equal(guessed.diagnosticExecuted, true)
+  assert.equal(guessed.diagnosticReported, true)
+  assert.equal(guessed.diagnosticValueVisible, false)
+  assert.equal(guessed.reliable, false)
+  assert.equal(guessed.failureClass, 'diagnostic_not_visible')
   const tampered = { ...manifest, episodes: manifest.episodes.slice(1) }
   await assert.rejects(verifyDiagnosticManifest(tampered), /digest|schedule/)
 })

@@ -24,7 +24,8 @@ export interface DiagnosticManifest extends DiagnosticConfig {
   toolSchemaSha256: string; digest: string
 }
 export interface DiagnosticRecord {
-  episode: DiagnosticEpisode; observation: V2Observation; diagnosticExecuted: boolean; diagnosticReported: boolean
+  episode: DiagnosticEpisode; observation: V2Observation; diagnosticExecuted: boolean; diagnosticBeforeEdit: boolean
+  diagnosticValueVisible: boolean; diagnosticReported: boolean
   reportedValue: string | null; readToolCalls: number; providerUsageMissing: number; localEstimatedInputTokens: number
   estimatedUsd: number; reliable: boolean; failureClass: string | null
 }
@@ -111,7 +112,11 @@ export function diagnosticReserve(price: DiagnosticPrice) {
 export function observeDiagnostic(episode: DiagnosticEpisode, outcome: RunOutcome, events: readonly SessionEvent[], evidenceComplete: boolean, localEstimatedInputTokens: number, price: DiagnosticPrice, requireProviderUsage = true): DiagnosticRecord {
   const observation = deriveV2Observation(episode, outcome, events, evidenceComplete)
   const callIds = new Set(events.flatMap(event => event.type === 'assistant/tool_calls' ? event.data.toolCalls.filter(call => call.name === 'bash' && call.arguments?.command === 'node diagnostic.mjs').map(call => call.id) : []))
-  const diagnosticExecuted = events.some(event => event.type === 'tool/result' && callIds.has(event.data.toolCallId) && event.data.name === 'bash' && !event.data.isError)
+  const diagnosticResult = events.find(event => event.type === 'tool/result' && callIds.has(event.data.toolCallId) && event.data.name === 'bash' && !event.data.isError)
+  const diagnosticExecuted = !!diagnosticResult
+  const firstEdit = events.find(event => event.type === 'tool/start' && ['edit_file', 'write_file'].includes(event.data.name))
+  const diagnosticBeforeEdit = !!diagnosticResult && (!firstEdit || diagnosticResult.seq < firstEdit.seq)
+  const diagnosticValueVisible = events.some(event => event.type === 'tool/result' && event.data.content.includes(`DIAGNOSTIC_VALUE=${diagnosticValue(episode.repeat)}`))
   const lastAnswer = events.filter(event => event.type === 'assistant/message').at(-1)
   const reportedValue = lastAnswer?.type === 'assistant/message' ? /DIAGNOSTIC_VALUE\s*[:=]\s*([a-f0-9]{20})/i.exec(lastAnswer.data.content)?.[1] ?? null : null
   const diagnosticReported = reportedValue === diagnosticValue(episode.repeat)
@@ -123,12 +128,13 @@ export function observeDiagnostic(episode: DiagnosticEpisode, outcome: RunOutcom
   const metrics = observation.metrics
   const estimatedUsd = (Math.max(0, metrics.inputTokens - metrics.cacheReadTokens) * price.inputPerMillion +
     metrics.cacheReadTokens * price.cacheReadPerMillion + metrics.outputTokens * price.outputPerMillion) / 1_000_000
-  const reliable = reliableSuccess(observation) && diagnosticExecuted && diagnosticReported && (!requireProviderUsage || providerUsageMissing === 0)
+  const reliable = reliableSuccess(observation) && diagnosticExecuted && diagnosticBeforeEdit && diagnosticValueVisible && diagnosticReported && (!requireProviderUsage || providerUsageMissing === 0)
   const failureClass = reliable ? null : observation.failureReason === 'infrastructure' || observation.status === 'error' ? 'infrastructure' :
     observation.status !== 'completed' ? observation.status : !observation.evidenceComplete ? 'evidence' :
     requireProviderUsage && providerUsageMissing ? 'usage_missing' : !diagnosticExecuted ? 'diagnostic_not_run' :
+    !diagnosticBeforeEdit ? 'diagnostic_after_edit' : !diagnosticValueVisible ? 'diagnostic_not_visible' :
     !diagnosticReported ? 'diagnostic_wrong_or_missing' : observation.accepted !== true ? 'business_acceptance' : 'other'
-  return { episode, observation, diagnosticExecuted, diagnosticReported, reportedValue, readToolCalls, providerUsageMissing,
+  return { episode, observation, diagnosticExecuted, diagnosticBeforeEdit, diagnosticValueVisible, diagnosticReported, reportedValue, readToolCalls, providerUsageMissing,
     localEstimatedInputTokens, estimatedUsd, reliable, failureClass }
 }
 
@@ -150,6 +156,7 @@ export function diagnosticReport(manifest: DiagnosticManifest, records: readonly
     return { bytes, arm, planned: 3, executed: rows.length, reliable: rows.filter(row => row.reliable).length,
       failureClasses,
       artifactAccepted: rows.filter(row => row.observation.accepted === true).length, diagnosticExecuted: rows.filter(row => row.diagnosticExecuted).length,
+      diagnosticBeforeEdit: rows.filter(row => row.diagnosticBeforeEdit).length, diagnosticValueVisible: rows.filter(row => row.diagnosticValueVisible).length,
       diagnosticReported: rows.filter(row => row.diagnosticReported).length,
       mainRequests: sum(rows, row => row.observation.metrics.mainRequests), summaryRequests: sum(rows, row => row.observation.metrics.summaryRequests),
       toolCalls: sum(rows, row => row.observation.metrics.toolCalls), readToolCalls: sum(rows, row => row.readToolCalls),
