@@ -39,6 +39,19 @@ Set-Location $workspace
 & $miniDsh --show-config
 ```
 
+### 只读检查会话日志
+
+已有 `events.jsonl` 可在无 API key、无模型请求时查看。`inspect` 不恢复会话、不获取写锁，也不执行日志里的命令或工具；路径可以位于含空格的目录。
+
+```powershell
+$log = Join-Path $env:USERPROFILE '.mini-dsh\sessions\<session-id>\events.jsonl'
+& $miniDsh inspect $log
+& $miniDsh inspect $log --json
+& $miniDsh inspect $log --trace
+```
+
+文本默认只列会话和最近一次 run 的状态、主请求/摘要请求/派发前拒绝、工具结果、provider token 与缓存、缺 usage、摘要及 `read_history` 次数、frozen 快照来源。`--trace` 只附带最近 40 条所选事件的序号、类型、工具名或终止原因；不显示提示正文和工具输出。`--json` 返回版本为 `1` 的结构化数据，含 `integrity.complete`、`integrity.warnings`，与 `--trace` 可组合。退出码：`0` 表示读到的 JSONL 全部通过校验，`2` 表示只能确认损坏/截断前的部分证据，`1` 表示参数或文件读取失败。`0` 不表示任务成功：没有 `run/finish` 时最近 run 为 `unrecorded_end`，生产日志没有独立产物验收。派发后缺 usage 计入未知请求数，不按零 token 补算；provider 输入 token 已包含缓存命中，不再重复相加，也不估算历史费用。会话结束时间没有独立事件时显示未记录，最近事件时间另列。旧日志反映当时的模型和代码，不代表当前配置。
+
 要处理自己的项目时，先切换到**该项目目录**，再运行 `& $miniDsh` 启动交互；需要先在环境变量或该目录的 `.env` 设置 `DEEPSEEK_API_KEY`，实际对话可能产生费用。默认工作区是启动命令时的当前目录（可用 `MINI_DSH_WORKSPACE` 覆盖），`.env` 也只从当前目录读取，已有环境变量优先；安装包内不带 `.env`。会话默认存于用户主目录的 `.mini-dsh/sessions`（可用 `MINI_DSH_SESSION_DIR` 覆盖），超长工具结果存于工作区的 `.mini-dsh/tool-results`；这些用户数据不写入安装包目录。`/exit` 会释放会话写入锁。当前本地安装验收只覆盖 Windows，未据此声称其他平台的安装验证通过。
 
 接入真实模型需先在 `.env` 填写 `DEEPSEEK_API_KEY`，再运行 `pnpm start`；**后续 CLI 对话可能产生模型费用**。不要覆盖已有 `.env`：

@@ -4156,3 +4156,9 @@ NX-07 最终验收：a 5ef5b2e、b 21ee528、c 04f5c4b、d dd45f75、e 6c03300�
 
 `--trace` 在文本及 JSON 中只附带最近 40 条所选事件的序号、类型和有限元数据：工具名、运行终态、拒绝原因、快照来源、摘要结果。用户/助手正文、模型片段、工具内容均不进入轨迹；异常工具名省略。超过 40 条明确标截断。`node scripts/build.js`、`node --test dist/test/session-inspect.test.js`（4/4）、定向 Biome 及 `git diff --check` 通过；合成日志中敏感占位正文未出现在文本或 JSON 轨迹。真实模型请求 0。
 
+# NX-49 只读会话 inspect：文档与隔离安装（2026-10-18）
+
+README 增加无 key 的 inspect 文本、`--json`、`--trace` 示例和退出码 0/1/2；说明 `integrity.complete` 只表示读到的 JSONL 完整，不代表任务或产物成功。由当前源码 `pnpm pack --pack-destination D:/Agent/outputs/nx49-inspect-validation-20261018/package-final` 得到 `mini-DSH-0.0.1.tgz`（SHA256 `07FC27637BEC9F11ED1FEFEAC88AE967902CC25A9D4644B73C5E666781D4F84B`），仓库外 `consumer space` 用 `pnpm --dir ... add --offline --ignore-scripts` 安装。109 个包成员，全部在白名单内，含 inspect 与入口 JS，无 `.env`、会话日志、原始实验及审计文件。安装后在 `sample project` 含空格目录，Windows `mini-dsh.cmd inspect <synthetic session.jsonl>`、`--json`、`--trace` 均退出 0；截断文件退出 2，缺失文件退出 1。输入 SHA256 前后相同，未创建指定会话目录，DEEPSEEK_API_KEY 为空。真实模型请求 0。
+
+最终检查：正常权限 `pnpm check`（syntax 158 文件）、`pnpm test`（435 项、405 通过、30 跳过、0 失败）、`pnpm lint`（172 文件、0 诊断），另核对 `git diff --check`。tarball 仅作本地安装验收，未发布 npm；只在 Windows `.cmd` 路径验证安装，不推断其他平台结果。
+
