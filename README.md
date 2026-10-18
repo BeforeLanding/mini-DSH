@@ -21,6 +21,26 @@ pnpm demo:compact
 
 `--show-config` 只读装配同一个 Harness，输出**新会话**实际配置及来源（环境、`.env`、默认或 provider 容量），包括模型、布局、工具预览、预算和 `read_history`；不打印密钥、环境变量全集、项目规则正文，也不创建 CLI 会话。非法配置直接报错。若设置了 `MINI_DSH_SESSION_ID`，它拒绝把新会话配置冒充恢复会话的配置；恢复后用 CLI `/budget` 查看预算。`pnpm demo:compact` 使用脚本化模型演示单任务摘要、原始事件保留及 `read_history` 按事件号回读。完整离线回归可运行 `pnpm test`（会在本机执行 Bash 和文件工具）。
 
+### 本地打包与安装
+
+项目**尚未发布到 npm**。下面从当前仓库生成 tarball，在仓库外的临时目录安装；已在 Windows 的含空格路径验证 `mini-dsh.cmd`。依赖首次安装可能需要访问包注册表；CLI 的前三个命令无需 API key，也不会请求模型。
+
+```powershell
+$packRoot = Join-Path $env:TEMP ("mini-dsh-local-" + [guid]::NewGuid().ToString('N'))
+$installRoot = Join-Path $packRoot 'consumer space'
+$workspace = Join-Path $packRoot 'sample project'
+New-Item -ItemType Directory -Path $packRoot, $installRoot, $workspace | Out-Null
+pnpm pack --pack-destination $packRoot
+pnpm --dir $installRoot add --ignore-scripts (Join-Path $packRoot 'mini-DSH-0.0.1.tgz')
+$miniDsh = Join-Path $installRoot 'node_modules\.bin\mini-dsh.cmd'
+Set-Location $workspace
+& $miniDsh --help
+& $miniDsh --version
+& $miniDsh --show-config
+```
+
+要处理自己的项目时，先切换到**该项目目录**，再运行 `& $miniDsh` 启动交互；需要先在环境变量或该目录的 `.env` 设置 `DEEPSEEK_API_KEY`，实际对话可能产生费用。默认工作区是启动命令时的当前目录（可用 `MINI_DSH_WORKSPACE` 覆盖），`.env` 也只从当前目录读取，已有环境变量优先；安装包内不带 `.env`。会话默认存于用户主目录的 `.mini-dsh/sessions`（可用 `MINI_DSH_SESSION_DIR` 覆盖），超长工具结果存于工作区的 `.mini-dsh/tool-results`；这些用户数据不写入安装包目录。`/exit` 会释放会话写入锁。当前本地安装验收只覆盖 Windows，未据此声称其他平台的安装验证通过。
+
 接入真实模型需先在 `.env` 填写 `DEEPSEEK_API_KEY`，再运行 `pnpm start`；**后续 CLI 对话可能产生模型费用**。不要覆盖已有 `.env`：
 
 ```powershell

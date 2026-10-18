@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### NX-48 本地安装文档（2026-10-18，步骤二）
+
+README 新增从仓库 `pnpm pack`、仓库外临时目录 `pnpm --dir ... add`、Windows `.cmd` 的 `--help`／`--version`／`--show-config` 及交互启动步骤；明确 npm 尚未发布、正常安装可下载依赖、API key 仅交互需要，默认工作区与 `.env` 来自调用者当前目录、会话在用户主目录、工具结果在工作区，且只声明 Windows 的本地安装验证。最终包 `D:/Agent/outputs/nx48-install-validation-20261018/package-final/mini-DSH-0.0.1.tgz`，SHA-256 `4c15bc6bacfd90bed454002c979f891417d89d10427efe615a9121188fda982c`；重新打包后，在全新 `consumer final space` 离线安装成功，三个无 key 命令均退出 0，含空格工作区定位正确、`.env` 来源正确，缺 key 报错退出 1；虚构 key 输入 `/exit` 退出 0，仅写 `session/start` 且锁清除。最终包 107 项、白名单外 0、敏感证据／`.env` 0。README 中 `pnpm --dir ... add` 的实际语法又在 `consumer documented space` 离线安装通过。`pnpm check`（syntax 156 文件）、`pnpm test`（401 通过／30 跳过／0 失败）、`pnpm lint`（170 文件、0 诊断）通过；真实模型请求 0。
+
 ### NX-48 可安装 CLI 入口与隔离安装（2026-10-18，步骤一）
 
 为原生产 `src/index.ts` 增 `mini-dsh` bin、`--help`／`--version` 早期分支，保留现有 `--show-config` 与正常 `createHarness`／CLI 路径；`prepack` 构建，`files` 仅允许生产 `dist/src`、`dist/plugins.config.js`，运行依赖 Cordis 4.0.1 与 dotenv 17.4.2 固定到已验证版。缺 key 报错指向调用者环境或当前目录 `.env`，不回显密钥。定向测试覆盖无 key 元数据命令、非法参数、含空格目录和缺 key。隔离包路径 `D:/Agent/outputs/nx48-install-validation-20261018/package-v2/mini-DSH-0.0.1.tgz`（SHA-256 `3bc340e42a7416fa8a5092f27e85af5cd814cd186420cbc8c050163b305c0499`）：`pnpm pack` 后在仓库外 `consumer space 3` 执行 `pnpm add --ignore-scripts`，Windows `mini-dsh.cmd` 的 `--help`／`--version`／`--show-config` 均退出 0；show-config 工作区为 `sample project`（含空格）、frozen 来源为该目录 `.env`，未暴露项目规则。虚构 key 下管道输入 `/exit` 正常退出 0，会话写到单独 `sessions`，只有 `session/start`，无 `model/start`，writer.lock 为 0；安装包目录无会话／工具结果。包清单 107 项，白名单外 0、敏感证据或 `.env` 0，包含入口与插件配置；Windows `.cmd`／`.ps1` shim 存在。首次 `npm install --offline` 缺 Cordis 缓存、随后 `pnpm add --offline` 缺 MCP SDK 1.30.1 缓存，最终正常依赖下载 11 项后隔离安装成功。`pnpm check`（syntax 156 文件）、`pnpm test`（401 通过／30 跳过／0 失败）、`pnpm lint`（170 文件、0 诊断）通过；真实模型请求 0。

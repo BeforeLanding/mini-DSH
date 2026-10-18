@@ -4,6 +4,8 @@
 
 ## 当前状态
 
+- **NX-48 本地可安装 CLI 已完成**：`mini-dsh` bin 复用生产入口，`--help`／`--version`／`--show-config` 无 key 可运行；仓库外 tarball 安装在 Windows 含空格目录成功，虚构 key 下 `/exit` 释放锁且日志无模型请求。包白名单排除 `.env`、日志与实验原件；README 写明本地 pack／安装及工作区和数据位置。完整离线测试 401 通过／30 跳过，check/lint 通过；npm 未发布、未推送或执行效果实验。
+
 - **NX-47 frozen 快照限定于会话**：两段 frozen 提示在首次组装后写入该会话 JSONL；同会话及恢复复用，同进程新 sessionId 或 `/reset` 重新取样。旧会话缺快照时按当前环境补采并明确标记，不能还原旧原文；`project_context` 仍实时读盘，规则更新需新会话或 `/reset` 才进入 frozen 提示。完整离线测试 400 通过/30 跳过，check/lint 通过；真实模型请求 0，未改历史实验或推送。
 
 - **NX-46 生产配置与作品入口已对齐**：日常默认 live/16 KiB 不变，`MINI_DSH_CONTEXT_LAYOUT` 与 `MINI_DSH_TOOL_PREVIEW_BYTES` 可显式校验选择；`--show-config` 无密钥查看新会话的实际值和来源，恢复会话仍用 `/budget`。frozen 生命周期限制已由 NX-47 修复。README 提供经实际运行的零付费上手和演示、v2.1 对照及 NX-45 限制。该阶段完整离线测试 398 通过/30 跳过，lint 0 诊断；真实模型请求 0，未推送或启动效果实验。
