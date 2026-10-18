@@ -4,11 +4,19 @@
   "private": true,
   "type": "module",
   "description": "a mini handwritten runtime for DSH",
+  "bin": {
+    "mini-dsh": "dist/src/index.js"
+  },
+  "files": [
+    "dist/src/",
+    "dist/plugins.config.js"
+  ],
   "engines": {
     "node": ">=20.18.1"
   },
   "packageManager": "pnpm@11.22.0",
   "scripts": {
+    "prepack": "node scripts/build.js",
     "start": "pnpm build && node dist/src/index.js",
     "test": "pnpm build && node --test dist/test/*.test.js",
     "fixtures:check": "pnpm build && node dist/scripts/check-coding-fixtures.js",
@@ -43,9 +51,9 @@
   "author": "jeffery jia",
   "license": "MIT",
   "dependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/cordis": "4.0.1",
     "@deepseek-ai/dsh-mcp-client": "0.1.1-rc.2",
-    "dotenv": "^17.4.2"
+    "dotenv": "17.4.2"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.10",

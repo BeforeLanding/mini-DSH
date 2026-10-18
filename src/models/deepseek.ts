@@ -106,7 +106,7 @@ export function normalizeUsage(raw: unknown): Usage | undefined {
 }
 export function createDeepSeekAdapter(config: DeepSeekConfig = {}): Adapter {
   const apiKey = config.apiKey ?? process.env.DEEPSEEK_API_KEY
-  if (!apiKey) throw new Error('missing DEEPSEEK_API_KEY; copy .env.example to .env and fill it in')
+  if (!apiKey) throw new Error('missing DEEPSEEK_API_KEY; set it in the environment or in .env in the current working directory')
   const { baseUrl, models, contextWindowTokens: configuredCapacity } = deepSeekModelMetadata(config)
   const adapter: Adapter = {
     models,

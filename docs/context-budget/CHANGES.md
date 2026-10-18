@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### NX-48 可安装 CLI 入口与隔离安装（2026-10-18，步骤一）
+
+为原生产 `src/index.ts` 增 `mini-dsh` bin、`--help`／`--version` 早期分支，保留现有 `--show-config` 与正常 `createHarness`／CLI 路径；`prepack` 构建，`files` 仅允许生产 `dist/src`、`dist/plugins.config.js`，运行依赖 Cordis 4.0.1 与 dotenv 17.4.2 固定到已验证版。缺 key 报错指向调用者环境或当前目录 `.env`，不回显密钥。定向测试覆盖无 key 元数据命令、非法参数、含空格目录和缺 key。隔离包路径 `D:/Agent/outputs/nx48-install-validation-20261018/package-v2/mini-DSH-0.0.1.tgz`（SHA-256 `3bc340e42a7416fa8a5092f27e85af5cd814cd186420cbc8c050163b305c0499`）：`pnpm pack` 后在仓库外 `consumer space 3` 执行 `pnpm add --ignore-scripts`，Windows `mini-dsh.cmd` 的 `--help`／`--version`／`--show-config` 均退出 0；show-config 工作区为 `sample project`（含空格）、frozen 来源为该目录 `.env`，未暴露项目规则。虚构 key 下管道输入 `/exit` 正常退出 0，会话写到单独 `sessions`，只有 `session/start`，无 `model/start`，writer.lock 为 0；安装包目录无会话／工具结果。包清单 107 项，白名单外 0、敏感证据或 `.env` 0，包含入口与插件配置；Windows `.cmd`／`.ps1` shim 存在。首次 `npm install --offline` 缺 Cordis 缓存、随后 `pnpm add --offline` 缺 MCP SDK 1.30.1 缓存，最终正常依赖下载 11 项后隔离安装成功。`pnpm check`（syntax 156 文件）、`pnpm test`（401 通过／30 跳过／0 失败）、`pnpm lint`（170 文件、0 诊断）通过；真实模型请求 0。
+
 ### NX-47 frozen 生命周期文档（2026-10-18，步骤二）
 
 README 将旧的「快照持续整个 Harness／新会话不刷新」更正为按 sessionId 和 reset 可见段保存、刷新与恢复；写明旧日志缺快照时按当前环境取样并标记、`project_context` 当前磁盘与提示快照可能不同、让新规则生效需 `/reset` 或新会话，以及 JSONL 内容与跨版本事件序号边界。生产默认 live、评测协议和历史证据未改。文档锚点检查随 `pnpm test` 执行；真实模型请求 0。

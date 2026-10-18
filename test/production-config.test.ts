@@ -186,3 +186,31 @@ test('show-config needs no key, reports effective values and sources, and reveal
     assert.match(resumed.stderr, /new-session configuration/)
   } finally { await fs.rm(workspace, { recursive: true, force: true }) }
 })
+
+test('CLI metadata commands ignore workspace config, and interactive startup explains a missing key', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'mini dsh installed entry '))
+  const entry = fileURLToPath(new URL('../src/index.js', import.meta.url))
+  const packageMetadata = JSON.parse(await fs.readFile(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string }
+  const sessionDirectory = path.join(workspace, 'sessions')
+  const env: NodeJS.ProcessEnv = { ...process.env, DEEPSEEK_API_KEY: '', MINI_DSH_SESSION_DIR: sessionDirectory }
+  for (const key of ['MINI_DSH_SESSION_ID', 'MINI_DSH_WORKSPACE', 'MINI_DSH_PROFILE', 'MINI_DSH_CONTEXT_LAYOUT']) delete env[key]
+  try {
+    await fs.writeFile(path.join(workspace, '.env'), 'MINI_DSH_PROFILE=invalid\n')
+    const help = spawnSync(process.execPath, [entry, '--help'], { cwd: workspace, env, encoding: 'utf8' })
+    assert.equal(help.status, 0, help.stderr)
+    assert.match(help.stdout, /Usage: mini-dsh/)
+    const version = spawnSync(process.execPath, [entry, '--version'], { cwd: workspace, env, encoding: 'utf8' })
+    assert.equal(version.status, 0, version.stderr)
+    assert.equal(version.stdout.trim(), packageMetadata.version)
+    const unknown = spawnSync(process.execPath, [entry, '--unknown'], { cwd: workspace, env, encoding: 'utf8' })
+    assert.notEqual(unknown.status, 0)
+    assert.match(unknown.stderr, /usage: mini-dsh/)
+    assert.equal(await fs.stat(sessionDirectory).then(() => true, () => false), false)
+    await fs.unlink(path.join(workspace, '.env'))
+    const missing = spawnSync(process.execPath, [entry], { cwd: workspace, env, encoding: 'utf8' })
+    assert.notEqual(missing.status, 0)
+    assert.match(missing.stderr, /missing DEEPSEEK_API_KEY.*current working directory/)
+    assert.doesNotMatch(missing.stderr, /offline-dummy/)
+    assert.equal(await fs.stat(sessionDirectory).then(() => true, () => false), false)
+  } finally { await fs.rm(workspace, { recursive: true, force: true }) }
+})
