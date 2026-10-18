@@ -14,10 +14,12 @@ export interface InspectReport {
   providerUsage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheReadFieldMissing: number }
   mechanisms: { compactionAttempts: number; compactionApplied: number; compactionDeclined: number; historyReads: number; previewTruncations: number }
   frozenSnapshots: { currentEpoch: { runtime: string | null; project: string | null }; legacyCurrentRecorded: number }
+  trace?: { events: { seq: number; type: string; detail?: string }[]; truncated: boolean }
 }
 
 type Request = { kind: 'main' | 'summary'; rejected: boolean; usage: boolean; estimated: boolean }
 const knownTypes = new Set(['verification/start', 'verification/result', 'file/baseline', 'file/observed', 'file/change', 'file/change-result', 'session/start', 'session/config', 'session/reset', 'context/snapshot', 'user/message', 'assistant/message', 'assistant/tool_calls', 'tool/result', 'run/start', 'run/finish', 'model/start', 'model/rejected', 'context/projection', 'context/summary-start', 'context/summary-end', 'context/summary', 'model/fragment', 'model/end', 'model/usage', 'tool/start'])
+const safeToolName = (name: string | undefined) => name && /^[\w.:-]{1,80}$/.test(name) ? name : undefined
 
 function warning(error: unknown, line: number, byteOffset: number): InspectWarning {
   const message = error instanceof Error ? error.message : String(error)
@@ -25,7 +27,7 @@ function warning(error: unknown, line: number, byteOffset: number): InspectWarni
   return { code, line, byteOffset, message: code === 'corrupt_json' ? 'Invalid JSON record' : 'Invalid event envelope, payload, or event sequence' }
 }
 
-export async function inspectSession(file: string): Promise<InspectReport> {
+export async function inspectSession(file: string, options: { trace?: boolean } = {}): Promise<InspectReport> {
   const before = await stat(file)
   if (!before.isFile()) throw new Error('inspect path must be a JSONL file')
   const report: InspectReport = {
@@ -38,6 +40,7 @@ export async function inspectSession(file: string): Promise<InspectReport> {
     providerUsage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheReadFieldMissing: 0 },
     mechanisms: { compactionAttempts: 0, compactionApplied: 0, compactionDeclined: 0, historyReads: 0, previewTruncations: 0 },
     frozenSnapshots: { currentEpoch: { runtime: null, project: null }, legacyCurrentRecorded: 0 },
+    ...(options.trace ? { trace: { events: [], truncated: false } } : {}),
   }
   const requests = new Map<string, Request>()
   const projections = new Map<string, string>()
@@ -55,6 +58,16 @@ export async function inspectSession(file: string): Promise<InspectReport> {
   function accept(event: SessionEvent) {
     report.integrity.confirmedEvents++
     report.session.lastRecordedAt = event.at
+    if (report.trace && !['model/fragment', 'user/message', 'assistant/message', 'assistant/tool_calls'].includes(event.type)) {
+      let detail: string | undefined
+      if (event.type === 'tool/start' || event.type === 'tool/result') detail = safeToolName(event.data.name)
+      else if (event.type === 'run/finish') detail = event.data.state.status
+      else if (event.type === 'model/rejected') detail = event.data.reason
+      else if (event.type === 'context/snapshot') detail = `${event.data.name}: ${event.data.source}`
+      else if (event.type === 'context/summary-end') detail = event.data.outcome.kind
+      report.trace.events.push({ seq: event.seq, type: event.type, ...(detail ? { detail } : {}) })
+      if (report.trace.events.length > 40) { report.trace.events.shift(); report.trace.truncated = true }
+    }
     switch (event.type) {
       case 'session/start':
         if (report.session.id === null) { report.session.id = event.sessionId; report.session.startedAt = event.at }
@@ -198,5 +211,6 @@ export function formatInspect(report: InspectReport) {
     `Mechanisms: compaction attempts ${mechanisms.compactionAttempts}, applied ${mechanisms.compactionApplied}, declined ${mechanisms.compactionDeclined}; read_history ${mechanisms.historyReads}; preview truncations ${mechanisms.previewTruncations}`,
     `Frozen snapshot source (current epoch): runtime ${frozenSnapshots.currentEpoch.runtime ?? 'none'}, project ${frozenSnapshots.currentEpoch.project ?? 'none'}; legacy-current records ${frozenSnapshots.legacyCurrentRecorded}`,
     ...integrity.warnings.map(item => `WARNING ${item.code} at line ${item.line}, byte ${item.byteOffset}: ${item.message}`),
+    ...(report.trace ? ['Trace (last 40 selected metadata events):', ...report.trace.events.map(event => `  #${event.seq} ${event.type}${event.detail ? ` ${event.detail}` : ''}`), ...(report.trace.truncated ? ['  ... earlier selected events omitted'] : [])] : []),
   ].join('\n')
 }

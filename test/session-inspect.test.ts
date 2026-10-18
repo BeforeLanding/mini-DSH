@@ -56,11 +56,35 @@ test('inspect counts dispatch, summary cache, missing usage, stops and multiple 
     assert.equal(report.mechanisms.compactionAttempts, 1)
     assert.equal(report.frozenSnapshots.legacyCurrentRecorded, 2)
     assert.doesNotMatch(formatInspect(report), /private/)
+    const traced = await inspectSession(f.file, { trace: true })
+    assert.ok(traced.trace?.events.some(event => event.type === 'tool/start' && event.detail === 'read_history'))
+    assert.ok(traced.trace?.events.some(event => event.type === 'run/finish' && event.detail === 'token_budget'))
+    assert.doesNotMatch(JSON.stringify(traced), /private clock|private rules|private tool result|private error/)
+    assert.doesNotMatch(formatInspect(traced), /private/)
+    const traceCli = spawnSync(process.execPath, ['dist/src/index.js', 'inspect', f.file, '--trace'], { encoding: 'utf8', env: { ...process.env, DEEPSEEK_API_KEY: '' } })
+    assert.equal(traceCli.status, 0, traceCli.stderr)
+    assert.match(traceCli.stdout, /#\d+ tool\/start read_history/)
+    assert.doesNotMatch(traceCli.stdout, /private/)
     const cli = spawnSync(process.execPath, ['dist/src/index.js', 'inspect', f.file, '--json'], { encoding: 'utf8', env: { ...process.env, DEEPSEEK_API_KEY: '', MINI_DSH_SESSION_DIR: path.join(f.directory, 'must-not-create') } })
     assert.equal(cli.status, 0, cli.stderr)
     assert.equal(JSON.parse(cli.stdout).providerUsage.cacheReadTokens, 7)
     assert.equal(hash(await fs.readFile(f.file)), before)
     await assert.rejects(fs.stat(path.join(f.directory, 'must-not-create')))
+  } finally { await fs.rm(f.directory, { recursive: true, force: true }) }
+})
+
+test('trace is bounded to recent metadata, including JSON mode', async () => {
+  const f = await fixture()
+  try {
+    for (let index = 0; index < 50; index++) f.runtime.append(f.session.id, 'context/projection', { estimatedInputTokens: index, reservedOutputTokens: 1, safetyMarginTokens: 0, removedTaskIds: [] })
+    await f.save()
+    const report = await inspectSession(f.file, { trace: true })
+    assert.equal(report.trace?.events.length, 40)
+    assert.equal(report.trace?.truncated, true)
+    assert.equal(report.trace?.events[0]?.seq, 12)
+    const cli = spawnSync(process.execPath, ['dist/src/index.js', 'inspect', f.file, '--json', '--trace'], { encoding: 'utf8', env: { ...process.env, DEEPSEEK_API_KEY: '' } })
+    assert.equal(cli.status, 0, cli.stderr)
+    assert.equal(JSON.parse(cli.stdout).trace.events.length, 40)
   } finally { await fs.rm(f.directory, { recursive: true, force: true }) }
 })
 

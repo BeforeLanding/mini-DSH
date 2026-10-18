@@ -4152,3 +4152,7 @@ NX-07 最终验收：a 5ef5b2e、b 21ee528、c 04f5c4b、d dd45f75、e 6c03300�
 
 验证：`node scripts/build.js`、`node scripts/check-syntax.js`（158 文件）、Biome（172 文件）通过；正常用户权限 `node --test dist/test/*.test.js`：434 项、404 通过、30 跳过、0 失败（受限沙箱中的 Bash 夹具失败，正常权限复验全绿）。定向三项合成日志测试包含哈希不变、空格路径、无 API key、未知 usage、摘要缓存与部分证据。NX-45 `002-BC01-0-full` 原始 JSONL 只读交叉核对：130 事件、7 次 model/start、19 次 tool/start、provider 输入 42083、输出 2160、缓存 29184；输入 SHA256 前后均为 `DB8501472FB6BCC2DB76394595076F9150CD3405619F223A65E5FBAAB981C3D3`。未读取验收结论或估价，也未请求模型。`pnpm typecheck` 在环境中因 npm registry 拉取 `@pnpm/exe` 失败，按 AGENTS 允许的固定依赖 Node 命令完成同等检查。
 
+# NX-49 只读会话 inspect：可选轨迹（2026-10-18）
+
+`--trace` 在文本及 JSON 中只附带最近 40 条所选事件的序号、类型和有限元数据：工具名、运行终态、拒绝原因、快照来源、摘要结果。用户/助手正文、模型片段、工具内容均不进入轨迹；异常工具名省略。超过 40 条明确标截断。`node scripts/build.js`、`node --test dist/test/session-inspect.test.js`（4/4）、定向 Biome 及 `git diff --check` 通过；合成日志中敏感占位正文未出现在文本或 JSON 轨迹。真实模型请求 0。
+

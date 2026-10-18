@@ -8,16 +8,16 @@ try {
   const args = process.argv.slice(2)
   if (args[0] === 'inspect') {
     const options = args.slice(1)
-    if (!options.length || options.length > 2 || options.slice(1).some(option => option !== '--json'))
-      throw new Error('usage: mini-dsh inspect <session-jsonl-path> [--json]')
+    if (!options.length || options.length > 3 || options.slice(1).some(option => !['--json', '--trace'].includes(option)) || new Set(options.slice(1)).size !== options.length - 1)
+      throw new Error('usage: mini-dsh inspect <session-jsonl-path> [--json] [--trace]')
     const { inspectSession, formatInspect } = await import('./core/session-inspect.js')
-    const report = await inspectSession(options[0]!)
+    const report = await inspectSession(options[0]!, { trace: options.includes('--trace') })
     console.log(options.includes('--json') ? JSON.stringify(report, null, 2) : formatInspect(report))
     if (!report.integrity.complete) process.exitCode = 2
   } else if (args.length > 1 || (args.length === 1 && !['--help', '--version', '--show-config'].includes(args[0]!))) {
-    throw new Error('usage: mini-dsh [--help|--version|--show-config] | inspect <session-jsonl-path> [--json]')
+    throw new Error('usage: mini-dsh [--help|--version|--show-config] | inspect <session-jsonl-path> [--json] [--trace]')
   } else if (args[0] === '--help') {
-    console.log('Usage: mini-dsh [--help|--version|--show-config]\n       mini-dsh inspect <session-jsonl-path> [--json]\nRun in the target workspace directory. --show-config and inspect need no API key; interactive use requires DEEPSEEK_API_KEY in the environment or current directory .env.\nSession logs: ~/.mini-dsh/sessions (override with MINI_DSH_SESSION_DIR).')
+    console.log('Usage: mini-dsh [--help|--version|--show-config]\n       mini-dsh inspect <session-jsonl-path> [--json] [--trace]\nRun in the target workspace directory. --show-config and inspect need no API key; interactive use requires DEEPSEEK_API_KEY in the environment or current directory .env.\nSession logs: ~/.mini-dsh/sessions (override with MINI_DSH_SESSION_DIR).')
   } else if (args[0] === '--version') {
     const metadata: unknown = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
     if (!metadata || typeof metadata !== 'object' || !('version' in metadata) || typeof metadata.version !== 'string') throw new Error('package version is unavailable')
