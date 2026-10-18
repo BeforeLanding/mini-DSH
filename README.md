@@ -66,6 +66,8 @@ pnpm start
 
 上面的 `pnpm demo:compact` 是零付费机制演示：脚本化摘要缩小当前任务的请求投影，事件日志仍保留原文，并通过 `read_history` 回读。想看编辑、检查、失败后修复及交付证据的完整编程流程，可运行同样使用脚本化模型的 `pnpm demo:fix`。
 
+面向招聘者的五分钟讲解顺序、工程贡献与取舍见[项目展示提纲](docs/RECRUITER_WALKTHROUGH.md)。
+
 ## 生产配置与 v2.1 对照
 
 生产入口 [src/index.ts](src/index.ts) 调用共用的 [createHarness](src/app/create-harness.ts)，评测入口也调用它；没有另复制一套 Harness。日常默认是 `coding`、`contextLayout=live`、16 KiB 工具结果预览，以及 [CLI_BUDGET](src/core/budget.ts) 的输入目标 65,536 token、主动压缩比例 0.8、一次溢出兜底、每段 2M 累计 token 上限。`read_history` 默认可用；它按事件号读取保留的原始历史，不是主动压缩开关。
@@ -90,6 +92,6 @@ pnpm start
 
 ## NX-45 开发探索的边界
 
-六道**已曝光开发题**、每臂计划分母 12、每题两次。Baseline/Full 的可靠完成为 **11/12 对 10/12**，独立产物验收为 **11/12 对 12/12**。Full 的峰时 provider usage 估价更低（$0.391956600 对 $1.448544408），但请求、工具调用和主动时间更多。费用是按冻结价格重算的估价，**不是供应商账单**。本批没有证明可靠完成率提高、统计显著性或泛化优势；组合配置的费用差异不能全归因于单一机制。逐题结果、模型版本、固定预算和末尾轨迹见 [探索报告](docs/context-budget/NX-45-EXPLORATION-RESULT.md)，原始 usage 更正与哈希见 [更正说明](docs/context-budget/NX-45-USAGE-CORRECTION.md)。
+六道**已曝光开发题**、每臂计划分母 12、每题两次。Baseline/Full 的可靠完成为 **11/12 对 10/12**，独立产物验收为 **11/12 对 12/12**。Full 的峰时 provider usage 估价更低（$0.391956600 对 $1.448544408），但请求、工具调用和主动时间更多。费用是按指定历史价格重算的 usage 估价，**不是供应商账单**。本批没有证明可靠完成率提高、统计显著性或泛化优势；组合策略结果不能单独归因于稳定前缀或主动压缩。逐题结果、模型版本、固定预算和末尾轨迹见[探索报告](docs/context-budget/NX-45-EXPLORATION-RESULT.md)，源文件指纹、统计口径及原始证据的可访问边界见[公开证据摘要](docs/context-budget/NX-45-PUBLIC-EVIDENCE.md)。
 
 更多设计与验收入口：[需求](docs/context-budget/REQUIREMENTS.md)、[计划](docs/context-budget/PLAN.md)、[任务清单](docs/context-budget/TASKS.md)、[进度](PROGRESS.md)。

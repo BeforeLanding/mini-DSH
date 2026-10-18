@@ -1,6 +1,6 @@
 # NX-45 原始 usage 离线更正（2026-10-17）
 
-原始批次位于 `D:/Agent/outputs/nx45-development-live-20261017/`，冻结 HEAD 为 `fed19a7c648b9f7f49f4a0254f7f15c80c8df099`。原始 manifest、runs、report、audit 与事件日志只读。新目录 `D:/Agent/outputs/nx45-development-corrected-20261017/` 保存可复算脚本 `recalculate.py` 和 `corrected-usage.json`；后者含六份顶层源文件、24 份事件日志的 SHA-256 和逐 episode 字段差异。脚本逐条读取原始 `model/usage`，按每条 episode 的 `requestId` 去重并与 `model/start` 核对；不以旧 `runs.jsonl` 的 counters 作为重算输入。真实模型调用和补跑均为 0。
+原始批次和更正文件目前仅在本地归档，冻结 HEAD 为 `fed19a7c648b9f7f49f4a0254f7f15c80c8df099`。原始 manifest、runs、report、audit 与事件日志只读。更正脚本 `recalculate.py` 和 `corrected-usage.json` 也保存在本地；后者含六份顶层源文件、24 份事件日志的 SHA-256 和逐 episode 字段差异。仓库内的[公开证据摘要](NX-45-PUBLIC-EVIDENCE.md)记录必要的来源、口径与顶层指纹，不提供原始事件。脚本逐条读取原始 `model/usage`，按每条 episode 的 `requestId` 去重并与 `model/start` 核对；不以旧 `runs.jsonl` 的 counters 作为重算输入。真实模型调用和补跑均为 0。
 
 冻结峰时价格为未命中输入 $0.30、命中输入 $0.006、输出 $1.20／百万 token。缓存命中包含在输入中，费用按 `(input-cache)×未命中价 + cache×命中价 + output×输出价`。
 

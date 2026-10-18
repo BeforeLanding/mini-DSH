@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### 招聘者交付审查与展示材料（2026-10-18）
+
+从完整 HEAD `cb017a732c20a2bc076ca958cf93224cf0b16723` 的干净工作树审查 README、AGENTS.md、NX-45 报告及本地安装记录。新增[五分钟讲解提纲](../RECRUITER_WALKTHROUGH.md)和[NX-45 公开证据摘要](NX-45-PUBLIC-EVIDENCE.md)，补 README 入口并明确公开摘要与仅本地保存的原始事件不同；报告及 usage 更正文档不再要求读者访问本机绝对路径。公开摘要列协议、冻结代码、固定分母、两种验收口径、历史价格来源、usage 重算方法及顶层源文件指纹；不加入原始提示或事件记录。README 明确组合策略结果不能单独归因于稳定前缀或主动压缩。
+
+原 NX-48 最终 tarball 早于 `inspect`，本次因此重新打包验证新增安装路径：`pnpm.cmd pack --pack-destination .review-validation`，包 SHA-256 `5e3136c4c50496cfe04e5852f88334059a952911c1bb9e68d8169d56e63bd201`，109 项，白名单外及敏感证据 0；在含空格的隔离 consumer 目录执行 `pnpm.cmd --dir ... add --offline --ignore-scripts <tarball>` 成功，安装的 Windows `.cmd` 在含空格工作区执行 `--help`、`--version`、`--show-config`、`inspect <脚本化演示日志> --trace` 均退出 0。`node scripts/build.js`、`node dist/scripts/demo-compact.js`、`node dist/src/index.js --show-config`、`node dist/src/index.js inspect <演示日志> --trace`、`node --test dist/test/docs-links.test.js` 和本次五份文档的相对链接目标检查通过；源文件哈希与本地封存原件一致。`pnpm` 在沙箱内引导无输出，包验证使用正常用户权限；未重跑无关测试或效果实验。真实模型请求 0，未推送或发布。
+
 ### NX-48 本地安装文档（2026-10-18，步骤二）
 
 README 新增从仓库 `pnpm pack`、仓库外临时目录 `pnpm --dir ... add`、Windows `.cmd` 的 `--help`／`--version`／`--show-config` 及交互启动步骤；明确 npm 尚未发布、正常安装可下载依赖、API key 仅交互需要，默认工作区与 `.env` 来自调用者当前目录、会话在用户主目录、工具结果在工作区，且只声明 Windows 的本地安装验证。最终包 `D:/Agent/outputs/nx48-install-validation-20261018/package-final/mini-DSH-0.0.1.tgz`，SHA-256 `4c15bc6bacfd90bed454002c979f891417d89d10427efe615a9121188fda982c`；重新打包后，在全新 `consumer final space` 离线安装成功，三个无 key 命令均退出 0，含空格工作区定位正确、`.env` 来源正确，缺 key 报错退出 1；虚构 key 输入 `/exit` 退出 0，仅写 `session/start` 且锁清除。最终包 107 项、白名单外 0、敏感证据／`.env` 0。README 中 `pnpm --dir ... add` 的实际语法又在 `consumer documented space` 离线安装通过。`pnpm check`（syntax 156 文件）、`pnpm test`（401 通过／30 跳过／0 失败）、`pnpm lint`（170 文件、0 诊断）通过；真实模型请求 0。
