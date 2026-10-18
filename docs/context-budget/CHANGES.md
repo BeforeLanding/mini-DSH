@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### NX-46 无密钥有效配置查看（2026-10-18，步骤二）
+
+`node dist/src/index.js --show-config` 在装配同一个 `createHarness` 后、注册 DeepSeek/外部插件及 CLI 会话前只读输出新会话配置：模型、工作区、profile、live/frozen、项目上下文目录、工具预览、read_history、审批和解析后的预算；每项标明环境／`.env`／默认／provider capability／CLI_BUDGET 来源。DeepSeek 模型与容量元数据由真实适配器复用的函数提供，不需要 API key，也不打印密钥、环境全集、项目规则正文或外部配置。`MINI_DSH_SESSION_ID` 存在时拒绝新会话视图，指引到恢复会话 `/budget`；非法模型或预算拒绝。`node scripts/build.js` 和 `node --test dist/test/production-config.test.js dist/test/harness-composition.test.js dist/test/deepseek.test.js` 通过（6/6）；模拟无密钥、`.env` 覆盖、非法配置与敏感变量不泄露。真实模型请求 0。
+
 ### NX-46 生产显式配置选择（2026-10-18，步骤一）
 
 `src/index.ts` 改用 `productionHarnessConfig` 把现有 `MINI_DSH_PROFILE`、工作区和项目目录映射到同一 `createHarness`，另接受 `MINI_DSH_CONTEXT_LAYOUT=live|frozen` 与正安全整数 `MINI_DSH_TOOL_PREVIEW_BYTES`。默认仍是 live 和 tool-results 的 16 KiB 预览；不改 CLI_BUDGET、评测两臂、工具 schema 或 read_history。非法值在装配前报错。定向 `node scripts/build.js`、`node --test dist/test/production-config.test.js dist/test/harness-composition.test.js` 通过（5/5）；测试还证实 frozen 时间与项目规则的系统提示快照跨同进程新会话不更新，`project_context` 工具实时重读，重建 Harness 后快照更新。真实模型请求 0。

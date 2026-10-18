@@ -84,6 +84,12 @@ export function finalizeToolCalls(map: Map<number, WireCall>) {
 }
 
 export interface DeepSeekConfig { apiKey?: string; baseUrl?: string; models?: string[]; defaultModel?: string; thinking?: string; contextWindowTokens?: number; fetch?: typeof fetch }
+export function deepSeekModelMetadata(config: Pick<DeepSeekConfig, 'baseUrl' | 'models' | 'contextWindowTokens'> = {}) {
+  const baseUrl = (config.baseUrl ?? process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com').replace(/\/+$/, '')
+  const models = config.models ?? ['deepseek-v4-pro', 'deepseek-v4-flash']
+  const contextWindowTokens = config.contextWindowTokens ?? (baseUrl === 'https://api.deepseek.com' && !config.models ? 1_000_000 : undefined)
+  return { baseUrl, models, contextWindowTokens }
+}
 export function normalizeUsage(raw: unknown): Usage | undefined {
   if (raw == null) return undefined
   if (!isRecord(raw)) throw new Error('invalid model usage')
@@ -101,9 +107,7 @@ export function normalizeUsage(raw: unknown): Usage | undefined {
 export function createDeepSeekAdapter(config: DeepSeekConfig = {}): Adapter {
   const apiKey = config.apiKey ?? process.env.DEEPSEEK_API_KEY
   if (!apiKey) throw new Error('missing DEEPSEEK_API_KEY; copy .env.example to .env and fill it in')
-  const baseUrl = (config.baseUrl ?? process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com').replace(/\/+$/, '')
-  const models = config.models ?? ['deepseek-v4-pro', 'deepseek-v4-flash']
-  const configuredCapacity = config.contextWindowTokens ?? (baseUrl === 'https://api.deepseek.com' && !config.models ? 1_000_000 : undefined)
+  const { baseUrl, models, contextWindowTokens: configuredCapacity } = deepSeekModelMetadata(config)
   const adapter: Adapter = {
     models,
     capabilities: configuredCapacity === undefined ? undefined : Object.fromEntries(models.map(model => [model, { contextWindowTokens: configuredCapacity }])),
