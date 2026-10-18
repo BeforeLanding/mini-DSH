@@ -1,10 +1,10 @@
 import type { Context } from '@deepseek-ai/cordis'
 import path from 'node:path'
 import os from 'node:os'
-import { stableText } from '../core/system-prompt-runtime.js'
+import { sessionStableText } from '../core/system-prompt-runtime.js'
 
 export const name = 'mini-runtime-context'
-export const inject = ['systemPrompt']
+export const inject = ['systemPrompt', 'sessions']
 
 // layout 决定 runtime:environment 这一段是否在会话内定住，见下面的注册处。缺省 'live' 是历史行为。
 export interface RuntimeContextConfig { workspace?: string; profile?: 'general' | 'coding'; layout?: 'live' | 'frozen'; now?: () => string }
@@ -35,12 +35,12 @@ export function apply(ctx: Context, config: RuntimeContextConfig = {}) {
 
   // 这一段读时钟，且是**毫秒**精度：默认（live）每次 assemble 渲染的结果必然不同，系统提示从 Time 那一行
   // 起、连同其后的一切每轮都失效。frozen 把它定在首次装配的那一刻——两臂的首帧字节因此逐字相同，差别只剩
-  // 后续轮次稳不稳，测的是稳定性本身而不是换了一段提示文本。
+  // 后续轮次稳不稳，测的是稳定性本身而不是换了一段提示文本。快照按 sessionId 入日志。
   const environment = () => ['## Runtime Context', `Time: ${config.now?.() ?? new Date().toISOString()}`,
     `Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`, `Workspace: ${workspace}`,
     `Platform: ${process.platform}`, `Node: ${process.version}`, `Hostname: ${os.hostname()}`].join('\n')
   ctx.effect(() => ctx.systemPrompt.context({
     name: 'runtime:environment', order: 100,
-    text: layout === 'frozen' ? stableText(environment) : environment,
+    text: layout === 'frozen' ? sessionStableText(ctx.sessions, 'runtime:environment', environment) : environment,
   }), 'register runtime context')
 }

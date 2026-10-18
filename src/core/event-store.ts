@@ -158,6 +158,7 @@ export function parseLog(text: string, sessionId: string): SessionEvent[] {
   const runs = new Map<string, { taskId: string; ended: boolean }>()
   const requests = new Set<string>(), usages = new Set<string>(), ends = new Set<string>()
   const changes = new Map<string, { taskId: string; runId: string; planned: boolean }>(), results = new Set<string>()
+  const snapshots = new Set<string>()
   const verifications = new Map<string, { taskId: string; runId: string; data: import('./task-verification.js').VerificationStart }>(), verificationResults = new Set<string>()
   for (const line of text.split('\n').slice(0, -1)) {
     let event: unknown
@@ -166,6 +167,11 @@ export function parseLog(text: string, sessionId: string): SessionEvent[] {
     if ((event.taskId !== undefined && typeof event.taskId !== 'string') || (event.runId !== undefined && typeof event.runId !== 'string')) throw new Error('invalid event scope')
     validatePayload(event.type, event.data)
     const parsed = event as unknown as SessionEvent
+    if (parsed.type === 'session/reset') snapshots.clear()
+    if (parsed.type === 'context/snapshot') {
+      if (parsed.taskId || parsed.runId || snapshots.has(parsed.data.name)) throw new Error('duplicate or scoped context snapshot')
+      snapshots.add(parsed.data.name)
+    }
     if (parsed.type === 'verification/start' || parsed.type === 'verification/result') {
       const run = parsed.runId ? runs.get(parsed.runId) : undefined
       if (!run || run.taskId !== parsed.taskId) throw new Error('verification event scope mismatch')

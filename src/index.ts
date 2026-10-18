@@ -20,12 +20,13 @@ try {
       : Object.hasOwn(dotenvResult.parsed ?? {}, key) ? '.env' as const : 'default' as const
     console.log(JSON.stringify(await inspectProductionConfig(process.env, origin), null, 2))
   } else {
-    harness = await createHarness(productionHarnessConfig())
+    const productionConfig = productionHarnessConfig()
+    harness = await createHarness(productionConfig)
     const { root } = harness
     const { default: externalConfig } = await import('../plugins.config.js')
     await root.plugin(deepseek)
     await root.plugin(externalPlugins, { entries: externalConfig })
-    await root.plugin(cli, { model: process.env.MINI_DSH_MODEL })
+    await root.plugin(cli, { model: process.env.MINI_DSH_MODEL, contextLayout: productionConfig.contextLayout ?? 'live' })
   }
 } catch (error) {
   console.error(`[startup] ${error instanceof Error ? error.message : String(error)}`)

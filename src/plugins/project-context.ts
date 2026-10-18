@@ -1,9 +1,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { ProjectContextRuntime, type ProjectContextLimits } from '../core/project-context-runtime.js'
-import { stableText } from '../core/system-prompt-runtime.js'
+import { sessionStableText } from '../core/system-prompt-runtime.js'
 
 export const name = 'mini-project-context'
-export const inject = ['systemPrompt', 'tools', 'sandbox']
+export const inject = ['systemPrompt', 'tools', 'sandbox', 'sessions']
 // layout 决定 project:context 这一段是否在会话内定住，见下面的注册处。缺省 'live' 是历史行为。
 export interface ProjectContextConfig { directory?: string; limits?: ProjectContextLimits; layout?: 'live' | 'frozen' }
 
@@ -15,7 +15,7 @@ export async function apply(ctx: Context, config: ProjectContextConfig = {}) {
   const runtime = new ProjectContextRuntime(ctx.sandbox.workspace, config.limits)
   await runtime.load(directory)
   // 这一段每轮重读工作区（AGENTS.md / package.json / 标记文件），默认保持这个语义。frozen 时定在首次装配
-  // 的那一刻。**冻结只影响系统提示这一份**：下面的 project_context 工具照旧实时读盘，否则冻结就不只是
+  // 的那一刻，按 sessionId 入日志。**冻结只影响系统提示这一份**：下面的 project_context 工具照旧实时读盘，否则冻结就不只是
   // 「让前缀稳定」，而是把实时读的能力一起拿掉了。
   const render = async () => [
     '## Project Context',
@@ -25,7 +25,7 @@ export async function apply(ctx: Context, config: ProjectContextConfig = {}) {
   ].join('\n')
   ctx.effect(() => ctx.systemPrompt.context({
     name: 'project:context', order: 110,
-    text: layout === 'frozen' ? stableText(render) : render,
+    text: layout === 'frozen' ? sessionStableText(ctx.sessions, 'project:context', render) : render,
   }), 'register project context')
   ctx.effect(() => ctx.tools.register({
     name: 'project_context',

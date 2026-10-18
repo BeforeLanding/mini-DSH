@@ -37,6 +37,7 @@ export function validatePayload(type: string, data: Record<string, unknown>) {
       try { resolveBudget({ contextWindowTokens: 1 }, data.budget); valid = true } catch { valid = false }
       break
     case 'session/reset': valid = integer(data.epoch); break
+    case 'context/snapshot': valid = ['runtime:environment', 'project:context'].includes(String(data.name)) && string(data.text) && ['new-session', 'legacy-current'].includes(String(data.source)); break
     case 'user/message': valid = string(data.content); break
     case 'assistant/message': valid = string(data.content) && optionalString(data.reasoningContent); break
     case 'assistant/tool_calls': valid = (data.content == null || string(data.content)) && optionalString(data.reasoningContent) && Array.isArray(data.toolCalls) && data.toolCalls.every(c => record(c) && string(c.id) && string(c.name) && (c.arguments === undefined || record(c.arguments))); break

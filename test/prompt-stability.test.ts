@@ -6,6 +6,7 @@ import path from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { stableText } from '../src/core/system-prompt-runtime.js'
 import * as systemPrompt from '../src/plugins/system-prompt.js'
+import * as sessions from '../src/plugins/session.js'
 import * as tools from '../src/plugins/tools.js'
 import * as runtimeContext from '../src/plugins/runtime-context.js'
 import * as projectContext from '../src/plugins/project-context.js'
@@ -50,6 +51,7 @@ test('the runtime environment section is re-rendered every turn by default and p
   mock.timers.enable({ apis: ['Date'], now: EPOCH })
   const live = new Context(), frozen = new Context()
   try {
+    await live.plugin(sessions)
     await live.plugin(systemPrompt)
     await live.plugin(runtimeContext, { workspace: 'synthetic-workspace' })
     const liveFirst = await live.systemPrompt.assemble()
@@ -63,6 +65,7 @@ test('the runtime environment section is re-rendered every turn by default and p
     // 提示文本」而不是「同一段文本稳不稳」。
     mock.timers.reset()
     mock.timers.enable({ apis: ['Date'], now: EPOCH })
+    await frozen.plugin(sessions)
     await frozen.plugin(systemPrompt)
     await frozen.plugin(runtimeContext, { workspace: 'synthetic-workspace', layout: 'frozen' })
     const frozenFirst = await frozen.systemPrompt.assemble()
@@ -81,7 +84,7 @@ test('the project context section follows the workspace by default and pins it u
   try {
     await fs.writeFile(path.join(f.workspace, 'AGENTS.md'), 'rule-one')
     for (const root of [live, frozen]) {
-      await root.plugin(systemPrompt); await root.plugin(tools)
+      await root.plugin(sessions); await root.plugin(systemPrompt); await root.plugin(tools)
       await root.plugin(sandbox, { workspace: f.workspace })
     }
     await live.plugin(projectContext)
@@ -108,11 +111,12 @@ test('the project context section follows the workspace by default and pins it u
 test('an unknown layout fails before either plugin registers a prompt entry', async () => {
   const f = await workspace(), plain = new Context(), withSandbox = new Context()
   try {
+    await plain.plugin(sessions)
     await plain.plugin(systemPrompt)
     await assert.rejects(async () => { await plain.plugin(runtimeContext, { layout: 'stale' as 'frozen' }) }, /layout must be live or frozen/)
     assert.deepEqual(plain.systemPrompt.inspect(), { sections: [], contexts: [] })
 
-    await withSandbox.plugin(systemPrompt); await withSandbox.plugin(tools)
+    await withSandbox.plugin(sessions); await withSandbox.plugin(systemPrompt); await withSandbox.plugin(tools)
     await withSandbox.plugin(sandbox, { workspace: f.workspace })
     await assert.rejects(async () => { await withSandbox.plugin(projectContext, { layout: 'stale' as 'frozen' }) }, /project context layout must be live or frozen/)
     assert.deepEqual(withSandbox.systemPrompt.inspect().contexts, [])

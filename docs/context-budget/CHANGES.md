@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### NX-47 frozen 按会话持久化快照（2026-10-18，步骤一）
+
+沿 CLI 的创建／`MINI_DSH_SESSION_ID` 恢复／`/reset` 和 AgentLoop 的装配路径检查后，新增 `context/snapshot` JSONL 事件，分别存 `runtime:environment` 与 `project:context` 的原文及来源。首次组装后即 flush，模型派发前已有持久记录；同会话后续轮次和重启恢复复用它，新 sessionId 或 reset 可见段重新取样。旧会话有既往 `model/start` 却无快照时以当前环境取样，标 `legacy-current` 并在 CLI 提示原始快照不可恢复；`project_context` 保持实时读盘。无 sessionId 的独立提示检查仍沿用 `stableText`。生产默认 live、预算、权限、提示正文和工具 schema 不变。新的 frozen 日志会多两条事件，后续事件序号变化；旧严格回放若比较事件序号或新旧实现的记录，可能出现差异，未放宽比较、未改旧日志。定向 `node --test dist/test/production-config.test.js` 6/6，`pnpm check` 语法 156 文件，`pnpm test` 400 通过／30 跳过，`pnpm lint` 170 文件 0 诊断；测试全为离线，真实模型请求 0。
+
 ### NX-46 求职 README 与零付费命令核验（2026-10-18，步骤三）
 
 README 缩为首次上手、无密钥查看、脚本化演示、生产/v2.1 配置映射、关键代码和 NX-45 边界六部分；保留教程与独立扩展的提交分界。明确 frozen 系统提示中的时间和项目规则在首次组装后固定到 Harness 释放，同进程新会话不刷新，`project_context` 工具仍实时读盘，规则变化需重启 CLI。原 README 的 `#演示` 锚点保留，避免历史文档断链。`.env.example` 补已有能力的两个显式选择。逐项实际运行：`pnpm install --frozen-lockfile`（已是最新）、`pnpm check`（syntax ok: 156 files）、`node dist/src/index.js --show-config`（无模型注册/请求）、`pnpm demo:compact`（脚本摘要 1 次、主循环 0 次，退出 0）、`pnpm demo:fix`（脚本化修复通过，退出 0）、`pnpm test`（398 通过、30 跳过、0 失败）、`pnpm lint`（170 文件、0 诊断）。`pnpm` 在沙箱内引导无输出，命令在正常用户权限运行；测试没有真实模型。`pnpm start` 需要 API key，未执行。

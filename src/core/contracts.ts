@@ -65,6 +65,7 @@ export interface EventData {
   'session/start': { meta: Arguments; reset?: boolean }
   'session/config': { model: string; budget: BudgetPolicy }
   'session/reset': { epoch: number }
+  'context/snapshot': { name: 'runtime:environment' | 'project:context'; text: string; source: 'new-session' | 'legacy-current' }
   'run/start': { state: RunState }
   'run/finish': { state: RunState }
   'model/start': { taskId: string; runId: string; requestId: string; estimatedInputTokens?: number }
