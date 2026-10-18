@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### NX-51 独立 12 条开发协议、运行与报告（2026-10-18，步骤二）
+
+独立 `NX-51-BC01-log-2arm-v1` 没有改 NX-45 development split。固定 6 个双臂 block、12 条，两个负载各三次、两臂各先行三次。冻结钉代码 HEAD、BC01 全部文件、相关源码、工具 schema、两臂原配置/共享 1M／64／128／600 秒预算、模型与官方价格快照及 digest；validate-only 在读密钥前检验干净 HEAD、文件、日程和 WSL/bwrap 隔离。付费路径复用 `runFixtureTask`／`createHarness`、原 BC01 独立验收、DeepSeek 适配器、逐请求金额闸门和整题预算；任务失败继续，provider／基础设施／usage／证据异常停批，失败保留在固定分母。报告分开列业务验收、诊断执行及答复、可靠完成、主／摘要请求、工具／回读／错误／截断、provider usage 与本地输入估算、主动时间和费用估价，保留逐次记录与缺失项。
+
+脚本模型在固定 WSL runtime 中完整跑过 12/12 调度，其中预置一条普通诊断未执行／业务未修失败仍入账，另 11 条原验收与诊断均通过；三条大输出 Full 各经一次真实 ref 回读、预览截断 1 次。所有 episode 的模型／工具／token 计数低于共享上限。纯离线测试覆盖日程、费用预留、失败分类、缺失项、manifest 篡改。`node scripts/build.js`、`node scripts/check-syntax.js`（162 文件）、Biome 176 文件零诊断、正常权限完整测试 409 通过／32 跳过／0 失败，`check-coding-fixtures` 与正常权限 `eval-offline` 12/12 通过。后者在沙箱中因既有 shell 权限限制曾全数验收失败，正常权限复核通过。真实模型请求 0；最终冻结与无密钥 validate-only 在本步提交后的干净 HEAD 执行。
+
 ### NX-51 BC01 诊断负载（2026-10-18，步骤一）
 
 `createV2Fixture` 仅在显式 NX-51 变体下给 BC01 候选工作区添加受保护的 `diagnostic.mjs`，任务要求先经 bash 运行并在最终答复报告中部的诊断值。4 KiB／256 KiB 日志由同一规则生成，同重复两臂使用同值；原 BC01 的业务规格、`src/day.mjs` 参考修改、四组独立隐藏验收与反例不变。脚本源码不含诊断值明文，任务也不提供答案。定向纯离线字节／位置／任务测试通过；使用固定 WSL runtime 的两种负载各自验证初始态失败、参考态四组通过、两种反例失败、篡改诊断脚本被拒（2/2）。`node scripts/build.js`、`node scripts/check-syntax.js`（159 文件）、Biome 173 文件零诊断；正常权限全套测试 407 通过／31 跳过／0 失败。真实模型请求 0，不推送。

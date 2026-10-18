@@ -19,5 +19,5 @@ export function diagnosticScript(variant: DiagnosticVariant): string {
 }
 
 export function diagnosticTask(base: string): string {
-  return `${base}\n\nNX-51 开发诊断：开始修改前必须通过 bash 运行 \`node diagnostic.mjs\`。诊断输出头部给出 DIAGNOSTIC_OFFSET（UTF-8 字节偏移）；如工具只显示预览，请用 read_tool_result 按需回读中部。完成原业务任务后，在最终答复明确写出日志中的 DIAGNOSTIC_VALUE。不要根据脚本源码推算该值；以实际运行输出为准。\n`
+  return `${base}\n\nNX-51 开发诊断：开始修改前必须通过 bash 运行 \`node diagnostic.mjs\`。诊断输出头部给出 DIAGNOSTIC_OFFSET（UTF-8 字节偏移）；如工具只显示预览，请用 read_tool_result 按需回读中部。完成原业务任务后，在最终答复写成 \`DIAGNOSTIC_VALUE=<日志中的值>\`。不要根据脚本源码推算该值；以实际运行输出为准。\n`
 }

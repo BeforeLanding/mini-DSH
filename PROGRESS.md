@@ -4,6 +4,8 @@
 
 ## 当前状态
 
+- **NX-51 BC01 真实模型开发实验待授权**：4 KiB／256 KiB、Baseline／Full、三重复的独立 12 条协议已离线实现。脚本模型隔离回放 12/12 留下逐条记录（11 条完成、一条预置失败保留），三条大输出 Full 均按 ref 回读；业务与诊断分开验收。官方模型与峰时价已复核，保守预留约 `$21.14`，拟申请本批 `$22` 上限；最终干净 HEAD 的冻结清单与无密钥预检完成后方可请求授权。真实模型请求 0，未推送；见 [协议](docs/context-budget/NX-51-DIAGNOSTIC.md)。
+
 - **NX-50 有界输出离线对照完成**：4 KiB 两臂都正确完成、输入估算接近；256 KiB Full 通过真实 ref 回读中部诊断值，累计估算输入约为 Baseline 的五分之一。完整离线测试 406 通过／30 跳过，check 的 Node 等价命令及 lint 通过；真实模型请求 0，未推送。该结果仅支持有界输出与回读机制在确定性负载上的效果，不支持整个 Full 的成功率或泛化优势，详见 [CHANGES](docs/context-budget/CHANGES.md#nx-50-baseline--full-有界输出离线对照2026-10-18)。
 
 - **NX-48 本地可安装 CLI 已完成**：`mini-dsh` bin 复用生产入口，`--help`／`--version`／`--show-config` 无 key 可运行；仓库外 tarball 安装在 Windows 含空格目录成功，虚构 key 下 `/exit` 释放锁且日志无模型请求。包白名单排除 `.env`、日志与实验原件；README 写明本地 pack／安装及工作区和数据位置。完整离线测试 401 通过／30 跳过，check/lint 通过；npm 未发布、未推送或执行效果实验。
