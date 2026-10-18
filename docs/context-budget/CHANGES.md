@@ -1,5 +1,13 @@
 # 改动与验收证据
 
+### NX-50 Baseline / Full 有界输出离线对照（2026-10-18）
+
+在 `test/tool-results.test.ts` 复用 `createHarness`、`resolveV2Arms(1_000_000, '1m')` 的 Baseline／Full 原配置和 Bash 结果投影，注入离线 commandRunner。两臂各取同一份 4 KiB 或 256 KiB ASCII 日志，诊断值位于中部；头部仅给字节偏移。脚本模型从收到的工具消息解析值，缺失时按真实 ref 发 `read_tool_result`，不按臂分支。两臂均完成且回答 `phase-7c92`。256 KiB 下 Full 的 Bash 预览截断 1 次、真实 ref 回读 1 次，Baseline 截断 0 次；4 KiB 均无截断或回读。
+
+正常权限全套离线测试中的累计 `estimateInput(ChatRequest)`：4 KiB Baseline／Full 各 8,087 token，各 2 次主请求、1 次工具调用；256 KiB 分别 85,502／16,960 token，分别 2／3 次主请求、1／2 次工具调用。Full 大负载约为 Baseline 的 19.8%，断言阈值为 50%，留出额外回读请求与合理开销；小负载断言差距小于 10%。可控时钟从同一时刻开始，每轮推进一秒；live 的系统提示 digest 随请求变化，frozen 在同会话保持单一 digest。这些是本地输入估算，不是 provider usage、缓存命中或账单，也不证明供应商缓存收益。
+
+`node scripts/build.js`、`node scripts/check-syntax.js`（158 文件）、定向测试 1/1、Biome 检查 172 文件零诊断通过；`node --test dist/test/*.test.js` 在正常权限 406 通过／30 跳过／0 失败。沙箱内既有真实 Bash 用例因进程退出 `3221225794` 失败，正常权限复核通过；`pnpm check` 在本环境无输出停住，故按 AGENTS.md 使用 Node 等价命令。真实模型请求与 API 费用均为 0。此测试只验证有界输出和信息回读在该确定性负载上的有效性，不能证明整个 Full Harness 的可靠完成率或泛化优势。
+
 ### 招聘者交付审查与展示材料（2026-10-18）
 
 从完整 HEAD `cb017a732c20a2bc076ca958cf93224cf0b16723` 的干净工作树审查 README、AGENTS.md、NX-45 报告及本地安装记录。新增[五分钟讲解提纲](../RECRUITER_WALKTHROUGH.md)和[NX-45 公开证据摘要](NX-45-PUBLIC-EVIDENCE.md)，补 README 入口并明确公开摘要与仅本地保存的原始事件不同；报告及 usage 更正文档不再要求读者访问本机绝对路径。公开摘要列协议、冻结代码、固定分母、两种验收口径、历史价格来源、usage 重算方法及顶层源文件指纹；不加入原始提示或事件记录。README 明确组合策略结果不能单独归因于稳定前缀或主动压缩。

@@ -66,6 +66,9 @@ import * as toolResults from '../src/plugins/tool-results.js'
 import * as bash from '../src/tools/bash.js'
 import type { CommandResult } from '../src/core/command-runner.js'
 import { JsonlStore } from '../src/core/event-store.js'
+import { createHarness } from '../src/app/create-harness.js'
+import { resolveV2Arms } from '../scripts/eval-v2-plan.js'
+import { estimateInput } from '../src/core/token-estimator.js'
 
 async function bootResults(workspace: string) {
   const root = new Context()
@@ -208,6 +211,85 @@ test('Cordis model reads a large Bash log via its persistent ref while events re
     const denied = await restarted.tools.execute('read_tool_result', { ref: reference }, { sessionId: 'other' })
     assert.equal(denied.isError, true)
   } finally { await root.fiber.dispose(); await restarted?.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
+})
+
+test('Baseline and Full complete log-dependent diagnostics with bounded input and real ref retrieval', async () => {
+  const sizes = [4096, 256 * 1024] as const
+  const arms = resolveV2Arms(1_000_000, '1m').filter(arm => arm.name === 'baseline' || arm.name === 'full')
+  const rows: { bytes: number; arm: string; status: string; answer: string; input: number; calls: number; toolCalls: number; truncations: number; promptDigests: number; readRef?: string; bashRef?: string }[] = []
+  for (const bytes of sizes) {
+    // ASCII keeps the advertised byte offset exact. The answer is in neither the head nor tail preview.
+    const offset = Math.floor(bytes / 2)
+    const marker = 'DIAGNOSTIC_VALUE=phase-7c92\n'
+    const header = `DIAGNOSTIC_OFFSET=${offset}\n`
+    const log = header + 'x'.repeat(offset - header.length) + marker + 'y'.repeat(bytes - offset - marker.length)
+    assert.equal(Buffer.byteLength(log), bytes)
+    for (const arm of arms) {
+      const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'result-arm-'))
+      let tick = 0, calls = 0, readRef: string | undefined
+      const inputs: number[] = []
+      const harness = await createHarness({
+        workspace, profile: 'coding', autoApprove: true,
+        contextLayout: arm.promptLayout.frozen ? 'frozen' : 'live',
+        toolOutputMaxPreviewBytes: arm.toolOutput.bounded ? undefined : 64 * 1024 * 1024,
+        runtimeTime: () => new Date(Date.UTC(2026, 0, 1) + 1000 * tick++).toISOString(),
+        commandRunner: async options => ({
+          type: 'command', version: 1, command: options.command, cwd: options.cwd,
+          status: 'exited', exitCode: 0, signal: null, durationMs: 0, timedOut: false, cancelled: false,
+          stdout: { text: log, bytes, truncated: false }, stderr: { text: '', bytes: 0, truncated: false },
+        }),
+        adapter: { provider: 'scripted', model: 'diagnostic', capabilities: { diagnostic: { contextWindowTokens: 1_000_000 } },
+          async chat(request) {
+            inputs.push(estimateInput(request)); calls++
+            const toolMessage = request.messages?.filter(message => message.role === 'tool').at(-1)?.content ?? ''
+            if (!toolMessage) return { toolCalls: [{ id: `bash-${calls}`, name: 'bash', arguments: { command: 'node diagnostic.mjs' } }] }
+            const answer = /DIAGNOSTIC_VALUE=([a-z0-9-]+)/.exec(toolMessage)?.[1]
+            if (answer) return { content: answer }
+            const command = JSON.parse(toolMessage) as CommandResult
+            const location = /DIAGNOSTIC_OFFSET=(\d+)/.exec(command.stdout.text)?.[1]
+            assert.ok(location, 'the Bash preview must give a byte location for selective retrieval')
+            assert.ok(command.stdout.ref, 'a missing middle requires a real stored ref')
+            readRef = command.stdout.ref
+            return { toolCalls: [{ id: `read-${calls}`, name: 'read_tool_result', arguments: { ref: readRef, offset: Number(location), maxBytes: 128 } }] }
+          } },
+      })
+      try {
+        const session = harness.root.sessions.create({ source: 'offline-log-discrimination' })
+        const agent = harness.root.agents.create({ sessionId: session.id, model: 'scripted/diagnostic', loop: harness.root.agentLoop, budget: arm.budget })
+        const answer = await agent.send('Run the diagnostic command and report DIAGNOSTIC_VALUE from its log.')
+        const state = harness.root.sessions.latestRun(session.id)!
+        const results = session.events.filter(event => event.type === 'tool/result')
+        const bashResult = JSON.parse(results[0]!.data.content) as CommandResult
+        assert.equal(results[0]!.data.name, 'bash')
+        assert.equal(bashResult.stdout.previewTruncated === true, bytes === 256 * 1024 && arm.name === 'full')
+        if (readRef) {
+          assert.equal(results[1]!.data.name, 'read_tool_result')
+          assert.equal(results[1]!.data.isError, false)
+          assert.ok(results[1]!.data.content.includes(marker.trim()))
+        }
+        const digests = session.events.filter(event => event.type === 'context/projection').map(event => event.data.systemPromptDigest)
+        rows.push({ bytes, arm: arm.name, status: state.status, answer, input: inputs.reduce((sum, value) => sum + value, 0), calls,
+          toolCalls: state.counters.toolCalls, truncations: state.counters.previewTruncations, promptDigests: new Set(digests).size,
+          readRef, bashRef: bashResult.stdout.ref })
+      } finally { await harness.root.sessions.close(); await harness.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
+    }
+  }
+  for (const row of rows) {
+    assert.equal(row.status, 'completed'); assert.equal(row.answer, 'phase-7c92')
+    assert.equal(row.truncations, row.bytes === 256 * 1024 && row.arm === 'full' ? 1 : 0)
+    assert.equal(row.toolCalls, row.bytes === 256 * 1024 && row.arm === 'full' ? 2 : 1)
+    assert.equal(row.calls, row.toolCalls + 1)
+    assert.equal(row.promptDigests, row.arm === 'full' ? 1 : row.calls)
+  }
+  const small = rows.filter(row => row.bytes === 4096)
+  const large = rows.filter(row => row.bytes === 256 * 1024)
+  assert.equal(large[1]!.readRef, large[1]!.bashRef)
+  assert.equal(large[0]!.readRef, undefined)
+  // A 128-byte targeted page adds a request, so allow 50% of Baseline's cumulative input.
+  // The 256 KiB raw result enters Baseline's next request, while Full carries a 16 KiB preview.
+  assert.ok(large[1]!.input < large[0]!.input * 0.5, JSON.stringify(large))
+  assert.ok(Math.abs(small[1]!.input - small[0]!.input) < small[0]!.input * 0.1, JSON.stringify(small))
+  console.log('offline ChatRequest input estimates:', JSON.stringify(rows.map(({ readRef, bashRef, ...row }) => row)))
 })
 
 test('result projection preserves errors, reports storage failure and disposes without changing old runtime calls', async () => {
