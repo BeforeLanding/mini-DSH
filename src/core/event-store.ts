@@ -153,17 +153,23 @@ export function decodeLog(bytes: Uint8Array, sessionId: string) {
 }
 export function parseLog(text: string, sessionId: string): SessionEvent[] {
   if (text && !text.endsWith('\n')) throw new Error('incomplete JSONL tail; preserve and quarantine before recovery')
-  const events: SessionEvent[] = []
+  const parseLine = createLogRecordParser(sessionId)
+  return text.split('\n').slice(0, -1).map(parseLine)
+}
+// Same validation state machine as parseLog, exposed one record at a time for read-only
+// consumers. It retains IDs and scopes, never prompt/tool bodies or whole JSONL lines.
+export function createLogRecordParser(sessionId: string): (line: string) => SessionEvent {
+  let count = 0
   const ids = new Set<string>()
   const runs = new Map<string, { taskId: string; ended: boolean }>()
   const requests = new Set<string>(), usages = new Set<string>(), ends = new Set<string>()
   const changes = new Map<string, { taskId: string; runId: string; planned: boolean }>(), results = new Set<string>()
   const snapshots = new Set<string>()
   const verifications = new Map<string, { taskId: string; runId: string; data: import('./task-verification.js').VerificationStart }>(), verificationResults = new Set<string>()
-  for (const line of text.split('\n').slice(0, -1)) {
+  return (line: string) => {
     let event: unknown
-    try { event = JSON.parse(line) } catch (error) { throw new Error(`corrupt JSONL record ${events.length + 1}`, { cause: error }) }
-    if (!isRecord(event) || event.version !== 1 || event.sessionId !== sessionId || event.seq !== events.length + 1 || typeof event.id !== 'string' || ids.has(event.id) || typeof event.at !== 'string' || typeof event.type !== 'string' || !isRecord(event.data)) throw new Error(`invalid event envelope/version/sequence at ${events.length + 1}`)
+    try { event = JSON.parse(line) } catch (error) { throw new Error(`corrupt JSONL record ${count + 1}`, { cause: error }) }
+    if (!isRecord(event) || event.version !== 1 || event.sessionId !== sessionId || event.seq !== count + 1 || typeof event.id !== 'string' || ids.has(event.id) || typeof event.at !== 'string' || typeof event.type !== 'string' || !isRecord(event.data)) throw new Error(`invalid event envelope/version/sequence at ${count + 1}`)
     if ((event.taskId !== undefined && typeof event.taskId !== 'string') || (event.runId !== undefined && typeof event.runId !== 'string')) throw new Error('invalid event scope')
     validatePayload(event.type, event.data)
     const parsed = event as unknown as SessionEvent
@@ -224,7 +230,7 @@ export function parseLog(text: string, sessionId: string): SessionEvent[] {
       if (parsed.type === 'model/rejected') { if (ends.has(requestId) || usages.has(requestId)) throw new Error('model rejection after dispatch result'); ends.add(requestId) }
     }
     ids.add(event.id)
-    events.push(parsed)
+    count++
+    return parsed
   }
-  return events
 }

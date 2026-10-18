@@ -4146,3 +4146,9 @@ NX-07 最终验收：a 5ef5b2e、b 21ee528、c 04f5c4b、d dd45f75、e 6c03300�
 
 检查：`node scripts/build.js`、顺序执行的 `node scripts/check-syntax.js`（153 文件）、Biome（167 文件零诊断）、`git diff --check` 通过；正常权限 `node --test dist/test/*.test.js` 为 419 项中 389 通过、30 跳过、0 失败。`pnpm` 引导在前一阶段受环境限制，本阶段按 AGENTS 允许的固定依赖 Node 命令替代。真实模型请求 0，未推送。最终清单必须在本地提交后的干净 HEAD 上另行冻结。
 
+# NX-49 只读会话 inspect：摘要与完整性（2026-10-18）
+
+`mini-dsh inspect <events.jsonl> [--json]` 在 dotenv、Harness、模型及工具模块加载前分流；以共享 `createLogRecordParser` 逐行校验 JSONL，不创建会话或写锁。输出版本 1，区分会话概览与最近 run、已派发主/摘要请求与派发前拒绝、缺 usage、provider usage 与缓存、工具错误及 unknown、摘要和历史读取、frozen 来源。截断、坏 JSON、未知事件及序列/载荷错误停在已确认前缀并标 `integrity.complete=false`；无 `run/finish` 记未记录结束，普通日志没有产物验收。旧日志及恢复语义未改。
+
+验证：`node scripts/build.js`、`node scripts/check-syntax.js`（158 文件）、Biome（172 文件）通过；正常用户权限 `node --test dist/test/*.test.js`：434 项、404 通过、30 跳过、0 失败（受限沙箱中的 Bash 夹具失败，正常权限复验全绿）。定向三项合成日志测试包含哈希不变、空格路径、无 API key、未知 usage、摘要缓存与部分证据。NX-45 `002-BC01-0-full` 原始 JSONL 只读交叉核对：130 事件、7 次 model/start、19 次 tool/start、provider 输入 42083、输出 2160、缓存 29184；输入 SHA256 前后均为 `DB8501472FB6BCC2DB76394595076F9150CD3405619F223A65E5FBAAB981C3D3`。未读取验收结论或估价，也未请求模型。`pnpm typecheck` 在环境中因 npm registry 拉取 `@pnpm/exe` 失败，按 AGENTS 允许的固定依赖 Node 命令完成同等检查。
+
