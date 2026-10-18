@@ -7,6 +7,8 @@ import { readTaskSequence } from './coding-fixtures.js'
 import type { FixtureKind } from './coding-fixtures.js'
 import type { V2IsolationConfig } from './eval-v2-isolation.js'
 import { createIsolatedCommandRunner } from './eval-v2-isolation.js'
+import { diagnosticScript, diagnosticTask } from './eval-diagnostic-fixture.js'
+import type { DiagnosticVariant } from './eval-diagnostic-fixture.js'
 
 export const harnessV2Ids = ['U01', 'U02', 'U03', 'U04', 'B01', 'B02', 'B03', 'B04', 'F01', 'F02', 'F03', 'F04', 'R01', 'R02', 'R03', 'R04', 'T01', 'T02', 'T03', 'T04', 'UC01', 'BC01', 'FC01', 'RC01', 'TC01'] as const
 export type HarnessV2Id = typeof harnessV2Ids[number]
@@ -51,8 +53,9 @@ function validMeta(value: unknown): value is V2Meta {
     && (meta.stages === undefined || meta.stages === 4)
 }
 
-export async function createV2Fixture(id: HarnessV2Id, isolation?: Omit<V2IsolationConfig, 'workspace'>) {
+export async function createV2Fixture(id: HarnessV2Id, isolation?: Omit<V2IsolationConfig, 'workspace'>, diagnostic?: DiagnosticVariant) {
   if (!harnessV2Ids.includes(id)) throw new Error(`unknown V2 fixture: ${id}`)
+  if (diagnostic && (id !== 'BC01' || ![4096, 262144].includes(diagnostic.bytes) || ![0, 1, 2].includes(diagnostic.repeat))) throw new Error('diagnostic variant is limited to BC01 and the frozen loads/repeats')
   const source = path.join(harnessV2Root, id)
   const meta: unknown = JSON.parse(await fs.readFile(path.join(source, 'meta.json'), 'utf8'))
   if (!validMeta(meta)) throw new Error(`invalid V2 fixture metadata: ${id}`)
@@ -63,16 +66,19 @@ export async function createV2Fixture(id: HarnessV2Id, isolation?: Omit<V2Isolat
   const initialFiles = await regularFiles(initial)
   if (meta.editable.some(file => !initialFiles.includes(file))) throw new Error(`V2 editable file missing from initial: ${id}`)
   const protectedFiles = await Promise.all(initialFiles.filter(file => !meta.editable.includes(file)).map(async file => ({ path: file, bytes: await fs.readFile(under(initial, file)) })))
+  if (diagnostic) protectedFiles.push({ path: 'diagnostic.mjs', bytes: Buffer.from(diagnosticScript(diagnostic)) })
   const edits = await Promise.all(meta.editable.map(async file => ({ path: file, oldText: await fs.readFile(under(initial, file), 'utf8'), newText: await fs.readFile(under(reference, file), 'utf8') })))
   const artifact = meta.artifact ? { path: meta.artifact, content: await fs.readFile(under(source, `oracle/${meta.artifact}`), 'utf8') } : undefined
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), `mini-dsh-v2-${id}-`))
   const workspace = path.join(directory, 'workspace')
   try {
     await fs.cp(initial, workspace, { recursive: true, errorOnExist: true })
+    if (diagnostic) await fs.writeFile(path.join(workspace, 'diagnostic.mjs'), diagnosticScript(diagnostic), { flag: 'wx' })
     const tasks = await readTaskSequence(source)
     if (tasks.length !== (meta.stages ?? 1)) throw new Error(`V2 task stage count mismatch: ${id}`)
     const scope = publicFileScope(meta)
     if (tasks.some(task => !task.split(/\r?\n/).includes(scope))) throw new Error(`V2 public file scope differs from metadata: ${id}`)
+    if (diagnostic) tasks[0] = diagnosticTask(tasks[0]!)
     const overlay = async (folder: string) => {
       for (const file of await regularFiles(folder)) {
         const target = under(workspace, file)

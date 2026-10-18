@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### NX-51 BC01 诊断负载（2026-10-18，步骤一）
+
+`createV2Fixture` 仅在显式 NX-51 变体下给 BC01 候选工作区添加受保护的 `diagnostic.mjs`，任务要求先经 bash 运行并在最终答复报告中部的诊断值。4 KiB／256 KiB 日志由同一规则生成，同重复两臂使用同值；原 BC01 的业务规格、`src/day.mjs` 参考修改、四组独立隐藏验收与反例不变。脚本源码不含诊断值明文，任务也不提供答案。定向纯离线字节／位置／任务测试通过；使用固定 WSL runtime 的两种负载各自验证初始态失败、参考态四组通过、两种反例失败、篡改诊断脚本被拒（2/2）。`node scripts/build.js`、`node scripts/check-syntax.js`（159 文件）、Biome 173 文件零诊断；正常权限全套测试 407 通过／31 跳过／0 失败。真实模型请求 0，不推送。
+
 ### NX-50 Baseline / Full 有界输出离线对照（2026-10-18）
 
 在 `test/tool-results.test.ts` 复用 `createHarness`、`resolveV2Arms(1_000_000, '1m')` 的 Baseline／Full 原配置和 Bash 结果投影，注入离线 commandRunner。两臂各取同一份 4 KiB 或 256 KiB ASCII 日志，诊断值位于中部；头部仅给字节偏移。脚本模型从收到的工具消息解析值，缺失时按真实 ref 发 `read_tool_result`，不按臂分支。两臂均完成且回答 `phase-7c92`。256 KiB 下 Full 的 Bash 预览截断 1 次、真实 ref 回读 1 次，Baseline 截断 0 次；4 KiB 均无截断或回读。

@@ -29,6 +29,7 @@ import type { V2EpisodeResult } from './eval-v2-episode.js'
 import { createIsolatedCommandRunner } from './eval-v2-isolation.js'
 import type { V2IsolationConfig } from './eval-v2-isolation.js'
 import { createHarness } from '../src/app/create-harness.js'
+import type { DiagnosticVariant } from './eval-diagnostic-fixture.js'
 
 export type Fixture = Awaited<ReturnType<typeof createFixture>> | Awaited<ReturnType<typeof createV2Fixture>>
 // 「无界」仍是同一插件，只是把预览上限抬到任何单条结果都装得下：bash 单流采集上限 8 MiB，经
@@ -148,10 +149,11 @@ export async function runFixtureTask(
   toolOutput?: ToolOutputMode, promptLayout?: PromptLayoutMode,
   v2SnapshotDirectory?: string,
   v2Isolation?: Omit<V2IsolationConfig, 'workspace'>,
+  diagnostic?: DiagnosticVariant,
 ): Promise<RunOutcome & { episode?: V2EpisodeResult }> {
   if (v2SnapshotDirectory && !v2Isolation) throw new Error('V2 fixture execution requires Linux candidate isolation')
   const v2 = /^[UBFRT](?:0[1-4]|C01)$/.test(id)
-  const fixture = await (v2 ? createV2Fixture(id as HarnessV2Id, v2Isolation) : createFixture(id as FixtureId))
+  const fixture = await (v2 ? createV2Fixture(id as HarnessV2Id, v2Isolation, diagnostic) : createFixture(id as FixtureId))
   let root = new Context()
   let store: JsonlStore | undefined
   let disposed = false

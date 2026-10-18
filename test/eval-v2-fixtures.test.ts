@@ -3,12 +3,53 @@ import { test } from 'node:test'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
+import { diagnosticLog, diagnosticValue } from '../scripts/eval-diagnostic-fixture.js'
 import { createV2Fixture, harnessV2Ids, harnessV2Root, publicFileScope } from '../scripts/eval-v2-fixtures.js'
 import { runFixtureTask, scriptedAdapter } from '../scripts/eval-fixture.js'
 import { evalPolicy } from '../scripts/eval-runner.js'
 
 const runtimeRoot = process.env.MINI_DSH_V2_RUNTIME
 const isolation = runtimeRoot ? { runtimeRoot, distro: 'Ubuntu' } : undefined
+
+test('BC01 diagnostic variants keep the business task while moving one per-repeat value into the log middle', async () => {
+  for (const repeat of [0, 1, 2] as const) for (const bytes of [4096, 262144] as const) {
+    const variant = { bytes, repeat }
+    const fixture = await createV2Fixture('BC01', undefined, variant)
+    try {
+      assert.match(fixture.tasks[0]!, /node diagnostic\.mjs/)
+      assert.ok(!fixture.tasks[0]!.includes(diagnosticValue(repeat)))
+      const output = execFileSync(process.execPath, ['diagnostic.mjs'], { cwd: fixture.workspace, encoding: 'utf8', maxBuffer: 300000 })
+      assert.equal(output, diagnosticLog(variant))
+      assert.equal(Buffer.byteLength(output), bytes)
+      const offset = Number(/DIAGNOSTIC_OFFSET=(\d+)/.exec(output)![1])
+      assert.equal(offset, bytes / 2)
+      assert.equal(output.indexOf(`DIAGNOSTIC_VALUE=${diagnosticValue(repeat)}`), offset)
+      assert.equal(fixture.edits.length, 1)
+      assert.equal(fixture.edits[0]!.path, 'src/day.mjs')
+    } finally { await fixture.close() }
+  }
+  await assert.rejects(createV2Fixture('B01', undefined, { bytes: 4096, repeat: 0 }), /limited to BC01/)
+})
+
+test('BC01 diagnostic variants retain the original four-group acceptance and protect the script', { skip: !isolation }, async () => {
+  for (const bytes of [4096, 262144] as const) {
+    const fixture = await createV2Fixture('BC01', isolation, { bytes, repeat: 0 })
+    try {
+      assert.equal((await fixture.evaluate()).passed, false)
+      await fixture.applyReference()
+      const reference = await fixture.evaluate()
+      assert.equal(reference.passed, true, JSON.stringify(reference.groups))
+      for (const negative of ['negative-a', 'negative-b'] as const) {
+        await fixture.applyCounterexample(negative)
+        assert.equal((await fixture.evaluate()).passed, false)
+      }
+      await fixture.applyReference()
+      await fs.writeFile(path.join(fixture.workspace, 'diagnostic.mjs'), 'tampered')
+      assert.deepEqual((await fixture.evaluate()).protectedFilesChanged, ['diagnostic.mjs'])
+    } finally { await fixture.close() }
+  }
+})
 
 test('every public V2 stage states the exact editable-file boundary', async () => {
   for (const id of harnessV2Ids) {
