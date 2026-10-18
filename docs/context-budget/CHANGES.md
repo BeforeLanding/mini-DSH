@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### NX-46 求职 README 与零付费命令核验（2026-10-18，步骤三）
+
+README 缩为首次上手、无密钥查看、脚本化演示、生产/v2.1 配置映射、关键代码和 NX-45 边界六部分；保留教程与独立扩展的提交分界。明确 frozen 系统提示中的时间和项目规则在首次组装后固定到 Harness 释放，同进程新会话不刷新，`project_context` 工具仍实时读盘，规则变化需重启 CLI。原 README 的 `#演示` 锚点保留，避免历史文档断链。`.env.example` 补已有能力的两个显式选择。逐项实际运行：`pnpm install --frozen-lockfile`（已是最新）、`pnpm check`（syntax ok: 156 files）、`node dist/src/index.js --show-config`（无模型注册/请求）、`pnpm demo:compact`（脚本摘要 1 次、主循环 0 次，退出 0）、`pnpm demo:fix`（脚本化修复通过，退出 0）、`pnpm test`（398 通过、30 跳过、0 失败）、`pnpm lint`（170 文件、0 诊断）。`pnpm` 在沙箱内引导无输出，命令在正常用户权限运行；测试没有真实模型。`pnpm start` 需要 API key，未执行。
+
 ### NX-46 无密钥有效配置查看（2026-10-18，步骤二）
 
 `node dist/src/index.js --show-config` 在装配同一个 `createHarness` 后、注册 DeepSeek/外部插件及 CLI 会话前只读输出新会话配置：模型、工作区、profile、live/frozen、项目上下文目录、工具预览、read_history、审批和解析后的预算；每项标明环境／`.env`／默认／provider capability／CLI_BUDGET 来源。DeepSeek 模型与容量元数据由真实适配器复用的函数提供，不需要 API key，也不打印密钥、环境全集、项目规则正文或外部配置。`MINI_DSH_SESSION_ID` 存在时拒绝新会话视图，指引到恢复会话 `/budget`；非法模型或预算拒绝。`node scripts/build.js` 和 `node --test dist/test/production-config.test.js dist/test/harness-composition.test.js dist/test/deepseek.test.js` 通过（6/6）；模拟无密钥、`.env` 覆盖、非法配置与敏感变量不泄露。真实模型请求 0。
