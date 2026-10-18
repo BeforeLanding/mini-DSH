@@ -1,34 +1,16 @@
-import { Context } from '@deepseek-ai/cordis'
 import type { Fixture, FixtureAdapter } from './eval-fixture.js'
 import { CLI_BUDGET } from '../src/core/budget.js'
 import type { BudgetPolicy } from '../src/core/budget.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
 import { JsonlStore } from '../src/core/event-store.js'
 import type { Agent, ChatRequest, ChatResponse, ToolCall } from '../src/core/contracts.js'
-import * as sessions from '../src/plugins/session.js'
-import * as systemPrompt from '../src/plugins/system-prompt.js'
-import * as tools from '../src/plugins/tools.js'
-import * as llm from '../src/plugins/llm.js'
-import * as agents from '../src/plugins/agent.js'
-import * as agentLoop from '../src/plugins/agent-loop.js'
-import * as runtimeContext from '../src/plugins/runtime-context.js'
-import * as projectContext from '../src/plugins/project-context.js'
-import * as sandbox from '../src/plugins/sandbox.js'
-import * as readHistory from '../src/plugins/read-history.js'
-import * as files from '../src/tools/files.js'
-import * as bash from '../src/tools/bash.js'
+import { createHarness } from '../src/app/create-harness.js'
 
 // NX-10 三幕演示共用的装配与输出工具。
 //
-// 装配按 src/index.ts:26-37 的**生产接法**，而不是 scripts/eval-fixture.ts 的评测接法：后者（:96-101）
-// 不装载 runtime-context 与 project-context，因此既没有 coding 身份、也拿不到 AGENTS.md 规则和
-// project_context 工具——「项目规则 → 定位」这一段在评测路径上根本不存在，现有 14 个 fixture 的
-// initial/ 里也一个规则文件都没有。
-//
-// 之所以不把这两个插件补进 runFixtureTask：那会改掉 eval:offline / eval:screening 与对照 A 两臂的
-// 系统提示，让已记录的基线数字与预注册上限不再对应同一件事。演示自带装配，评测路径一字不动。
+// 生产、演示和新版 v2 共用核心装配；旧 fixture 仍走显式 legacy 路径。
 export interface DemoHarness {
-  root: Context
+  root: Awaited<ReturnType<typeof createHarness>>['root']
   sessionId: string
   agent: Agent
   store?: JsonlStore
@@ -43,19 +25,16 @@ export interface DemoOptions {
 }
 
 export async function assembleDemoHarness(fixture: Fixture, makeAdapter: (fixture: Fixture) => FixtureAdapter, options: DemoOptions = {}): Promise<DemoHarness> {
-  const root = new Context()
+  let assembled: Awaited<ReturnType<typeof createHarness>>
+  let adapter: FixtureAdapter
+  try {
+    adapter = makeAdapter(fixture)
+    assembled = await createHarness({ workspace: fixture.workspace, profile: 'coding', adapter, autoApprove: true, projectContext: options.projectRules !== false, toolOutput: false })
+  }
+  catch (error) { await fixture.close(); throw error }
+  const { root } = assembled
   let store: JsonlStore | undefined
   try {
-    for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
-    await root.plugin(runtimeContext, { workspace: fixture.workspace, profile: 'coding' })
-    await root.plugin(sandbox, { workspace: fixture.workspace, autoApprove: true })
-    // 与 src/index.ts 的装配保持一致：摘要 frame 的 recall 提示只在确实挂载了 read_history 时才出现，
-    // 演示要展示的正是那条提示兑现得了的样子。
-    await root.plugin(readHistory)
-    if (options.projectRules !== false) await root.plugin(projectContext)
-    await root.plugin(files); await root.plugin(bash)
-    const adapter = makeAdapter(fixture)
-    root.llm.register(adapter.provider, { models: [adapter.model], ...(adapter.capabilities ? { capabilities: adapter.capabilities } : {}), chat: adapter.chat })
     // workspace 进 meta 是必须的：SessionRuntime.restore 会拿它做校验（session-runtime.ts:43），
     // 缺了就恢复不到同一个工作区。
     const session = root.sessions.create({ source: 'demo', workspace: fixture.workspace })

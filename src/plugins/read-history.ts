@@ -7,8 +7,7 @@ export const inject = ['tools', 'sessions']
 export interface ReadHistoryConfig { maxBytes?: number }
 
 // NX-34：摘要把一段历史换成 frame 之后，模型手里就只剩「第 N–M 号事件被替换了」这个门牌号。
-// 这个工具是那张门牌号能兑现的入口。它刻意不挂进评测路径（scripts/eval-fixture.ts）：多一个工具条目
-// 就改了 tools.schema，而 NX-08 两臂的对照要求工具表一致。
+// 这个工具是那张门牌号能兑现的入口。生产与 v2 评测共同装配它；旧 NX-08 路径保留历史工具表。
 export function apply(ctx: Context, config: ReadHistoryConfig = {}) {
   const maxBytes = positiveLimit(config.maxBytes, HISTORY_READ_MAX_BYTES, 'maxBytes')
   ctx.effect(() => ctx.tools.register({

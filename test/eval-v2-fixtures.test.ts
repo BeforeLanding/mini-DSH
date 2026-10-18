@@ -3,12 +3,24 @@ import { test } from 'node:test'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
-import { createV2Fixture, harnessV2Root } from '../scripts/eval-v2-fixtures.js'
+import { createV2Fixture, harnessV2Ids, harnessV2Root, publicFileScope } from '../scripts/eval-v2-fixtures.js'
 import { runFixtureTask, scriptedAdapter } from '../scripts/eval-fixture.js'
 import { evalPolicy } from '../scripts/eval-runner.js'
 
 const runtimeRoot = process.env.MINI_DSH_V2_RUNTIME
 const isolation = runtimeRoot ? { runtimeRoot, distro: 'Ubuntu' } : undefined
+
+test('every public V2 stage states the exact editable-file boundary', async () => {
+  for (const id of harnessV2Ids) {
+    const root = path.join(harnessV2Root, id)
+    const meta = JSON.parse(await fs.readFile(path.join(root, 'meta.json'), 'utf8')) as { editable: string[]; artifact?: string }
+    const expected = publicFileScope(meta)
+    const single = path.join(root, 'TASK.md')
+    const files = (await fs.stat(single).then(() => true, () => false)) ? [single] :
+      (await fs.readdir(path.join(root, 'TASKS'))).filter(name => name.endsWith('.md')).map(name => path.join(root, 'TASKS', name))
+    for (const file of files) assert.ok((await fs.readFile(file, 'utf8')).split(/\r?\n/).includes(expected), `${id}/${path.basename(file)}: scope differs from meta.json`)
+  }
+})
 
 test('calibration projects have independent initial trees and no hidden verifier in candidate files', async () => {
   const digests = new Map<string, string>()

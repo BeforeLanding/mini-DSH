@@ -6,7 +6,7 @@ import { searchFiles } from '../core/bounded-search.js'
 import type { FileSnapshot } from '../core/file-edit.js'
 import { snapshot, checkHash, replaceUnique, unifiedDiff, commitFile, validateText, fingerprint, FileSizeLimit } from '../core/file-edit.js'
 import { TaskChanges, taskChanges } from '../core/task-changes.js'
-import { taskReport } from '../core/task-verification.js'
+import { compactTaskReport, taskReport } from '../core/task-verification.js'
 import { requestTrace } from '../core/task-trace.js'
 
 export const name = 'mini-tools-files'
@@ -113,13 +113,14 @@ export function apply(ctx: Context, config: FilesConfig = {}) {
       },
     },
     {
-      name: 'task_report', description: 'Inspect delivery evidence for the current task across continuation/restart: confirmed file edits, current-version check coverage, failed/unknown/stale checks and run status. Passing checks cover declared files/commands only and never assert task acceptance. File and verification pages are independent; use next offsets. Logs remain in verification events and original Bash results.',
+      name: 'task_report', description: 'Inspect delivery evidence for the current task across continuation/restart: confirmed file edits, current-version check coverage, failed/unknown/stale checks and run status. The default is a compact one-check page; follow verificationNextOffset until verificationsEof. Pass maxRecords explicitly for full check records. File and verification pages are independent. Passing checks cover declared files/commands only and never assert task acceptance. Logs remain in verification events and original Bash results.',
       parameters: parameters({ fileOffset: { type: 'integer', minimum: 0 }, verificationOffset: { type: 'integer', minimum: 0 }, maxFiles: { type: 'integer', minimum: 1, maximum: maxTrackedFiles }, maxRecords: { type: 'integer', minimum: 1, maximum: 100 } }),
       async execute(args, exec) {
         const service = sessions()
         if (!exec.sessionId || !service) throw new Error('task_report requires a session')
         const offset = (value: unknown) => { if (value === undefined) return 0; if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error('offset must be a nonnegative integer'); return value }
-        return taskReport(service, exec.sessionId, file => resolve(file), maxEditBytes, exec.signal, offset(args.fileOffset), offset(args.verificationOffset), positiveLimit(args.maxFiles, Math.min(20, maxTrackedFiles), 'maxFiles', maxTrackedFiles), positiveLimit(args.maxRecords, 20, 'maxRecords', 100))
+        const report = await taskReport(service, exec.sessionId, file => resolve(file), maxEditBytes, exec.signal, offset(args.fileOffset), offset(args.verificationOffset), positiveLimit(args.maxFiles, Math.min(20, maxTrackedFiles), 'maxFiles', maxTrackedFiles), positiveLimit(args.maxRecords, 1, 'maxRecords', 100))
+        return args.maxRecords === undefined ? compactTaskReport(report) : report
       },
     },
     {
@@ -143,7 +144,7 @@ export function apply(ctx: Context, config: FilesConfig = {}) {
       async execute(args, exec) { return mutate('write_file', args, exec) },
     },
     {
-      name: 'edit_file', description: 'Replace one unique exact oldText, preserving line endings, after approval showing range and diff. Pass expectedHash from read_file to reject stale edits. Returns diff and hashes.',
+      name: 'edit_file', description: 'Replace one unique oldText; CRLF and LF may match while untouched bytes are preserved. Other text must match exactly. Approval shows range and diff. Pass expectedHash from read_file to reject stale edits. Returns diff and hashes.',
       parameters: parameters({ path: string, oldText: string, newText: string, expectedHash: string }, ['path', 'oldText', 'newText']),
       async execute(args, exec) { return mutate('edit_file', args, exec) },
     },

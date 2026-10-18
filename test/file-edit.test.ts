@@ -3,7 +3,19 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { snapshot, fingerprint, replaceUnique, unifiedDiff, commitFile, validateText } from '../src/core/file-edit.js'
+import { snapshot, fingerprint, checkHash, replaceUnique, unifiedDiff, commitFile, validateText } from '../src/core/file-edit.js'
+
+test('edit fallback accepts only unique CRLF/LF-equivalent text and preserves untouched bytes', () => {
+  assert.equal(replaceUnique('head\r\nold\r\nend\r\ntail', 'old\nend', 'new\nbody').text, 'head\r\nnew\nbody\r\ntail')
+  assert.equal(replaceUnique('head\nold\nend\ntail', 'old\r\nend', 'new').text, 'head\nnew\ntail')
+  assert.equal(replaceUnique('head\r\nold\nend\r\ntail', 'old\r\nend', 'new').text, 'head\r\nnew\r\ntail')
+  assert.throws(() => replaceUnique('a\r\nb\r\na\nb', 'a\nb', 'x'), /not unique/)
+  assert.throws(() => replaceUnique('a\r\nb\na\nb', 'a\nb', 'x'), /not unique/)
+  assert.throws(() => replaceUnique('a\r\nb', 'a\nb ', 'x'), /not found/)
+  assert.throws(() => replaceUnique('a\r\nb', 'a\rb', 'x'), /not found/)
+  checkHash(fingerprint('a\r\nb'), fingerprint('a\r\nb'))
+  assert.throws(() => checkHash(fingerprint('a\r\nb'), fingerprint('a\nb')), /file conflict/)
+})
 
 test('file editing preserves exact Unicode/BOM/CRLF bytes and rejects ambiguous or unsupported text', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'file-edit-')), file = path.join(directory, 'a')

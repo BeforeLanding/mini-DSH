@@ -16,6 +16,12 @@ export interface V2ContractGroup { name: string; passed: boolean; detail?: strin
 interface V2Meta { kind: FixtureKind; editable: string[]; artifact?: string; groups: [string, string, string, string]; stages?: 4 }
 interface V2Acceptance { passed: boolean; exitCode: number | null; output: string; protectedFilesChanged: string[]; groups: V2ContractGroup[] }
 
+// Keep the candidate's public edit boundary identical to the protected-file check.
+export function publicFileScope(meta: Pick<V2Meta, 'editable' | 'artifact'>): string {
+  if (meta.artifact) return `文件范围：已有文件均不得修改（包括 package.json、源码、规格和公开检查）；交付文件是根目录 \`${meta.artifact}\`。`
+  return `文件范围：仅可修改以下已有文件：${meta.editable.map(file => `\`${file}\``).join('、')}；其他已有文件（包括 package.json、规格和公开检查）不得修改。`
+}
+
 const under = (root: string, relative: string): string => {
   if (!relative || relative.includes('\\') || path.isAbsolute(relative) || relative.split('/').some(part => !part || part === '..' || part === '.')) throw new Error(`invalid V2 fixture path: ${relative}`)
   return path.join(root, relative)
@@ -65,6 +71,8 @@ export async function createV2Fixture(id: HarnessV2Id, isolation?: Omit<V2Isolat
     await fs.cp(initial, workspace, { recursive: true, errorOnExist: true })
     const tasks = await readTaskSequence(source)
     if (tasks.length !== (meta.stages ?? 1)) throw new Error(`V2 task stage count mismatch: ${id}`)
+    const scope = publicFileScope(meta)
+    if (tasks.some(task => !task.split(/\r?\n/).includes(scope))) throw new Error(`V2 public file scope differs from metadata: ${id}`)
     const overlay = async (folder: string) => {
       for (const file of await regularFiles(folder)) {
         const target = under(workspace, file)

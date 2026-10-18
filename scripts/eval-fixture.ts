@@ -28,6 +28,7 @@ import { runV2Stages, snapshotWorkspace } from './eval-v2-episode.js'
 import type { V2EpisodeResult } from './eval-v2-episode.js'
 import { createIsolatedCommandRunner } from './eval-v2-isolation.js'
 import type { V2IsolationConfig } from './eval-v2-isolation.js'
+import { createHarness } from '../src/app/create-harness.js'
 
 export type Fixture = Awaited<ReturnType<typeof createFixture>> | Awaited<ReturnType<typeof createV2Fixture>>
 // 「无界」仍是同一插件，只是把预览上限抬到任何单条结果都装得下：bash 单流采集上限 8 MiB，经
@@ -149,10 +150,24 @@ export async function runFixtureTask(
   v2Isolation?: Omit<V2IsolationConfig, 'workspace'>,
 ): Promise<RunOutcome & { episode?: V2EpisodeResult }> {
   if (v2SnapshotDirectory && !v2Isolation) throw new Error('V2 fixture execution requires Linux candidate isolation')
-  const fixture = await (/^[UBFRT](?:0[1-4]|C01)$/.test(id) ? createV2Fixture(id as HarnessV2Id, v2Isolation) : createFixture(id as FixtureId)), root = new Context()
+  const v2 = /^[UBFRT](?:0[1-4]|C01)$/.test(id)
+  const fixture = await (v2 ? createV2Fixture(id as HarnessV2Id, v2Isolation) : createFixture(id as FixtureId))
+  let root = new Context()
   let store: JsonlStore | undefined
   let disposed = false
   try {
+    const adapter = makeAdapter(fixture)
+    if (v2) {
+      const assembled = await createHarness({
+        workspace: fixture.workspace, profile: 'coding', adapter, autoApprove: true,
+        contextLayout: promptLayout?.frozen ? 'frozen' : 'live',
+        toolOutputMaxPreviewBytes: toolOutput?.bounded === false ? UNBOUNDED_PREVIEW_BYTES : undefined,
+        commandRunner: v2Isolation ? createIsolatedCommandRunner({ ...v2Isolation, workspace: fixture.workspace }) : undefined,
+      })
+      await root.fiber.dispose()
+      root = assembled.root
+    } else {
+    // Legacy NX-08/NX-38 fixtures retain their historical plugin and prompt layout.
     for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
     await root.plugin(sandbox, { workspace: fixture.workspace, autoApprove: true })
     // runtime-context 的 runtime:environment 是评测路径上唯一**每轮必然变化**的系统提示段落（毫秒级
@@ -168,8 +183,8 @@ export async function runFixtureTask(
     // 有界走生产默认（positiveLimit 的 16 KiB 预览），无界抬到 UNBOUNDED_PREVIEW_BYTES。两者注册的工具
     // 与 schema 逐字相同，差异只在结果是否被投影截断。
     if (toolOutput) await root.plugin(toolResults, { maxPreviewBytes: toolOutput.bounded ? undefined : UNBOUNDED_PREVIEW_BYTES })
-    const adapter = makeAdapter(fixture)
     root.llm.register(adapter.provider, { models: [adapter.model], ...(adapter.capabilities ? { capabilities: adapter.capabilities } : {}), chat: adapter.chat })
+    }
     const session = root.sessions.create({ source: 'eval', fixtureId: id })
     if (sessionDirectory) {
       store = await JsonlStore.open(sessionDirectory, session.id)

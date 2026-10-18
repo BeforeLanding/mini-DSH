@@ -5,7 +5,7 @@ import { ablationPolicy, promptLayoutPolicy, toolOutputPolicy } from './eval-run
 import type { AblationPhase, PromptLayoutMode, ToolOutputMode } from './eval-runner.js'
 import type { BudgetPolicy } from '../src/core/budget.js'
 
-export type V2Split = 'calibration' | 'formal'
+export type V2Split = 'calibration' | 'formal' | 'development'
 export type V2Tier = '2m' | '1m'
 export type V2Family = 'comprehension' | 'bugfix' | 'feature' | 'refactor' | 'mutation'
 export type V2Shape = 'single' | 'cross-module' | 'information' | 'multi-stage'
@@ -22,10 +22,18 @@ export const formalTasks: readonly V2Task[] = Object.freeze(families.flatMap(([p
   shapes.map((shape, index) => Object.freeze({ id: `${prefix}${String(index + 1).padStart(2, '0')}`, family, shape }))))
 export const calibrationTasks: readonly V2Task[] = Object.freeze(families.map(([prefix, family]) =>
   Object.freeze({ id: `${prefix}C01`, family, shape: family === 'comprehension' || family === 'refactor' ? 'multi-stage' : 'information' as V2Shape })))
+// Structural selection only: all five existing calibration roots plus the first
+// single-stage comprehension root. U01 becomes development data once used here.
+export const developmentTasks: readonly V2Task[] = Object.freeze([...calibrationTasks, formalTasks[0]!])
 
 export const v2Arms = ['baseline', 'context', 'prompt', 'full'] as const
 export const calibrationArms = ['baseline', 'full'] as const
 export const v2ScheduleSeed = 20261015
+export const developmentScheduleSeed = 20261017
+export const tasksForV2Split = (split: V2Split): readonly V2Task[] => split === 'formal' ? formalTasks : split === 'development' ? developmentTasks : calibrationTasks
+export const armsForV2Split = (split: V2Split): readonly AblationPhase[] => split === 'formal' ? v2Arms : calibrationArms
+export const repeatsForV2Split = (split: V2Split) => split === 'formal' ? 3 : 2
+export const seedForV2Split = (split: V2Split) => split === 'development' ? developmentScheduleSeed : v2ScheduleSeed
 const fixtureRoot = fileURLToPath(new URL('../../test/fixtures/harness-v2/', import.meta.url))
 
 const positive = (value: string, flag: string): number => {
@@ -53,9 +61,10 @@ export function parseV2Arguments(argv: readonly string[]): V2Options {
     values.set(key, value)
   }
   const split = values.get('split')
-  if (split !== 'calibration' && split !== 'formal') throw new Error('--split must be calibration or formal')
+  if (split !== 'calibration' && split !== 'formal' && split !== 'development') throw new Error('--split must be calibration, development or formal')
   const tier = values.get('tier')
   if (tier !== '2m' && tier !== '1m') throw new Error('--tier must be 2m or 1m; choose the formal tier after calibration')
+  if (split === 'development' && tier !== '1m') throw new Error('development protocol requires the shared 1m tier')
   const window = positive(values.get('window') ?? '', '--window')
   if (window <= 65_536) throw new Error('--window must exceed the managed input target of 65,536 tokens')
   const evidenceRoot = values.get('evidence-root')
@@ -78,15 +87,27 @@ export function resolveV2Arms(window: number, tier: V2Tier): readonly V2Arm[] {
   }))
 }
 
+export function developmentReserveUsd(price: { inputPerMillion: number; outputPerMillion: number; cacheReadPerMillion: number }) {
+  if ([price.inputPerMillion, price.outputPerMillion, price.cacheReadPerMillion].some(value => !Number.isFinite(value) || value < 0)) throw new Error('invalid development price')
+  const budget = resolveV2Arms(1_000_000, '1m')[0]!.budget
+  const maxRate = Math.max(price.inputPerMillion, price.outputPerMillion, price.cacheReadPerMillion)
+  const tokenBudgetUsd = budget.maxTotalTokens! * maxRate / 1_000_000
+  const marginUsd = tokenBudgetUsd * 0.2
+  const finalRequestUsd = price.inputPerMillion + budget.maxOutputTokens! * price.outputPerMillion / 1_000_000
+  const perEpisodeUsd = tokenBudgetUsd + marginUsd + finalRequestUsd
+  const probeUsd = 16_384 * maxRate / 1_000_000
+  return { tokenBudgetUsd, marginUsd, finalRequestUsd, perEpisodeUsd, probeUsd, batchUsd: perEpisodeUsd * 24 + probeUsd }
+}
+
 export function resolveV2Episodes(split: V2Split): readonly V2Episode[] {
-  const tasks = split === 'formal' ? formalTasks : calibrationTasks
-  const arms = split === 'formal' ? v2Arms : calibrationArms
-  const repeats = split === 'formal' ? 3 : 2
+  const tasks = tasksForV2Split(split)
+  const arms = armsForV2Split(split)
+  const repeats = repeatsForV2Split(split)
   const result: V2Episode[] = []
   for (let repeat = 0; repeat < repeats; repeat += 1) {
     // Fisher-Yates with a protocol-fixed seed controls order only; model decoding is not seeded.
     const ordered = [...tasks]
-    let state = (v2ScheduleSeed ^ repeat) >>> 0
+    let state = (seedForV2Split(split) ^ repeat) >>> 0
     for (let cursor = ordered.length - 1; cursor > 0; cursor -= 1) {
       state ^= state << 13; state ^= state >>> 17; state ^= state << 5
       const target = (state >>> 0) % (cursor + 1)
@@ -103,12 +124,12 @@ export function resolveV2Episodes(split: V2Split): readonly V2Episode[] {
 }
 
 export function resolveV2Plan(options: V2Options) {
-  const tasks = options.split === 'formal' ? formalTasks : calibrationTasks
+  const tasks = tasksForV2Split(options.split)
   const episodes = resolveV2Episodes(options.split)
-  const arms = resolveV2Arms(options.window, options.tier).filter(arm => options.split === 'formal' || arm.name === 'baseline' || arm.name === 'full')
+  const arms = resolveV2Arms(options.window, options.tier).filter(arm => armsForV2Split(options.split).includes(arm.name))
   const perEpisode = arms[0]!.budget
   return {
-    protocol: 'NX-42-eval-v2', scheduleSeed: v2ScheduleSeed, split: options.split, tier: options.tier, evidenceRoot: options.evidenceRoot,
+    protocol: options.split === 'development' ? 'NX-45-dev-2arm-v1' : 'NX-42-eval-v2.1', scheduleSeed: seedForV2Split(options.split), split: options.split, tier: options.tier, evidenceRoot: options.evidenceRoot,
     modelWindowTokens: options.window, tasks, arms, episodes,
     caps: { runs: episodes.length, modelRequests: episodes.length * perEpisode.maxModelRequests!, toolCalls: episodes.length * perEpisode.maxToolCalls!, totalTokens: episodes.length * perEpisode.maxTotalTokens!, activeDurationMs: episodes.length * perEpisode.maxActiveDurationMs! },
     readiness: { fixturesPresent: tasks.filter(task => fs.existsSync(path.join(fixtureRoot, task.id))).length, fixturesPlanned: tasks.length },

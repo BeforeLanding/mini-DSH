@@ -1,5 +1,210 @@
 # 改动与验收证据
 
+### 招聘者交付审查与展示材料（2026-10-18）
+
+从完整 HEAD `cb017a732c20a2bc076ca958cf93224cf0b16723` 的干净工作树审查 README、AGENTS.md、NX-45 报告及本地安装记录。新增[五分钟讲解提纲](../RECRUITER_WALKTHROUGH.md)和[NX-45 公开证据摘要](NX-45-PUBLIC-EVIDENCE.md)，补 README 入口并明确公开摘要与仅本地保存的原始事件不同；报告及 usage 更正文档不再要求读者访问本机绝对路径。公开摘要列协议、冻结代码、固定分母、两种验收口径、历史价格来源、usage 重算方法及顶层源文件指纹；不加入原始提示或事件记录。README 明确组合策略结果不能单独归因于稳定前缀或主动压缩。
+
+原 NX-48 最终 tarball 早于 `inspect`，本次因此重新打包验证新增安装路径：`pnpm.cmd pack --pack-destination .review-validation`，包 SHA-256 `5e3136c4c50496cfe04e5852f88334059a952911c1bb9e68d8169d56e63bd201`，109 项，白名单外及敏感证据 0；在含空格的隔离 consumer 目录执行 `pnpm.cmd --dir ... add --offline --ignore-scripts <tarball>` 成功，安装的 Windows `.cmd` 在含空格工作区执行 `--help`、`--version`、`--show-config`、`inspect <脚本化演示日志> --trace` 均退出 0。`node scripts/build.js`、`node dist/scripts/demo-compact.js`、`node dist/src/index.js --show-config`、`node dist/src/index.js inspect <演示日志> --trace`、`node --test dist/test/docs-links.test.js` 和本次五份文档的相对链接目标检查通过；源文件哈希与本地封存原件一致。`pnpm` 在沙箱内引导无输出，包验证使用正常用户权限；未重跑无关测试或效果实验。真实模型请求 0，未推送或发布。
+
+### NX-48 本地安装文档（2026-10-18，步骤二）
+
+README 新增从仓库 `pnpm pack`、仓库外临时目录 `pnpm --dir ... add`、Windows `.cmd` 的 `--help`／`--version`／`--show-config` 及交互启动步骤；明确 npm 尚未发布、正常安装可下载依赖、API key 仅交互需要，默认工作区与 `.env` 来自调用者当前目录、会话在用户主目录、工具结果在工作区，且只声明 Windows 的本地安装验证。最终包 `D:/Agent/outputs/nx48-install-validation-20261018/package-final/mini-DSH-0.0.1.tgz`，SHA-256 `4c15bc6bacfd90bed454002c979f891417d89d10427efe615a9121188fda982c`；重新打包后，在全新 `consumer final space` 离线安装成功，三个无 key 命令均退出 0，含空格工作区定位正确、`.env` 来源正确，缺 key 报错退出 1；虚构 key 输入 `/exit` 退出 0，仅写 `session/start` 且锁清除。最终包 107 项、白名单外 0、敏感证据／`.env` 0。README 中 `pnpm --dir ... add` 的实际语法又在 `consumer documented space` 离线安装通过。`pnpm check`（syntax 156 文件）、`pnpm test`（401 通过／30 跳过／0 失败）、`pnpm lint`（170 文件、0 诊断）通过；真实模型请求 0。
+
+### NX-48 可安装 CLI 入口与隔离安装（2026-10-18，步骤一）
+
+为原生产 `src/index.ts` 增 `mini-dsh` bin、`--help`／`--version` 早期分支，保留现有 `--show-config` 与正常 `createHarness`／CLI 路径；`prepack` 构建，`files` 仅允许生产 `dist/src`、`dist/plugins.config.js`，运行依赖 Cordis 4.0.1 与 dotenv 17.4.2 固定到已验证版。缺 key 报错指向调用者环境或当前目录 `.env`，不回显密钥。定向测试覆盖无 key 元数据命令、非法参数、含空格目录和缺 key。隔离包路径 `D:/Agent/outputs/nx48-install-validation-20261018/package-v2/mini-DSH-0.0.1.tgz`（SHA-256 `3bc340e42a7416fa8a5092f27e85af5cd814cd186420cbc8c050163b305c0499`）：`pnpm pack` 后在仓库外 `consumer space 3` 执行 `pnpm add --ignore-scripts`，Windows `mini-dsh.cmd` 的 `--help`／`--version`／`--show-config` 均退出 0；show-config 工作区为 `sample project`（含空格）、frozen 来源为该目录 `.env`，未暴露项目规则。虚构 key 下管道输入 `/exit` 正常退出 0，会话写到单独 `sessions`，只有 `session/start`，无 `model/start`，writer.lock 为 0；安装包目录无会话／工具结果。包清单 107 项，白名单外 0、敏感证据或 `.env` 0，包含入口与插件配置；Windows `.cmd`／`.ps1` shim 存在。首次 `npm install --offline` 缺 Cordis 缓存、随后 `pnpm add --offline` 缺 MCP SDK 1.30.1 缓存，最终正常依赖下载 11 项后隔离安装成功。`pnpm check`（syntax 156 文件）、`pnpm test`（401 通过／30 跳过／0 失败）、`pnpm lint`（170 文件、0 诊断）通过；真实模型请求 0。
+
+### NX-47 frozen 生命周期文档（2026-10-18，步骤二）
+
+README 将旧的「快照持续整个 Harness／新会话不刷新」更正为按 sessionId 和 reset 可见段保存、刷新与恢复；写明旧日志缺快照时按当前环境取样并标记、`project_context` 当前磁盘与提示快照可能不同、让新规则生效需 `/reset` 或新会话，以及 JSONL 内容与跨版本事件序号边界。生产默认 live、评测协议和历史证据未改。文档锚点检查随 `pnpm test` 执行；真实模型请求 0。
+
+### NX-47 frozen 按会话持久化快照（2026-10-18，步骤一）
+
+沿 CLI 的创建／`MINI_DSH_SESSION_ID` 恢复／`/reset` 和 AgentLoop 的装配路径检查后，新增 `context/snapshot` JSONL 事件，分别存 `runtime:environment` 与 `project:context` 的原文及来源。首次组装后即 flush，模型派发前已有持久记录；同会话后续轮次和重启恢复复用它，新 sessionId 或 reset 可见段重新取样。旧会话有既往 `model/start` 却无快照时以当前环境取样，标 `legacy-current` 并在 CLI 提示原始快照不可恢复；`project_context` 保持实时读盘。无 sessionId 的独立提示检查仍沿用 `stableText`。生产默认 live、预算、权限、提示正文和工具 schema 不变。新的 frozen 日志会多两条事件，后续事件序号变化；旧严格回放若比较事件序号或新旧实现的记录，可能出现差异，未放宽比较、未改旧日志。定向 `node --test dist/test/production-config.test.js` 6/6，`pnpm check` 语法 156 文件，`pnpm test` 400 通过／30 跳过，`pnpm lint` 170 文件 0 诊断；测试全为离线，真实模型请求 0。
+
+### NX-46 求职 README 与零付费命令核验（2026-10-18，步骤三）
+
+README 缩为首次上手、无密钥查看、脚本化演示、生产/v2.1 配置映射、关键代码和 NX-45 边界六部分；保留教程与独立扩展的提交分界。明确 frozen 系统提示中的时间和项目规则在首次组装后固定到 Harness 释放，同进程新会话不刷新，`project_context` 工具仍实时读盘，规则变化需重启 CLI。原 README 的 `#演示` 锚点保留，避免历史文档断链。`.env.example` 补已有能力的两个显式选择。逐项实际运行：`pnpm install --frozen-lockfile`（已是最新）、`pnpm check`（syntax ok: 156 files）、`node dist/src/index.js --show-config`（无模型注册/请求）、`pnpm demo:compact`（脚本摘要 1 次、主循环 0 次，退出 0）、`pnpm demo:fix`（脚本化修复通过，退出 0）、`pnpm test`（398 通过、30 跳过、0 失败）、`pnpm lint`（170 文件、0 诊断）。`pnpm` 在沙箱内引导无输出，命令在正常用户权限运行；测试没有真实模型。`pnpm start` 需要 API key，未执行。
+
+### NX-46 无密钥有效配置查看（2026-10-18，步骤二）
+
+`node dist/src/index.js --show-config` 在装配同一个 `createHarness` 后、注册 DeepSeek/外部插件及 CLI 会话前只读输出新会话配置：模型、工作区、profile、live/frozen、项目上下文目录、工具预览、read_history、审批和解析后的预算；每项标明环境／`.env`／默认／provider capability／CLI_BUDGET 来源。DeepSeek 模型与容量元数据由真实适配器复用的函数提供，不需要 API key，也不打印密钥、环境全集、项目规则正文或外部配置。`MINI_DSH_SESSION_ID` 存在时拒绝新会话视图，指引到恢复会话 `/budget`；非法模型或预算拒绝。`node scripts/build.js` 和 `node --test dist/test/production-config.test.js dist/test/harness-composition.test.js dist/test/deepseek.test.js` 通过（6/6）；模拟无密钥、`.env` 覆盖、非法配置与敏感变量不泄露。真实模型请求 0。
+
+### NX-46 生产显式配置选择（2026-10-18，步骤一）
+
+`src/index.ts` 改用 `productionHarnessConfig` 把现有 `MINI_DSH_PROFILE`、工作区和项目目录映射到同一 `createHarness`，另接受 `MINI_DSH_CONTEXT_LAYOUT=live|frozen` 与正安全整数 `MINI_DSH_TOOL_PREVIEW_BYTES`。默认仍是 live 和 tool-results 的 16 KiB 预览；不改 CLI_BUDGET、评测两臂、工具 schema 或 read_history。非法值在装配前报错。定向 `node scripts/build.js`、`node --test dist/test/production-config.test.js dist/test/harness-composition.test.js` 通过（5/5）；测试还证实 frozen 时间与项目规则的系统提示快照跨同进程新会话不更新，`project_context` 工具实时重读，重建 Harness 后快照更新。真实模型请求 0。
+
+### NX-45 开发探索结论与末尾轨迹（2026-10-17）
+
+按固定每臂 12 条分母保留逐题两次结果：可靠完成 Baseline 11/12、Full 10/12，产物验收分别 11/12、12/12。Full 峰时 usage 估价较低，但请求、工具与主动时间更多。只读 UC01/0/Full 与 RC01/0/Full 的末段事件，区分有目的的公开验证修正与可见的重复报告/文件回读，不从隐藏验收设计在线停止条件。开发题已曝光，模型版本与 1M/64/128/600 秒固定预算约束均在[结果报告](NX-45-EXPLORATION-RESULT.md)列明；不声称成功率提升、显著性、泛化或单机制归因。未实现新完成协议或上下文策略，真实模型请求 0。
+
+### NX-45 原始 usage 离线更正（2026-10-17）
+
+新目录 `D:/Agent/outputs/nx45-development-corrected-20261017/` 的脚本从 24 份 `model/usage` 事件独立重算，核对唯一请求、provider 来源、输入与总 token，并保存源 SHA-256 及旧字段差异；原始证据未改。Full 缓存命中更正为 3,993,600，四条 episode 合计旧字段少 43,264。峰时 episode usage 估价 Baseline $1.448544408、Full $0.391956600；探针 $0.000031200，含探针 $1.840532208；金额闸门含完整探针预留的读数 $1.860161808 独立列示。详见[离线更正](NX-45-USAGE-CORRECTION.md)。真实模型调用 0。
+
+### NX-45 摘要 usage 缓存累计修复（2026-10-17）
+
+`CompactionRuntime.#settle` 现在同主请求及 `SessionRuntime` 事件折叠一致，将每次摘要返回的 `cacheReadTokens ?? 0` 累加一次。缓存命中仍包含在 `inputTokens` 内，不加到 `totalTokens`，不改变 token 预算或金额闸门。模拟测试覆盖主请求及多次摘要的命中、字段缺失/显式 0、实时与日志重建一致，以及 `token_budget` 停止后的持久化恢复和继续。`node scripts/build.js`、`node scripts/check-syntax.js`、`node --test dist/test/compaction-runtime.test.js` 通过（14/14）；完整 `node --test dist/test/*.test.js` 在正常用户权限下 394 通过、30 跳过、0 失败。沙箱内 Bash/软链用例受权限限制，单独核查后在正常权限下通过；`pnpm` 在本机无输出等待，故使用仓库规则允许的 Node 后备命令。真实模型调用 0。
+
+### NX-45 开发探索：协议交接与最终冻结准备（2026-10-17，步骤三）
+
+[NX-45 协议](NX-45-DEVELOPMENT.md)逐题列选择依据和既有真实曝光（五个 C 题 26–28 条，U01 无真实运行但本次改归开发集），固定 12 个配对 block、每臂 12 条分母、可靠完成与产物验收独立口径、普通失败继续/基础设施和未知费用停批、价格与报告结构。官方 `deepseek-flash` 当前版本 `DeepSeek-V4.1-Flash-1017`，思考模式启用且适配器不发送 temperature/top_p；峰时输入命中/未命中/输出价每百万 token 为 $0.006/$0.30/$1.20。三批既有 1M 校准共 60 条按当前峰时价重算后，24 条量级约 $3–5；独立保守公式为 24 × ($1.20+$0.24+$0.3196608) + $0.0196608 = $42.25152，建议本批授权上限 $43。该金额不是执行授权，也不按 NX-44 短 smoke 线性外推。最终干净 HEAD 的仓库外 manifest 与 digest 在本步提交后生成；不会在仓库内写自引用清单。未调用真实模型、未推送。
+
+### NX-45 开发探索：运行门禁、费用与证据边界（2026-10-17，步骤二）
+
+开发 split 使用现有 v2.1 runner/隔离/快照/验收路径，执行前增加独立协议、干净冻结 HEAD、官方价格来源、模型版本和工具 schema 校验；六题任务与规则文件均钉 SHA。原 calibration/formal 路径保留。24 条按 12 个完整 block 调度，余额不足整块保守预留不启动；逐请求复用既有金额闸门，主/摘要均计费，未知 provider usage、provider/运行错误、已完成却缺证据、金额拒绝停批，普通任务失败继续记入固定分母。整题预算由 `runV2Stages` 跨阶段扣减，退出候选快照与独立验收沿用既有组件。
+
+`node scripts/build.js`、`node scripts/check-syntax.js`（153 文件）、定向 21/21、Biome 7 文件零诊断；`node scripts/eval-capabilities.mjs` 实测 Baseline/Full schema 同为 `59cf172ac95b4f3b8f21c919cf81730fac77d4a6ab5c56c65b93b94b1ba6d204`，差异仅四个白名单字段。正常用户权限 `MINI_DSH_V2_RUNTIME=D:/Agent/tmp/nx42-runtime/unpack node --test dist/test/eval-v2-fixtures.test.js`：31 通过、0 跳过，覆盖六题初始/参考/反例及 UC01/RC01 四阶段自检。完整离线套件 393 通过、30 跳过、0 失败；首次仅旧 manifest 拒绝文案用例失败，恢复历史错误文案后复绿。真实模型请求 0。
+
+### NX-45 开发探索：独立协议与固定 24 项日程（2026-10-17，步骤一）
+
+基线 `7befdb4`。在现有 v2.1 计划/冻结/报告组件内增加 `NX-45-dev-2arm-v1`，六题按结构固定为 UC01、BC01、FC01、RC01、TC01、U01；每题两个重复，每个 block 含 Baseline/Full 各一条，先行臂 6:6 平衡。两臂沿用 `resolveV2Arms` 的 1M 整题预算，报告每臂固定分母 12，产物验收与可靠完成分开，解释固定为 `development-only`，正式改善阈值不适用。未修改原 calibration/formal 日程。`node scripts/build.js` 通过，`node --test dist/test/eval-v2-plan.test.js dist/test/eval-v2-report.test.js` 7/7；plan-only 读数为 24 条、总上限 24M token/1536 请求/3072 工具调用。真实模型请求 0。
+
+### NX-44 smoke-v2 repair 六轮零付费回放收口（2026-10-17）
+
+基线 `98c8971`、工作树干净。`createSmokeReplay` 显式登记原 fixture 根，仅对 Bash `command` 结果的 `cwd` 根和 `durationMs` 制作指纹比较副本；保留原始录制指纹核验、结果文本其余字节比较、实际 session 耗时。录制六次主请求用尽时模拟预派发 `request_limit`，不消耗第七条，也无 provider 后备。新增反例覆盖 stdout、exitCode、命令、超时、取消、截断与相对/根外路径。`node scripts/build.js`、`node scripts/check-syntax.js`（153 文件）、定向 6/6；正常权限完整测试 390 通过、30 跳过、0 失败。沙箱内 WSL 拒绝导致第一次本地回放在 Bash stdout/exitCode 差异处拒绝，正常权限复跑通过。
+
+新证据 `D:/Agent/outputs/mini-dsh-repair-smoke-evidence-v2-20261017/replay-limited-audit.json`：首分歧无，6/6 主、0/0 摘要响应消费完毕，runStatus `max_steps`，候选 hash `967728a506d88c31b1d9e491ce01bec148491bbd7cd64273538f0f9accee503b` 与原候选相同，独立验收 passed；真实网络请求 0、新增模型费用 $0。回放 amountGuard `$0.012265848` 标为模拟记账，原录制 33,668 provider token 及历史峰时估价另列。轨迹与边界见 [复盘](NX-44-REPAIR-REPLAY.md)。原录制、原 smoke 结论不改，不推送。
+
+### NX-44-4 逐请求金额闸门
+
+2026-10-17。把 `--max-usd` 从整批储备门槛延伸为运行中闸门：每次调用前按冻结的 1M 输入及该次输出上限预留峰时金额，provider usage 返回后逐次累计，部分流有真实 usage 也计费；usage 缺失禁止后续请求。`smoke-report.json` 记录估算已用美元、usage 不确定性和实际发出请求数。模拟模型金额/未知/部分流边界测试通过；`node scripts/build.js`、`node scripts/check-syntax.js`（151 文件）、Biome 165 文件、`git diff --check` 通过，正常权限完整测试 379 通过、30 跳过、0 失败（409 总数），不接真实 API。此改动使先前生成的 smoke manifest 失效，须在本步提交后按最终 HEAD 重新冻结。
+
+### NX-44-3 最终冻结与待授权预算
+
+2026-10-17。代码与测试提交后，最终 freeze 只生成在仓库外 `D:/Agent/outputs/mini-dsh-smoke-freeze-final-v2-20261017/`；该目录的 `manifest.json`、校验输出和交接说明按最终 HEAD 记录代码、fixture、工具 schema、三场景、模型参数与官方峰时价格。先前的 `mini-dsh-smoke-freeze-final-20261017` 在金额闸门改动前生成，已失效。冻结命令不读取凭证，`smoke-run --validate-only` 不调用 provider。官方 `deepseek-flash` 峰时价分别为缓存命中输入 $0.006、未命中输入 $0.30、输出 $1.20／百万 token；520,000 token 的 80/20 无缓存示例约 $0.2496，全按输出价加 20% 储备为 $0.7488，建议单批最高授权 $1.00。价格与执行命令见 [NX-44](NX-44-SMOKE.md) 和仓库外交接；本步未执行真实 smoke。
+
+### NX-44-2 固定 smoke 场景与独立运行入口
+
+2026-10-17。新增独立的协议、压缩回读、短修复 smoke 清单和入口；最多 2+5+7 次模型请求、合计 520,000 token，分别限定单次输出、主动时间、墙钟时间、超时与工具调用。修复录制器在 provider usage 缺失或累计预算越界时重复写终止记录的问题：现在只写一条错误终止并阻止所有后续 provider 调用。DeepSeek 流响应保留回显模型和 system fingerprint 供协议探针检查，不改变请求提示、thinking、压缩阈值或完成语义。`--validate-only` 只做冻结校验，不读凭证；`--execute` 先做现有 WSL/bwrap 隔离预检。三项结果独立于正式评测统计。官方价格与冻结须在此提交后按最终 HEAD 写工作树外。详见 [NX-44](NX-44-SMOKE.md)。
+
+验证：`node scripts/build.js`、`node scripts/check-syntax.js`（149 文件）、Biome 163 文件、`git diff --check` 均通过。模拟协议和按事件号回读、专用清单、provider 流事件及录制器停止语义的针对性测试 11/11；正常权限下完整 `node --test dist/test/*.test.js` 为 377 通过、30 跳过、0 失败（407 总数）。沙箱内 Bash/链接类测试因权限失败，已在正常权限下复验。真实模型请求 0，隔离运行时当前未配置，真实预检未执行。
+
+### NX-44-1 专用 smoke 录制与严格离线回放
+
+2026-10-17。为模型请求增加不进入 provider wire 的 `purpose=main|summary`，在 smoke adapter 边界独占写入完整请求材料和固定 wire 配置、可重算 SHA-256 指纹、流片段、结束响应、usage、finishReason、错误、fixture 初始字节与版本信息；不写凭证。回放适配器无网络后端，逐条检查请求、分流顺序与 fixture，缺失或额外请求直接失败。历史日志仍不具备严格回放条件。详见 [NX-44](NX-44-SMOKE.md)。
+
+验证：`node scripts/build.js`、`node scripts/check-syntax.js`（143 文件）、`node --test dist/test/smoke-recording.test.js` 2/2、Biome 157 文件零诊断；普通权限完整 `node --test dist/test/*.test.js` 为 372 通过、30 跳过、0 失败。脚本化证据 `D:/Agent/outputs/mini-dsh-smoke-offline-20261017/recording.jsonl` 已离线录制 2 次主请求和 1 次摘要、从快照恢复 fixture 并严格回放，付费请求 0。录制文件仅含合成材料，不提交到仓库。新增目的字段使 `DECISIONS.md` 的 unknown 代码行号失效，已按当前源码更新并通过锚点测试。
+
+### NX-43 零付费测试准备
+
+2026-10-17。第一独立步骤：只读脚本从八批原始 `manifest.json`、`report.json`、`runs.jsonl` 建立逐批版本索引，SHA-256 固定来源；另按事件号诊断 TC01 和 RC01，输出不含推理正文、工具结果与命令的结构摘要。结构 JSON 存在 `D:/Agent/outputs/mini-dsh-history-index-20261017.json` 与 `D:/Agent/outputs/mini-dsh-failure-audit-20261017.json`。原始批次文件未修改；无模型调用。
+
+验证：`node scripts/eval-history-audit.mjs D:/Agent/outputs` 得 8 批、137 条、已知估算 `$17.11320996`；`node scripts/eval-failure-audit.mjs D:/Agent/outputs/nx42-post-report-1m-20261016` 得两条 TC01 `length` 的结构事件和四条 RC01 分类。未知 usage 独立标记。脚本只读原件且不调用模型。
+
+第二独立步骤：提取生产、demo 与 v2 共用装配，四臂注册相同 `read_history`；旧 fixture 路径显式保留 legacy。能力脚本验证四臂与生产核心工具 schema 一致，差异限于登记的 C/P 字段。新冻结协议改为 `NX-42-eval-v2.1`，付费运行入口在读取环境或 provider 前拒绝旧 v2 manifest；旧报告仍只作历史证据。未生成新的正式 manifest、未执行真实 eval。交付说明与最小 smoke 清单见 [NX-43](NX-43-TEST-PREP.md)。
+
+验证：`pnpm check` 因受限环境访问 npm registry 失败；替代 `node scripts/build.js` 通过，`node scripts/check-syntax.js` 为 140 文件通过，Biome 154 文件零诊断。沙箱内完整测试因 Bash/symlink 权限失败；正常用户权限最终 `node --test dist/test/*.test.js` 为 370 通过、30 跳过、0 失败。针对性回读、预算、unknown、部分响应和 schema 测试 40/40；`node dist/scripts/demo-compact.js` 完整通过。`node scripts/eval-capabilities.mjs` 输出四臂一致的 schema SHA 与白名单差异；`git diff --check` 通过。所有这些为零付费验证。
+
+### NX-42-20 正式1M清单冻结与零费用预检
+
+2026-10-16。在校准选定1M后，将同一模型、窗口、thinking、provider默认采样与峰时价格快照用于正式split，在干净提交`51a93ffa186ac7995739f6f681f0a52db7dc9f75`冻结清单`dc9ed2d5e8069e0d89b316836eeceadac5947a27e25cead6dc6831d78f07a718`，保存在`D:/Agent/tmp/nx42-formal-1m-manifest.json`（工作树外，不包含密钥）。清单包含20个独立正式题、Baseline/Context Manager/Prompt Optimizer/Full四组、每题每组三次，共240个episode；`eval-v2-run --validate-only`的Linux隔离与冻结文件校验通过，`paidRequests:0`。首次在受限沙箱内预检被隔离环境拒绝；同一清单在正常权限下复验通过，没有改动清单或代码。
+
+本次1M校准20次的峰时估算$2.6090含探针预留，扣除探针后按12倍episode数机械外推约$31.07；正式题可能更长，Context Manager和Prompt Optimizer两臂尚无同版本付费观测，故不把该外推当预测上界或批准额度。按校准约50分钟主动时间外推，正式串行运行约10小时量级，也会受服务延迟和任务差异影响。正式批次未发送任何模型请求，须先确定独立金额上限并取得用户授权；1M校准的$8授权只覆盖已结束的20次。
+
+### NX-42-19 新冻结1M校准完整读数
+
+2026-10-16。提交`e5b0c39`的干净工作树冻结1M清单，digest`b4a3bcbb055ed7e789e4524d8becd43e03ff4d831e6112c7c9e12701b6531edd`，零费用隔离预检通过。用户单批授权$8上限后，在`D:/Agent/outputs/nx42-post-report-1m-20261016/`执行20/20 episode，无缺失、无基础设施错误、未停批；峰时价快照估算$2.609041296（含探针预留，实际账单另核）。独立用`eval-v2-report`从冻结清单及`runs.jsonl`重算，原/新报告的`observationsDigest`均为`67f1947355f99536c690f7104777c87b026d1f52ed80aba5ae23af25673a7154`，主差值均为−0.1。两档均只有每类一个校准根，分层bootstrap区间退化成点值，不能解释为精确置信区间。
+
+可靠完成Baseline 5/10、Full 4/10，产物验收分别10/10、8/10。按根Baseline/Full：UC01 0/2对0/2、BC01 2/2对2/2、FC01 2/2对2/2、RC01 0/2对0/2、TC01 1/2对0/2。Baseline五次、Full四次在产物验收通过后因`token_budget`停止；Full的TC01两次均`output_limit`且未通过验收。主模型请求Baseline/Full为203/181，摘要0/10，工具调用388/343，工具错误19/16，输入加输出token约649.96万/447.75万，主动耗时约27.78/22.20分钟；估算臂内费用约$2.1544/$0.4350，Full费用优势主要受缓存命中影响。该批Full的可靠完成率比Baseline低10个百分点，不能宣称Harness提高成功率；节省请求和token的观察也仅限这5个校准根。
+
+预注册的档位条件：2M Baseline 10/10，故只检查1M；1M Baseline 5/10落在3～8区间。Full 9/10个episode出现主动压缩或预览截断；压力压缩10次，覆盖UC01和RC01两根；多阶段UC01/RC01均有真实旧任务裁剪，共4个episode；信息定位题BC01/FC01/TC01有预览截断，合计19次；多轮系统提示稳定21/21个可测run，provider usage与真实缓存命中落盘。故1M按事先规则成为正式候选预算档，不因Full输赢重选。正式20题×4组×3次的240个episode尚未授权或启动；下一步独立冻结清单和金额上限，不能把本次$8授权延用到正式批次。此前同名1M探索批次的题面/源码不同，仅作历史诊断，不与本次拼接。
+
+### NX-42-18 恢复产物验收通过数
+
+2026-10-16。复核第三批2M完整报告时发现此前为基础设施错误修订成功率上界的一行改动误删了`artifactAccepted`输出字段；逐条`accepted`仍在`runs.jsonl`，可靠成功/费用/配对主值未受影响。现恢复臂级产物验收计数，新增预算停止但产物验收通过仍应计入该计数、却不能计入可靠成功的回归。用同一原始记录重算：`observationsDigest`与Full−Baseline主值−0.4保持不变，产物验收Baseline 10/10、Full 8/10。旧`report.json`保留原样，新报告另存于工作树外，不覆盖历史证据。
+
+验证：`node scripts/build.js`、`node scripts/check-syntax.js`（138文件）、Biome 149文件零诊断、报告针对性测试3/3、正常权限完整`node --test dist/test/*.test.js`（368通过、30跳过、0失败）及`git diff --check`通过。未发起付费调用。
+
+
+### NX-42-17 第三批2M校准完整读数
+
+2026-10-16。提交`a828401`重冻结的清单digest`3c5e28f838f39bfee4c47957c78be47bca2aa5d88121a3e638a381a2b9847b5b`通过零费用隔离验证后，使用第三批已授权的$10上限；先前三次预检失败都发生在付费请求之前。证据`D:/Agent/outputs/nx42-preflight-retry-2m-20261016/`：20/20 episode、无缺失/基础设施错误，估算$3.262787376（实际账单另核）。独立`eval-v2-report`的`observationsDigest`与原报告一致，主差值Full−Baseline为−0.4；五个校准类别各只有一个根，分层bootstrap区间退化为同一点，不能当成精确置信区间。
+
+可靠完成Baseline 10/10、Full 6/10。逐根Baseline/Full：UC01 2/2对0/2（`max_steps`、`token_budget`），BC01 2/2对2/2，FC01 2/2对2/2，RC01 2/2对1/2（一次`token_budget`），TC01 2/2对1/2（一次`output_limit`）。Full的产物验收为8/10；预算停止与最终产物验收单独计。主模型请求Baseline/Full为203/265，摘要0/36，工具调用365/457，工具错误22/13，输入加输出token约723.5万/816.6万，主动耗时26.07/35.30分钟。按冻结峰时价格与缓存命中估算的臂内费用约$2.38/$0.86；Full更便宜主要是缓存计价，不表示token或调用更少，工具错误仍混有预期失败检查。
+
+机制读数满足2M的触发条件：Full 9/10次至少有压力压缩或工具预览截断；压力压缩35次，覆盖UC01、RC01、TC01三个根；真实旧任务裁剪出现在RC01/0及UC01/1两条多阶段episode；信息定位题的预览截断出现，合计42次；多轮系统提示稳定21/21个可测run，provider usage全部落盘且有真实缓存命中。**档位仍按预注册规则选择**：2M Baseline为10/10，属于9～10分支，不能因Full负向结果改规则，也不能选择2M为正式档；下一步只检查原定1M档是否Baseline 3～8/10且机制条件成立。旧1M探索批次的源码/题面不同，不与本批拼接，须重新冻结并另取该批金额授权。正式240次不启动。
+
+
+### NX-42-16 预检目录短暂占用的清理重试
+
+2026-10-16。第三批2M校准的授权上限$10，但执行入口在任何模型调用与证据目录创建前连续遇到`EBUSY: rmdir mini-dsh-v2-preflight-*`；C盘与工作区D盘临时目录都复现，目录为空且稍后可人工删除。Linux隔离预检本身未报失败，清理与WSL释放句柄存在短暂竞争。只在已确认属于`os.tmpdir()`、且带固定预检前缀的目录清理调用上增加Node `fs.rm`的20次、每次250毫秒有限重试；不改变候选隔离、任务或预算。旧清单因源码hash改变必须重冻结；三次失败的付费请求均为0，同一单批授权尚未开始执行episode。
+
+
+### NX-42-15 脱敏保存V2底层错误
+
+2026-10-16。第二次2M批次证明仅记录HTTP码仍不足：第11条响应流已产生部分内容却无完整结束，`error.json`的状态为null、没有错误消息。现在返回型与抛出型失败统一写诊断：provider HTTP码、`provider_http`/`provider_stream`/`transport`/`incomplete_stream`/`runtime`类别、最后一次模型请求是否完整、最后一次usage来源，以及最多512字符的错误消息。消息遮盖当前API Key、Bearer令牌、`sk-`形态和查询参数中的key；不保存原始流或候选内容。历史证据不补造错误消息，旧批次根因仍未知。
+
+验证：`node scripts/build.js`、`node scripts/check-syntax.js`（138文件）、Biome 149文件零诊断、V2针对性测试7/7（含凭证遮盖、长度与流状态边界）、正常权限完整`node --test dist/test/*.test.js`（368通过、30跳过、0失败）、`git diff --check`通过。没有付费模型调用；新错误诊断的真实服务端类别须等待下一次单独授权批次。
+
+
+### NX-42-14 修复后2M校准在流中断后停批
+
+2026-10-16，冻结提交`e63dc97e62520cf0c946ec28862fb5e8fe10f08e`、清单摘要`ac045b41f2342c6e5085207f52b5ce6211977410064fd94b9c833f7ccd7c7203`，5题×Baseline/Full×2次共20次，用户单批授权上限$10。执行前`--validate-only`确认5题、20次、隔离通过、付费请求0；模型协议探测回显`deepseek-flash`。证据目录`D:/Agent/outputs/nx42-infra-guard-2m-20261016/`记录11条后按新闸门停止，未执行9条，估算$1.863641244（实际账单可能因未闭合请求而更高）。原报告与独立重算报告的`observationsDigest`和主结论一致：`invalid=[FC01/1/full]`、`incomplete=true`、主效应与区间均为null。不能用已执行子集选2M/1M档，也不能据此宣称Full改善或退化。
+
+前10条无基础设施错误：TC01/0 Baseline成功、Full `output_limit`；BC01、RC01、FC01首轮两臂均可靠成功；UC01/0 Baseline成功、Full `timeout`且产物验收通过。第11条FC01/1/full前三次模型请求有完整provider usage，第四次已有64条流式片段、约3506个估算输出token，却以`model/end complete=false`结束并使用估算usage；该episode四个模型请求、14次工具调用、0次工具错误，最终`status:error`。`error.json`只有`providerHttpStatus:null`，错误消息没有落盘；HTTP响应之后的流式中断、服务事件错误或传输异常目前无法区分。下一步加脱敏、有限长度的错误诊断，再决定是否另行授权新批次；不拼接两次无效批次。
+
+
+# NX-42-13 2M校准受污染与基础设施错误闸门
+
+2026-10-16。提交`96709c6`与清单`8f87513ce332e8dbe71df41df41e0f1a0cc4dd550e5cadfbf349b2600c42dac6`冻结了紧凑`task_report`修复后的2M校准。用户单批授权上限$10；证据目录`D:/Agent/outputs/nx42-post-report-2m-20261016`保存20/20条、估算$1.169460192。前6条里有3条`completed`、TC01/0/full为`output_limit`、RC01/0/baseline为`token_budget`、RC01/0/full为`error`；其后14条跨Baseline/Full、不同题型，全部首次模型请求即`error`、无工具调用。总计15条基础设施失败（Baseline 7、Full 8）。旧报告的点估计-0.1把这些异常当作任务失败，不可解释为Harness效果。按新代码重算，`observationsDigest=54bfda2f543855abd531698a47f9cbdb9aa0ac3a9f81df4ebf59d6e6589a7bc5`保持不变，`invalid=15`、`incomplete=true`、主效应与区间均为null。原报告与新报告均留在证据目录/工作树外；不改历史观测、不拼接批次。
+
+旧V2驱动只在`runFixtureTask`抛出时停批；模型调用错误被episode捕获并作为`status:error`返回，因此连续发送14条无效请求。V2报告也只按缺失行数认定`incomplete`。现改为返回型provider/runtime错误也在该条后停批，写不含密钥和原始响应的`error.json`（能识别时含HTTP状态码）；报告单列`invalid`，任何基础设施错误使配对主效应不可估计，成功率上界把这些记录按未知处理。只读余额接口显示账户仍有可用CNY余额，故不能据此归因为余额耗尽；旧证据未持久化错误信息，429/500/网络异常无法区分。新版本需干净提交重新冻结，任何后续付费批次另取金额授权。本批账单实扣未知，$1.1695仅按落盘token和价格快照估算。
+
+验证：`node scripts/build.js`、`node scripts/check-syntax.js`（138文件）、`node_modules/.bin/biome.CMD check .`（149文件，零诊断）、针对性V2测试6/6、正常权限`node --test dist/test/*.test.js`（367通过、30跳过、0失败）、`node dist/scripts/check-coding-fixtures.js`退出0、正常权限`node dist/scripts/eval-offline.js`（12/12）和`git diff --check`通过。受限沙箱里Bash子进程无法正常工作，完整测试及离线评测的首跑假失败；按AGENTS允许的正常权限复核通过。未为这项离线修复新增付费调用。
+
+### NX-42-12 缩小默认任务报告，保留完整分页
+
+2026-10-16，对修复后1M批次的RC01/UC01事件做阶段级分解，见[轨迹诊断](NX-42-POSTFIX-TRACE.md)。RC01第二轮第3阶段Full反复拿到`task_report`的16KiB首尾预览（完整内容约23～58KB，中间缺失、非完整JSON），并在同阶段调用9次摘要；9次摘要后下一次投影均低于压力线，说明旧版无效压缩循环已被抑制，新增历史又使其越线。UC01第二轮第4阶段也连续3次收到截断报告。自写检查的非零退出仍属模型任务轨迹，未修改工具错误口径。
+
+`task_report`在模型不指定`maxRecords`时现返回一条检查记录的紧凑摘要、分页游标、状态/新鲜度、文件覆盖和汇总用量；显式`maxRecords`仍返回原始完整记录，CLI显式使用20条完整页。没有删除持久事件或完整工具结果。针对多个长Bash检查增加回归：默认页小于16KiB且可解析、下一页可取、显式大页保留；CLI模拟模型改按游标读完失败和成功两条检查。
+
+验收：`node scripts/build.js`、`node scripts/check-syntax.js`（138文件）、Biome全仓149文件零诊断；正常权限`node --test dist/test/*.test.js`为367通过、30跳过、0失败；`check-coding-fixtures`退出0、`eval-offline`12/12通过；`git diff --check`通过。初次全量测试抓到CLI模拟模型仍假设单页含两条检查，已改为分页读取并重验通过。无付费模型调用，不能声称本改动已提高真实成功率。下一步须先提交源码和文档，在干净提交上重新冻结；遵循新版本2M→1M档位选择，金额授权单独申请。
+
+### NX-42-11 修复后1M档独立诊断批次
+
+2026-10-16，北京时间08:42～09:39运行，冻结提交`81caed170acf5cf594d649b2614cf216d32705cd`、清单digest`a7453747c2d10573472476319ff8d1d8452f974386fdb8c64786f683f7ca07ff`；本地清单`D:/Agent/tmp/nx42-postfix-1m-manifest.json`，证据`D:/Agent/outputs/nx42-postfix-1m-20261016/`。用户单独授权本批次上限$8，20/20完整执行，无基础设施中止；运行器按峰时价快照估算$2.5335（含探测预留，实际账单与离峰时段须以供应商记录核对）。探测回显`deepseek-flash`。独立`eval-v2-report`重生报告，`observationsDigest`与主差值一致。新旧题面/运行行为不同，本批不与2026-10-15旧批拼接；这是修复后探索性诊断，尚未按新版本重走预注册2M→1M档位选择，不能代替正式240次评测。
+
+可靠完成：Baseline 6/10、Full 7/10，Full−Baseline=+10个百分点；两组产物验收均10/10，失败分别为4次和3次`token_budget`。按根看，TC01为1/2对2/2、UC01为0/2对1/2、RC01为1/2对0/2，BC01和FC01均2/2对2/2（顺序均为Baseline对Full）。五个根每类只有一个，校准报告的分层bootstrap区间退化为单值，不能用于显著性判断，更不能据此宣称Harness有效。
+
+资源：Baseline/Full主模型请求181/201、摘要0/23、工具调用334/364、工具错误9/14、输入+输出provider token 5,738,342/5,189,620、cache-read token 45,056/4,106,496、模型费用估算$1.9066/$0.6073、累计主动耗时25.67/29.29分钟。Full虽有缓存费用优势，响应次数、工具调用/错误、耗时并未下降；工具错误中仍可能包含预期失败测试，当前无结构化分类。与旧1M批次的Baseline 6/10、Full 5/10及Full摘要18次相比，本批Full成功7/10但摘要23次；改动与随机波动混杂，不能作因果归因。
+
+RC01 Full两轮分别摘要3/9次、均因token预算停止；UC01 Full两轮摘要4/6次，其中第二轮可靠完成。细查RC01第二轮9次均落在同一个run；每次摘要后的下一次投影约47,131～48,769 token，低于主动压力线52,428.8，后来新增上下文重新越线。因此“压缩后仍超线”的反馈抑制没有失效，反复摘要来自新内容再增长。下一步先剖析长题的新增上下文、工具输出和自写测试轨迹，再决定是否另立v2.1机制/题目修订；当前不启动正式240次。
+
+离线准入：`node scripts/build.js`、`node scripts/check-syntax.js`（138文件）、Biome全仓149文件零诊断、`fixtures:check`退出0、正常权限完整测试367通过/30跳过/0失败，`eval:offline`正常权限12/12通过，校准/正式`plan-only`分别为20/240 episode。初次受限沙箱内并行执行Bash相关检查出现失败/模拟评测0/12，改为正常权限串行复核通过；冻结`--validate-only`为5题/20 episode/隔离通过、付费请求0。文档证据复核`git diff --check`通过。
+
+### NX-42-10b 压缩循环收口与 RC01/UC01 调用归因
+
+2026-10-15，用既有2M/1M校准的 `events.jsonl` 独立复核：2M Full 的 RC01/0 第4阶段18次、UC01/0 第4阶段17次压力摘要，摘要后重新投影分别始终为52,990～54,712和53,906～55,068 token，均高于 `65,536 × 0.8 = 52,428.8`。根因是主动压缩只处理当前task，旧阶段在65,536输入目标前尚未被裁剪；主循环原本每轮看到压力条件就再付费摘要。现在一次已应用的压力压缩若仍没降过压力线，则本次run抑制后续主动压力尝试；溢出兜底、显式`/compact`和有效压缩后新历史增长再次越线的路径保留。默认阈值和预算未改，抑制不跨run。
+
+1M RC01/0 Full在第3阶段多次自写堆测试失败并反复修复，20次模型请求、5次工具错误、758,604 token，对照Baseline的6次、1次、263,437 token；2次摘要只占46,615 provider token。2M UC01/0 Full的15次实际Bash错误主要来自反复运行应在缺陷实现上非零退出的`node repro.mjs`，另外2个因`max_steps`跳过的调用不计工具错误。没有发现Harness自动重试同一工具调用的证据，也不把预期非零退出叫做基础设施故障；模型轨迹的因果不能由两次校准确定。详见 [校准后诊断](NX-42-CALIBRATION-DIAGNOSIS.md)。
+
+验收：`node scripts/build.js`退出0；`node scripts/check-syntax.js`为138文件；四个压缩相关测试文件33/33通过，其中新增无法降线、有效降线后再次触发、抑制后溢出兜底三个边界；正常权限`node --test dist/test/*.test.js`为367通过、30跳过、0失败；`git diff --check`通过。未发起付费模型请求；修复后的成功率待新清单校准，旧结果不得当作修复效果。
+
+### NX-42-10a 公开题目明确文件范围
+
+2026-10-15，针对1M校准 TC01/0 的四组行为检查全过、但 Full 改动 `package.json` 导致验收失败，检查25道V2题的 `meta.json` 与公开题面。将精确的既有文件可修改范围与新建交付文件写入全部46份 `TASK.md`／`TASKS/*.md`，多阶段题每阶段重复说明，避免旧任务被裁剪后看不见边界。`createV2Fixture` 在发题前检查题面与元数据逐字一致，新增离线遍历测试；受保护文件的实际验收规则未放宽，初始项目和隐藏验证器未改。此修订改变公开提示文本，因此旧2M/1M付费批次只作历史诊断，不与新题面的正式运行直接合并；正式清单需重新冻结并重新校准。
+
+验收：`node scripts/build.js` 退出0；`node scripts/check-syntax.js` 为138文件；`node --test dist/test/eval-v2-fixtures.test.js` 4通过、27项隔离测试在本机配置下跳过；正常权限 `node --test dist/test/*.test.js` 为365通过、30跳过、0失败；`git diff --check` 通过。受限沙箱内的 Bash/候选执行用例失败，正常权限复核通过；`pnpm` 引导在沙箱内无输出，使用等价 Node 命令。
+
+### NX-42-9d 1M档校准完整结果与正式批次边界
+
+2026-10-15，北京时间20:43～21:30错峰运行；清单digest `483e4161e1782013cfa949191e42749521ebcd1128330105bae7e91d51c73b36`，本地证据 `D:/Agent/outputs/nx42-calibration-1m-20261015/`。20/20完整执行、无基础设施中止。Baseline可靠成功6/10、产物通过10/10；Full可靠成功5/10、产物通过8/10，Full−Baseline=-10个百分点，仅是校准读数，不作正式统计推断。失败分别为Baseline四次 `token_budget`；Full四次 `token_budget`、一次验收失败。按预注册，Baseline处于3～8区间；Full的C机制在10/10 episode出现（压力压缩7/10、覆盖4个独立根；预览截断10/10；旧任务裁剪覆盖UC01和RC01），P稳定提示在10/10出现，因此选择1M为正式候选档位，**不等于Harness有效**。
+
+1M档Full相对Baseline：模型请求240对197、工具调用404对372、工具错误23对21、输入+输出token 5,764,114对5,528,512，均未下降；缓存命中4,776,192对49,152，使按峰时快照估算的模型费用约$0.55对$1.82。整批峰时价估算$2.3813（含探测预留），错峰单价粗估约$1.19，以供应商账单为准。独立用`eval-v2-report`重放两档冻结清单与JSONL，均为20/20完整，主差分别为2M的0、1M的-0.10。2M用时约59分钟，1M约47.5分钟；加首次不完整批次的错峰粗估，总付费约$2.9，非精确账单。正式240次尚未运行；按方案需单独估价和授权，当前校准没有提供正向效应证据，不应宣称达到Full 90%等目标。
+
+### NX-42-9c 2M档校准完整结果与下一档触发
+
+2026-10-15，北京时间晚间错峰运行；新冻结清单digest `0bb9b8605cbe05cc27d66bbc62ec4697142ab5b225b83b741b133cdf669311c9`，本地证据 `D:/Agent/outputs/nx42-calibration-20261015-rerun/`。`report.json` 记录20/20完整执行、无基础设施中止，Baseline可靠成功9/10（TC01首次 `output_limit`）、Full 9/10（UC01首次 `max_steps`，但产物验收通过），主差值0。Full发生压力压缩60次、预览截断53次、2个episode出现旧任务裁剪，不能因此推断完成率改善。峰时价快照估算$2.7837（含探测预留），错峰单价粗估约$1.39；最终以DeepSeek账单为准。按预注册「Baseline 9～10/10」分支，下一步只再运行固定的1M档校准20次，不启动正式240次。
+
+### NX-42-9b 损坏证据下的付费用量恢复
+
+2026-10-15，首批 RC01/0/full 运行的原始日志含 1,171,214 token 的阶段终态，但严格解码失败后运行器写入了零用量，导致中止报告少计费用。现在异常路径保留严格解码失败状态，同时逐行恢复结构有效的事件、去重同请求 usage，并写每题 `error.json`；失败仍停止批次、`evidenceComplete=false`，已落盘模型用量和峰时价估算不再归零。原批次原始 usage 独立复算为6次 3,316,676输入、153,195输出、1,798,272缓存命中，按冻结峰时价约$0.6501（错峰单价约$0.3251，另有探测），原 `report.json` 的$0.5097低估，不作为账单引用。新增日志次序损坏/重复usage/坏行回归；`node scripts/build.js`、`node scripts/check-syntax.js`（138文件）、正常权限 `node --test dist/test/*.test.js`（363通过、30跳过、0失败）与 `git diff --check`通过。后续重新冻结并完整重跑，不把旧批次拼入结果。
+
+### NX-42-9a 付费校准发现的摘要流事件顺序修复
+
+2026-10-15，首次20次校准在第6次停止；RC01/0/full 的原始日志里第651号 `model/end` 后仍有同请求第652号 `model/fragment`，`decodeLog` 以 `fragment after model end` 拒绝，批次只完成5次有效观察。原因是摘要成功路径先调用 `#settle` 写 usage/end，再在 `finally` 关闭 `StreamJournal`，最后缓冲片段因而迟到。现在成功路径在 `#settle` 前关闭 journal；异常路径原本已先关闭，保持不变。`test/compaction-runtime.test.ts` 的真实缓冲片段回归断言 fragment 早于 end，`node scripts/build.js`、`node scripts/check-syntax.js`（138文件）、正常权限 `node --test dist/test/*.test.js`（362通过、30跳过、0失败）及 `git diff --check` 通过。受限沙箱的 Bash 子进程测试失败，按 AGENTS 在正常权限复核。旧批次保留为不完整诊断证据，不与新批次拼接。
+
 ### NX-42-8 付费执行入口接线与离线准入
 
 新增`eval:v2-run`：默认拒绝执行，须显式给冻结清单、全新证据目录、正金额上限及`--execute`；`--validate-only`只复核完整计划、逐文件hash与WSL bubblewrap隔离探针，不加载模型凭证或发送请求。付费路径以校准2臂/正式4臂为完整配对block串行调度；按价格快照最贵token类别及10%余量预留下一block，余额不足即标incomplete。两次协议探测单独留证，供应商回显不符即停止；每个episode独立session/阶段快照/验收副本，逐次写`runs.jsonl`，最终报告保留计划分母与缺失。异常时尝试从已落盘事件恢复用量并停止，未闭合供应商请求费用仍有不确定性。当前事件无法结构化拆出工具策略拒绝或预期失败测试，报告明确标未知，不填0。新增[运行手册](NX-42-V2-RUNBOOK.md)。
@@ -3895,3 +4100,71 @@ NX-07 最终验收：a 5ef5b2e、b 21ee528、c 04f5c4b、d dd45f75、e 6c03300�
 `5969363` 删除已跟踪源码/测试/脚本中的行注释、块注释和行尾注释，同时清理 CI 版本旁注、`.env.example` 注释及 README 运行代码块注释。URL、正则和字符串内容、中文说明文档及实际 `.env` 保留。编译器生成的 sourceMappingURL 是既有调试映射指令，sourceMap 配置继续保留。
 
 完整提交顺序可用 `git log --reverse --oneline cfee2b5..7110917` 查阅；具体设计参数见 [PLAN](PLAN.md)，逐项需求和证据见 [REQUIREMENTS](REQUIREMENTS.md)、[TASKS](TASKS.md)。
+# NX-44 后续零付费修复：新冻结协议边界（2026-10-17）
+
+`edit_file` 的模型可见 schema 文案已因明确 CRLF/LF 契约而变化，旧 smoke manifest 的代码 SHA、schema SHA 及结果均不可作为同一实验重用。将后续冻结协议标识设为 `NX-44-smoke-v2`；既有三项日程、修复题面、模型参数、6 次主请求、阈值与评分标准未改。短修复重测只给拟议清单，正式执行需新专用入口或新冻结文件、新证据目录和单独金额授权。本步不调用模型。
+
+# NX-44 后续零付费修复：阶段验收（2026-10-17）
+
+四项行为独立提交 `cfe3008`、`96d3fd0`、`09b3841`、`3d61209`。阶段末 `node scripts/build.js`、`node scripts/check-syntax.js`（153 文件）、Biome（167 文件）、`git diff --check` 均通过；正常权限 `node --test dist/test/*.test.js` 416 总计、386 通过、30 跳过、0 失败。首次完整测试仅文档锚点 3 处偏移，修正 `DECISIONS.md` 后复验全绿。`pnpm check` 在当前环境引导停滞，按仓库允许的固定依赖 Node 命令替代。阶段真实模型请求 0。仓库要求推送，但 GitHub remote 推送被自动审批以“目的地未由本轮授权确认”为由拦截；没有绕过。
+
+# NX-44 后续零付费修复：严格回放动态字段（2026-10-17）
+
+原始 repair 首请求 system 的第 15 行是 `Time: 2026-10-17T06:52:17.366Z`，来自 `runtime-context` 的实时时钟；第 25 行是 `project-context` 序列化 JSON 中的原 fixture 绝对工作区路径，隔离恢复时自然不同。Harness 增加仅供调用者显式注入的时钟来源；回放适配器只允许声明的 project-context `workspace` 字段映射，仍完整核对 system/messages/tools 与原始请求指纹。录制本身、生产默认动态行为和历史原始证据均未改。
+
+验证：`node scripts/build.js`；`node --test dist/test/smoke-recording.test.js` 正常权限 5/5，路径映射正例以及 system、messages、tools 负例。对旧 repair 轨迹恢复隔离 fixture 后，注入录制时间并映射项目路径，system 25 行完全一致，messages、模型和输出上限也一致；新 `edit_file` schema 描述与旧录制不同，严格回放在第一个请求指纹处拒绝，0 响应、0 工具、0 付费。结构结果：`D:/Agent/outputs/mini-dsh-nx44-fix-20261017/old-repair-first-divergence.json`。旧批次 adapter 边界严格回放仍是历史审计结论；新源码不能冒充旧轨迹的完整 Harness 回放通过。
+
+# NX-44 后续零付费修复：停止后候选与独立验收（2026-10-17）
+
+原运行器仅在 `agent.send` 正常返回后复制候选，异常路径先清理临时 fixture，历史 repair 因此没有产物验收。现在等待 run/工具结束及 session 关闭，保存退出候选快照后才运行独立验收；结果分别记录 `runStatus`、`artifactAcceptance`、`evidenceStatus`，另列原始 run、保存及验收错误类型。保存失败保持 `save_failed`，验收异常保持 `error`，不以任何一项覆盖其他结论。NX-44 历史原始批次仍为“产物未验收”。
+
+验证：`node scripts/build.js` 通过；`node --test dist/test/smoke-scenarios.test.js` 正常权限 2/2，模拟请求拒绝后的候选保存和独立验收、正常模型返回但产物失败的分离状态。完整测试留待阶段末。
+
+# NX-44 后续零付费修复：预派发状态和计数（2026-10-17）
+
+最小复现：NX-44 repair seq 91 为已准备并落盘的 `model/start`，recorder 在实际 provider 前拒绝第 7 次主请求；旧通用 catch 生成 seq 92 的 8,238 estimated token。现在 `ModelNotDispatchedError` 明确表示次数/金额/未知用量等派发前拒绝；追加 `model/rejected` 终态并修正实时及恢复计数，不写 model/usage，原先的动作前落盘仍在。已派发但网络中断继续计一次请求、缺 provider usage 继续为未知。`request_trace` 标出 rejected；录制内准备后拒绝有独立终态。旧证据不追溯更改。
+
+验证：`node scripts/build.js` 通过；`node --test dist/test/context.test.js dist/test/smoke-cost.test.js dist/test/smoke-recording.test.js dist/test/compaction-runtime.test.js` 正常权限 31/31。覆盖请求次数、金额、派发后网络中断、正常 usage 及录制回放拒绝；完整测试留待阶段末。
+
+# NX-44 后续零付费修复：编辑换行兼容（2026-10-17）
+
+原始 repair fixture 与 seq 53、85 的 `expectedHash` 分别一致，精确文本匹配均为 0；仅 CRLF/LF 归一化后各有 1 个候选。`replaceUnique` 只将 CRLF 与 LF 视为等价，先按归一化全文检查唯一性，再用原文件边界替换，未修改区域字节保持原样；`edit_file` schema 说明同步。孤立 CR、真正不匹配、重复候选及旧 hash 仍拒绝。原始证据未改。
+
+验证：`node scripts/build.js` 通过；`node --test dist/test/file-edit.test.js dist/test/file-tools.test.js` 正常权限 7/7；只读原始 fixture/成功编辑重建 seq 53、85 均唯一匹配。`pnpm check` 在当前环境引导 60 秒无输出，终止后用固定依赖的 Node 构建替代；完整测试留待阶段末运行。
+
+# NX-44 smoke-v2 短修复重测：显式场景冻结与调度（2026-10-17）
+
+冻结与运行入口均要求 `--scenarios`，只接受非空、无重复、按固定顺序的场景 ID；本次只选 `repair`。清单只写所选场景且场景数据参与 digest；运行前同时比对 CLI 选择、清单场景与源码固定日程，执行循环只遍历清单所选项。代码 SHA、工具 schema、fixture、wire 仍照旧核对；无新模型或题面入口。
+
+验证：`node scripts/build.js`；正常权限 `node --test dist/test/smoke-plan.test.js dist/test/smoke-scenarios.test.js` 7/7。覆盖 repair 单独调度且仅产生 `repair/`、重复/乱序/未知选择拒绝、选择变更导致 digest 变化、主请求上限篡改即使重算 digest 仍拒绝。仅模拟 adapter，真实请求 0。
+
+# NX-44 smoke-v2 短修复重测：所选场景费用预留（2026-10-17）
+
+执行入口的金额下限现按所选场景计算：每场景累计 token 上限按三种峰时费率的最高值计，另加该部分 20% 缓冲，再加每场景可能跨越 token 上限的最后一次最大请求。repair 为 `$0.24 + $0.048 + $0.3196608 = $0.6076608`；最后一次主请求按 1M 输入及 16,384 输出，摘要为 8,192 输出，前者更大，故同时覆盖两种结尾。最后请求中可能有 token 仍落在 20 万额度内，所以该相加有保守重叠，20% 缓冲又在其外，并非精确最小费用。逐请求金额闸门仍用已知 provider usage 累计，下一请求前检查最多 1M 输入及实际输出上限；usage 缺失标未知且不再派发，绝不按零记。结果报告保存预留分解与实际已知估算。
+
+验证：`node scripts/build.js`；正常权限 `node --test dist/test/smoke-cost.test.js dist/test/smoke-scenarios.test.js` 覆盖 repair 的数值分解、主/摘要派发和拒绝、预算停止后保存候选并独立验收。仅模拟 adapter，真实请求 0。
+
+# NX-44 smoke-v2 短修复重测：回放、版本核价与阶段验收（2026-10-17）
+
+官方价格页本次显示 `deepseek-flash` 的版本标签为 `DeepSeek-V4.1-Flash-1017`，旧标签已过时；只更新冻结元数据的标签，模型 ID、thinking、采样、题面和各上限未改。峰时价格三项与提案相同，版本变化使新批不能当旧批的同版效果对照。详细合同与运行后完整 Harness 回放步骤见 [短修复重测](NX-44-REPAIR-RETEST.md)。
+
+所选 repair 的合成录制在恢复的初始 fixture 上通过 adapter 严格回放、额外请求无 API 回退；同一条单请求轨迹通过完整 Harness 重建与指纹核对，命令执行在测试中显式禁用。真实多请求/摘要轨迹尚未产生，不能预报完整 Harness 回放结果。预算拒绝后退出候选保存和独立验收测试继续通过。既有锁定 WSL/bwrap 运行时路径 `D:/Agent/tmp/nx42-runtime/unpack` 实际存在，隔离探针 3/3 通过。
+
+检查：`node scripts/build.js`、顺序执行的 `node scripts/check-syntax.js`（153 文件）、Biome（167 文件零诊断）、`git diff --check` 通过；正常权限 `node --test dist/test/*.test.js` 为 419 项中 389 通过、30 跳过、0 失败。`pnpm` 引导在前一阶段受环境限制，本阶段按 AGENTS 允许的固定依赖 Node 命令替代。真实模型请求 0，未推送。最终清单必须在本地提交后的干净 HEAD 上另行冻结。
+
+# NX-49 只读会话 inspect：摘要与完整性（2026-10-18）
+
+`mini-dsh inspect <events.jsonl> [--json]` 在 dotenv、Harness、模型及工具模块加载前分流；以共享 `createLogRecordParser` 逐行校验 JSONL，不创建会话或写锁。输出版本 1，区分会话概览与最近 run、已派发主/摘要请求与派发前拒绝、缺 usage、provider usage 与缓存、工具错误及 unknown、摘要和历史读取、frozen 来源。截断、坏 JSON、未知事件及序列/载荷错误停在已确认前缀并标 `integrity.complete=false`；无 `run/finish` 记未记录结束，普通日志没有产物验收。旧日志及恢复语义未改。
+
+验证：`node scripts/build.js`、`node scripts/check-syntax.js`（158 文件）、Biome（172 文件）通过；正常用户权限 `node --test dist/test/*.test.js`：434 项、404 通过、30 跳过、0 失败（受限沙箱中的 Bash 夹具失败，正常权限复验全绿）。定向三项合成日志测试包含哈希不变、空格路径、无 API key、未知 usage、摘要缓存与部分证据。NX-45 `002-BC01-0-full` 原始 JSONL 只读交叉核对：130 事件、7 次 model/start、19 次 tool/start、provider 输入 42083、输出 2160、缓存 29184；输入 SHA256 前后均为 `DB8501472FB6BCC2DB76394595076F9150CD3405619F223A65E5FBAAB981C3D3`。未读取验收结论或估价，也未请求模型。`pnpm typecheck` 在环境中因 npm registry 拉取 `@pnpm/exe` 失败，按 AGENTS 允许的固定依赖 Node 命令完成同等检查。
+
+# NX-49 只读会话 inspect：可选轨迹（2026-10-18）
+
+`--trace` 在文本及 JSON 中只附带最近 40 条所选事件的序号、类型和有限元数据：工具名、运行终态、拒绝原因、快照来源、摘要结果。用户/助手正文、模型片段、工具内容均不进入轨迹；异常工具名省略。超过 40 条明确标截断。`node scripts/build.js`、`node --test dist/test/session-inspect.test.js`（4/4）、定向 Biome 及 `git diff --check` 通过；合成日志中敏感占位正文未出现在文本或 JSON 轨迹。真实模型请求 0。
+
+# NX-49 只读会话 inspect：文档与隔离安装（2026-10-18）
+
+README 增加无 key 的 inspect 文本、`--json`、`--trace` 示例和退出码 0/1/2；说明 `integrity.complete` 只表示读到的 JSONL 完整，不代表任务或产物成功。由当前源码 `pnpm pack --pack-destination D:/Agent/outputs/nx49-inspect-validation-20261018/package-final` 得到 `mini-DSH-0.0.1.tgz`（SHA256 `07FC27637BEC9F11ED1FEFEAC88AE967902CC25A9D4644B73C5E666781D4F84B`），仓库外 `consumer space` 用 `pnpm --dir ... add --offline --ignore-scripts` 安装。109 个包成员，全部在白名单内，含 inspect 与入口 JS，无 `.env`、会话日志、原始实验及审计文件。安装后在 `sample project` 含空格目录，Windows `mini-dsh.cmd inspect <synthetic session.jsonl>`、`--json`、`--trace` 均退出 0；截断文件退出 2，缺失文件退出 1。输入 SHA256 前后相同，未创建指定会话目录，DEEPSEEK_API_KEY 为空。真实模型请求 0。
+
+最终检查：正常权限 `pnpm check`（syntax 158 文件）、`pnpm test`（435 项、405 通过、30 跳过、0 失败）、`pnpm lint`（172 文件、0 诊断），另核对 `git diff --check`。tarball 仅作本地安装验收，未发布 npm；只在 Windows `.cmd` 路径验证安装，不推断其他平台结果。
+

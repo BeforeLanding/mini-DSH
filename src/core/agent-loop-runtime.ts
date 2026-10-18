@@ -7,6 +7,7 @@ import type { CompactionTrigger, DeclineReason } from './compaction-runtime.js'
 import { estimateUsage } from './token-estimator.js'
 import { StreamJournal } from './stream-journal.js'
 import { ModelStreamError } from './model-error.js'
+import { ModelNotDispatchedError } from './model-dispatch.js'
 import type { BudgetPolicy, RunState, Usage, StopReason } from './budget.js'
 import { createHash, randomUUID } from 'node:crypto'
 import { BudgetStop } from './budget.js'
@@ -55,6 +56,10 @@ export class AgentLoopRuntime {
         if (input !== undefined) append(sessionId, 'user/message', { content: input })
 
         let step = 0
+        // A successful pressure summary can leave an irreducible prefix (for example, an
+        // earlier task) above the pressure line. Retrying on every model turn then spends
+        // requests on the same condition. Overflow compaction remains available.
+        let pressureSuppressed = false
 
         while (true) {
             step += 1
@@ -111,8 +116,9 @@ export class AgentLoopRuntime {
             }
             // pressure 是主路径：装得下但已逼近阈值。它只该做一次——压完还在带内说明这次压缩没解决问题，
             // 再压一遍只是重复花钱。context-overflow 是兜底，按 maxOverflowRetries 限次，防止一步内无限重试。
-            if (!overflowing() && compactionBudget !== undefined && projection.estimatedInputTokens > compactionBudget * (policy.compactionRatio ?? 0.8)) {
-                await attempt('pressure')
+            const pressureLine = compactionBudget === undefined ? undefined : compactionBudget * (policy.compactionRatio ?? 0.8)
+            if (!pressureSuppressed && !overflowing() && pressureLine !== undefined && projection.estimatedInputTokens > pressureLine) {
+                if (await attempt('pressure') && projection.estimatedInputTokens > pressureLine) pressureSuppressed = true
             }
             for (let retries = 0; overflowing() && retries < (policy.maxOverflowRetries ?? 1); retries++) {
                 if (!await attempt('context-overflow')) break
@@ -138,6 +144,7 @@ export class AgentLoopRuntime {
             const journal = new StreamJournal(requestId, data => append(sessionId, 'model/fragment', data))
             const response = await control.wait(() => this.llm.chat(
                 {
+                    purpose: 'main',
                     maxOutputTokens,
                     system,
                     messages,
@@ -149,6 +156,12 @@ export class AgentLoopRuntime {
                 agent.model,
             ), policy.requestTimeoutMs ?? 180_000).catch(error => {
                 journal.close()
+                if (error instanceof ModelNotDispatchedError) {
+                    state.counters.modelRequests--
+                    append(sessionId, 'model/rejected', { requestId, reason: error.reason })
+                    if (error.reason === 'request_limit') throw new BudgetStop('max_steps', state)
+                    throw error
+                }
                 const partial = error instanceof ModelStreamError ? error.partial : { content: journal.content, reasoningContent: journal.reasoningContent, usage: undefined }
                 settle(partial.usage ?? estimateUsage(estimatedInputTokens, partial))
                 append(sessionId, 'model/end', { requestId, complete: false })

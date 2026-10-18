@@ -1,11 +1,58 @@
 import type { SessionEvent } from '../src/core/contracts.js'
+import { validatePayload } from '../src/core/event-validation.js'
 import type { RunOutcome } from './eval-runner.js'
 import type { V2Episode } from './eval-v2-plan.js'
 import type { V2Observation } from './eval-v2-report.js'
 
+export function diagnoseV2Error(message: string, events: readonly SessionEvent[], secret = process.env.DEEPSEEK_API_KEY): {
+  kind: string; providerHttpStatus: number | null; message: string; lastModelComplete: boolean | null; lastUsageSource: string | null
+} {
+  const providerStatus = message.match(/DeepSeek API ([1-5]\d\d):/)
+  const end = events.filter(event => event.type === 'model/end').at(-1)
+  const usage = events.filter(event => event.type === 'model/usage').at(-1)
+  let safe = secret ? message.replaceAll(secret, '[REDACTED]') : message
+  safe = safe.replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]')
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, '[REDACTED]')
+    .replace(/([?&]api[_-]?key=)[^\s&]+/gi, '$1[REDACTED]')
+    .replace(/[\r\n\t]+/g, ' ').slice(0, 512)
+  return {
+    kind: providerStatus ? 'provider_http' : /stream/i.test(message) ? 'provider_stream' : /fetch failed|ECONN|ETIMEDOUT|socket|terminated/i.test(message) ? 'transport' : end?.type === 'model/end' && !end.data.complete ? 'incomplete_stream' : 'runtime',
+    providerHttpStatus: providerStatus ? Number(providerStatus[1]) : null,
+    message: safe,
+    lastModelComplete: end?.type === 'model/end' ? end.data.complete : null,
+    lastUsageSource: usage?.type === 'model/usage' ? usage.data.usage.source : null,
+  }
+}
+
+// A semantically invalid journal must fail acceptance, but its already-billed
+// provider usage must not disappear from the amount ledger. This parser only
+// recovers individually valid lines; it never makes the episode admissible.
+export function recoverV2UnverifiedEvents(raw: string): SessionEvent[] {
+  const events: SessionEvent[] = []
+  const usageRequests = new Set<string>()
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line) continue
+    try {
+      const value: unknown = JSON.parse(line)
+      if (!value || typeof value !== 'object' || Array.isArray(value)) continue
+      const event = value as Record<string, unknown>
+      if (typeof event.type !== 'string' || !event.data || typeof event.data !== 'object' || Array.isArray(event.data)) continue
+      validatePayload(event.type, event.data as Record<string, unknown>)
+      if (event.type === 'model/usage') {
+        const data = event.data as { requestId: string; usage: { inputTokens: number; cacheReadTokens?: number } }
+        const cache = data.usage.cacheReadTokens ?? 0
+        if (!Number.isSafeInteger(cache) || cache < 0 || cache > data.usage.inputTokens || usageRequests.has(data.requestId)) continue
+        usageRequests.add(data.requestId)
+      }
+      events.push(value as SessionEvent)
+    } catch { /* Preserve valid later usage even if one line is damaged. */ }
+  }
+  return events
+}
+
 export function deriveV2Observation(episode: V2Episode, outcome: RunOutcome, events: readonly SessionEvent[], evidenceComplete: boolean): V2Observation {
   const stages = outcome.tasks ?? []
-  const scope = events.filter(event => event.runId && stages.some(stage => stage.taskId === event.taskId))
+  const scope = stages.length ? events.filter(event => event.runId && stages.some(stage => stage.taskId === event.taskId)) : events
   const summaryIds = new Set<string>()
   const summaryStarts = new Map<string, number>()
   const durations = new Map<string, number>()
@@ -25,10 +72,12 @@ export function deriveV2Observation(episode: V2Episode, outcome: RunOutcome, eve
   const prunedTaskIds = [...new Set(stages.flatMap(stage => stage.removedTaskIds))]
   const stablePromptRuns = stages.filter(stage => stage.promptRounds.rounds > 1 && stage.promptRounds.stable === stage.promptRounds.rounds - 1).length
   const acceptanceGroups = outcome.acceptance?.groups?.map(group => ({ name: group.name, passed: group.passed })) ?? []
+  const providerStatus = outcome.error?.match(/DeepSeek API ([1-5]\d\d):/)
   return {
     taskId: episode.taskId, repeat: episode.repeat, arm: episode.arm, status: outcome.status, accepted: outcome.accepted,
     acceptanceGroups, protectedFilesChanged: outcome.acceptance?.protectedFilesChanged ?? [], evidenceComplete,
     ...(outcome.error ? { failureReason: 'infrastructure' } : outcome.status !== 'completed' ? { failureReason: outcome.status } : outcome.accepted === false ? { failureReason: 'acceptance' } : {}),
+    ...(providerStatus ? { providerHttpStatus: Number(providerStatus[1]) } : {}),
     metrics: {
       mainRequests: Math.max(0, outcome.counters.modelRequests - summaryIds.size), summaryRequests: summaryIds.size,
       toolCalls: outcome.counters.toolCalls, toolErrors: outcome.counters.toolErrors, policyRejected: null, toolSkipped,
@@ -45,4 +94,18 @@ export function deriveV2Observation(episode: V2Episode, outcome: RunOutcome, eve
       multiRoundRuns: stages.filter(stage => stage.promptRounds.rounds > 1).length,
     },
   }
+}
+
+// A task-level failure remains an observation. Missing provider usage or an
+// incomplete journal makes the monetary/evidence ledger unsafe for later work.
+export function developmentBatchStopReason(record: V2Observation, events: readonly SessionEvent[]): string | null {
+  if (events.some(event => event.type === 'model/rejected' && event.data.reason === 'amount_limit')) return 'amount_cap_before_request'
+  if (events.some(event => event.type === 'model/rejected' && event.data.reason === 'usage_unknown')) return 'usage_unknown'
+  if (record.failureReason === 'infrastructure' || record.status === 'error') return 'infrastructure_or_provider_error'
+  const rejected = new Set(events.flatMap(event => event.type === 'model/rejected' ? [event.data.requestId] : []))
+  const dispatched = events.flatMap(event => event.type === 'model/start' && !rejected.has(event.data.requestId) ? [event.data.requestId] : [])
+  const providerUsage = new Set(events.flatMap(event => event.type === 'model/usage' && event.data.usage.source === 'provider' ? [event.data.requestId] : []))
+  if (dispatched.some(id => !providerUsage.has(id)) || events.some(event => event.type === 'model/usage' && event.data.usage.source !== 'provider')) return 'usage_unknown'
+  if (record.status === 'completed' && !record.evidenceComplete) return 'evidence_incomplete'
+  return null
 }

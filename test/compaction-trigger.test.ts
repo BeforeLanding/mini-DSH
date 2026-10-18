@@ -51,6 +51,14 @@ function seed(h: H, policy: BudgetPolicy, resultChars = 20_000) {
   return run
 }
 
+function seedPriorTask(h: H, policy: BudgetPolicy) {
+  const run = h.sessions.beginRun(h.session.id, policy, 'mock/test')
+  h.sessions.append(h.session.id, 'user/message', { content: 'previous completed task' }, run)
+  h.sessions.append(h.session.id, 'assistant/tool_calls', { toolCalls: [{ id: 'old', name: 'read_file', arguments: { path: 'old.txt' } }] }, run)
+  h.sessions.append(h.session.id, 'tool/result', { toolCallId: 'old', name: 'read_file', content: 'older task context '.repeat(1800) }, run)
+  h.sessions.finishRun(run, 'completed')
+}
+
 test('budget policy carries compaction knobs and rejects values outside their domain', () => {
   const policy = resolveBudget({ compactionRatio: 0.8, retainRatio: 0.16, auto: true, compactionBudgetTokens: 1000, maxOverflowRetries: 0 })
   assert.equal(policy.compactionRatio, 0.8)
@@ -76,6 +84,51 @@ test('pressure compacts a fitting projection that has crossed the compaction rat
   // 压缩后重新投影，且两条投影准备的是同一个请求。
   assert.equal(projections(h).length, 2)
   assert.equal(new Set(projections(h).map(event => event.data.requestId)).size, 1)
+})
+
+test('pressure does not repeatedly summarize a prefix that stays above the pressure line', async () => {
+  const steps: ToolCall[] = [1, 2, 3].map(index => ({ id: `tick-${index}`, name: 'tick', arguments: {} }))
+  const scriptedRun = scripted(steps)
+  const h = harness(scriptedRun.chat)
+  h.tools.register({ name: 'tick', execute: () => 'current task output '.repeat(800) })
+  const policy = base({ maxModelRequests: 10 })
+  seedPriorTask(h, policy)
+
+  assert.equal(await h.agent.send('new task', { budget: policy }), 'done')
+  assert.equal(starts(h).length, 1)
+  assert.equal(starts(h)[0]!.data.trigger, 'pressure')
+  assert.equal(scriptedRun.state.summaries, 1)
+  assert.equal(scriptedRun.state.calls, 4)
+  const projected = projections(h)
+  const afterPressure = projected.find((event, index) => index > 0 && event.data.requestId === projected[index - 1]!.data.requestId)
+  assert.ok(afterPressure && afterPressure.data.estimatedInputTokens > 3000 * 0.8, 'summary cannot shrink the retained earlier task')
+  assert.equal(h.sessions.latestRun(h.session.id)?.status, 'completed')
+})
+
+test('pressure can run again after an effective summary and new history growth', async () => {
+  const steps: ToolCall[] = [1, 2, 3].map(index => ({ id: `tick-${index}`, name: 'tick', arguments: {} }))
+  const scriptedRun = scripted(steps)
+  const h = harness(scriptedRun.chat)
+  h.tools.register({ name: 'tick', execute: () => 'new output '.repeat(2200) })
+  const policy = base({ maxModelRequests: 12 })
+  seed(h, policy)
+
+  assert.equal(await h.agent.continue({ budget: policy }), 'done')
+  assert.ok(scriptedRun.state.summaries >= 2, 'effective compaction must not disable later pressure checks')
+  assert.equal(h.sessions.latestRun(h.session.id)?.status, 'completed')
+})
+
+test('overflow fallback remains available after ineffective pressure is suppressed', async () => {
+  const scriptedRun = scripted([1, 2, 3].map(index => ({ id: `tick-${index}`, name: 'tick', arguments: {} })))
+  const h = harness(scriptedRun.chat)
+  let calls = 0
+  h.tools.register({ name: 'tick', execute: () => ++calls < 3 ? 'current task output '.repeat(800) : 'new output '.repeat(36000) })
+  const policy = base({ maxModelRequests: 10 })
+  seedPriorTask(h, policy)
+
+  assert.equal(await h.agent.send('new task', { budget: policy }), 'done')
+  assert.deepEqual(starts(h).map(event => event.data.trigger), ['pressure', 'context-overflow'])
+  assert.equal(h.sessions.latestRun(h.session.id)?.status, 'completed')
 })
 
 test('overflow compacts and retries instead of stopping, and records both projections', async () => {

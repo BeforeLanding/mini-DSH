@@ -1,8 +1,10 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
+import os from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { calibrationTasks, formalTasks, resolveV2Arms, resolveV2Episodes, v2ScheduleSeed } from './eval-v2-plan.js'
+import { createHarness } from '../src/app/create-harness.js'
+import { armsForV2Split, repeatsForV2Split, resolveV2Arms, resolveV2Episodes, seedForV2Split, tasksForV2Split } from './eval-v2-plan.js'
 import type { V2Episode, V2Split, V2Tier } from './eval-v2-plan.js'
 import type { AblationPhase } from './eval-runner.js'
 
@@ -12,6 +14,7 @@ export interface V2FreezeInput {
   window: number
   model: string
   echoedModel: string
+  modelVersion?: string
   thinking: 'enabled' | 'disabled'
   sampling: 'provider-default'
   baseUrl: string
@@ -20,12 +23,13 @@ export interface V2FreezeInput {
 }
 export interface V2FrozenFile { path: string; sha256: string }
 export interface V2Manifest extends V2FreezeInput {
-  protocol: 'NX-42-eval-v2'
+  protocol: 'NX-42-eval-v2' | 'NX-42-eval-v2.1' | 'NX-45-dev-2arm-v1'
   scheduleSeed: number
   tasks: readonly { id: string; family: string; shape: string; groups: string[]; files: V2FrozenFile[] }[]
   arms: ReturnType<typeof resolveV2Arms>
   episodes: readonly V2Episode[]
   sourceFiles: V2FrozenFile[]
+  toolSchemaSha256?: string
   digest: string
 }
 
@@ -36,10 +40,12 @@ const sourcePaths = [
   'scripts/eval-v2-plan.ts', 'scripts/eval-v2-episode.ts', 'scripts/eval-v2-fixtures.ts',
   'scripts/eval-v2-isolation.ts', 'scripts/eval-fixture.ts', 'scripts/eval-runner.ts',
   'scripts/eval-v2-report.ts', 'scripts/eval-v2-freeze.ts', 'scripts/eval-v2.ts', 'scripts/eval-v2-runtime.sha256',
+  'scripts/eval-capabilities.mjs',
   'scripts/eval-v2-observation.ts', 'scripts/eval-v2-run.ts',
   'scripts/eval-v2-prepare-runtime.sh', 'scripts/coding-fixtures.ts', 'scripts/eval-provenance.ts',
   'test/fixtures/harness-v2/_shared/probe.mjs',
 ]
+const frozenSourcePaths = (split: V2Split) => split === 'development' ? [...sourcePaths, 'scripts/smoke-cost.ts', 'docs/context-budget/NX-45-DEVELOPMENT.md'] : sourcePaths
 const sha = (data: string | Buffer): string => createHash('sha256').update(data).digest('hex')
 const stable = (value: unknown): string => JSON.stringify(value)
 const quantile = (values: readonly number[], q: number): number | null => {
@@ -49,6 +55,18 @@ const quantile = (values: readonly number[], q: number): number | null => {
 }
 const mean = (values: readonly number[]): number | null => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null
 const stats = (values: readonly number[]) => ({ count: values.length, mean: mean(values), median: quantile(values, 0.5), p95: quantile(values, 0.95), total: values.reduce((a, b) => a + b, 0) })
+
+async function currentToolSchemaSha256(): Promise<string> {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-v2-schema-'))
+  let harness: Awaited<ReturnType<typeof createHarness>> | undefined
+  try {
+    harness = await createHarness({ workspace, profile: 'coding' })
+    return harness.capabilityManifest.toolSchemaSha256
+  } finally {
+    if (harness) await harness.dispose()
+    await fs.rm(workspace, { recursive: true, force: true })
+  }
+}
 
 async function listFiles(root: string, relative = ''): Promise<V2FrozenFile[]> {
   const entries = await fs.readdir(path.join(root, relative), { withFileTypes: true })
@@ -64,15 +82,19 @@ async function listFiles(root: string, relative = ''): Promise<V2FrozenFile[]> {
 }
 
 export async function freezeV2(input: V2FreezeInput): Promise<V2Manifest> {
-  if (input.split !== 'formal' && input.split !== 'calibration') throw new Error('invalid V2 split')
+  if (input.split !== 'formal' && input.split !== 'calibration' && input.split !== 'development') throw new Error('invalid V2 split')
   if (input.tier !== '2m' && input.tier !== '1m') throw new Error('invalid V2 tier')
+  if (input.split === 'development' && input.tier !== '1m') throw new Error('development protocol requires the shared 1m tier')
+  if (input.split === 'development' && (input.window !== 1_000_000 || input.model !== 'deepseek/deepseek-flash' || input.echoedModel !== 'deepseek-flash' ||
+    input.thinking !== 'enabled' || input.sampling !== 'provider-default' || !input.modelVersion)) throw new Error('development model contract mismatch')
+  if (input.split === 'development' && input.priceSnapshot.source !== 'https://api-docs.deepseek.com/quick_start/pricing/') throw new Error('development price snapshot must use the official source')
   if (!input.model || !input.echoedModel || !input.baseUrl || !/^[0-9a-f]{40}$/.test(input.gitCommit) ||
     !['enabled', 'disabled'].includes(input.thinking) || input.sampling !== 'provider-default') throw new Error('freeze requires model, echo label, thinking, provider-default sampling, endpoint and clean Git commit')
   const price = input.priceSnapshot
   if (!price.source || !Number.isFinite(Date.parse(price.capturedAt)) || !price.currency ||
     [price.inputPerMillion, price.outputPerMillion, price.cacheReadPerMillion].some(value => !Number.isFinite(value) || value < 0) ||
     price.inputPerMillion === 0 || price.outputPerMillion === 0) throw new Error('invalid price snapshot')
-  const tasks = input.split === 'formal' ? formalTasks : calibrationTasks
+  const tasks = tasksForV2Split(input.split)
   const frozenTasks = await Promise.all(tasks.map(async task => {
     const files = await listFiles(path.join(fixtureRoot, task.id))
     for (const required of ['meta.json', 'verify.mjs']) if (!files.some(file => file.path === required)) throw new Error(`incomplete fixture ${task.id}: ${required}`)
@@ -83,11 +105,13 @@ export async function freezeV2(input: V2FreezeInput): Promise<V2Manifest> {
     return { ...task, groups: meta.groups as string[], files }
   }))
   const sourceFiles = [
-    ...await Promise.all(sourcePaths.map(async file => ({ path: file, sha256: sha(await fs.readFile(path.join(repository, file))) }))),
+    ...await Promise.all(frozenSourcePaths(input.split).map(async file => ({ path: file, sha256: sha(await fs.readFile(path.join(repository, file))) }))),
     ...(await listFiles(path.join(repository, 'src'))).map(file => ({ path: `src/${file.path}`, sha256: file.sha256 })),
   ].sort((a, b) => a.path.localeCompare(b.path, 'en'))
-  const arms = resolveV2Arms(input.window, input.tier).filter(arm => input.split === 'formal' || arm.name === 'baseline' || arm.name === 'full')
-  const fields = { protocol: 'NX-42-eval-v2' as const, scheduleSeed: v2ScheduleSeed, ...input, tasks: frozenTasks, arms, episodes: resolveV2Episodes(input.split), sourceFiles }
+  const arms = resolveV2Arms(input.window, input.tier).filter(arm => armsForV2Split(input.split).includes(arm.name))
+  const fields = { protocol: input.split === 'development' ? 'NX-45-dev-2arm-v1' as const : 'NX-42-eval-v2.1' as const,
+    scheduleSeed: seedForV2Split(input.split), ...input, tasks: frozenTasks, arms, episodes: resolveV2Episodes(input.split), sourceFiles,
+    ...(input.split === 'development' ? { toolSchemaSha256: await currentToolSchemaSha256() } : {}) }
   return { ...fields, digest: sha(stable(fields)) }
 }
 
@@ -101,10 +125,11 @@ export async function verifyV2FrozenFiles(manifest: V2Manifest): Promise<void> {
     if (stable(meta.groups) !== stable(task.groups)) throw new Error(`V2 group contract changed after freeze: ${task.id}`)
   }
   const sources = [
-    ...await Promise.all(sourcePaths.map(async file => ({ path: file, sha256: sha(await fs.readFile(path.join(repository, file))) }))),
+    ...await Promise.all(frozenSourcePaths(manifest.split).map(async file => ({ path: file, sha256: sha(await fs.readFile(path.join(repository, file))) }))),
     ...(await listFiles(path.join(repository, 'src'))).map(file => ({ path: `src/${file.path}`, sha256: file.sha256 })),
   ].sort((a, b) => a.path.localeCompare(b.path, 'en'))
   if (stable(sources) !== stable(manifest.sourceFiles)) throw new Error('V2 source, prompt, schema or rules changed after freeze')
+  if (manifest.split === 'development' && manifest.toolSchemaSha256 !== await currentToolSchemaSha256()) throw new Error('development tool schema changed after freeze')
 }
 
 export interface V2Observation {
@@ -117,6 +142,7 @@ export interface V2Observation {
   protectedFilesChanged: string[]
   evidenceComplete: boolean
   failureReason?: string
+  providerHttpStatus?: number
   metrics: {
     mainRequests: number; summaryRequests: number; toolCalls: number; toolErrors: number; policyRejected: number | null; toolSkipped: number
     inputTokens: number; outputTokens: number; summaryTokens: number; cacheReadTokens: number
@@ -140,13 +166,15 @@ function validateObservation(record: V2Observation): void {
     !Array.isArray(record.metrics.prunedTaskIds) || record.metrics.prunedTaskIds.some(value => typeof value !== 'string')) throw new Error(`invalid V2 metrics: ${record.taskId}`)
   if (record.metrics.toolErrors > record.metrics.toolCalls) throw new Error(`V2 tool errors exceed calls: ${record.taskId}`)
   if (record.metrics.policyRejected !== null && (!Number.isSafeInteger(record.metrics.policyRejected) || record.metrics.policyRejected < 0)) throw new Error(`invalid V2 policy rejections: ${record.taskId}`)
+  if (record.providerHttpStatus !== undefined && (!Number.isInteger(record.providerHttpStatus) || record.providerHttpStatus < 100 || record.providerHttpStatus > 599)) throw new Error(`invalid V2 provider status: ${record.taskId}`)
   if (!['baseline', 'context', 'prompt', 'full'].includes(record.arm) || !Number.isInteger(record.repeat) || record.repeat < 0) throw new Error('invalid V2 arm/repeat')
 }
 
 function bootstrapDelta(manifest: V2Manifest, observations: readonly V2Observation[], first: AblationPhase, second: AblationPhase): { estimate: number | null; lower95: number | null; upper95: number | null; complete: boolean } {
+  if (observations.some(record => record.failureReason === 'infrastructure' || record.status === 'error')) return { estimate: null, lower95: null, upper95: null, complete: false }
   const arms = [first, second] as const
   const roots = manifest.tasks.map(task => task.id)
-  const expectedRepeats = manifest.split === 'formal' ? 3 : 2
+  const expectedRepeats = repeatsForV2Split(manifest.split)
   const byKey = new Map(observations.map(record => [`${record.taskId}/${record.repeat}/${record.arm}`, record]))
   const perRoot = roots.map(id => {
     const values = arms.map(arm => Array.from({ length: expectedRepeats }, (_, repeat) => byKey.get(`${id}/${repeat}/${arm}`)))
@@ -156,7 +184,7 @@ function bootstrapDelta(manifest: V2Manifest, observations: readonly V2Observati
   const estimate = mean(perRoot as number[])!
   const byFamily = new Map<string, number[]>()
   for (const [index, task] of manifest.tasks.entries()) byFamily.set(task.family, [...(byFamily.get(task.family) ?? []), perRoot[index]!])
-  let state = v2ScheduleSeed >>> 0
+  let state = seedForV2Split(manifest.split) >>> 0
   const random = (): number => { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; return state >>> 0 }
   const draws: number[] = []
   for (let index = 0; index < 10_000; index += 1) {
@@ -169,10 +197,14 @@ function bootstrapDelta(manifest: V2Manifest, observations: readonly V2Observati
 
 export function reportV2(manifest: V2Manifest, observations: readonly V2Observation[]) {
   const { digest, ...fields } = manifest
-  const expectedTasks = manifest.split === 'formal' ? formalTasks : calibrationTasks
-  if (sha(stable(fields)) !== digest || stable(manifest.tasks.map(({ id, family, shape }) => ({ id, family, shape }))) !== stable(expectedTasks) ||
+  const expectedTasks = tasksForV2Split(manifest.split)
+  if (sha(stable(fields)) !== digest || (manifest.split === 'development' ? manifest.protocol !== 'NX-45-dev-2arm-v1' : !['NX-42-eval-v2', 'NX-42-eval-v2.1'].includes(manifest.protocol)) ||
+    manifest.scheduleSeed !== seedForV2Split(manifest.split) || (manifest.split === 'development' && manifest.tier !== '1m') ||
+    (manifest.split === 'development' && (!/^[a-f0-9]{64}$/.test(manifest.toolSchemaSha256 ?? '') || !manifest.modelVersion || manifest.window !== 1_000_000 ||
+      manifest.model !== 'deepseek/deepseek-flash' || manifest.echoedModel !== 'deepseek-flash' || manifest.thinking !== 'enabled' || manifest.sampling !== 'provider-default')) ||
+    stable(manifest.tasks.map(({ id, family, shape }) => ({ id, family, shape }))) !== stable(expectedTasks) ||
     stable(manifest.episodes) !== stable(resolveV2Episodes(manifest.split)) ||
-    stable(manifest.arms) !== stable(resolveV2Arms(manifest.window, manifest.tier).filter(arm => manifest.split === 'formal' || arm.name === 'baseline' || arm.name === 'full'))) throw new Error('V2 manifest integrity or schedule mismatch')
+    stable(manifest.arms) !== stable(resolveV2Arms(manifest.window, manifest.tier).filter(arm => armsForV2Split(manifest.split).includes(arm.name)))) throw new Error('V2 manifest integrity or schedule mismatch')
   const expected = new Map(manifest.episodes.map(episode => [`${episode.taskId}/${episode.repeat}/${episode.arm}`, episode]))
   const seen = new Map<string, V2Observation>()
   for (const record of observations) {
@@ -184,6 +216,8 @@ export function reportV2(manifest: V2Manifest, observations: readonly V2Observat
     seen.set(key, record)
   }
   const missing = [...expected.keys()].filter(key => !seen.has(key))
+  const invalid = observations.filter(record => record.failureReason === 'infrastructure' || record.status === 'error')
+    .map(record => `${record.taskId}/${record.repeat}/${record.arm}`)
   const arms = manifest.arms.map(arm => {
     const rows = observations.filter(record => record.arm === arm.name)
     const planned = manifest.episodes.filter(episode => episode.arm === arm.name).length
@@ -197,7 +231,8 @@ export function reportV2(manifest: V2Manifest, observations: readonly V2Observat
     }
     return {
       arm: arm.name, planned, executed: rows.length, reliableSuccesses: successes, rateLower: successes / planned,
-      rateUpper: (successes + planned - rows.length) / planned, artifactAccepted: rows.filter(row => row.accepted === true).length,
+      rateUpper: (successes + planned - rows.length + rows.filter(row => row.failureReason === 'infrastructure' || row.status === 'error').length) / planned,
+      artifactAccepted: rows.filter(row => row.accepted === true).length,
       failureReasons: reasons,
       modelRounds: { main: stats(numbers('mainRequests')), summary: stats(numbers('summaryRequests')), all: stats(rows.map(row => row.metrics.mainRequests + row.metrics.summaryRequests)) },
       tools: { calls: stats(numbers('toolCalls')), errors: stats(numbers('toolErrors')), policyRejected: rows.some(row => row.metrics.policyRejected !== null) ? stats(numbers('policyRejected')) : null, skipped: stats(numbers('toolSkipped')),
@@ -222,7 +257,7 @@ export function reportV2(manifest: V2Manifest, observations: readonly V2Observat
     fullMinusContext: bootstrapDelta(manifest, observations, 'context', 'full'),
   } : null
   const pairs = manifest.tasks.map(task => ({ id: task.id, family: task.family, arms: Object.fromEntries(arms.map(arm => [arm.arm, observations.filter(record => record.taskId === task.id && record.arm === arm.arm).map(record => ({ repeat: record.repeat, reliableSuccess: reliableSuccess(record), status: record.status, groups: record.acceptanceGroups }))])),
-    baselineFull: Array.from({ length: manifest.split === 'formal' ? 3 : 2 }, (_, repeat) => {
+    baselineFull: Array.from({ length: repeatsForV2Split(manifest.split) }, (_, repeat) => {
       const baseline = observations.find(record => record.taskId === task.id && record.repeat === repeat && record.arm === 'baseline')
       const full = observations.find(record => record.taskId === task.id && record.repeat === repeat && record.arm === 'full')
       if (!baseline || !full) return 'missing'
@@ -230,10 +265,10 @@ export function reportV2(manifest: V2Manifest, observations: readonly V2Observat
     }),
   }))
   return { protocol: manifest.protocol, manifestDigest: manifest.digest, observationsDigest: sha(observations.map(record => stable(record)).join('\n')),
-    split: manifest.split, planned: manifest.episodes.length, executed: observations.length, incomplete: missing.length > 0,
-    missing, arms, primary, exploratory, pairs,
-    measurementLimits: ['Policy/parameter rejection has no structured event subtype in the current Harness; null means not measurable, never zero.', 'A failed test command is counted as a tool error but cannot be reliably separated from an unexpected command error without a structured check marker.', 'A provider call interrupted before usage is durable may cost more than the token-derived estimate; the runner stops the batch after an evidence failure.'],
-    interpretation: manifest.split === 'calibration' ? 'calibration-only' : !primary.complete ? 'incomplete' : primary.estimate! >= 0.10 && primary.lower95! > 0 ? 'supported-improvement' : 'no-supported-improvement',
+    split: manifest.split, planned: manifest.episodes.length, executed: observations.length, incomplete: missing.length > 0 || invalid.length > 0,
+    missing, invalid, arms, primary, exploratory, pairs,
+    measurementLimits: ['Policy/parameter rejection has no structured event subtype in the current Harness; null means not measurable, never zero.', 'A failed test command is counted as a tool error but cannot be reliably separated from an unexpected command error without a structured check marker.', 'A provider call interrupted before usage is durable may cost more than the token-derived estimate; the runner stops the batch after an infrastructure or evidence failure.'],
+    interpretation: missing.length || invalid.length ? 'incomplete' : manifest.split === 'development' ? 'development-only' : manifest.split === 'calibration' ? 'calibration-only' : !primary.complete ? 'incomplete' : primary.estimate! >= 0.10 && primary.lower95! > 0 ? 'supported-improvement' : 'no-supported-improvement',
     thresholdClaimSupported: manifest.split === 'formal' && primary.complete && primary.lower95! >= 0.10 }
 }
 

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { assertEvidenceRootUnused, calibrationTasks, formalTasks, parseV2Arguments, resolveV2Arms, resolveV2Episodes, resolveV2Plan } from '../scripts/eval-v2-plan.js'
+import { assertEvidenceRootUnused, calibrationTasks, developmentReserveUsd, developmentTasks, formalTasks, parseV2Arguments, resolveV2Arms, resolveV2Episodes, resolveV2Plan } from '../scripts/eval-v2-plan.js'
 
 test('V2 plans complete matched blocks with explicit repeats and shared resource limits', () => {
   assert.equal(formalTasks.length, 20)
@@ -37,6 +37,31 @@ test('V2 plans complete matched blocks with explicit repeats and shared resource
   assert.equal(arms[3]!.toolOutput.bounded, true)
   assert.deepEqual(resolveV2Plan({ split: 'formal', tier: '2m', window: 1_000_000, evidenceRoot: 'unused', planOnly: true }).caps,
     { runs: 240, modelRequests: 15_360, toolCalls: 30_720, totalTokens: 480_000_000, activeDurationMs: 144_000_000 })
+})
+
+test('development protocol fixes six structurally selected roots, 24 paired episodes and balanced arm order', () => {
+  assert.deepEqual(developmentTasks.map(task => task.id), ['UC01', 'BC01', 'FC01', 'RC01', 'TC01', 'U01'])
+  assert.equal(new Set(developmentTasks.map(task => task.family)).size, 5)
+  assert.deepEqual(new Set(developmentTasks.map(task => task.shape)), new Set(['multi-stage', 'information', 'single']))
+  const episodes = resolveV2Episodes('development')
+  assert.equal(episodes.length, 24)
+  assert.equal(new Set(episodes.map(row => `${row.taskId}/${row.repeat}/${row.arm}`)).size, 24)
+  for (const block of new Set(episodes.map(row => row.block))) {
+    const pair = episodes.filter(row => row.block === block)
+    assert.deepEqual(new Set(pair.map(row => row.arm)), new Set(['baseline', 'full']))
+    assert.equal(new Set(pair.map(row => `${row.taskId}/${row.repeat}`)).size, 1)
+  }
+  assert.equal(episodes.filter((row, index) => index % 2 === 0 && row.arm === 'baseline').length, 6)
+  assert.deepEqual(resolveV2Plan({ split: 'development', tier: '1m', window: 1_000_000, evidenceRoot: 'unused', planOnly: true }).caps,
+    { runs: 24, modelRequests: 1536, toolCalls: 3072, totalTokens: 24_000_000, activeDurationMs: 14_400_000 })
+  assert.throws(() => parseV2Arguments(['--split', 'development', '--tier', '2m', '--window', '1000000', '--evidence-root', 'unused']), /shared 1m/)
+  const reserve = developmentReserveUsd({ inputPerMillion: 0.3, outputPerMillion: 1.2, cacheReadPerMillion: 0.006 })
+  assert.equal(reserve.tokenBudgetUsd, 1.2)
+  assert.equal(reserve.marginUsd, 0.24)
+  assert.ok(Math.abs(reserve.finalRequestUsd - 0.3196608) < 1e-9)
+  assert.ok(Math.abs(reserve.perEpisodeUsd - 1.7596608) < 1e-9)
+  assert.ok(Math.abs(reserve.probeUsd - 0.0196608) < 1e-9)
+  assert.ok(Math.abs(reserve.batchUsd - 42.25152) < 1e-9)
 })
 
 test('V2 refuses ambiguous or colliding paid-plan configuration before effects', () => {

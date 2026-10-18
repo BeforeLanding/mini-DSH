@@ -37,6 +37,7 @@ export function validatePayload(type: string, data: Record<string, unknown>) {
       try { resolveBudget({ contextWindowTokens: 1 }, data.budget); valid = true } catch { valid = false }
       break
     case 'session/reset': valid = integer(data.epoch); break
+    case 'context/snapshot': valid = ['runtime:environment', 'project:context'].includes(String(data.name)) && string(data.text) && ['new-session', 'legacy-current'].includes(String(data.source)); break
     case 'user/message': valid = string(data.content); break
     case 'assistant/message': valid = string(data.content) && optionalString(data.reasoningContent); break
     case 'assistant/tool_calls': valid = (data.content == null || string(data.content)) && optionalString(data.reasoningContent) && Array.isArray(data.toolCalls) && data.toolCalls.every(c => record(c) && string(c.id) && string(c.name) && (c.arguments === undefined || record(c.arguments))); break
@@ -44,6 +45,7 @@ export function validatePayload(type: string, data: Record<string, unknown>) {
     case 'run/start': valid = validState(data.state) && record(data.state) && data.state.status === 'running'; break
     case 'run/finish': valid = validState(data.state) && record(data.state) && data.state.status !== 'running'; break
     case 'model/start': valid = string(data.taskId) && string(data.runId) && string(data.requestId) && (data.estimatedInputTokens === undefined || integer(data.estimatedInputTokens)); break
+    case 'model/rejected': valid = string(data.requestId) && ['request_limit', 'amount_limit', 'usage_unknown', 'other_limit'].includes(String(data.reason)); break
     case 'context/projection': valid = optionalString(data.requestId) && integer(data.estimatedInputTokens) && integer(data.reservedOutputTokens) && integer(data.safetyMarginTokens) && Array.isArray(data.removedTaskIds) && data.removedTaskIds.every(string) && (data.systemPromptDigest === undefined || /^[a-f0-9]{64}$/.test(String(data.systemPromptDigest))); break
     case 'context/summary-start': valid = ['pressure', 'context-overflow', 'explicit'].includes(String(data.trigger)) && integer(data.budgetTokens) && integer(data.projectedTokens) && integer(data.plannedStart) && integer(data.plannedEnd) && integer(data.plannedNodes) && Number(data.plannedEnd) >= Number(data.plannedStart) && Number(data.plannedNodes) > 0; break
     case 'context/summary-end': valid = integer(data.startSeq) && record(data.outcome) && (data.outcome.kind === 'applied' || (data.outcome.kind === 'declined' && ['summary-failed', 'summary-empty', 'summary-not-smaller', 'turn-started', 'plan-stale', 'agent-gone', 'cancelled', 'unclosed'].includes(String(data.outcome.reason)))); break

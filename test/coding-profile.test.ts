@@ -2,11 +2,13 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { Context } from '@deepseek-ai/cordis'
 import * as systemPrompt from '../src/plugins/system-prompt.js'
+import * as sessions from '../src/plugins/session.js'
 import * as runtimeContext from '../src/plugins/runtime-context.js'
 
 test('runtime context preserves the general default and disposes registered prompt entries', async () => {
   const root = new Context()
   try {
+    await root.plugin(sessions)
     await root.plugin(systemPrompt)
     const plugin = await root.plugin(runtimeContext, { workspace: 'synthetic-workspace' })
     const prompt = await root.systemPrompt.assemble()
@@ -22,6 +24,7 @@ test('runtime context preserves the general default and disposes registered prom
 test('coding profile preserves changes, respects scoped rules and requires actual verification evidence', async () => {
   const root = new Context()
   try {
+    await root.plugin(sessions)
     await root.plugin(systemPrompt)
     await root.plugin(runtimeContext, { profile: 'coding', workspace: 'synthetic-workspace' })
     const prompt = await root.systemPrompt.assemble()
@@ -40,6 +43,7 @@ test('coding profile preserves changes, respects scoped rules and requires actua
 test('invalid coding profile fails before registering prompt entries', async () => {
   const root = new Context()
   try {
+    await root.plugin(sessions)
     await root.plugin(systemPrompt)
     await assert.rejects(async () => { await root.plugin(runtimeContext, { profile: 'invalid' as 'coding' }) }, /profile must/)
     assert.deepEqual(root.systemPrompt.inspect(), { sections: [], contexts: [] })

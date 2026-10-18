@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { deriveV2Observation } from '../scripts/eval-v2-observation.js'
+import { deriveV2Observation, developmentBatchStopReason, diagnoseV2Error, recoverV2UnverifiedEvents } from '../scripts/eval-v2-observation.js'
 import type { RunOutcome } from '../scripts/eval-runner.js'
 import type { SessionEvent } from '../src/core/contracts.js'
 
@@ -31,4 +31,64 @@ test('V2 observation separates summary requests and skipped tools from executed 
   assert.equal(row.metrics.policyRejected, null)
   assert.equal(row.metrics.pressureCompactions, 1)
   assert.deepEqual(row.metrics.prunedTaskIds, ['prior'])
+})
+
+test('development continues ordinary task failures but stops on unknown usage or evidence faults', () => {
+  const row = { status: 'max_steps', failureReason: 'max_steps', evidenceComplete: false } as ReturnType<typeof deriveV2Observation>
+  const start = { type: 'model/start', data: { requestId: 'a' } } as SessionEvent
+  const usage = { type: 'model/usage', data: { requestId: 'a', usage: { source: 'provider' } } } as SessionEvent
+  assert.equal(developmentBatchStopReason(row, [start, usage]), null)
+  assert.equal(developmentBatchStopReason(row, [start]), 'usage_unknown')
+  assert.equal(developmentBatchStopReason(row, [start, { type: 'model/usage', data: { requestId: 'a', usage: { source: 'estimated' } } } as SessionEvent]), 'usage_unknown')
+  assert.equal(developmentBatchStopReason(row, [start, { type: 'model/rejected', data: { requestId: 'a' } } as SessionEvent]), null)
+  assert.equal(developmentBatchStopReason(row, [{ type: 'model/rejected', data: { requestId: 'a', reason: 'amount_limit' } } as SessionEvent]), 'amount_cap_before_request')
+  assert.equal(developmentBatchStopReason({ ...row, status: 'completed', failureReason: undefined }, [start, usage]), 'evidence_incomplete')
+  assert.equal(developmentBatchStopReason({ ...row, status: 'error', failureReason: 'infrastructure' }, [start, usage]), 'infrastructure_or_provider_error')
+})
+
+test('V2 error evidence retains a bounded diagnostic while redacting credentials and exposing interrupted usage', () => {
+  const events = [
+    { type: 'model/usage', data: { usage: { source: 'estimated' } } },
+    { type: 'model/end', data: { complete: false } },
+  ] as SessionEvent[]
+  const diagnostic = diagnoseV2Error(`DeepSeek stream error Bearer secret-token api_key=secret-token ${'x'.repeat(1000)}`, events, 'secret-token')
+  assert.equal(diagnostic.kind, 'provider_stream')
+  assert.equal(diagnostic.providerHttpStatus, null)
+  assert.equal(diagnostic.lastModelComplete, false)
+  assert.equal(diagnostic.lastUsageSource, 'estimated')
+  assert.ok(diagnostic.message.length <= 512)
+  assert.doesNotMatch(diagnostic.message, /secret-token/)
+  const http = diagnoseV2Error('DeepSeek API 429: rate limit', [], 'secret-token')
+  assert.equal(http.kind, 'provider_http')
+  assert.equal(http.providerHttpStatus, 429)
+})
+
+test('a journal with a fragment after model end still recovers its paid usage once', () => {
+  const usage = { inputTokens: 100, outputTokens: 20, totalTokens: 120, cacheReadTokens: 80, source: 'provider', uncertain: false }
+  const line = (type: string, data: object) => JSON.stringify({ type, data, at: '2026-10-15T00:00:00.000Z', runId: 'run', taskId: 'task' })
+  const raw = [
+    line('model/start', { taskId: 'task', runId: 'run', requestId: 'req' }),
+    line('model/usage', { taskId: 'task', runId: 'run', requestId: 'req', usage }),
+    line('model/end', { requestId: 'req', complete: true }),
+    line('model/fragment', { requestId: 'req', content: 'late', reasoningContent: '' }),
+    'broken JSON',
+    line('model/usage', { taskId: 'task', runId: 'run', requestId: 'req', usage }),
+  ].join('\n')
+  const events = recoverV2UnverifiedEvents(raw)
+  assert.equal(events.filter(event => event.type === 'model/usage').length, 1)
+  assert.ok(events.some(event => event.type === 'model/fragment'))
+  const row = deriveV2Observation({ taskId: 'RC01', repeat: 0, arm: 'full', block: 0 }, {
+    status: 'error', accepted: null, error: 'fragment after model end',
+    counters: { modelRequests: 1, toolCalls: 0, toolErrors: 0, previewTruncations: 0, inputTokens: 100, outputTokens: 20, totalTokens: 120, cacheReadTokens: 80, activeDurationMs: 0, approvalDurationMs: 0 },
+  } as RunOutcome, events, false)
+  assert.equal(row.metrics.providerTokens, 120)
+  assert.equal(row.evidenceComplete, false)
+  assert.equal(row.failureReason, 'infrastructure')
+  const providerFailure = deriveV2Observation({ taskId: 'RC01', repeat: 0, arm: 'full', block: 0 }, {
+    status: 'error', accepted: null, error: 'DeepSeek API 429: rate limited', counters: {
+      modelRequests: 1, toolCalls: 0, toolErrors: 0, previewTruncations: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0,
+      cacheReadTokens: 0, activeDurationMs: 0, approvalDurationMs: 0,
+    },
+  } as RunOutcome, [], false)
+  assert.equal(providerFailure.providerHttpStatus, 429)
 })

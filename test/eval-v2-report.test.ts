@@ -46,6 +46,11 @@ test('V2 report keeps the fixed denominator, missing range, six measures and roo
   assert.equal(report.primary.estimate, 0.2)
   assert.equal(report.arms.find(arm => arm.arm === 'baseline')?.reliableSuccesses, 24)
   assert.equal(report.arms.find(arm => arm.arm === 'full')?.reliableSuccesses, 36)
+  assert.equal(report.arms.find(arm => arm.arm === 'full')?.artifactAccepted, 36)
+  const budgetedArtifact = records.map(row => row.arm === 'full' && row.taskId === manifest.tasks[12]!.id && row.repeat === 0 ? { ...row, accepted: true } : row)
+  const budgetedReport = reportV2(manifest, budgetedArtifact)
+  assert.equal(budgetedReport.arms.find(arm => arm.arm === 'full')?.reliableSuccesses, 36)
+  assert.equal(budgetedReport.arms.find(arm => arm.arm === 'full')?.artifactAccepted, 37)
   assert.equal(report.arms.find(arm => arm.arm === 'full')?.modelRounds.all.total, 180)
   assert.equal(report.arms.find(arm => arm.arm === 'full')?.tools.errors.total, 60)
   assert.equal(report.arms.find(arm => arm.arm === 'full')?.tokens.tokensPerReliableSuccess, 200)
@@ -59,6 +64,15 @@ test('V2 report keeps the fixed denominator, missing range, six measures and roo
   assert.equal(full.rateUpper, (full.reliableSuccesses + full.planned - full.executed) / full.planned)
   assert.throws(() => reportV2(manifest, [...records, records[0]!]), /duplicate/)
   assert.throws(() => reportV2({ ...manifest, model: 'changed' }, records), /integrity/)
+  const errored = records.map((row, index) => index === 0 ? { ...row, status: 'error', failureReason: 'infrastructure', providerHttpStatus: 429 } : row)
+  const invalid = reportV2(manifest, errored)
+  assert.equal(invalid.incomplete, true)
+  assert.deepEqual(invalid.invalid, [`${records[0]!.taskId}/${records[0]!.repeat}/${records[0]!.arm}`])
+  assert.equal(invalid.primary.complete, false)
+  assert.equal(invalid.primary.estimate, null)
+  assert.equal(invalid.thresholdClaimSupported, false)
+  const invalidArm = invalid.arms.find(arm => arm.arm === records[0]!.arm)!
+  assert.equal(invalidArm.rateUpper, (invalidArm.reliableSuccesses + 1) / invalidArm.planned)
 })
 
 test('reliable success requires terminal completion, four groups, clean protection and complete evidence', () => {
@@ -68,4 +82,31 @@ test('reliable success requires terminal completion, four groups, clean protecti
   assert.equal(reliableSuccess({ ...good, protectedFilesChanged: ['docs/SPEC.md'] }), false)
   assert.equal(reliableSuccess({ ...good, acceptanceGroups: good.acceptanceGroups.slice(0, 3) }), false)
   assert.equal(reliableSuccess({ ...good, status: 'output_limit' }), false)
+})
+
+test('development report keeps twelve per-arm denominators and never makes a formal improvement claim', async () => {
+  const developmentConfig = { ...config, split: 'development' as const, tier: '1m' as const, window: 1_000_000,
+    model: 'deepseek/deepseek-flash', echoedModel: 'deepseek-flash', modelVersion: 'DeepSeek-V4.1-Flash-1017',
+    priceSnapshot: { ...config.priceSnapshot, source: 'https://api-docs.deepseek.com/quick_start/pricing/' } }
+  const manifest = await freezeV2(developmentConfig)
+  assert.equal(manifest.protocol, 'NX-45-dev-2arm-v1')
+  assert.match(manifest.toolSchemaSha256!, /^[a-f0-9]{64}$/)
+  await verifyV2FrozenFiles(manifest)
+  assert.equal(manifest.episodes.length, 24)
+  const rows = manifest.episodes.map(episode => ({ ...observation(episode.taskId, episode.repeat, episode.arm, episode.arm === 'full'),
+    acceptanceGroups: manifest.tasks.find(task => task.id === episode.taskId)!.groups.map(name => ({ name, passed: episode.arm === 'full' })) }))
+  const report = reportV2(manifest, rows)
+  assert.equal(report.incomplete, false)
+  assert.equal(report.interpretation, 'development-only')
+  assert.equal(report.thresholdClaimSupported, false)
+  assert.equal(report.arms.find(arm => arm.arm === 'baseline')?.planned, 12)
+  assert.equal(report.arms.find(arm => arm.arm === 'full')?.planned, 12)
+  assert.equal(report.arms.find(arm => arm.arm === 'full')?.artifactAccepted, 12)
+  const incomplete = reportV2(manifest, rows.slice(0, -1))
+  assert.equal(incomplete.incomplete, true)
+  assert.equal(incomplete.missing.length, 1)
+  assert.equal(incomplete.primary.complete, false)
+  await assert.rejects(freezeV2({ ...developmentConfig, tier: '2m' }), /shared 1m/)
+  await assert.rejects(freezeV2({ ...developmentConfig, model: 'deepseek/other' }), /model contract/)
+  assert.throws(() => reportV2({ ...manifest, protocol: 'NX-42-eval-v2.1' }, rows), /integrity/)
 })

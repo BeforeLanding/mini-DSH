@@ -5,7 +5,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Adapter, Arguments, ChatRequest } from '../core/contracts.js'
 interface WireCall { id: string; name: string; arguments: string }
 interface Delta { index?: number; id?: string; function?: { name?: string; arguments?: string } }
-interface StreamEvent { usage?: unknown; error?: { message?: string }; choices?: { finish_reason?: string; delta?: { content?: string; reasoning_content?: string; tool_calls?: Delta[] } }[] }
+interface StreamEvent { usage?: unknown; model?: string; system_fingerprint?: string; error?: { message?: string }; choices?: { finish_reason?: string; delta?: { content?: string; reasoning_content?: string; tool_calls?: Delta[] } }[] }
 
 export const name = 'mini-model-deepseek'
 export const inject = ['llm']
@@ -22,7 +22,9 @@ export async function* parseSSE(response: { body: { getReader(): { read(): Promi
     if (data === '[DONE]') return null
     if (!data) return undefined
     const event: unknown = JSON.parse(data)
-    if (!isRecord(event) || (event.choices !== undefined && !Array.isArray(event.choices))) throw new Error('invalid SSE event')
+    if (!isRecord(event) || (event.choices !== undefined && !Array.isArray(event.choices)) ||
+      (event.model !== undefined && typeof event.model !== 'string') ||
+      (event.system_fingerprint !== undefined && typeof event.system_fingerprint !== 'string')) throw new Error('invalid SSE event')
     for (const choice of event.choices ?? []) {
       if (!isRecord(choice)) throw new Error('invalid SSE choice')
       if (choice.finish_reason != null && typeof choice.finish_reason !== 'string') throw new Error('invalid SSE finish reason')
@@ -82,6 +84,12 @@ export function finalizeToolCalls(map: Map<number, WireCall>) {
 }
 
 export interface DeepSeekConfig { apiKey?: string; baseUrl?: string; models?: string[]; defaultModel?: string; thinking?: string; contextWindowTokens?: number; fetch?: typeof fetch }
+export function deepSeekModelMetadata(config: Pick<DeepSeekConfig, 'baseUrl' | 'models' | 'contextWindowTokens'> = {}) {
+  const baseUrl = (config.baseUrl ?? process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com').replace(/\/+$/, '')
+  const models = config.models ?? ['deepseek-v4-pro', 'deepseek-v4-flash']
+  const contextWindowTokens = config.contextWindowTokens ?? (baseUrl === 'https://api.deepseek.com' && !config.models ? 1_000_000 : undefined)
+  return { baseUrl, models, contextWindowTokens }
+}
 export function normalizeUsage(raw: unknown): Usage | undefined {
   if (raw == null) return undefined
   if (!isRecord(raw)) throw new Error('invalid model usage')
@@ -98,14 +106,12 @@ export function normalizeUsage(raw: unknown): Usage | undefined {
 }
 export function createDeepSeekAdapter(config: DeepSeekConfig = {}): Adapter {
   const apiKey = config.apiKey ?? process.env.DEEPSEEK_API_KEY
-  if (!apiKey) throw new Error('missing DEEPSEEK_API_KEY; copy .env.example to .env and fill it in')
-  const baseUrl = (config.baseUrl ?? process.env.DEEPSEEK_BASE_URL ?? 'https://api.deepseek.com').replace(/\/+$/, '')
-  const models = config.models ?? ['deepseek-v4-pro', 'deepseek-v4-flash']
-  const configuredCapacity = config.contextWindowTokens ?? (baseUrl === 'https://api.deepseek.com' && !config.models ? 1_000_000 : undefined)
+  if (!apiKey) throw new Error('missing DEEPSEEK_API_KEY; set it in the environment or in .env in the current working directory')
+  const { baseUrl, models, contextWindowTokens: configuredCapacity } = deepSeekModelMetadata(config)
   const adapter: Adapter = {
     models,
     capabilities: configuredCapacity === undefined ? undefined : Object.fromEntries(models.map(model => [model, { contextWindowTokens: configuredCapacity }])),
-    async chat({ system, messages = [], tools = [], model, signal, onReasoning, onContent, maxOutputTokens }: ChatRequest) {
+    async chat({ system, messages = [], tools = [], model, signal, onReasoning, onContent, onProviderEvent, maxOutputTokens }: ChatRequest) {
       const response = await (config.fetch ?? fetch)(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, signal,
@@ -123,9 +129,15 @@ export function createDeepSeekAdapter(config: DeepSeekConfig = {}): Adapter {
       const calls = new Map<number, WireCall>()
       let usage: Usage | undefined
       let finishReason: string | undefined
+      let observedModel: string | undefined
+      let systemFingerprint: string | undefined
       try {
       for await (const event of parseSSE(response)) {
+        onProviderEvent?.({ ...(event.model === undefined ? {} : { model: event.model }), ...(event.system_fingerprint === undefined ? {} : { system_fingerprint: event.system_fingerprint }),
+          ...(event.choices === undefined ? {} : { choices: event.choices }), ...(event.usage === undefined ? {} : { usage: event.usage }) })
         if (event.error) throw new Error(event.error.message ?? 'DeepSeek stream error')
+        observedModel = event.model ?? observedModel
+        systemFingerprint = event.system_fingerprint ?? systemFingerprint
         if (event.usage != null) usage = normalizeUsage(event.usage)
         finishReason = event.choices?.[0]?.finish_reason ?? finishReason
         const delta = event.choices?.[0]?.delta
@@ -135,7 +147,7 @@ export function createDeepSeekAdapter(config: DeepSeekConfig = {}): Adapter {
         for (const call of delta.tool_calls ?? []) accumulateToolCallDelta(calls, call)
       }
       const complete = finishReason === 'stop' || finishReason === 'tool_calls'
-      return { content, reasoningContent, usage, finishReason, complete, toolCalls: complete ? finalizeToolCalls(calls) : [] }
+      return { content, reasoningContent, usage, finishReason, complete, toolCalls: complete ? finalizeToolCalls(calls) : [], observedModel, systemFingerprint }
       } catch (error) { throw new ModelStreamError(error instanceof Error ? error.message : String(error), { content, reasoningContent, usage, finishReason, complete: false }, error) }
     },
   }

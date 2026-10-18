@@ -254,6 +254,8 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 
 默认 `compactionBudgetTokens = inputTargetTokens`（65,536）、`compactionRatio = 0.8`、`retainRatio = 0.16`、`compactionMaxTokens = 8192`、`maxSummaryFailures = 2`、`maxOverflowRetries = 1`，`auto = true`。压缩预算不能默认取 1M 的 `contextWindowTokens`，否则 80% 阈值在 65,536 输入目标之前永远到不了。默认配置下 0.8 实际等价于“裁剪救不了”；只有显式调整压缩预算时才有独立意义。摘要调用计入 run 的请求数、主动时间与 token，预留输出走现有预算机制；预算不足依现有 `token_budget` 停止。三入口是自动压力、溢出兜底及 CLI `/compact`；后者不受失败闩影响。压缩不是模型可调用的工具。
 
+**NX-42 校准后收口（2026-10-15）**：一次主动压力压缩已应用、重新投影后仍高于同一压力线时，本次 run 不再每轮重复主动压缩。这个情形下不可压缩的原始请求或较早任务仍占据输入，再次压缩当前 task 的少量新增消息会耗费模型请求与 token，却不能解除压力条件。输入目标/窗口真正溢出时的兜底压缩、显式 `/compact` 以及一次有效压缩后随新历史增长再次越线的主动压缩均保留。抑制只持续当前 run，不跨阶段或 `/continue`；它是按既有压缩结果作反馈，而非调整 65,536／0.8 默认值。旧付费校准在此行为修订前完成，仅用于诊断；新的正式清单和校准需重新冻结执行。
+
 纯规划器只读事件，摘要尝试在付费调用前记录开始事件，结果以结束事件闭合；失败闩从当前 run 日志折叠。恢复只读已记录的摘要，不重新调用模型；未闭合的尝试按事实补结束事件——已经写下摘要的补 `applied`，连正文都没有的才补 `unclosed`。模型若缺事实，可用有界、session 隔离的 `read_history` 按事件号读回。摘要调用使用主循环的 system 和 tool schema，原样重放遮蔽段；DeepSeek 当前适配器未显式实现前缀缓存，因此缓存收益尚未兑现。与参考实现不同，本仓库的 `beginRun` 排斥同 session 并发 run，不需完整的 after-await 计划重校验；写 applied 前仍复查取消和主动预算。摘要可能遗漏或捏造事实，事件号与回读入口让事实可核对，却不保证模型一定主动核对。
 
 **`resolveBudget` 的两档放宽（NX-34-4）。** `compactionRatio` 与 `retainRatio` 是比率，0.8 存不进「非负安全整数」这条统一契约，因此为这两个键开一个**分数集**（要求 `0 < v ≤ 1`）、为 `auto` 开一个**布尔集**，其余键仍是安全整数。这是有意的契约放宽，代价是 `resolveBudget` 的判定从一档变两档；越过域的值（0、负数、>1、NaN、Infinity、非布尔）仍逐条拒绝。`compactionBudgetTokens` **不进** `CLI_BUDGET`：它默认取 `inputTargetTokens`，写死成 65,536 会让调整输入目标时压缩阈值不再跟着走。

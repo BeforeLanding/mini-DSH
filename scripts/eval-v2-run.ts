@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
 import { createDeepSeekAdapter } from '../src/models/deepseek.js'
 import { emptyCounters } from '../src/core/budget.js'
@@ -8,7 +10,9 @@ import { decodeLog } from '../src/core/event-store.js'
 import type { SessionEvent } from '../src/core/contracts.js'
 import { runFixtureTask } from './eval-fixture.js'
 import type { RunOutcome } from './eval-runner.js'
-import { deriveV2Observation } from './eval-v2-observation.js'
+import { deriveV2Observation, developmentBatchStopReason, diagnoseV2Error, recoverV2UnverifiedEvents } from './eval-v2-observation.js'
+import { developmentReserveUsd } from './eval-v2-plan.js'
+import { createSmokeAmountGuard } from './smoke-cost.js'
 import { createIsolatedCommandRunner, windowsToWslPath } from './eval-v2-isolation.js'
 import { reportV2, verifyV2FrozenFiles } from './eval-v2-report.js'
 import type { V2Manifest, V2Observation } from './eval-v2-report.js'
@@ -19,6 +23,8 @@ if (!validateOnly && (args.length !== 7 || args[0] !== '--manifest' || args[2] !
   throw new Error('usage: eval:v2-run --manifest FILE --evidence-root NEW_DIRECTORY --max-usd POSITIVE_NUMBER --execute; or --manifest FILE --validate-only')
 }
 const manifest = JSON.parse(await fs.readFile(args[1]!, 'utf8')) as V2Manifest
+if (manifest.protocol === 'NX-42-eval-v2') throw new Error('historical V2 manifest cannot run with the changed tool composition; freeze a new v2.1 manifest')
+if (manifest.protocol !== (manifest.split === 'development' ? 'NX-45-dev-2arm-v1' : 'NX-42-eval-v2.1')) throw new Error('V2 manifest protocol/split mismatch; freeze a current manifest')
 const evidenceRoot = path.resolve(args[3] ?? os.tmpdir())
 const maxUsd = validateOnly ? 0 : Number(args[5])
 if (!validateOnly && (!Number.isFinite(maxUsd) || maxUsd <= 0)) throw new Error('--max-usd must be a positive finite amount')
@@ -26,7 +32,14 @@ if (manifest.priceSnapshot.currency !== 'USD') throw new Error('this runner requ
 if (![manifest.priceSnapshot.inputPerMillion, manifest.priceSnapshot.outputPerMillion, manifest.priceSnapshot.cacheReadPerMillion].every(value => Number.isFinite(value) && value >= 0) ||
   manifest.priceSnapshot.inputPerMillion === 0 || manifest.priceSnapshot.outputPerMillion === 0) throw new Error('invalid frozen price snapshot')
 if (!manifest.model.startsWith('deepseek/')) throw new Error('only a frozen deepseek model is supported')
-if (manifest.split !== 'calibration' && manifest.split !== 'formal') throw new Error('invalid V2 split')
+if (manifest.split !== 'calibration' && manifest.split !== 'formal' && manifest.split !== 'development') throw new Error('invalid V2 split')
+if (manifest.split === 'development') {
+  const repository = fileURLToPath(new URL('../../', import.meta.url))
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' }).trim()
+  const dirty = execFileSync('git', ['status', '--porcelain'], { cwd: repository, encoding: 'utf8' }).trim()
+  if (head !== manifest.gitCommit || dirty) throw new Error('development run requires the clean frozen HEAD')
+  if (manifest.priceSnapshot.source !== 'https://api-docs.deepseek.com/quick_start/pricing/' || !manifest.modelVersion) throw new Error('development price or model version snapshot missing')
+}
 reportV2(manifest, []) // Validate the entire fixed task, arm and episode schedule before side effects.
 await verifyV2FrozenFiles(manifest)
 if (!validateOnly && await fs.stat(evidenceRoot).catch(() => undefined)) throw new Error(`evidence root already exists: ${evidenceRoot}`)
@@ -44,7 +57,7 @@ try {
     if (result.status !== 'exited' || result.exitCode !== 0 || !result.stdout.text.includes('v22.22.1')) throw new Error('V2 Linux isolation preflight failed')
   } finally { await fs.rm(sentinel, { force: true }) }
 } finally {
-  if (path.dirname(preflight) === path.resolve(os.tmpdir()) && path.basename(preflight).startsWith('mini-dsh-v2-preflight-')) await fs.rm(preflight, { recursive: true, force: true })
+  if (path.dirname(preflight) === path.resolve(os.tmpdir()) && path.basename(preflight).startsWith('mini-dsh-v2-preflight-')) await fs.rm(preflight, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
 }
 if (validateOnly) {
   console.log(JSON.stringify({ manifestDigest: manifest.digest, tasks: manifest.tasks.length, episodes: manifest.episodes.length, isolation: 'passed', paidRequests: 0 }))
@@ -56,10 +69,16 @@ const modelId = manifest.model.slice('deepseek/'.length)
 const adapter = createDeepSeekAdapter({ baseUrl: manifest.baseUrl, models: [modelId], thinking: manifest.thinking, contextWindowTokens: manifest.window })
 const armByName = new Map(manifest.arms.map(arm => [arm.name, arm]))
 const maxUnit = Math.max(manifest.priceSnapshot.inputPerMillion, manifest.priceSnapshot.outputPerMillion, manifest.priceSnapshot.cacheReadPerMillion)
-const perEpisodeReserve = (manifest.tier === '2m' ? 2_000_000 : 1_000_000) * maxUnit / 1_000_000 * 1.1
+const developmentReserve = manifest.split === 'development' ? developmentReserveUsd(manifest.priceSnapshot) : undefined
+const perEpisodeReserve = developmentReserve?.perEpisodeUsd ?? (manifest.tier === '2m' ? 2_000_000 : 1_000_000) * maxUnit / 1_000_000 * 1.1
 const blockSize = manifest.split === 'formal' ? 4 : 2
-const probeReserve = 16_384 * maxUnit / 1_000_000
+const probeReserve = developmentReserve?.probeUsd ?? 16_384 * maxUnit / 1_000_000
 if (maxUsd < probeReserve + perEpisodeReserve * blockSize) throw new Error(`amount cap cannot reserve protocol probes and one complete block; need at least $${(probeReserve + perEpisodeReserve * blockSize).toFixed(2)}`)
+const developmentAmountGuard = manifest.split === 'development' ? createSmokeAmountGuard(adapter.chat, {
+  source: manifest.priceSnapshot.source, capturedAt: manifest.priceSnapshot.capturedAt, currency: 'USD',
+  peakInputPerMillion: manifest.priceSnapshot.inputPerMillion, peakOutputPerMillion: manifest.priceSnapshot.outputPerMillion,
+  peakCacheReadPerMillion: manifest.priceSnapshot.cacheReadPerMillion,
+}, maxUsd - probeReserve) : undefined
 
 await fs.mkdir(evidenceRoot)
 await fs.writeFile(path.join(evidenceRoot, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
@@ -80,7 +99,7 @@ try {
   const direct = await response.json() as { model?: string; usage?: unknown; choices?: { finish_reason?: string }[] }
   if (direct.model !== manifest.echoedModel || !direct.usage) throw new Error(`model probe mismatch: expected ${manifest.echoedModel}, observed ${String(direct.model)}`)
   const streamed = await adapter.chat({ model: modelId, maxOutputTokens: 1024, messages: [{ role: 'user', content: 'reply with the single word: ok' }] })
-  if (!streamed.usage || streamed.complete === false) throw new Error('streaming model probe returned no complete usage')
+  if (!streamed.usage || streamed.complete === false || (manifest.split === 'development' && streamed.usage.source !== 'provider')) throw new Error('streaming model probe returned no complete provider usage')
   await fs.writeFile(path.join(evidenceRoot, 'probe.json'), `${JSON.stringify({ requestedModel: modelId, echoedModel: direct.model, directUsage: direct.usage, directFinishReason: direct.choices?.[0]?.finish_reason, streamedUsage: streamed.usage, streamedFinishReason: streamed.finishReason, reservedUsd: probeReserve }, null, 2)}\n`, { flag: 'wx' })
   // Reserve the full probe allowance in the amount ceiling; actual provider prices may be lower.
   spentUsd = probeReserve
@@ -128,24 +147,41 @@ for (let index = 0; index < manifest.episodes.length; index += blockSize) {
     let evidenceComplete = false
     try {
       const result = await runFixtureTask(episode.taskId as Parameters<typeof runFixtureTask>[0],
-        () => ({ provider: 'deepseek', model: modelId, capabilities: adapter.capabilities, chat: adapter.chat }),
+        () => ({ provider: 'deepseek', model: modelId, capabilities: adapter.capabilities, chat: developmentAmountGuard?.chat ?? adapter.chat }),
         arm.budget, sessionDirectory, arm.toolOutput, arm.promptLayout, path.join(episodeDirectory, 'snapshots'), { runtimeRoot, distro: 'Ubuntu' })
       outcome = result
       events = await readDurableEvents(sessionDirectory)
       evidenceComplete = result.episode?.stages.length === (manifest.tasks.find(task => task.id === episode.taskId)?.shape === 'multi-stage' ? 4 : 1)
         && result.episode.stages.every(stage => Boolean(stage.snapshotHash))
     } catch (error) {
-      try { events = await readDurableEvents(sessionDirectory) } catch { /* The missing or corrupt journal is itself an evidence failure. */ }
-      outcome = recoverPartialOutcome(events, error instanceof Error ? error.message : String(error))
+      const reason = error instanceof Error ? error.message : String(error)
+      try { events = await readDurableEvents(sessionDirectory) } catch {
+        try {
+          const dirs = await fs.readdir(sessionDirectory, { withFileTypes: true })
+          if (dirs.length === 1 && dirs[0]!.isDirectory()) events = recoverV2UnverifiedEvents(await fs.readFile(path.join(sessionDirectory, dirs[0]!.name, 'events.jsonl'), 'utf8'))
+        } catch { /* Missing journal: provider charges may remain unknown. */ }
+      }
+      await fs.writeFile(path.join(episodeDirectory, 'error.json'), `${JSON.stringify({ ...diagnoseV2Error(reason, events), recoveredEvents: events.length })}\n`, { flag: 'wx' })
+      outcome = recoverPartialOutcome(events, reason)
       stopped = true
       stopReason = 'infrastructure_or_evidence_error'
     }
     const observation = deriveV2Observation(episode, outcome, events, evidenceComplete)
+    const developmentStop = manifest.split === 'development' ? developmentBatchStopReason(observation, events) : null
+    if (observation.failureReason === 'infrastructure' || observation.status === 'error') {
+      if (!stopped) {
+        await fs.writeFile(path.join(episodeDirectory, 'error.json'), `${JSON.stringify(diagnoseV2Error(outcome.error ?? outcome.status, events))}\n`, { flag: 'wx' })
+        stopReason = 'infrastructure_or_provider_error'
+      }
+      stopped = true
+    }
+    if (developmentStop) { stopped = true; stopReason = developmentStop }
     observations.push(observation)
     await fs.appendFile(runLog, `${JSON.stringify(observation)}\n`)
     const tokens = observation.metrics
     const nonCacheInput = Math.max(0, tokens.inputTokens - tokens.cacheReadTokens)
-    spentUsd += (nonCacheInput * manifest.priceSnapshot.inputPerMillion + tokens.cacheReadTokens * manifest.priceSnapshot.cacheReadPerMillion + tokens.outputTokens * manifest.priceSnapshot.outputPerMillion) / 1_000_000
+    spentUsd = developmentAmountGuard ? probeReserve + developmentAmountGuard.spentUsd : spentUsd +
+      (nonCacheInput * manifest.priceSnapshot.inputPerMillion + tokens.cacheReadTokens * manifest.priceSnapshot.cacheReadPerMillion + tokens.outputTokens * manifest.priceSnapshot.outputPerMillion) / 1_000_000
     if (spentUsd > maxUsd) { stopped = true; stopReason = 'amount_cap_exceeded_after_provider_usage' }
     console.log(`${episode.taskId}/${episode.repeat}/${episode.arm}: ${observation.status}, accepted=${observation.accepted}, spent≈$${spentUsd.toFixed(4)}`)
     if (stopped) break
@@ -154,6 +190,8 @@ for (let index = 0; index < manifest.episodes.length; index += blockSize) {
 }
 
 const report = reportV2(manifest, observations)
-await fs.writeFile(path.join(evidenceRoot, 'report.json'), `${JSON.stringify({ ...report, spentUsdEstimate: spentUsd, maxUsd, stopped, stopReason }, null, 2)}\n`, { flag: 'wx' })
+await fs.writeFile(path.join(evidenceRoot, 'report.json'), `${JSON.stringify({ ...report, spentUsdEstimate: spentUsd, maxUsd, stopped, stopReason,
+  ...(manifest.split === 'development' ? { costLedgerMethod: 'known episode provider usage plus full protocol probe reserve; not a provider invoice',
+    probeReserveUsd: probeReserve, costUnknown: developmentAmountGuard?.usageUnknown || stopReason === 'usage_unknown' || stopReason.startsWith('infrastructure') } : {}) }, null, 2)}\n`, { flag: 'wx' })
 console.log(JSON.stringify({ evidenceRoot, executed: observations.length, planned: manifest.episodes.length, incomplete: report.incomplete, spentUsdEstimate: spentUsd, stopReason }))
 if (report.incomplete || stopped) process.exitCode = 1
