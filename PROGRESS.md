@@ -4,7 +4,9 @@
 
 ## 当前状态
 
-- **R01 结构化错误进行中（2026-10-19）**：provider 分类提交 `5a96257` 的 [CI 39256249087](https://github.com/BeforeLanding/mini-DSH/actions/runs/39256249087) 六组通过。安全 `run/error` 已接入主请求、摘要、工具、JSONL 恢复与 inspect v2；本地 check、完整 413 通过／30 跳过、lint 通过，待独立提交与当前提交 CI。旧日志可读；旧读取器遇新事件可能只返回有效前缀。下一步：提交、推送并验收 R01b CI，随后 R02。
+- **R02 环境与中央授权进行中（2026-10-19）**：R02a 最小子进程 env 与独立 HOME 本地 check、完整 416 通过／30 跳过、lint 通过，待独立提交和该提交 CI。当前 MCP 仅 HTTP，无 stdio 启动点；后续增加 stdio 必须复用安全 env。下一步为 R02b 中央授权；env 边界不提供文件系统隔离。
+
+- **R01 结构化错误工作分支验收完成（2026-10-19）**：provider 分类 `5a96257` 的 [CI 39256249087](https://github.com/BeforeLanding/mini-DSH/actions/runs/39256249087)、安全 `run/error`/inspect v2 `2eb28d3` 的 [CI 39258324293](https://github.com/BeforeLanding/mini-DSH/actions/runs/39258324293) 均六组通过。R01b 本地 413 通过／30 跳过，旧日志可读，旧读取器遇新事件可能只返回有效前缀；main 尚未合并。
 
 - **R00 工作分支验收完成（2026-10-19）**：独立执行目录 `D:\Agent\mini-DSH-execution`，分支 `fix/mini-dsh-portfolio-r00`，草稿 [PR #3](https://github.com/BeforeLanding/mini-DSH/pull/3)。修复提交 `93c6ab0`、`21fac6b`，诊断提交 `ed9151d`；`21fac6b` 的 [PR CI 39255149181](https://github.com/BeforeLanding/mini-DSH/actions/runs/39255149181) 六组均为 408 通过／0 失败／30 跳过，[故意失败探针 39254181030](https://github.com/BeforeLanding/mini-DSH/actions/runs/39254181030) 六组红灯且 TAP 可下载。main 尚未合并，原 main CI 仍红；30 条隔离测试归 R08。下一步：R01 结构化错误与事件兼容读取。
 

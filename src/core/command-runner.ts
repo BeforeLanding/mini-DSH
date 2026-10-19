@@ -2,6 +2,8 @@ import { spawn, execFile } from 'node:child_process'
 import { performance } from 'node:perf_hooks'
 import { positiveLimit } from './bounded-text.js'
 import { utf8Prefix } from './tool-result-store.js'
+import fs from 'node:fs/promises'
+import { childEnvironment, temporaryChildHome } from './child-environment.js'
 
 export interface CommandStream {
   text: string; bytes: number; truncated: boolean; tail?: string; omittedBytes?: number; resumeOffset?: number
@@ -15,7 +17,7 @@ export interface CommandResult {
 }
 export interface CommandOptions {
   executable: string; args: string[]; command: string; cwd: string; signal: AbortSignal
-  timeoutMs?: number; maxCaptureBytes?: number
+  timeoutMs?: number; maxCaptureBytes?: number; env?: NodeJS.ProcessEnv
 }
 
 export function commandFailed(result: CommandResult) { return result.status !== 'exited' || result.exitCode !== 0 }
@@ -29,8 +31,9 @@ export async function runCommand(options: CommandOptions): Promise<CommandResult
   const limit = positiveLimit(options.maxCaptureBytes, 8 * 1024 * 1024, 'maxCaptureBytes')
   const timeoutMs = positiveLimit(options.timeoutMs, 30_000, 'timeoutMs', 2_147_483_647)
   options.signal.throwIfAborted()
+  const home = await temporaryChildHome()
   const started = performance.now()
-  return new Promise(resolve => {
+  try { return await new Promise<CommandResult>(resolve => {
     const stdout = { chunks: [] as Buffer[], truncated: false }
     const stderr = { chunks: [] as Buffer[], truncated: false }
     let bytes = 0, status: CommandResult['status'] = 'exited', error: string | undefined
@@ -53,7 +56,7 @@ export async function runCommand(options: CommandOptions): Promise<CommandResult
       timedOut: status === 'timed_out', cancelled: status === 'cancelled', stdout: stream(stdout), stderr: stream(stderr), ...(error ? { error } : {}),
     })
     let child: ReturnType<typeof spawn>
-    try { child = spawn(options.executable, options.args, { cwd: options.cwd, windowsHide: true,
+    try { child = spawn(options.executable, options.args, { cwd: options.cwd, env: childEnvironment(home, options.env), windowsHide: true,
       detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] }) }
     catch (cause) { status = 'spawn_error'; error = String(cause); resolve(result(null, null)); return }
     const collect = (target: typeof stdout, chunk: Buffer) => {
@@ -106,5 +109,5 @@ export async function runCommand(options: CommandOptions): Promise<CommandResult
       if (!terminating) return resolve(result(code, signal))
       terminating.then(() => resolve(result(code, signal)))
     })
-  })
+  }) } finally { await fs.rm(home, { recursive: true, force: true }) }
 }

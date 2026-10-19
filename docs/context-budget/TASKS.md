@@ -1,8 +1,12 @@
 # 任务清单
 
-### R01 结构化错误与可恢复诊断（2026-10-19，进行中）
+### R02 环境与统一工具授权（2026-10-19，进行中）
 
-基线为 R00 工作分支 `b8ba09d`。① provider 安全分类 `5a96257` 已独立提交、推送，[CI 39256249087](https://github.com/BeforeLanding/mini-DSH/actions/runs/39256249087) 六组通过。② `run/error` 契约、运行时校验、JSONL 解析/恢复/inspect 和主请求、摘要、工具阶段记录已实现；本地 `pnpm check`、`pnpm test`（413 通过／30 跳过）、`pnpm lint` 通过，待独立提交及当前提交 CI。测试覆盖旧日志可读、新日志可重放、唯一 `run/finish`、坏 JSONL 与假 token 脱敏。旧读取器遇新事件可能只显示部分前缀，须在文档明示；未通过 CI 不开始 R02。
+R01b 提交 `2eb28d3` 的 [CI 39258324293](https://github.com/BeforeLanding/mini-DSH/actions/runs/39258324293) 六组通过。独立提交边界：① R02a 子进程环境最小继承、独立临时 HOME、显式额外变量，已本地通过定向 8/8、完整 416 通过／30 跳过、check/lint；待当前提交 CI。现有 MCP 配置为 streamable HTTP，没有 stdio 子进程启动点；R07 增 stdio 时必须调用同一环境构造器。② R02b 中央授权为单独可回退行为，待 R02a 当前提交 CI 通过后实施。env 过滤降低传播面，HOME 隔离不等于文件系统或进程级沙箱；现有路径与审批规则继续适用。
+
+### R01 结构化错误与可恢复诊断（2026-10-19，工作分支验收完成）
+
+基线为 R00 工作分支 `b8ba09d`。① provider 安全分类 `5a96257` 已独立提交、推送，[CI 39256249087](https://github.com/BeforeLanding/mini-DSH/actions/runs/39256249087) 六组通过。② `run/error` 契约、运行时校验、JSONL 解析/恢复/inspect 和主请求、摘要、工具阶段记录提交 `2eb28d3`，[CI 39258324293](https://github.com/BeforeLanding/mini-DSH/actions/runs/39258324293) 六组通过；本地 `pnpm test` 413 通过／30 跳过、check/lint 通过。测试覆盖旧日志可读、新日志可重放、唯一 `run/finish`、坏 JSONL 与假 token 脱敏。旧读取器遇新事件可能只显示部分前缀。
 
 ### R00 可信 CI 恢复（2026-10-19，工作分支验收完成；main 待合并）
 

@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### R02a Bash 子进程环境边界（2026-10-19，本地通过，待 CI）
+
+`CommandOptions.env` 允许调用方显式配置额外变量；默认子进程只继承 PATH、临时目录、locale/终端及 Windows 的系统目录与执行所需变量。每次命令创建独立临时 HOME（Windows 同时设置 USERPROFILE，POSIX 设置 XDG 目录），命令退出后删除；额外变量不能覆盖这些 home 变量。DeepSeek key、代理、云凭证、SSH socket、`NODE_OPTIONS` 与 Git 凭证配置不再自动从父进程进入 Bash。生产当前 MCP 仅配置 streamable HTTP，无 stdio spawn 可接；未来 stdio 路径须复用构造器。环境过滤不限制子进程访问工作区文件或其他系统进程，不能替代路径策略和 R02b 授权。
+
+假密钥定向验证：真实 Bash `env` 输出及命令结果无密钥，Node 子进程看不到父进程 key，HOME 退出后不存在。本地 `pnpm check`（syntax 161 files）、`pnpm test`（446 tests / 416 pass / 0 fail / 30 skipped）、`pnpm lint`（175 files / 0 diagnostics）通过；真实模型请求 0。当前提交 CI 待验收。
+
 ### R01b 安全运行错误事件（2026-10-19，本地通过，待 CI）
 
 新增经固定安全消息校验的 `run/error`，记录模型、摘要、工具和运行时失败的阶段、分类、关联 ID、可选 HTTP 状态及重试性；事件不作终态，`run/finish` 仍唯一。JSONL 解析核查 run 范围、错误 ID 唯一性及模型请求引用，恢复只读取而不重复执行。inspect JSON 版本升至 2，增加错误计数和最后安全原因；旧日志继续读取，未曾记录原因时明确显示 unknown。旧版读取器遇新事件可能止于有效前缀，跨版本读取应使用本版或更新版。第三方工具抛异常默认只写固定错误说明，内置工具以显式标记保留既有诊断。测试用假 token 验证 provider body、第三方工具异常均不进入事件日志。

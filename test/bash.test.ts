@@ -64,3 +64,23 @@ test('Bash approval shows cwd, rejects without execution and rechecks directory 
     await assert.rejects(fs.access(path.join(workspace, 'two', 'marker')))
   } finally { await root.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }); await fs.rm(outside, { recursive: true, force: true }) }
 })
+
+test('Bash env omits parent secrets and uses an isolated home', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'bash-env-'))
+  const previous = process.env.DEEPSEEK_API_KEY
+  process.env.DEEPSEEK_API_KEY = 'fake-secret-token-for-bash-env'
+  const root = await boot(workspace)
+  try {
+    const result = await root.tools.execute('bash', { command: 'env' })
+    assert.equal(result.isError, false)
+    const output = (result.value as CommandResult).stdout.text
+    assert.match(output, /HOME=/)
+    assert.doesNotMatch(output, /fake-secret-token-for-bash-env|DEEPSEEK_API_KEY=/)
+    assert.doesNotMatch(JSON.stringify(result), /fake-secret-token-for-bash-env/)
+  } finally {
+    await root.fiber.dispose()
+    await fs.rm(workspace, { recursive: true, force: true })
+    if (previous === undefined) delete process.env.DEEPSEEK_API_KEY
+    else process.env.DEEPSEEK_API_KEY = previous
+  }
+})
