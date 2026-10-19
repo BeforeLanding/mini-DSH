@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { deriveEventMessage, planCompaction, surfaceSeqs } from './compaction-plan.js'
-import { ModelStreamError } from './model-error.js'
+import { ModelStreamError, runErrorData } from './model-error.js'
 import { ModelNotDispatchedError } from './model-dispatch.js'
 import { StreamJournal } from './stream-journal.js'
 import { estimateMessage } from './message-estimator.js'
@@ -180,6 +180,7 @@ export class CompactionRuntime {
       // model/end, otherwise durable replay rejects the entire session log.
       journal.close()
       this.#settle(sessionId, state, requestId, response.usage ?? estimateUsage(inputTokens, response), !incomplete)
+      if (incomplete) this.#sessions.append(sessionId, 'run/error', runErrorData('summary', undefined, { requestId }), state)
     } catch (error) {
       journal.close()
       failure = error
@@ -190,6 +191,7 @@ export class CompactionRuntime {
       // 照主循环：ModelStreamError 带着供应商已经返回的部分正文与真实用量，不能被统一估算盖掉。
       const partial = error instanceof ModelStreamError ? error.partial : { content: journal.content, reasoningContent: journal.reasoningContent, usage: undefined }
       this.#settle(sessionId, state, requestId, partial.usage ?? estimateUsage(inputTokens, partial), false)
+      this.#sessions.append(sessionId, 'run/error', runErrorData('summary', error, { requestId }), state)
       }
     } finally { journal.close() }
 

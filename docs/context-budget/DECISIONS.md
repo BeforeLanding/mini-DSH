@@ -83,7 +83,7 @@
 | 代码 | `src/core/context-runtime.ts:6` | `assertToolProtocol` 对孤立结果、缺失结果、重复或空 id 三种情况直接抛错，不静默丢弃 |
 | 代码 | `src/core/context-runtime.ts:40` | 组内只要还有未配对的调用、或 run 尚未结束，该组就被标成 `protected` |
 | 代码 | `src/core/context-runtime.ts:75` | 返回投影之前再跑一次 `assertToolProtocol`，裁剪不可能产出坏投影 |
-| 代码 | `src/core/agent-loop-runtime.ts:276` | 异常路径为每个在途调用补结果，按「进过工具入口没有」区分 `unknown` 与 `skipped` |
+| 代码 | `src/core/agent-loop-runtime.ts:297` | 异常路径为每个在途调用补结果，按「进过工具入口没有」区分 `unknown` 与 `skipped` |
 | 代码 | `src/core/pending-tools.ts:2` | `pendingTools` 是「已声明未配对」的唯一判定，恢复与错误路径共用同一份实现 |
 | 测试 | `test/context.test.ts` · `history groups entire tasks including multiple runs and never splits pending tools` | 带在途工具的组被判 `protected`；`assertToolProtocol` 对缺结果与孤立结果分别抛错 |
 | 测试 | `test/budget.test.ts` · `a batch with one tool allowance executes only the first and pairs all skipped results` | 一批三个工具只执行第一个，其余各有 `skipped` 结果，投影仍然合法 |

@@ -2,7 +2,7 @@
 
 ### R01 结构化错误与可恢复诊断（2026-10-19，进行中）
 
-基线为 R00 工作分支 `b8ba09d`。现有 DeepSeek 非 2xx 异常拼接完整 response body，模型及摘要失败没有 `run/error`，inspect 只见终态。预计独立提交边界：① provider 错误分类与有界安全消息（401/429/上下文超限/网络和流中断），定向 7/7、完整 410 通过／30 跳过、check/lint 通过，**本地完成，待提交与当前提交 CI**；② `run/error` 契约、运行时校验、JSONL 解析/恢复/inspect 和主请求、摘要、工具阶段记录作为一个完整事件行为提交，验证旧日志可读、新日志可重放、唯一 `run/finish`、坏 JSONL 与假 token 脱敏。每步通过定向、`pnpm check`、`pnpm test`、lint 后独立提交并推送；未通过先修复，不开始 R02。旧读取器遇新事件可能只显示部分前缀，须在文档明示。
+基线为 R00 工作分支 `b8ba09d`。① provider 安全分类 `5a96257` 已独立提交、推送，[CI 39256249087](https://github.com/BeforeLanding/mini-DSH/actions/runs/39256249087) 六组通过。② `run/error` 契约、运行时校验、JSONL 解析/恢复/inspect 和主请求、摘要、工具阶段记录已实现；本地 `pnpm check`、`pnpm test`（413 通过／30 跳过）、`pnpm lint` 通过，待独立提交及当前提交 CI。测试覆盖旧日志可读、新日志可重放、唯一 `run/finish`、坏 JSONL 与假 token 脱敏。旧读取器遇新事件可能只显示部分前缀，须在文档明示；未通过 CI 不开始 R02。
 
 ### R00 可信 CI 恢复（2026-10-19，工作分支验收完成；main 待合并）
 

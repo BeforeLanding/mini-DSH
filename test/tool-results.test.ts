@@ -215,7 +215,7 @@ test('result projection preserves errors, reports storage failure and disposes w
   const root = await bootResults(workspace)
   try {
     const plugin = await root.plugin(toolResults, { maxPreviewBytes: 32, maxCaptureBytes: 256 })
-    root.tools.register({ name: 'large-error', execute() { throw new Error('synthetic failure '.repeat(100)) } })
+    root.tools.register({ name: 'large-error', exposeErrors: true, execute() { throw new Error('synthetic failure '.repeat(100)) } })
     const result = await root.tools.execute('large-error', {}, { sessionId: 's' })
     assert.equal(result.isError, true)
     const ref = (result.value as { ref: string }).ref

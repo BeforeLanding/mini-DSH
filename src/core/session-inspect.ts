@@ -5,10 +5,11 @@ import type { SessionEvent } from './contracts.js'
 
 export interface InspectWarning { code: 'truncated_tail' | 'corrupt_json' | 'unknown_event_type' | 'invalid_record' | 'invalid_utf8' | 'changed_during_read' | 'read_error' | 'missing_session_start'; line: number; byteOffset: number; message: string }
 export interface InspectReport {
-  version: 1
+  version: 2
   integrity: { complete: boolean; confirmedEvents: number; confirmedBytes: number; warnings: InspectWarning[] }
   session: { id: string | null; startedAt: string | null; endedAt: null; lastRecordedAt: string | null; runs: number; finishedRuns: number; resets: number }
   latestRun: { id: string; taskId: string; startedAt: string; finishedAt: string | null; status: string; stopReason: string | null } | null
+  errors: { count: number; last: { runId: string; stage: string; errorKind: string; safeMessage: string; requestId?: string; toolCallId?: string; httpStatus?: number } | null }
   requests: { main: number; summary: number; preDispatchRejected: number; preparedUnsent: number; missingUsage: number; estimatedUsage: number }
   tools: { calls: number; confirmedErrors: number; unknownOutcomes: number; skipped: number }
   providerUsage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheReadFieldMissing: number }
@@ -18,7 +19,7 @@ export interface InspectReport {
 }
 
 type Request = { kind: 'main' | 'summary'; rejected: boolean; usage: boolean; estimated: boolean }
-const knownTypes = new Set(['verification/start', 'verification/result', 'file/baseline', 'file/observed', 'file/change', 'file/change-result', 'session/start', 'session/config', 'session/reset', 'context/snapshot', 'user/message', 'assistant/message', 'assistant/tool_calls', 'tool/result', 'run/start', 'run/finish', 'model/start', 'model/rejected', 'context/projection', 'context/summary-start', 'context/summary-end', 'context/summary', 'model/fragment', 'model/end', 'model/usage', 'tool/start'])
+const knownTypes = new Set(['verification/start', 'verification/result', 'file/baseline', 'file/observed', 'file/change', 'file/change-result', 'session/start', 'session/config', 'session/reset', 'context/snapshot', 'user/message', 'assistant/message', 'assistant/tool_calls', 'tool/result', 'run/start', 'run/error', 'run/finish', 'model/start', 'model/rejected', 'context/projection', 'context/summary-start', 'context/summary-end', 'context/summary', 'model/fragment', 'model/end', 'model/usage', 'tool/start'])
 const safeToolName = (name: string | undefined) => name && /^[\w.:-]{1,80}$/.test(name) ? name : undefined
 
 function warning(error: unknown, line: number, byteOffset: number): InspectWarning {
@@ -31,10 +32,11 @@ export async function inspectSession(file: string, options: { trace?: boolean } 
   const before = await stat(file)
   if (!before.isFile()) throw new Error('inspect path must be a JSONL file')
   const report: InspectReport = {
-    version: 1,
+    version: 2,
     integrity: { complete: true, confirmedEvents: 0, confirmedBytes: 0, warnings: [] },
     session: { id: null, startedAt: null, endedAt: null, lastRecordedAt: null, runs: 0, finishedRuns: 0, resets: 0 },
     latestRun: null,
+    errors: { count: 0, last: null },
     requests: { main: 0, summary: 0, preDispatchRejected: 0, preparedUnsent: 0, missingUsage: 0, estimatedUsage: 0 },
     tools: { calls: 0, confirmedErrors: 0, unknownOutcomes: 0, skipped: 0 },
     providerUsage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheReadFieldMissing: 0 },
@@ -62,6 +64,7 @@ export async function inspectSession(file: string, options: { trace?: boolean } 
       let detail: string | undefined
       if (event.type === 'tool/start' || event.type === 'tool/result') detail = safeToolName(event.data.name)
       else if (event.type === 'run/finish') detail = event.data.state.status
+      else if (event.type === 'run/error') detail = `${event.data.stage}: ${event.data.errorKind}`
       else if (event.type === 'model/rejected') detail = event.data.reason
       else if (event.type === 'context/snapshot') detail = `${event.data.name}: ${event.data.source}`
       else if (event.type === 'context/summary-end') detail = event.data.outcome.kind
@@ -92,6 +95,12 @@ export async function inspectSession(file: string, options: { trace?: boolean } 
           report.latestRun.status = event.data.state.status
           report.latestRun.stopReason = event.data.state.status
         }
+        break
+      case 'run/error':
+        report.errors.count++
+        report.errors.last = { runId: event.runId!, stage: event.data.stage, errorKind: event.data.errorKind, safeMessage: event.data.safeMessage,
+          ...(event.data.requestId ? { requestId: event.data.requestId } : {}), ...(event.data.toolCallId ? { toolCallId: event.data.toolCallId } : {}),
+          ...(event.data.httpStatus ? { httpStatus: event.data.httpStatus } : {}) }
         break
       case 'context/projection':
         if (event.data.requestId && event.runId) projections.set(event.data.requestId, event.runId)
@@ -200,11 +209,12 @@ export async function inspectSession(file: string, options: { trace?: boolean } 
 }
 
 export function formatInspect(report: InspectReport) {
-  const { session, latestRun, requests, tools, providerUsage, mechanisms, frozenSnapshots, integrity } = report
+  const { session, latestRun, errors, requests, tools, providerUsage, mechanisms, frozenSnapshots, integrity } = report
   return [
     `Session ${session.id ?? 'unknown'} — ${integrity.complete ? 'complete JSONL' : 'PARTIAL EVIDENCE'} (${integrity.confirmedEvents} events)`,
     `Started: ${session.startedAt ?? 'unknown'}; session end: not recorded; last event: ${session.lastRecordedAt ?? 'none'}`,
     `Runs: ${session.runs} (${session.finishedRuns} finished, ${session.resets} resets); latest: ${latestRun ? `${latestRun.status} (${latestRun.stopReason ?? 'no recorded end'})` : 'none'}`,
+    `Recorded errors: ${errors.count}; last: ${errors.last ? `${errors.last.stage}/${errors.last.errorKind}: ${errors.last.safeMessage}${errors.last.httpStatus ? ` (HTTP ${errors.last.httpStatus})` : ''}` : latestRun?.status === 'error' ? 'unknown (legacy or interrupted log)' : 'none'}`,
     `Requests dispatched: main ${requests.main}, summary ${requests.summary}; pre-dispatch rejected ${requests.preDispatchRejected}, prepared unsent ${requests.preparedUnsent}; missing usage ${requests.missingUsage}, estimated usage ${requests.estimatedUsage}`,
     `Tools: calls ${tools.calls}, confirmed errors ${tools.confirmedErrors}, unknown outcomes ${tools.unknownOutcomes}, skipped ${tools.skipped}`,
     `Provider usage: input ${providerUsage.inputTokens}, output ${providerUsage.outputTokens}, cache read ${providerUsage.cacheReadTokens} (${providerUsage.cacheReadFieldMissing} provider records omit cache field)`,

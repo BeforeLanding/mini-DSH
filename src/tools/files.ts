@@ -171,5 +171,5 @@ export function apply(ctx: Context, config: FilesConfig = {}) {
       async execute(args, exec) { return searchFiles(resolve, matchFilePattern, args, searchLimits, exec.signal, true) },
     },
   ]
-  for (const definition of definitions) ctx.effect(() => ctx.tools.register(definition), `register ${definition.name}`)
+  for (const definition of definitions) ctx.effect(() => ctx.tools.register({ ...definition, exposeErrors: true }), `register ${definition.name}`)
 }

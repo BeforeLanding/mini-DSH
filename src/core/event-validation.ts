@@ -1,5 +1,6 @@
 import { resolveBudget } from './budget.js'
 import { fingerprint } from './file-edit.js'
+import { safeRunMessages } from './model-error.js'
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const string = (v: unknown) => typeof v === 'string'
 const integer = (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0
@@ -43,6 +44,7 @@ export function validatePayload(type: string, data: Record<string, unknown>) {
     case 'assistant/tool_calls': valid = (data.content == null || string(data.content)) && optionalString(data.reasoningContent) && Array.isArray(data.toolCalls) && data.toolCalls.every(c => record(c) && string(c.id) && string(c.name) && (c.arguments === undefined || record(c.arguments))); break
     case 'tool/result': valid = string(data.toolCallId) && string(data.content) && optionalString(data.name) && (data.isError === undefined || typeof data.isError === 'boolean') && (data.previewTruncated === undefined || typeof data.previewTruncated === 'boolean') && (data.status === undefined || ['completed', 'skipped', 'unknown'].includes(String(data.status))); break
     case 'run/start': valid = validState(data.state) && record(data.state) && data.state.status === 'running'; break
+    case 'run/error': valid = string(data.errorId) && data.errorId.length <= 128 && ['model', 'summary', 'tool', 'runtime'].includes(String(data.stage)) && ['auth', 'invalid_request', 'context_overflow', 'rate_limit', 'transient', 'timeout', 'cancelled', 'protocol', 'unknown'].includes(String(data.errorKind)) && safeRunMessages.has(String(data.safeMessage)) && optionalString(data.requestId) && optionalString(data.toolCallId) && (data.httpStatus === undefined || (integer(data.httpStatus) && Number(data.httpStatus) >= 100 && Number(data.httpStatus) <= 599)) && (data.retryable === undefined || typeof data.retryable === 'boolean') && (data.providerRequestId === undefined || (string(data.providerRequestId) && /^[\w.:-]{1,128}$/.test(data.providerRequestId))); break
     case 'run/finish': valid = validState(data.state) && record(data.state) && data.state.status !== 'running'; break
     case 'model/start': valid = string(data.taskId) && string(data.runId) && string(data.requestId) && (data.estimatedInputTokens === undefined || integer(data.estimatedInputTokens)); break
     case 'model/rejected': valid = string(data.requestId) && ['request_limit', 'amount_limit', 'usage_unknown', 'other_limit'].includes(String(data.reason)); break

@@ -1,5 +1,6 @@
 import type { BudgetPolicy, RunState, Usage } from './budget.js'
 import type { FileSnapshot } from './file-edit.js'
+import type { ProviderErrorKind } from './model-error.js'
 export type Arguments = Record<string, unknown>
 export type ModelSelection = string | { provider: string; model: string } | null
 
@@ -47,6 +48,7 @@ export interface ContentBlock { type: string; text?: string; [key: string]: unkn
 export interface ToolResult { value: unknown; content: ContentBlock[]; isError: boolean; previewTruncated?: boolean }
 export interface ToolDefinition {
   name: string; description?: string; parameters?: Arguments
+  exposeErrors?: boolean
   execute(args: Arguments, execution: Execution): unknown | Promise<unknown>
   output?: { render(args: Arguments, value: unknown): ContentBlock[]; isError?(value: unknown): boolean }
   finalizeContent?(execution: Execution, result: ToolResult): ContentBlock[] | undefined | Promise<ContentBlock[] | undefined>
@@ -67,6 +69,7 @@ export interface EventData {
   'session/reset': { epoch: number }
   'context/snapshot': { name: 'runtime:environment' | 'project:context'; text: string; source: 'new-session' | 'legacy-current' }
   'run/start': { state: RunState }
+  'run/error': { errorId: string; stage: 'model' | 'summary' | 'tool' | 'runtime'; errorKind: ProviderErrorKind; safeMessage: string; requestId?: string; toolCallId?: string; httpStatus?: number; retryable?: boolean; providerRequestId?: string }
   'run/finish': { state: RunState }
   'model/start': { taskId: string; runId: string; requestId: string; estimatedInputTokens?: number }
   'model/rejected': { requestId: string; reason: 'request_limit' | 'amount_limit' | 'usage_unknown' | 'other_limit' }

@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### R01b 安全运行错误事件（2026-10-19，本地通过，待 CI）
+
+新增经固定安全消息校验的 `run/error`，记录模型、摘要、工具和运行时失败的阶段、分类、关联 ID、可选 HTTP 状态及重试性；事件不作终态，`run/finish` 仍唯一。JSONL 解析核查 run 范围、错误 ID 唯一性及模型请求引用，恢复只读取而不重复执行。inspect JSON 版本升至 2，增加错误计数和最后安全原因；旧日志继续读取，未曾记录原因时明确显示 unknown。旧版读取器遇新事件可能止于有效前缀，跨版本读取应使用本版或更新版。第三方工具抛异常默认只写固定错误说明，内置工具以显式标记保留既有诊断。测试用假 token 验证 provider body、第三方工具异常均不进入事件日志。
+
+本地 `pnpm check`（syntax 159 files）、`pnpm test`（443 tests / 413 pass / 0 fail / 30 skipped）、`pnpm lint`（173 files / 0 diagnostics）通过；源码后移导致的 DECISIONS 锚点同步修正。当前提交 CI 待验证，真实模型请求 0。
+
 ### R01a provider 错误分类（2026-10-19，本地通过，待 CI）
 
 DeepSeek HTTP 非 2xx 不再把完整 response body 拼入异常；最多读取 4 KiB 作上下文超限分类，展示固定安全消息。`ProviderError` 记录 auth／invalid_request／context_overflow／rate_limit／transient／timeout／cancelled／protocol／unknown、可选 status、是否可重试及受字符集／长度限制的 provider request ID；网络 TypeError、超时与取消独立归类。流中供应商错误消息不外露，未自动重试或更改账本。合成测试覆盖 401、429、400 上下文、503、连接失败、流错误及假 token 不泄漏。`pnpm check`（syntax 158 files）、`node --test dist/test/model.test.js` 7/7、`pnpm test` 410 通过／0 失败／30 跳过、`pnpm lint` 172 files 0 诊断、`git diff --check` 通过。当前提交的 CI 待运行，主请求/摘要 `run/error` 尚未实现。

@@ -162,7 +162,7 @@ export function createLogRecordParser(sessionId: string): (line: string) => Sess
   let count = 0
   const ids = new Set<string>()
   const runs = new Map<string, { taskId: string; ended: boolean }>()
-  const requests = new Set<string>(), usages = new Set<string>(), ends = new Set<string>()
+  const requests = new Set<string>(), usages = new Set<string>(), ends = new Set<string>(), errorIds = new Set<string>()
   const changes = new Map<string, { taskId: string; runId: string; planned: boolean }>(), results = new Set<string>()
   const snapshots = new Set<string>()
   const verifications = new Map<string, { taskId: string; runId: string; data: import('./task-verification.js').VerificationStart }>(), verificationResults = new Set<string>()
@@ -216,6 +216,11 @@ export function createLogRecordParser(sessionId: string): (line: string) => Sess
         if (!run || run.ended || run.taskId !== state.taskId) throw new Error('missing/duplicate run terminal')
         run.ended = true
       }
+    }
+    if (parsed.type === 'run/error') {
+      const run = parsed.runId ? runs.get(parsed.runId) : undefined
+      if (!run || run.ended || run.taskId !== parsed.taskId || errorIds.has(parsed.data.errorId) || (parsed.data.requestId !== undefined && !requests.has(parsed.data.requestId))) throw new Error('invalid run error scope or duplicate error')
+      errorIds.add(parsed.data.errorId)
     }
     if (parsed.type === 'model/start') {
       if (requests.has(parsed.data.requestId)) throw new Error('duplicate model request')

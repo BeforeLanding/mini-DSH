@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- **R01 结构化错误进行中（2026-10-19）**：provider 边界分类与安全消息本地通过，定向 7/7、完整 410 通过／30 跳过、check/lint 通过；尚待独立提交与 CI。下一步：把 `run/error` 接入契约、JSONL、主请求、摘要、工具及 inspect，验证新旧日志兼容与脱敏。
+- **R01 结构化错误进行中（2026-10-19）**：provider 分类提交 `5a96257` 的 [CI 39256249087](https://github.com/BeforeLanding/mini-DSH/actions/runs/39256249087) 六组通过。安全 `run/error` 已接入主请求、摘要、工具、JSONL 恢复与 inspect v2；本地 check、完整 413 通过／30 跳过、lint 通过，待独立提交与当前提交 CI。旧日志可读；旧读取器遇新事件可能只返回有效前缀。下一步：提交、推送并验收 R01b CI，随后 R02。
 
 - **R00 工作分支验收完成（2026-10-19）**：独立执行目录 `D:\Agent\mini-DSH-execution`，分支 `fix/mini-dsh-portfolio-r00`，草稿 [PR #3](https://github.com/BeforeLanding/mini-DSH/pull/3)。修复提交 `93c6ab0`、`21fac6b`，诊断提交 `ed9151d`；`21fac6b` 的 [PR CI 39255149181](https://github.com/BeforeLanding/mini-DSH/actions/runs/39255149181) 六组均为 408 通过／0 失败／30 跳过，[故意失败探针 39254181030](https://github.com/BeforeLanding/mini-DSH/actions/runs/39254181030) 六组红灯且 TAP 可下载。main 尚未合并，原 main CI 仍红；30 条隔离测试归 R08。下一步：R01 结构化错误与事件兼容读取。
 

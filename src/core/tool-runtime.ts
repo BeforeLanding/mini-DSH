@@ -94,13 +94,13 @@ export class ToolRuntime {
         } catch (error: unknown) {
             result = {
                 value: null,
-                content: [{ type: 'text', text: `ToolError: ${error instanceof Error ? error.message : String(error)}` }],
+                content: [{ type: 'text', text: `ToolError: ${tool.exposeErrors && error instanceof Error ? error.message : 'execution failed'}` }],
                 isError: true,
             }
         }
         if (this.#projection) {
             try { return await this.#projection(name, result, execution) }
-            catch (error) { return { value: null, isError: true, content: [{ type: 'text', text: `ToolError: result projection failed: ${error instanceof Error ? error.message : String(error)}` }] } }
+            catch { return { value: null, isError: true, content: [{ type: 'text', text: 'ToolError: result projection failed' }] } }
         }
         return result
     }

@@ -6,7 +6,7 @@ import { CompactionRuntime } from './compaction-runtime.js'
 import type { CompactionTrigger, DeclineReason } from './compaction-runtime.js'
 import { estimateUsage } from './token-estimator.js'
 import { StreamJournal } from './stream-journal.js'
-import { ModelStreamError } from './model-error.js'
+import { ModelStreamError, runErrorData } from './model-error.js'
 import { ModelNotDispatchedError } from './model-dispatch.js'
 import type { BudgetPolicy, RunState, Usage, StopReason } from './budget.js'
 import { createHash, randomUUID } from 'node:crypto'
@@ -46,6 +46,10 @@ export class AgentLoopRuntime {
         const control = new RunBudgetRuntime(policy, state, signal, this.clock)
         const enteredTools = new Set<string>()
         let terminalStatus: StopReason | undefined
+        let failureStage: 'model' | 'summary' | 'tool' | 'runtime' = 'runtime'
+        let activeRequestId: string | undefined
+        let activeToolCallId: string | undefined
+        let errorRecorded = false
         const observeCommit = (confirmed: boolean, status: StopReason = terminalStatus!) => {
             state.counters.approvalDurationMs = control.approvalDurationMs
             state.counters.activeDurationMs = control.activeDurationMs
@@ -103,7 +107,10 @@ export class AgentLoopRuntime {
                 (policy.contextWindowTokens !== undefined && projection.estimatedInputTokens + maxOutputTokens + projection.safetyMarginTokens > policy.contextWindowTokens)
             const compactionBudget = policy.compactionBudgetTokens ?? policy.inputTargetTokens
             const attempt = async (trigger: CompactionTrigger) => {
-                if (!await this.#compact(sessionId, state, policy, control, agent, { system, tools: schemas }, trigger, projection)) return false
+                failureStage = 'summary'
+                const applied = await this.#compact(sessionId, state, policy, control, agent, { system, tools: schemas }, trigger, projection)
+                failureStage = 'runtime'
+                if (!applied) return false
                 projection = project()
                 absorb()
                 control.check()
@@ -142,6 +149,8 @@ export class AgentLoopRuntime {
             control.check()
             state.counters.modelRequests++
             const journal = new StreamJournal(requestId, data => append(sessionId, 'model/fragment', data))
+            failureStage = 'model'
+            activeRequestId = requestId
             const response = await control.wait(() => this.llm.chat(
                 {
                     purpose: 'main',
@@ -159,14 +168,19 @@ export class AgentLoopRuntime {
                 if (error instanceof ModelNotDispatchedError) {
                     state.counters.modelRequests--
                     append(sessionId, 'model/rejected', { requestId, reason: error.reason })
+                    errorRecorded = true
                     if (error.reason === 'request_limit') throw new BudgetStop('max_steps', state)
                     throw error
                 }
                 const partial = error instanceof ModelStreamError ? error.partial : { content: journal.content, reasoningContent: journal.reasoningContent, usage: undefined }
                 settle(partial.usage ?? estimateUsage(estimatedInputTokens, partial))
                 append(sessionId, 'model/end', { requestId, complete: false })
+                append(sessionId, 'run/error', runErrorData('model', error, { requestId }))
+                errorRecorded = true
                 throw error
             }).finally(() => journal.close())
+            failureStage = 'runtime'
+            activeRequestId = undefined
             settle(response.usage ?? estimateUsage(estimatedInputTokens, response))
             append(sessionId, 'model/end', { requestId, complete: response.complete !== false, finishReason: response.finishReason })
             if (response.complete === false) throw new BudgetStop(response.finishReason === 'length' ? 'output_limit' : 'error', state)
@@ -228,6 +242,8 @@ export class AgentLoopRuntime {
                 control.check()
                 state.counters.toolCalls++
                 enteredTools.add(`${batch.seq}/${call.id}`)
+                failureStage = 'tool'
+                activeToolCallId = call.id
                 const result = await control.wait(() => this.tools.execute(call.name, call.arguments, {
                     signal: control.signal,
                     sessionId,
@@ -255,7 +271,10 @@ export class AgentLoopRuntime {
                     // 语义里（content 是给人看的那串文本），靠正则去认它是把渲染细节当契约。
                     ...(result.previewTruncated ? { previewTruncated: true } : {}),
                 })
+                if (result.isError) append(sessionId, 'run/error', runErrorData('tool', undefined, { toolCallId: call.id }))
                 await this.sessions.flush(sessionId)
+                failureStage = 'runtime'
+                activeToolCallId = undefined
                 onToolResult?.({ ...result, renderedContent, name: call.name, toolCallId: call.id })
             }
 
@@ -269,6 +288,9 @@ export class AgentLoopRuntime {
                 throw error
             }
             const events = this.sessions.visibleEvents(sessionId)
+            if (!errorRecorded && !(error instanceof BudgetStop && !['timeout', 'request_timeout', 'approval_timeout'].includes(error.reason))) {
+                append(sessionId, 'run/error', runErrorData(failureStage, error, { ...(activeRequestId ? { requestId: activeRequestId } : {}), ...(activeToolCallId ? { toolCallId: activeToolCallId } : {}) }))
+            }
             for (const { call, scope } of pendingTools(events)) {
                 if (scope.runId !== state.runId) continue
                 const started = enteredTools.has(`${scope.seq}/${call.id}`)
@@ -347,6 +369,7 @@ export class AgentLoopRuntime {
         } catch (error) {
             terminal = control.stopReason ?? (error instanceof BudgetStop ? error.reason : 'error')
             failure = error
+            this.sessions.append(sessionId, 'run/error', runErrorData('summary', error), state)
         }
         state.counters.approvalDurationMs = control.approvalDurationMs
         state.counters.activeDurationMs = control.activeDurationMs
