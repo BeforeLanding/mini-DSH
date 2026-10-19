@@ -4,7 +4,7 @@
 
 基线 `32e25989d1d36354cba91664cd304fb8250769a2`，独立克隆 `D:\Agent\mini-DSH-execution`，分支 `fix/mini-dsh-portfolio-r00`。历史 [CI 39133594202](https://github.com/BeforeLanding/mini-DSH/actions/runs/39133594202) 四个 required job 在测试步骤失败：Windows Node 22/24 各 1 条、Ubuntu Node 22/24 各 2 条；共同错误为 `smoke replay project context workspace mismatch; no API fallback`。根因：工作区路径在嵌入 JSON 中的转义形式未被规范化，重放又按原路径而非规范化 token 检查；Windows 本机基线定向测试 9/9 通过，未复现 CI 的路径环境，但新增跨平台用例覆盖了该分支。
 
-独立验收与预计提交边界：① 修复 smoke 录制与重放工作区规范化冲突，保留严格请求指纹与无 API 回退；新增定向 10/10、`pnpm check`、完整测试 406 通过／30 跳过、lint 0 诊断，**本地通过，待当前提交 CI**。② CI 失败诊断输出 TAP、保留退出码并上传脱敏测试产物；人为断言失败验证红灯和可下载诊断，通过后独立提交。③ 同一源码提交的 Ubuntu/Windows × Node 22/24 required CI 均通过，逐 job 记录执行、失败与跳过后才将 R00 标为完成。前序未通过时不叠加 R01。
+独立验收与预计提交边界：① 修复 smoke 录制与重放工作区规范化冲突，保留严格请求指纹与无 API 回退；新增定向 10/10、`pnpm check`、完整测试 406 通过／30 跳过、lint 0 诊断，**本地通过，提交 `93c6ab0`，待当前提交 CI**。② CI 失败诊断输出 TAP、保留退出码并上传测试产物；临时断言失败本地验证退出码 1 和 TAP `not ok`，完整测试 406 通过／30 跳过、check/lint 通过；**待远端失败探针与 artifact 下载验收**。另增 Node 20.18.1 以测试 `engines` 最低版本。③ 同一源码提交的 Ubuntu/Windows × Node 20.18.1/22/24 required CI 均通过，逐 job 记录执行、失败与跳过后才将 R00 标为完成。前序未通过时不叠加 R01。
 
 ### NX-49 只读会话 inspect（2026-10-18，done）
 

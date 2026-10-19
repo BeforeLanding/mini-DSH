@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### R00 CI TAP 诊断与最低 Node 版本（2026-10-19，待远端验收）
+
+CI 保留 Ubuntu/Windows × Node 22/24 并增 Node 20.18.1，与 `package.json` 的最低版本一致。测试使用 Node TAP reporter，经 Bash `pipefail` + `tee` 同时写 job log 与 `test-results.tap`，失败后由固定 SHA 的 `upload-artifact` 上传 7 天；只上传无密钥离线测试输出，不上传会话、环境或真实提示。新增手动 `diagnostic_probe` 输入，仅显式开启时在 runner 的 `dist/test` 临时生成失败断言，用于验证 job 仍红且 artifact 可下载；默认与 PR 测试不触发探针。
+
+本地临时失败断言运行 `node --test --test-reporter=tap`：退出码 1，TAP 含 `not ok 1 - CI diagnostic probe`；临时文件和 TAP 已删除。本地 Bash 无可用 Node PATH，故未在本机验证 workflow 的 `pipefail` 管道；须以远端手动探针验证。随后 `pnpm check`（syntax 158 files）、`pnpm test`（406 pass / 0 fail / 30 skipped）、`pnpm lint`（172 files，0 诊断）、`git diff --check` 均通过。远端 Node 20 与 artifact 尚未验证，不写成完成。
+
 ### R00 smoke replay 工作区映射修复（2026-10-19，待当前提交 CI）
 
 基线 `32e25989d1d36354cba91664cd304fb8250769a2`，[失败 CI 39133594202](https://github.com/BeforeLanding/mini-DSH/actions/runs/39133594202)：Ubuntu Node 22/24 各 `403 pass / 2 fail / 30 skipped`，Windows Node 22/24 各 `404 pass / 1 fail / 30 skipped`。失败测试为 Ubuntu 的 `strict replay permits only the declared project workspace remap...` 与四平台的 `selected repair dispatch creates no protocol or recall evidence`；预期严格重放已录制请求，实际 `smoke replay project context workspace mismatch; no API fallback`。根因是嵌入 system 文本的 JSON 将 Windows 路径反斜杠转义，而普通路径替换无法识别；重放在规范化之后仍把 project.workspace 与原工作区比较。修复先替换 JSON 转义路径，再替换普通路径；重放校验规范化 token，记录的旧请求只对显式声明的原工作区路径做兼容映射，保留完整指纹和其他字段核对。

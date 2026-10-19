@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- **R00 可信 CI 恢复进行中（2026-10-19）**：独立执行目录 `D:\Agent\mini-DSH-execution` 从最新 `origin/main` 的 `32e2598` 建立 `fix/mini-dsh-portfolio-r00`。历史四平台失败已从 [CI 39133594202](https://github.com/BeforeLanding/mini-DSH/actions/runs/39133594202) 定位到 smoke replay 工作区映射；本地修复后定向 10/10、完整 406 通过／30 跳过、check/lint 通过。下一步：提交修复，补 CI TAP 诊断并以当前提交 PR CI 验证四平台；R01 尚未开始。
+- **R00 可信 CI 恢复进行中（2026-10-19）**：独立执行目录 `D:\Agent\mini-DSH-execution` 从最新 `origin/main` 的 `32e2598` 建立 `fix/mini-dsh-portfolio-r00`。历史四平台失败已从 [CI 39133594202](https://github.com/BeforeLanding/mini-DSH/actions/runs/39133594202) 定位到 smoke replay 工作区映射；修复提交 `93c6ab0` 本地定向 10/10、完整 406 通过／30 跳过、check/lint 通过。CI TAP 诊断及 Node 20 最低版本矩阵已本地准备，远端验证待执行。下一步：提交并推送工作分支，创建草稿 PR 触发六个 job，再手动运行失败探针确认 artifact；R01 尚未开始。
 
 - **NX-48 本地可安装 CLI 已完成**：`mini-dsh` bin 复用生产入口，`--help`／`--version`／`--show-config` 无 key 可运行；仓库外 tarball 安装在 Windows 含空格目录成功，虚构 key 下 `/exit` 释放锁且日志无模型请求。包白名单排除 `.env`、日志与实验原件；README 写明本地 pack／安装及工作区和数据位置。完整离线测试 401 通过／30 跳过，check/lint 通过；npm 未发布、未推送或执行效果实验。
 
