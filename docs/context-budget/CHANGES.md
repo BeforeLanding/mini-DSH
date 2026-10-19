@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### R01a provider 错误分类（2026-10-19，本地通过，待 CI）
+
+DeepSeek HTTP 非 2xx 不再把完整 response body 拼入异常；最多读取 4 KiB 作上下文超限分类，展示固定安全消息。`ProviderError` 记录 auth／invalid_request／context_overflow／rate_limit／transient／timeout／cancelled／protocol／unknown、可选 status、是否可重试及受字符集／长度限制的 provider request ID；网络 TypeError、超时与取消独立归类。流中供应商错误消息不外露，未自动重试或更改账本。合成测试覆盖 401、429、400 上下文、503、连接失败、流错误及假 token 不泄漏。`pnpm check`（syntax 158 files）、`node --test dist/test/model.test.js` 7/7、`pnpm test` 410 通过／0 失败／30 跳过、`pnpm lint` 172 files 0 诊断、`git diff --check` 通过。当前提交的 CI 待运行，主请求/摘要 `run/error` 尚未实现。
+
 ### R00 工作分支最终验收（2026-10-19）
 
 草稿 [PR #3](https://github.com/BeforeLanding/mini-DSH/pull/3) 的提交依次为：`93c6ab0` 修复 JSON 路径规范化，`ed9151d` 增 CI TAP 诊断，`21fac6b` 补 Windows 真实路径别名。`21fac6bc74f4b9fa68bf43ba4ec2c57141faa444` 的 [PR CI 39255149181](https://github.com/BeforeLanding/mini-DSH/actions/runs/39255149181) 六个 job 全部 success；Ubuntu/Windows × Node 20.18.1/22/24 **每组** `438 tests / 408 pass / 0 fail / 30 skipped`，均来自该 run 的 job 日志。Node 20.18.1 覆盖 `engines` 声明最低版本，原 required 四组保留。`ed9151d` 的 [故意失败探针 39254181030](https://github.com/BeforeLanding/mini-DSH/actions/runs/39254181030) 六个 job 全红，TAP artifact 可下载并已抽查。R00 在工作分支验收完成；main 仍是 `32e2598`，需人工审查合并后才能宣称 main CI 绿色。30 条隔离测试仍按原平台条件跳过，后续 R08 单独处理，不把本轮 CI 恢复写成隔离覆盖。

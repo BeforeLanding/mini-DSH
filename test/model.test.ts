@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createDeepSeekAdapter, normalizeUsage } from '../src/models/deepseek.js'
-import { ModelStreamError } from '../src/core/model-error.js'
+import { ModelStreamError, ProviderError } from '../src/core/model-error.js'
 import { harness } from './harness.js'
 const usage = { prompt_tokens: 10, completion_tokens: 8, total_tokens: 18, completion_tokens_details: { reasoning_tokens: 3 } }
 const event = (data: unknown) => 'data: ' + JSON.stringify(data) + '\n'
@@ -63,4 +63,32 @@ test('malformed provider results and duplicate tool IDs fail with a single termi
   assert.equal(h.session.events.filter(e => e.type === 'run/finish').length, 1)
   const adapter = createDeepSeekAdapter({ apiKey: 'mock', fetch: async () => new Response(event({ choices: [{ delta: { content: 123 } }] }) + 'data: [DONE]\n') })
   await assert.rejects(adapter.chat({}), /invalid SSE delta/)
+})
+
+test('DeepSeek classifies HTTP and transport failures without exposing provider bodies', async () => {
+  const secret = 'fake-secret-token-401'
+  for (const [status, body, kind, retryable] of [
+    [401, `invalid key ${secret}`, 'auth', false],
+    [429, `rate limit ${secret}`, 'rate_limit', true],
+    [400, `maximum context length ${secret}`, 'context_overflow', false],
+    [503, `upstream ${secret}`, 'transient', true],
+  ] as const) {
+    const adapter = createDeepSeekAdapter({ apiKey: 'mock', fetch: async () => new Response(body, { status, headers: { 'x-request-id': 'safe-request-1' } }) })
+    await assert.rejects(adapter.chat({}), (error: unknown) => {
+      assert.ok(error instanceof ProviderError)
+      assert.equal(error.kind, kind)
+      assert.equal(error.status, status)
+      assert.equal(error.retryable, retryable)
+      assert.equal(error.providerRequestId, 'safe-request-1')
+      assert.doesNotMatch(error.message + JSON.stringify(error), /fake-secret-token/)
+      return true
+    })
+  }
+  const network = createDeepSeekAdapter({ apiKey: 'mock', fetch: async () => { throw new TypeError(`connection failed ${secret}`) } })
+  await assert.rejects(network.chat({}), (error: unknown) => error instanceof ProviderError && error.kind === 'transient' && error.retryable && !error.message.includes(secret))
+})
+
+test('provider stream error text cannot appear in the surfaced exception', async () => {
+  const adapter = createDeepSeekAdapter({ apiKey: 'mock', fetch: async () => new Response(event({ error: { message: 'fake-secret-token-stream' } }) + 'data: [DONE]\n') })
+  await assert.rejects(adapter.chat({}), (error: unknown) => error instanceof ModelStreamError && !error.message.includes('fake-secret-token-stream'))
 })

@@ -4,6 +4,8 @@
 
 ## 当前状态
 
+- **R01 结构化错误进行中（2026-10-19）**：provider 边界分类与安全消息本地通过，定向 7/7、完整 410 通过／30 跳过、check/lint 通过；尚待独立提交与 CI。下一步：把 `run/error` 接入契约、JSONL、主请求、摘要、工具及 inspect，验证新旧日志兼容与脱敏。
+
 - **R00 工作分支验收完成（2026-10-19）**：独立执行目录 `D:\Agent\mini-DSH-execution`，分支 `fix/mini-dsh-portfolio-r00`，草稿 [PR #3](https://github.com/BeforeLanding/mini-DSH/pull/3)。修复提交 `93c6ab0`、`21fac6b`，诊断提交 `ed9151d`；`21fac6b` 的 [PR CI 39255149181](https://github.com/BeforeLanding/mini-DSH/actions/runs/39255149181) 六组均为 408 通过／0 失败／30 跳过，[故意失败探针 39254181030](https://github.com/BeforeLanding/mini-DSH/actions/runs/39254181030) 六组红灯且 TAP 可下载。main 尚未合并，原 main CI 仍红；30 条隔离测试归 R08。下一步：R01 结构化错误与事件兼容读取。
 
 - **NX-48 本地可安装 CLI 已完成**：`mini-dsh` bin 复用生产入口，`--help`／`--version`／`--show-config` 无 key 可运行；仓库外 tarball 安装在 Windows 含空格目录成功，虚构 key 下 `/exit` 释放锁且日志无模型请求。包白名单排除 `.env`、日志与实验原件；README 写明本地 pack／安装及工作区和数据位置。完整离线测试 401 通过／30 跳过，check/lint 通过；npm 未发布、未推送或执行效果实验。

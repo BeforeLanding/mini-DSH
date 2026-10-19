@@ -1,6 +1,6 @@
 import type { Usage } from '../core/budget.js'
 import { isRecord } from '../core/event-store.js'
-import { ModelStreamError } from '../core/model-error.js'
+import { ModelStreamError, ProviderError, classifyHttpError, classifyTransportError } from '../core/model-error.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Adapter, Arguments, ChatRequest } from '../core/contracts.js'
 interface WireCall { id: string; name: string; arguments: string }
@@ -104,6 +104,21 @@ export function normalizeUsage(raw: unknown): Usage | undefined {
   if (cached !== undefined && (typeof cached !== 'number' || !Number.isSafeInteger(cached) || cached < 0 || cached > input)) throw new Error('invalid cache usage')
   return { inputTokens: input, outputTokens: output, totalTokens: input + output, source: 'provider', uncertain: false, ...(typeof reasoning === 'number' ? { reasoningTokens: reasoning } : {}), ...(typeof cached === 'number' ? { cacheReadTokens: cached } : {}) }
 }
+async function errorPreview(response: Response) {
+  if (!response.body) return ''
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let bytes = 0
+  try {
+    while (bytes < 4096) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (value) { chunks.push(value.subarray(0, 4096 - bytes)); bytes += value.length }
+    }
+  } catch { /* an unreadable error body does not replace the HTTP status */ }
+  finally { await reader.cancel().catch(() => {}); reader.releaseLock() }
+  return new TextDecoder().decode(Buffer.concat(chunks))
+}
 export function createDeepSeekAdapter(config: DeepSeekConfig = {}): Adapter {
   const apiKey = config.apiKey ?? process.env.DEEPSEEK_API_KEY
   if (!apiKey) throw new Error('missing DEEPSEEK_API_KEY; set it in the environment or in .env in the current working directory')
@@ -112,7 +127,8 @@ export function createDeepSeekAdapter(config: DeepSeekConfig = {}): Adapter {
     models,
     capabilities: configuredCapacity === undefined ? undefined : Object.fromEntries(models.map(model => [model, { contextWindowTokens: configuredCapacity }])),
     async chat({ system, messages = [], tools = [], model, signal, onReasoning, onContent, onProviderEvent, maxOutputTokens }: ChatRequest) {
-      const response = await (config.fetch ?? fetch)(`${baseUrl}/chat/completions`, {
+      let response: Response
+      try { response = await (config.fetch ?? fetch)(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, signal,
         body: JSON.stringify({
@@ -122,8 +138,8 @@ export function createDeepSeekAdapter(config: DeepSeekConfig = {}): Adapter {
           messages: [...(system ? [{ role: 'system', content: system }] : []), ...messages],
           ...(tools.length ? { tools } : {}),
         }),
-      })
-      if (!response.ok) throw new Error(`DeepSeek API ${response.status}: ${await response.text()}`)
+      }) } catch (error) { throw classifyTransportError(error, signal?.aborted) }
+      if (!response.ok) throw classifyHttpError(response.status, await errorPreview(response), response.headers.get('x-request-id') ?? undefined)
       let content = ''
       let reasoningContent = ''
       const calls = new Map<number, WireCall>()
@@ -135,7 +151,7 @@ export function createDeepSeekAdapter(config: DeepSeekConfig = {}): Adapter {
       for await (const event of parseSSE(response)) {
         onProviderEvent?.({ ...(event.model === undefined ? {} : { model: event.model }), ...(event.system_fingerprint === undefined ? {} : { system_fingerprint: event.system_fingerprint }),
           ...(event.choices === undefined ? {} : { choices: event.choices }), ...(event.usage === undefined ? {} : { usage: event.usage }) })
-        if (event.error) throw new Error(event.error.message ?? 'DeepSeek stream error')
+        if (event.error) throw new ProviderError('protocol')
         observedModel = event.model ?? observedModel
         systemFingerprint = event.system_fingerprint ?? systemFingerprint
         if (event.usage != null) usage = normalizeUsage(event.usage)
@@ -148,7 +164,10 @@ export function createDeepSeekAdapter(config: DeepSeekConfig = {}): Adapter {
       }
       const complete = finishReason === 'stop' || finishReason === 'tool_calls'
       return { content, reasoningContent, usage, finishReason, complete, toolCalls: complete ? finalizeToolCalls(calls) : [], observedModel, systemFingerprint }
-      } catch (error) { throw new ModelStreamError(error instanceof Error ? error.message : String(error), { content, reasoningContent, usage, finishReason, complete: false }, error) }
+      } catch (error) {
+        const message = error instanceof ProviderError ? error.safeMessage : error instanceof Error && /^(?:invalid SSE|invalid model usage|invalid cache usage|invalid reasoning usage|incomplete tool arguments JSON)/.test(error.message) ? error.message : 'Provider stream failed'
+        throw new ModelStreamError(message, { content, reasoningContent, usage, finishReason, complete: false })
+      }
     },
   }
   return adapter

@@ -1,5 +1,9 @@
 # 任务清单
 
+### R01 结构化错误与可恢复诊断（2026-10-19，进行中）
+
+基线为 R00 工作分支 `b8ba09d`。现有 DeepSeek 非 2xx 异常拼接完整 response body，模型及摘要失败没有 `run/error`，inspect 只见终态。预计独立提交边界：① provider 错误分类与有界安全消息（401/429/上下文超限/网络和流中断），定向 7/7、完整 410 通过／30 跳过、check/lint 通过，**本地完成，待提交与当前提交 CI**；② `run/error` 契约、运行时校验、JSONL 解析/恢复/inspect 和主请求、摘要、工具阶段记录作为一个完整事件行为提交，验证旧日志可读、新日志可重放、唯一 `run/finish`、坏 JSONL 与假 token 脱敏。每步通过定向、`pnpm check`、`pnpm test`、lint 后独立提交并推送；未通过先修复，不开始 R02。旧读取器遇新事件可能只显示部分前缀，须在文档明示。
+
 ### R00 可信 CI 恢复（2026-10-19，工作分支验收完成；main 待合并）
 
 基线 `32e25989d1d36354cba91664cd304fb8250769a2`，独立克隆 `D:\Agent\mini-DSH-execution`，分支 `fix/mini-dsh-portfolio-r00`。历史 [CI 39133594202](https://github.com/BeforeLanding/mini-DSH/actions/runs/39133594202) 四个 required job 在测试步骤失败：Windows Node 22/24 各 1 条、Ubuntu Node 22/24 各 2 条；共同错误为 `smoke replay project context workspace mismatch; no API fallback`。根因：工作区路径在嵌入 JSON 中的转义形式未被规范化，重放又按原路径而非规范化 token 检查；Windows 本机基线定向测试 9/9 通过，未复现 CI 的路径环境，但新增跨平台用例覆盖了该分支。
