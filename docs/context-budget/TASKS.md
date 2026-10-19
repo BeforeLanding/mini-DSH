@@ -1,10 +1,10 @@
 # 任务清单
 
-### R00 可信 CI 恢复（2026-10-19，进行中）
+### R00 可信 CI 恢复（2026-10-19，工作分支验收完成；main 待合并）
 
 基线 `32e25989d1d36354cba91664cd304fb8250769a2`，独立克隆 `D:\Agent\mini-DSH-execution`，分支 `fix/mini-dsh-portfolio-r00`。历史 [CI 39133594202](https://github.com/BeforeLanding/mini-DSH/actions/runs/39133594202) 四个 required job 在测试步骤失败：Windows Node 22/24 各 1 条、Ubuntu Node 22/24 各 2 条；共同错误为 `smoke replay project context workspace mismatch; no API fallback`。根因：工作区路径在嵌入 JSON 中的转义形式未被规范化，重放又按原路径而非规范化 token 检查；Windows 本机基线定向测试 9/9 通过，未复现 CI 的路径环境，但新增跨平台用例覆盖了该分支。
 
-独立验收与预计提交边界：① 修复 smoke 录制与重放工作区规范化冲突，保留严格请求指纹与无 API 回退；首个修复提交 `93c6ab0` 本地通过，但当前 [PR run 39254115258](https://github.com/BeforeLanding/mini-DSH/actions/runs/39254115258) Ubuntu 3/3 通过、Windows 3/3 仍在 repair smoke 失败，不能标完成。补充 `fs.realpath`／`path.resolve` 别名映射和定向回归，本地定向 12/12、完整 408 通过／30 跳过、check/lint 通过，**待新提交 CI**。② CI 失败诊断提交 `ed9151d`；[手动失败探针 39254181030](https://github.com/BeforeLanding/mini-DSH/actions/runs/39254181030) 六个 job 全红、六份 TAP 均上传，已下载 Ubuntu Node22 产物核对 `not ok 21 - CI diagnostic probe` 和 `406 pass / 1 fail / 30 skipped`，**完成**。另增 Node 20.18.1 以测试 `engines` 最低版本。③ 同一源码提交的 Ubuntu/Windows × Node 20.18.1/22/24 required CI 均通过，逐 job 记录执行、失败与跳过后才将 R00 标为完成。前序未通过时不叠加 R01。
+独立验收与提交：① 首个修复 `93c6ab0` 本地通过，但 [PR run 39254115258](https://github.com/BeforeLanding/mini-DSH/actions/runs/39254115258) Ubuntu 3/3 通过、Windows 3/3 仍在 repair smoke 失败；真实路径补丁 `21fac6b` 补齐 `fs.realpath`／`path.resolve` 别名映射和回归。本地定向 12/12、完整 408 通过／30 跳过、check/lint 通过；[PR CI 39255149181](https://github.com/BeforeLanding/mini-DSH/actions/runs/39255149181) 六组均通过，**完成**。② CI 失败诊断 `ed9151d`；[手动失败探针 39254181030](https://github.com/BeforeLanding/mini-DSH/actions/runs/39254181030) 六个 job 全红、六份 TAP 均上传，已下载 Ubuntu Node22 产物核对 `not ok 21 - CI diagnostic probe`，**完成**。③ `21fac6b` 的 Ubuntu/Windows × Node 20.18.1/22/24 各 job `438 executed / 408 passed / 0 failed / 30 skipped`，工作分支 R00 验收完成。main 尚未合并，不能宣称 main CI 已恢复。
 
 ### NX-49 只读会话 inspect（2026-10-18，done）
 

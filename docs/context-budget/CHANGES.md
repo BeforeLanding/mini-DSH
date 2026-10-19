@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### R00 工作分支最终验收（2026-10-19）
+
+草稿 [PR #3](https://github.com/BeforeLanding/mini-DSH/pull/3) 的提交依次为：`93c6ab0` 修复 JSON 路径规范化，`ed9151d` 增 CI TAP 诊断，`21fac6b` 补 Windows 真实路径别名。`21fac6bc74f4b9fa68bf43ba4ec2c57141faa444` 的 [PR CI 39255149181](https://github.com/BeforeLanding/mini-DSH/actions/runs/39255149181) 六个 job 全部 success；Ubuntu/Windows × Node 20.18.1/22/24 **每组** `438 tests / 408 pass / 0 fail / 30 skipped`，均来自该 run 的 job 日志。Node 20.18.1 覆盖 `engines` 声明最低版本，原 required 四组保留。`ed9151d` 的 [故意失败探针 39254181030](https://github.com/BeforeLanding/mini-DSH/actions/runs/39254181030) 六个 job 全红，TAP artifact 可下载并已抽查。R00 在工作分支验收完成；main 仍是 `32e2598`，需人工审查合并后才能宣称 main CI 绿色。30 条隔离测试仍按原平台条件跳过，后续 R08 单独处理，不把本轮 CI 恢复写成隔离覆盖。
+
 ### R00 Windows 真实路径补充修复（2026-10-19，待新提交 CI）
 
 首个修复提交 `93c6ab0` 对应 [PR CI 39254115258](https://github.com/BeforeLanding/mini-DSH/actions/runs/39254115258)：Ubuntu Node 20.18.1/22/24 通过，Windows 三组均 `405 pass / 1 fail / 30 skipped`，仍在 `selected repair dispatch creates no protocol or recall evidence` 报 `smoke replay project context workspace mismatch`。进一步核查 `ProjectContextRuntime`：它输出 `fs.realpath(workspace)`，录制器此前只规范化原始传入路径；Windows runner 上两者可有不同表示。补丁把传入路径、`path.resolve`、`fs.realpathSync` 和 native realpath 的普通／JSON 转义／斜杠形式映射到同一 token；保留指纹、显式旧路径映射与错误工作区拒绝。新增别名及路径拼写测试，本地 `pnpm check`（syntax 158 files）、定向 12/12、`pnpm test`（408 pass / 0 fail / 30 skipped）、`pnpm lint`（172 files，0 诊断）、`git diff --check` 通过。远端 Windows 结果待新提交确认。
