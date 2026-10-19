@@ -26,7 +26,7 @@ function stable(value: unknown): string {
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex')
 const workspaceToken = '$' + '{WORKSPACE}'
 const normalize = (value: unknown, workspace: string): Json => {
-  if (typeof value === 'string') return value.replaceAll(workspace, workspaceToken).replaceAll(workspace.replaceAll('\\', '/'), workspaceToken)
+  if (typeof value === 'string') return value.replaceAll(JSON.stringify(workspace).slice(1, -1), workspaceToken).replaceAll(workspace, workspaceToken).replaceAll(workspace.replaceAll('\\', '/'), workspaceToken)
   if (Array.isArray(value)) return value.map(item => normalize(item, workspace))
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined).map(([key, item]) => [key, normalize(item, workspace)]))
   return value as Json
@@ -195,13 +195,11 @@ export function createSmokeReplay(options: { file: string; workspace: string; ve
       const index = lines.indexOf('## Project Context')
       if (index < 0 || index + 3 >= lines.length) throw new Error('smoke replay project context path mapping unavailable; no API fallback')
       const project = JSON.parse(lines[index + 3]!) as { workspace?: string }
-      if (project.workspace !== options.workspace) throw new Error('smoke replay project context workspace mismatch; no API fallback')
-      project.workspace = options.recordedProjectWorkspace
-      lines[index + 3] = JSON.stringify(project)
-      material.system = lines.join('\n')
+      if (project.workspace !== workspaceToken) throw new Error('smoke replay project context workspace mismatch; no API fallback')
     }
     if (entry?.kind !== 'start' || entry.purpose !== request.purpose || entry.fingerprint !== requestFingerprint(entry.request)) throw new Error('smoke replay request fingerprint/order mismatch; no API fallback')
-    const expected = options.recordedBashFixtureWorkspace ? normalizeBashResults(entry.request, options.recordedBashFixtureWorkspace) : entry.request
+    const recordedRequest = options.recordedProjectWorkspace ? normalize(entry.request, options.recordedProjectWorkspace) : entry.request
+    const expected = options.recordedBashFixtureWorkspace ? normalizeBashResults(recordedRequest, options.recordedBashFixtureWorkspace) : recordedRequest
     const actual = options.recordedBashFixtureWorkspace ? normalizeBashResults(material, options.workspace) : material
     if (requestFingerprint(expected) !== requestFingerprint(actual) || stable(expected) !== stable(actual)) throw new Error('smoke replay request fingerprint/order mismatch; no API fallback')
     cursor++

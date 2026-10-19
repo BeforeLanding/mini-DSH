@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### R00 smoke replay 工作区映射修复（2026-10-19，待当前提交 CI）
+
+基线 `32e25989d1d36354cba91664cd304fb8250769a2`，[失败 CI 39133594202](https://github.com/BeforeLanding/mini-DSH/actions/runs/39133594202)：Ubuntu Node 22/24 各 `403 pass / 2 fail / 30 skipped`，Windows Node 22/24 各 `404 pass / 1 fail / 30 skipped`。失败测试为 Ubuntu 的 `strict replay permits only the declared project workspace remap...` 与四平台的 `selected repair dispatch creates no protocol or recall evidence`；预期严格重放已录制请求，实际 `smoke replay project context workspace mismatch; no API fallback`。根因是嵌入 system 文本的 JSON 将 Windows 路径反斜杠转义，而普通路径替换无法识别；重放在规范化之后仍把 project.workspace 与原工作区比较。修复先替换 JSON 转义路径，再替换普通路径；重放校验规范化 token，记录的旧请求只对显式声明的原工作区路径做兼容映射，保留完整指纹和其他字段核对。
+
+本地 Windows Node 24.16.0 / pnpm 11.22.0：基线定向 9/9 通过（本机路径未复现 CI）；修复后 `node --test dist/test/smoke-recording.test.js dist/test/smoke-scenarios.test.js` 10/10、`pnpm check`（syntax 158 files）、`pnpm test`（406 pass / 0 fail / 30 skipped）、`pnpm lint`（172 files，0 诊断）通过。新增合成 Windows JSON 路径及错误工作区拒绝用例，真实 provider 请求 0。当前提交 CI 待观察，不能据本地结果宣称跨平台修复完成。
+
 ### 招聘者交付审查与展示材料（2026-10-18）
 
 从完整 HEAD `cb017a732c20a2bc076ca958cf93224cf0b16723` 的干净工作树审查 README、AGENTS.md、NX-45 报告及本地安装记录。新增[五分钟讲解提纲](../RECRUITER_WALKTHROUGH.md)和[NX-45 公开证据摘要](NX-45-PUBLIC-EVIDENCE.md)，补 README 入口并明确公开摘要与仅本地保存的原始事件不同；报告及 usage 更正文档不再要求读者访问本机绝对路径。公开摘要列协议、冻结代码、固定分母、两种验收口径、历史价格来源、usage 重算方法及顶层源文件指纹；不加入原始提示或事件记录。README 明确组合策略结果不能单独归因于稳定前缀或主动压缩。

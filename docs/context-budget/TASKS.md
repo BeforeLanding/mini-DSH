@@ -1,5 +1,11 @@
 # 任务清单
 
+### R00 可信 CI 恢复（2026-10-19，进行中）
+
+基线 `32e25989d1d36354cba91664cd304fb8250769a2`，独立克隆 `D:\Agent\mini-DSH-execution`，分支 `fix/mini-dsh-portfolio-r00`。历史 [CI 39133594202](https://github.com/BeforeLanding/mini-DSH/actions/runs/39133594202) 四个 required job 在测试步骤失败：Windows Node 22/24 各 1 条、Ubuntu Node 22/24 各 2 条；共同错误为 `smoke replay project context workspace mismatch; no API fallback`。根因：工作区路径在嵌入 JSON 中的转义形式未被规范化，重放又按原路径而非规范化 token 检查；Windows 本机基线定向测试 9/9 通过，未复现 CI 的路径环境，但新增跨平台用例覆盖了该分支。
+
+独立验收与预计提交边界：① 修复 smoke 录制与重放工作区规范化冲突，保留严格请求指纹与无 API 回退；新增定向 10/10、`pnpm check`、完整测试 406 通过／30 跳过、lint 0 诊断，**本地通过，待当前提交 CI**。② CI 失败诊断输出 TAP、保留退出码并上传脱敏测试产物；人为断言失败验证红灯和可下载诊断，通过后独立提交。③ 同一源码提交的 Ubuntu/Windows × Node 22/24 required CI 均通过，逐 job 记录执行、失败与跳过后才将 R00 标为完成。前序未通过时不叠加 R01。
+
 ### NX-49 只读会话 inspect（2026-10-18，done）
 
 基线 `1de2d5007e26024a764e1084cc55c009cd1486b6`，工作树干净。独立验收和预计本地提交边界：① 复用 JSONL 校验规则的逐行解析，提供无模型／工具运行时的 `mini-dsh inspect <events.jsonl> [--json]`、证据完整性告警和会话／最近 run 统计；合成日志覆盖正常、预算、拒绝、缺 usage、摘要缓存、多轮、legacy-current 与坏尾，验证只读及 NX-45 交叉读数（**done**，`64477e1`）。② 增 `--trace` 的有界脱敏事件轨迹，只显示事件号／类型／工具名称／停止原因；测试敏感正文不泄露（**done**，`1ac11c1`）。③ README 说明命令、口径和退出码，从新 tarball 在仓库外安装验证无 key 的文本／JSON／轨迹（**done**，本步提交）。每步通过相关检查后独立本地提交；不改策略、预算、旧日志或回放规则，不付费、不发布或推送。

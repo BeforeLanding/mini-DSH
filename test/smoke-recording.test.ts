@@ -11,6 +11,14 @@ const wire: SmokeWireOptions = { provider: 'deepseek', baseUrl: 'https://api.dee
 const version: SmokeVersion = { codeSHA: 'a'.repeat(40), fixtureId: 'synthetic', manifestDigest: 'b'.repeat(64), toolSchemaSha256: 'c'.repeat(64) }
 const request = (purpose: 'main' | 'summary', content: string) => ({ purpose, model: 'test', maxOutputTokens: 16, system: 'fixture system', messages: [{ role: 'user' as const, content }], tools: [] })
 
+test('request material normalizes a Windows workspace inside serialized project JSON', () => {
+  const workspace = 'C:\\runner\\candidate'
+  const material = requestMaterial({ ...request('main', 'same'), system: `## Project Context\nguidance\nlimits\n${JSON.stringify({ workspace, directory: '.', rules: [] })}` }, wire, workspace)
+  const system = (material as { system: string }).system
+  assert.equal(JSON.parse(system.split('\n').at(-1)!).workspace, '$' + '{WORKSPACE}')
+  assert.equal(system.includes('C:\\runner'), false)
+})
+
 test('recording retains reconstructible requests, fixture bytes, streams and separate main/summary order', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-record-'))
   try {
@@ -151,6 +159,8 @@ test('strict replay permits only the declared project workspace remap and still 
     const replay = createSmokeReplay({ file, workspace: restored, version, wire, recordedProjectWorkspace: original })
     assert.equal((await replay.chat({ ...request('main', 'same'), system: system(restored) })).content, 'OK')
     replay.assertConsumed()
+    const wrongWorkspace = createSmokeReplay({ file, workspace: restored, version, wire, recordedProjectWorkspace: original })
+    await assert.rejects(wrongWorkspace.chat({ ...request('main', 'same'), system: system(path.join(directory, 'unrelated')) }), /workspace mismatch/)
     const changed = createSmokeReplay({ file, workspace: restored, version, wire, recordedProjectWorkspace: original })
     await assert.rejects(changed.chat({ ...request('main', 'changed'), system: system(restored) }), /fingerprint\/order mismatch/)
     const badSystem = createSmokeReplay({ file, workspace: restored, version, wire, recordedProjectWorkspace: original })
