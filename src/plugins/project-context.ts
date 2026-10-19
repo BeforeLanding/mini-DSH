@@ -30,6 +30,7 @@ export async function apply(ctx: Context, config: ProjectContextConfig = {}) {
   ctx.effect(() => ctx.tools.register({
     name: 'project_context',
     exposeErrors: true,
+    origin: 'builtin', effect: 'read', resources: args => [typeof args.directory === 'string' ? args.directory : directory],
     description: 'Read scoped AGENTS.md rules and explicit project/check metadata for a directory inside the workspace. Does not execute scripts or change tool cwd.',
     parameters: { type: 'object', properties: { directory: { type: 'string', description: 'Workspace-relative directory; defaults to initial project directory.' } }, additionalProperties: false },
     execute: async (args) => {

@@ -71,6 +71,7 @@ async function bootResults(workspace: string) {
   const root = new Context()
   for (const plugin of [tools, systemPrompt, sessions, agents, agentLoop, llm]) await root.plugin(plugin)
   await root.plugin(sandbox, { workspace, autoApprove: true })
+  root.sandbox.setApprover(async () => true) // Explicit test approval for synthetic third-party tools.
   return root
 }
 

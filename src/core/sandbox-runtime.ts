@@ -205,9 +205,9 @@ export class SandboxRuntime {
     this.#approver = fn
     return () => { if (this.#approver === fn) this.#approver = undefined }
   }
-  async approve(request: ApprovalRequest) {
+  async approve(request: ApprovalRequest, allowAuto = true) {
     request.signal?.throwIfAborted()
-    if (this.autoApprove) return { approved: true, source: 'auto' }
+    if (allowAuto && this.autoApprove) return { approved: true, source: 'auto' }
     if (!this.#approver) throw new Error('write requires user approval, but no approval channel is set')
     const approver = this.#approver
     const approved = await (request.approval ? request.approval(() => approver(request)) : approver(request))

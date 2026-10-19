@@ -49,6 +49,9 @@ export interface ToolResult { value: unknown; content: ContentBlock[]; isError: 
 export interface ToolDefinition {
   name: string; description?: string; parameters?: Arguments
   exposeErrors?: boolean
+  effect?: 'read' | 'write' | 'exec' | 'network' | 'unknown'
+  origin?: 'builtin' | 'external'
+  resources?(args: Arguments): string[]
   execute(args: Arguments, execution: Execution): unknown | Promise<unknown>
   output?: { render(args: Arguments, value: unknown): ContentBlock[]; isError?(value: unknown): boolean }
   finalizeContent?(execution: Execution, result: ToolResult): ContentBlock[] | undefined | Promise<ContentBlock[] | undefined>

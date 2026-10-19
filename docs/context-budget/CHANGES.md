@@ -1,10 +1,16 @@
 # 改动与验收证据
 
-### R02a Bash 子进程环境边界（2026-10-19，本地通过，待 CI）
+### R02b 中央工具授权（2026-10-19，本地通过，待 CI）
+
+ToolRuntime 每次 execute 在工具代码前调用授权钩子。内置工具声明 effect/origin/resource 并与固定名称和 effect 清单核对；可信内置读操作按现有路径策略执行，写与 Bash 仍由原工具执行一次审批、真实路径和内容复核，不新增第二次弹窗。第三方与未声明元数据工具默认要求人工批准，即使 `autoApprove` 用于受控评测也不自动授予。批准摘要含 toolCallId、参数 SHA-256、资源真实路径、工作区及策略版本；批准返回后重新核查参数、资源与工作区。钩子释放后拒绝执行，避免已启用授权的 Runtime 失效开放。插件代码本身与本进程同权，中央授权约束的是经 ToolRuntime 发起的调用，不能声称进程隔离。
+
+定向用例覆盖第三方伪写工具无审批不执行、autoApprove 不扩权、换参数或工作区拒绝，模拟工具需显式测试批准。内置 Bash/文件工具原审批与路径复核回归通过。本地 `pnpm check`（syntax 163 files）、`pnpm test`（448 tests / 418 pass / 0 fail / 30 skipped）、`pnpm lint`（177 files / 0 diagnostics）通过；真实模型请求 0。当前提交 CI 待验证。
+
+### R02a Bash 子进程环境边界（2026-10-19，工作分支验收完成）
 
 `CommandOptions.env` 允许调用方显式配置额外变量；默认子进程只继承 PATH、临时目录、locale/终端及 Windows 的系统目录与执行所需变量。每次命令创建独立临时 HOME（Windows 同时设置 USERPROFILE，POSIX 设置 XDG 目录），命令退出后删除；额外变量不能覆盖这些 home 变量。DeepSeek key、代理、云凭证、SSH socket、`NODE_OPTIONS` 与 Git 凭证配置不再自动从父进程进入 Bash。生产当前 MCP 仅配置 streamable HTTP，无 stdio spawn 可接；未来 stdio 路径须复用构造器。环境过滤不限制子进程访问工作区文件或其他系统进程，不能替代路径策略和 R02b 授权。
 
-假密钥定向验证：真实 Bash `env` 输出及命令结果无密钥，Node 子进程看不到父进程 key，HOME 退出后不存在。本地 `pnpm check`（syntax 161 files）、`pnpm test`（446 tests / 416 pass / 0 fail / 30 skipped）、`pnpm lint`（175 files / 0 diagnostics）通过；真实模型请求 0。当前提交 CI 待验收。
+假密钥定向验证：真实 Bash `env` 输出及命令结果无密钥，Node 子进程看不到父进程 key，HOME 退出后不存在。本地 `pnpm check`（syntax 161 files）、`pnpm test`（446 tests / 416 pass / 0 fail / 30 skipped）、`pnpm lint`（175 files / 0 diagnostics）通过；提交 `70d4048` 的 [CI 39259211634](https://github.com/BeforeLanding/mini-DSH/actions/runs/39259211634) 六组通过。真实模型请求 0。
 
 ### R01b 安全运行错误事件（2026-10-19，本地通过，待 CI）
 

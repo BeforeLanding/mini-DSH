@@ -20,6 +20,7 @@ export function apply(ctx: Context, config: { executable?: string; workspace?: s
   ctx.effect(() => ctx.tools.register({
     name: 'bash', description: 'Run a bounded foreground bash command after approval. Optional cwd must be an existing workspace directory. Returns structured exit/status, duration and separate stdout/stderr; large logs may have refs for read_tool_result. To record a check, explicitly pass verification.files as workspace-relative file paths (include relevant sources, tests and config). Evidence covers only these files and this command; exit zero does not establish task acceptance.',
     exposeErrors: true,
+    origin: 'builtin', effect: 'exec', resources: args => [typeof args.cwd === 'string' ? args.cwd : '.'],
     parameters: { type: 'object', properties: { command: { type: 'string' }, cwd: { type: 'string' }, verification: { type: 'object', properties: { files: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: maxVerificationFiles } }, required: ['files'] } }, required: ['command'] },
     output: { render: (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }],
       isError: value => commandFailed(value as CommandResult) },

@@ -59,6 +59,7 @@ export function apply(ctx: Context, config: ToolResultsConfig = {}) {
   ctx.effect(() => ctx.tools.register({
     name: 'read_tool_result',
     exposeErrors: true,
+    origin: 'builtin', effect: 'read',
     description: 'Read a stored tool result from this session using its ref. Truncated results may include text (head), tail (end), omittedBytes (missing middle) and resumeOffset (middle start). UTF-8 byte offset starts at 0; use nextOffset until eof. captureTruncated means collection was bounded. References survive restart while result files remain.',
     parameters: { type: 'object', properties: { ref: { type: 'string' }, offset: { type: 'integer', minimum: 0 }, maxBytes: { type: 'integer', minimum: 1, maximum: store.maxReadBytes } }, required: ['ref'] },
     async execute(args, execution) {

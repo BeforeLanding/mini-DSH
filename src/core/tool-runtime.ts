@@ -18,6 +18,15 @@ function blocksToText(blocks: ContentBlock[]) {
 export class ToolRuntime {
     #tools = new Map<string, ToolDefinition>()
     #projection?: (name: string, result: ToolResult, execution: Execution) => Promise<ToolResult>
+    #authorize?: (tool: ToolDefinition, args: Arguments, execution: Execution) => Promise<void>
+    #authorizationConfigured = false
+
+    setAuthorization(authorize: (tool: ToolDefinition, args: Arguments, execution: Execution) => Promise<void>) {
+        if (this.#authorize) throw new Error('tool authorization already configured')
+        this.#authorizationConfigured = true
+        this.#authorize = authorize
+        return () => { if (this.#authorize === authorize) this.#authorize = undefined }
+    }
 
     setResultProjection(projection: (name: string, result: ToolResult, execution: Execution) => Promise<ToolResult>) {
         if (this.#projection) throw new Error('tool result projection already configured')
@@ -81,6 +90,9 @@ export class ToolRuntime {
 
         let result: ToolResult
         try {
+            if (this.#authorizationConfigured && !this.#authorize) throw new Error('tool authorization unavailable')
+            await this.#authorize?.(tool, args, execution)
+            execution.signal.throwIfAborted()
             const value = await tool.execute(args, execution)
             const content = tool.output?.render
                 ? tool.output.render(args, value)

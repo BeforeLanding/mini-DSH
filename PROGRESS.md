@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- **R02 环境与中央授权进行中（2026-10-19）**：R02a 最小子进程 env 与独立 HOME 本地 check、完整 416 通过／30 跳过、lint 通过，待独立提交和该提交 CI。当前 MCP 仅 HTTP，无 stdio 启动点；后续增加 stdio 必须复用安全 env。下一步为 R02b 中央授权；env 边界不提供文件系统隔离。
+- **R02 环境与中央授权进行中（2026-10-19）**：R02a `70d4048` 的 [CI 39259211634](https://github.com/BeforeLanding/mini-DSH/actions/runs/39259211634) 六组通过。R02b ToolRuntime 中央授权本地 check、完整 418 通过／30 跳过、lint 通过，待独立提交及当前提交 CI。未知/第三方工具默认需人工批准，内置写/Bash 保留已有一次审批与复核。当前 MCP 仅 HTTP，无 stdio 启动点；后续增加 stdio 必须复用安全 env。env 边界不提供文件系统隔离。
 
 - **R01 结构化错误工作分支验收完成（2026-10-19）**：provider 分类 `5a96257` 的 [CI 39256249087](https://github.com/BeforeLanding/mini-DSH/actions/runs/39256249087)、安全 `run/error`/inspect v2 `2eb28d3` 的 [CI 39258324293](https://github.com/BeforeLanding/mini-DSH/actions/runs/39258324293) 均六组通过。R01b 本地 413 通过／30 跳过，旧日志可读，旧读取器遇新事件可能只返回有效前缀；main 尚未合并。
 
