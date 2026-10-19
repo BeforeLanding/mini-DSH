@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### R00 Windows 真实路径补充修复（2026-10-19，待新提交 CI）
+
+首个修复提交 `93c6ab0` 对应 [PR CI 39254115258](https://github.com/BeforeLanding/mini-DSH/actions/runs/39254115258)：Ubuntu Node 20.18.1/22/24 通过，Windows 三组均 `405 pass / 1 fail / 30 skipped`，仍在 `selected repair dispatch creates no protocol or recall evidence` 报 `smoke replay project context workspace mismatch`。进一步核查 `ProjectContextRuntime`：它输出 `fs.realpath(workspace)`，录制器此前只规范化原始传入路径；Windows runner 上两者可有不同表示。补丁把传入路径、`path.resolve`、`fs.realpathSync` 和 native realpath 的普通／JSON 转义／斜杠形式映射到同一 token；保留指纹、显式旧路径映射与错误工作区拒绝。新增别名及路径拼写测试，本地 `pnpm check`（syntax 158 files）、定向 12/12、`pnpm test`（408 pass / 0 fail / 30 skipped）、`pnpm lint`（172 files，0 诊断）、`git diff --check` 通过。远端 Windows 结果待新提交确认。
+
+诊断能力已由 [手动失败探针 39254181030](https://github.com/BeforeLanding/mini-DSH/actions/runs/39254181030) 证实：同一 `ed9151d` 的六个 job 全为 failure，API 列出六份 `test-tap-*` artifact；Ubuntu Node22 artifact 已下载到 `D:\Agent\outputs\mini-dsh-r00-ci-evidence-20261019\test-results.tap`，SHA-256 `2a986e9872b58877f3c34d6e4a5c22f6da1598441fbeed61a237da193423355d`，含故意失败的 `not ok 21 - CI diagnostic probe`、`406 pass / 1 fail / 30 skipped`。探针红灯是预期验证，不算正常 PR CI 通过。
+
 ### R00 CI TAP 诊断与最低 Node 版本（2026-10-19，待远端验收）
 
 CI 保留 Ubuntu/Windows × Node 22/24 并增 Node 20.18.1，与 `package.json` 的最低版本一致。测试使用 Node TAP reporter，经 Bash `pipefail` + `tee` 同时写 job log 与 `test-results.tap`，失败后由固定 SHA 的 `upload-artifact` 上传 7 天；只上传无密钥离线测试输出，不上传会话、环境或真实提示。新增手动 `diagnostic_probe` 输入，仅显式开启时在 runner 的 `dist/test` 临时生成失败断言，用于验证 job 仍红且 artifact 可下载；默认与 PR 测试不触发探针。

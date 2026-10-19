@@ -19,6 +19,27 @@ test('request material normalizes a Windows workspace inside serialized project 
   assert.equal(system.includes('C:\\runner'), false)
 })
 
+test('request material maps a resolved project root when the supplied workspace has another spelling', () => {
+  const workspace = `${path.parse(process.cwd()).root}candidate${path.sep}nested${path.sep}..${path.sep}fixture`
+  const resolved = path.resolve(workspace)
+  const material = requestMaterial({ ...request('main', 'same'), system: `## Project Context\nguidance\nlimits\n${JSON.stringify({ workspace: resolved, directory: '.', rules: [] })}` }, wire, workspace)
+  const system = (material as { system: string }).system
+  assert.equal(JSON.parse(system.split('\n').at(-1)!).workspace, '$' + '{WORKSPACE}')
+})
+
+test('request material maps the real project root behind a workspace directory alias', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-workspace-alias-'))
+  try {
+    const real = path.join(directory, 'real'), alias = path.join(directory, 'alias')
+    await fs.mkdir(real)
+    await fs.symlink(real, alias, process.platform === 'win32' ? 'junction' : 'dir')
+    const canonical = await fs.realpath(alias)
+    const material = requestMaterial({ ...request('main', 'same'), system: `## Project Context\nguidance\nlimits\n${JSON.stringify({ workspace: canonical, directory: '.', rules: [] })}` }, wire, alias)
+    const system = (material as { system: string }).system
+    assert.equal(JSON.parse(system.split('\n').at(-1)!).workspace, '$' + '{WORKSPACE}')
+  } finally { await fs.rm(directory, { recursive: true, force: true }) }
+})
+
 test('recording retains reconstructible requests, fixture bytes, streams and separate main/summary order', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-record-'))
   try {

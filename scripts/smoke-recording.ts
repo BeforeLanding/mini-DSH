@@ -26,10 +26,16 @@ function stable(value: unknown): string {
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex')
 const workspaceToken = '$' + '{WORKSPACE}'
 const normalize = (value: unknown, workspace: string): Json => {
-  if (typeof value === 'string') return value.replaceAll(JSON.stringify(workspace).slice(1, -1), workspaceToken).replaceAll(workspace, workspaceToken).replaceAll(workspace.replaceAll('\\', '/'), workspaceToken)
-  if (Array.isArray(value)) return value.map(item => normalize(item, workspace))
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined).map(([key, item]) => [key, normalize(item, workspace)]))
-  return value as Json
+  const roots = new Set([workspace, path.resolve(workspace)])
+  try { roots.add(fs.realpathSync(workspace)); roots.add(fs.realpathSync.native(workspace)) } catch { /* synthetic requests may have no local workspace */ }
+  const forms = [...roots].flatMap(root => [JSON.stringify(root).slice(1, -1), root, root.replaceAll('\\', '/')]).sort((a, b) => b.length - a.length)
+  const visit = (item: unknown): Json => {
+    if (typeof item === 'string') return forms.reduce((text, form) => text.replaceAll(form, workspaceToken), item)
+    if (Array.isArray(item)) return item.map(visit)
+    if (item && typeof item === 'object') return Object.fromEntries(Object.entries(item).filter(([, nested]) => nested !== undefined).map(([key, nested]) => [key, visit(nested)]))
+    return item as Json
+  }
+  return visit(value)
 }
 
 export function requestMaterial(request: ChatRequest, wire: SmokeWireOptions, workspace: string) {
