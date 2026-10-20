@@ -30,6 +30,7 @@
 **实际命令与结果**：
 - `node --test dist/test/mcp-config.test.js` → 9 tests / 9 pass / 0 fail；新增真实 mock 子进程断言 fake provider key、`HTTP(S)_PROXY`、`ALL_PROXY`、`SSH_AUTH_SOCK`、`NODE_OPTIONS` 均不出现，显式 `MOCK_TOKEN` 与 PATH 按契约出现，HOME 为 `mini-dsh-mcp-*` 临时目录，dispose 后 server pid 退出；既有 list/call/timeout/disconnect/dispose 与拒绝审批保持通过。
 - `pnpm test` → 497 tests / 467 pass / 0 fail / 30 skipped；`pnpm check` syntax 187 files；`pnpm lint` 208 files / 0 diagnostics。
+- 后续 `0568c6d`：Windows 上用 `taskkill /pid <pid> /T /F` 终止整棵 server 进程树（`npx`/`.cmd` shim 的孙进程不会残留）；定向 `mcp-config` 仍为 9/9。
 - [CI 39421704013](https://github.com/BeforeLanding/mini-DSH/actions/runs/39421704013) 六个 job 全绿；`Official SWE-bench no-model PoC` 为未触发配置下的 skipped，不计为通过或失败。
 
 **边界**：这是环境变量传播面的收敛，不是文件系统或进程级沙箱；MCP server 仍能读取当前用户可读的文件，显式配置 server 仍表示信任。SDK 目前没有直接注入自定义 transport 的接口，故采用启动器而非替换 SDK。
