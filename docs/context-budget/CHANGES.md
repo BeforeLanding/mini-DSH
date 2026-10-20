@@ -1,5 +1,13 @@
 # 改动与验收证据
 
+### R08 隔离后端与 required CI job（2026-10-20，本地契约通过，待远端隔离验证）
+
+`scripts/eval-v2-isolation.ts` 改为 `IsolationBackend` 接口：平台选择、capability manifest、preflight、run、dispose 分离。Windows 继续走 `wsl.exe` + `bwrap`；Linux 新增原生 `bwrap` 参数（宿主 `/usr/bin` 提供 bash/coreutils，固定 runtime 提供 Node 22 与 `/usr/share/nodejs`，工作区以外不挂载）。preflight 在真实 bwrap 中检查工作区可写、无宿主 sentinel、无非回环网络接口、150 ms 超时后后代进程不能继续写文件，并计算 runtime digest（Node 二进制 + `eval-v2-runtime.sha256`）。`createIsolatedCommandRunner` 保持原入口并自动选择后端；`eval-v2-run`、`smoke-run`、fixture probe 与 V2 fixture 改为传 `runtimeRoot`，`distro` 仅 WSL 使用。
+
+`.github/workflows/ci.yml` 新增 `isolation` job（ubuntu-latest / Node 22）：安装 bubblewrap、准备固定 runtime、构建，然后运行契约、隔离实测与 V2 fixture 测试。任何 `# SKIP` 都使 job 失败，失败上传 TAP，避免“跳过即绿”。新增 `test/eval-v2-isolation-contract.test.ts` 4 条覆盖路径映射、平台专用参数、后端选择与 runtime 指纹；隔离实测测试改为在 Windows/Linux 都只依赖 `MINI_DSH_V2_RUNTIME`。
+
+本地 `pnpm check` syntax 173 files、`pnpm test` 478 tests / 448 pass / 0 fail / 30 skipped、`pnpm lint` 187 files / 0 diagnostics；契约测试 4/4。本机无固定 runtime，30 条隔离实测仍跳过；它们的真实执行与零意外 skip 只能在远端 isolation job 验证，当前提交 CI 待验证。真实 provider 请求 0。
+
 ### R06 当前提交 CI 验收（2026-10-20）
 
 `051f96239307927924c1e580d8a4602425cd9a4c` 的 [CI 39378725489](https://github.com/BeforeLanding/mini-DSH/actions/runs/39378725489) Ubuntu/Windows × Node 20.18.1/22/24 六组全部通过；R06 在工作分支验收完成，main 未合并。阶段 B 校准仍未接入运行时。

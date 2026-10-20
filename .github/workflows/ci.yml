@@ -81,3 +81,64 @@ jobs:
           path: test-results.tap
           if-no-files-found: error
           retention-days: 7
+
+  # R08：隔离测试不能只靠本地环境变量。这个 job 真的安装 bwrap、准备固定 runtime，
+  # 跑平台无关契约、隔离实测与 V2 fixture；出现任何 skip 即失败，避免“跳过即绿”。
+  isolation:
+    name: Isolation (ubuntu-latest, Node 22)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+        with:
+          standalone: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install bubblewrap
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+
+      - name: Prepare pinned Linux runtime
+        run: |
+          sh scripts/eval-v2-prepare-runtime.sh "$RUNNER_TEMP/v2-runtime"
+          echo "MINI_DSH_V2_RUNTIME=$RUNNER_TEMP/v2-runtime/unpack" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: pnpm check
+
+      - name: Run required isolation tests
+        id: isolation_tests
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test --test-reporter=tap \
+            dist/test/eval-v2-isolation-contract.test.js \
+            dist/test/eval-v2-isolation.test.js \
+            dist/test/eval-v2-fixtures.test.js 2>&1 | tee isolation.tap
+          if grep -Eq '(^|[[:space:]])# SKIP([[:space:]]|$)|^not ok .*# SKIP' isolation.tap; then
+            echo "required isolation tests reported a skip" >&2
+            exit 1
+          fi
+
+      - name: Upload isolation TAP
+        if: failure() && steps.isolation_tests.outcome == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: isolation-tap-ubuntu-node-22
+          path: isolation.tap
+          if-no-files-found: error
+          retention-days: 7

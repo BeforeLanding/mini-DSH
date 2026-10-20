@@ -6,8 +6,9 @@ import { createIsolatedCommandRunner } from '../../../../dist/scripts/eval-v2-is
 
 export async function runCandidate(workspace, command) {
   const runtimeRoot = process.env.V2_RUNTIME_ROOT, distro = process.env.V2_DISTRO
-  if (!runtimeRoot || !distro) throw new Error('hidden acceptance requires isolated candidate runtime')
-  const runner = createIsolatedCommandRunner({ workspace, runtimeRoot, distro })
+  if (!runtimeRoot) throw new Error('hidden acceptance requires isolated candidate runtime')
+  // distro 只对 WSL 后端有意义；Linux 原生 bwrap 由 createIsolatedCommandRunner 自动选择。
+  const runner = createIsolatedCommandRunner({ workspace, runtimeRoot, ...(distro ? { distro } : {}) })
   return runner({ executable: 'ignored', args: [], command, cwd: workspace, signal: new AbortController().signal, timeoutMs: 10_000, maxCaptureBytes: 64 * 1024 })
 }
 

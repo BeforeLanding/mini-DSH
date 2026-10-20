@@ -6,7 +6,7 @@ import { createDeepSeekAdapter } from '../src/models/deepseek.js'
 import { assertCleanCode, verifySmokeManifest, type SmokeManifest } from './smoke-manifest.js'
 import { selectSmokeScenarios } from './smoke-plan.js'
 import { runSmokeScenario } from './smoke-scenarios.js'
-import { createIsolatedCommandRunner, windowsToWslPath } from './eval-v2-isolation.js'
+import { createIsolationBackend } from './eval-v2-isolation.js'
 import { createSmokeAmountGuard, smokeReserveUsd } from './smoke-cost.js'
 
 const args = process.argv.slice(2)
@@ -37,11 +37,13 @@ try {
   const sentinel = path.join(path.dirname(preflight), `${path.basename(preflight)}-hidden.txt`)
   await fs.writeFile(sentinel, 'host-only', { flag: 'wx' })
   try {
-    const result = await createIsolatedCommandRunner({ workspace: preflight, runtimeRoot, distro: 'Ubuntu' })({
-      executable: 'ignored', args: [], command: `node --version && test ! -r '${windowsToWslPath(sentinel)}'`, cwd: preflight,
+    const backend = createIsolationBackend({ workspace: preflight, runtimeRoot })
+    const capabilities = await backend.preflight()
+    const result = await backend.run({
+      executable: 'ignored', args: [], command: `node --version && test ! -r '${backend.visibleHostPath(sentinel)}'`, cwd: preflight,
       signal: new AbortController().signal, timeoutMs: 10_000,
     })
-    if (result.status !== 'exited' || result.exitCode !== 0 || !result.stdout.text.includes('v22.22.1')) throw new Error('smoke Linux isolation preflight failed')
+    if (result.status !== 'exited' || result.exitCode !== 0 || !result.stdout.text.includes('v22.22.1')) throw new Error(`smoke Linux isolation preflight failed (${capabilities.kind})`)
   } finally { await fs.rm(sentinel, { force: true }) }
 } finally { await fs.rm(preflight, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 }) }
 dotenv.config({ quiet: true })

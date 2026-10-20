@@ -1,5 +1,11 @@
 # 任务清单
 
+### R08 隔离测试进入 required CI（2026-10-20，进行中）
+
+抽出 `IsolationBackend` 接口（`visibleHostPath`、`capabilityManifest`、`preflight`、`run`、`dispose`）：Windows 保留 WSL→bwrap；新增 Linux 原生 bwrap，使用宿主 Linux 路径与 `MINI_DSH_V2_RUNTIME` 固定的 Node 22 runtime，不搬 WSL 路径转换。preflight 实际验证命名空间可用、无非回环网络接口、工作区可写、工作区外 sentinel 不可见、超时能收掉后代进程，并输出 runtime digest。CI 新增 `Isolation (ubuntu-latest, Node 22)` job：安装 bubblewrap、用 `eval-v2-prepare-runtime.sh` 准备固定 runtime、运行契约/隔离/fixture 三组测试；TAP 中出现 `# SKIP` 即失败，失败上传 TAP。平台无关契约测试与平台专用实测分开；WSL 专用参数仍在 `isolatedCommandArgs`，Linux 自动选择 `linux-bwrap`。`eval-v2-run`、`smoke-run`、fixture probe 改用统一后端；`distro` 只在 WSL 需要。
+
+本地：契约测试 4/4 通过；完整 `pnpm test` 478 tests／448 pass／0 fail／30 skipped，`pnpm check` syntax 173 files，`pnpm lint` 187 files／0 diagnostics。本机没有 `MINI_DSH_V2_RUNTIME`，30 条隔离实测按原条件跳过；它们的真实执行与“零意外 skip”由远端 isolation job 验证，当前提交 CI 待验证。真实 provider 请求 0。
+
 ### R07 MCP 成为可控插件能力（2026-10-20，进行中）
 
 删除内置 context7 条目，`plugins.config.ts` 默认为空；MCP 只从用户目录级 `~/.mini-dsh/mcp.json`、`MINI_DSH_MCP_CONFIG` 或显式 `--mcp-config <path>` 读取，工作区本地文件不自动加载，`MINI_DSH_MCP=0` 可关闭。新增 `src/app/mcp-config.ts`：严格校验 serverName/transport/字段，stdio `env` 与 HTTP `headers` 只接受完整 `${ENV_NAME}` 引用，缺变量时启动失败并点名，`--show-config` 只展示变量名与缺失项、不连接 server。MCP 装配移入 `createHarness` 的可选 `mcpServers`，评测/离线入口不传即禁用；重复 serverName 拒绝，连接失败固定 `failOnStartupError=false`。第三方工具经 ToolRuntime 中央授权按 unknown 默认询问，`autoApprove` 不自动授权；dispose 释放注册项与子进程。

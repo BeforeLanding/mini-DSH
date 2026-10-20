@@ -286,6 +286,10 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 
 **装配与授权。** MCP server 经 `createHarness` 的可选 `mcpServers` 参数装配，不在 CLI 路径单独挂载；评测与离线入口不传该参数即明确禁用。工具名由插件命名为 `mcp__<server>__<raw>`，重复 `serverName` 在配置层拒绝。插件不声明 effect/origin，因此经 ToolRuntime 中央授权按 unknown 默认询问；`autoApprove` 不会替第三方工具自动授权。连接、调用超时与传输断开只使该 server 的工具失败或消失，不阻断主循环；dispose 释放子进程、连接与注册项。
 
+### 隔离后端（R08）
+
+隔离能力抽为 `IsolationBackend`：Windows 使用 WSL→bwrap，Linux 使用原生 bwrap；平台专用路径和参数不共享。两端都要求 `MINI_DSH_V2_RUNTIME` 指向固定 Node 22 runtime，工作区以外不挂载宿主目录，`/tmp` 为 tmpfs，`--unshare-all --die-with-parent`。`preflight` 不是环境变量检查：它实际运行候选命令，验证命名空间、无网络接口、工作区可写、隐藏 sentinel 不可见、超时能收掉后代，并输出 runtime digest。required CI 的 `isolation` job 安装 bwrap、准备固定 runtime 后运行这些测试；出现 skip 即失败，不能以“本平台不适用”自动转绿。WSL 的路径转换仍保留在 `isolatedCommandArgs`，Linux 不调用它。
+
 ## 默认参数与行为
 
 ### 请求规模与估算
