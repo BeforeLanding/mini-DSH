@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { ProviderError, ModelStreamError } from '../src/core/model-error.js'
-import { parseRetryAfter, retryDelay } from '../src/core/retry-policy.js'
+import { parseRetryAfter, retryDelay, waitForRetry } from '../src/core/retry-policy.js'
 import { createDeepSeekAdapter } from '../src/models/deepseek.js'
 
 test('Retry-After parses seconds and dates without accepting malformed or unbounded values', () => {
@@ -34,4 +34,14 @@ test('DeepSeek captures Retry-After as safe metadata without exposing response b
     assert.doesNotMatch(error.message, /fake-secret-token/)
     return true
   })
+})
+
+test('retry wait clears its timer when cancelled', async () => {
+  const controller = new AbortController()
+  let cleared = false
+  const clock = { now: () => 0, setTimeout: () => 1, clearTimeout: () => { cleared = true } }
+  const pending = waitForRetry(1000, controller.signal, clock)
+  controller.abort(new Error('cancelled'))
+  await assert.rejects(pending, /cancelled/)
+  assert.equal(cleared, true)
 })

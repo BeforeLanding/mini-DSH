@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- **R03 有账本的 provider 重试进行中（2026-10-20）**：R03a `Retry-After` 与纯策略本地 check、完整 421 通过／30 跳过、lint 通过，待独立提交及当前提交 CI；运行时尚未自动重试。下一步将每次 attempt 独立写入事件和预算账本。真实 provider 请求 0。
+- **R03 有账本的 provider 重试进行中（2026-10-20）**：R03a `6b04b03` 的 [CI 39347765168](https://github.com/BeforeLanding/mini-DSH/actions/runs/39347765168) 六组通过。主请求逐次重试账本已本地通过完整 424 通过／30 跳过、check/lint，待独立提交和当前提交 CI；摘要路径尚未接入。下一步完成摘要请求的同一策略。真实 provider 请求 0。
 
 - **R02 环境与中央授权工作分支验收完成（2026-10-19）**：R02a `70d4048` 的 [CI 39259211634](https://github.com/BeforeLanding/mini-DSH/actions/runs/39259211634)、R02b `7519753` 的 [CI 39261106135](https://github.com/BeforeLanding/mini-DSH/actions/runs/39261106135) 均六组通过。未知/第三方工具默认需人工批准，内置写/Bash 保留已有一次审批与复核。当前 MCP 仅 HTTP，无 stdio 启动点；后续增加 stdio 必须复用安全 env。env 边界不提供文件系统隔离。
 

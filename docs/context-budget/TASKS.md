@@ -2,7 +2,7 @@
 
 ### R03 有账本的 provider 重试（2026-10-20，进行中）
 
-R02b `7519753` 的 [CI 39261106135](https://github.com/BeforeLanding/mini-DSH/actions/runs/39261106135) 六组通过。预计独立提交：① 从响应头解析 `Retry-After`，定义仅限预流 429／可恢复 5xx／连接失败的纯重试策略、指数退避和 full jitter，注入时钟与随机数；本地定向 10/10、完整 421 通过／30 跳过、check/lint 通过，待提交及当前提交 CI。② 主请求与摘要请求的每次 attempt 独立 `model/start`/usage/end、dispatch gate、预算计数及 `model/retry` 链接；模拟 429→成功、503→成功、401 即停、取消/超时、等待超剩余 wall-clock、部分流禁止重试，恢复读数一致。本项不调用真实 provider；未通过前序 CI 或测试不进入下一项。
+R02b `7519753` 的 [CI 39261106135](https://github.com/BeforeLanding/mini-DSH/actions/runs/39261106135) 六组通过。独立提交：① `Retry-After` 与纯策略 `6b04b03`，[CI 39347765168](https://github.com/BeforeLanding/mini-DSH/actions/runs/39347765168) 六组通过。② 主请求每次 attempt 独立 `model/start`/usage/end、dispatch gate、预算计数及 `model/retry` 链接；本地完整 424 通过／30 跳过、check/lint 通过，待提交与当前提交 CI。③ 摘要请求应用同一有账本策略及剩余 wall-clock/取消条件，前一步 CI 通过后执行。②③ 均要求 429→成功、503→成功、401 即停、过长等待与部分流不重试、JSONL 恢复读数一致。本项不调用真实 provider；未通过前序 CI 或测试不进入下一项。
 
 ### R02 环境与统一工具授权（2026-10-19，工作分支验收完成）
 

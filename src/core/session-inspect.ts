@@ -10,7 +10,7 @@ export interface InspectReport {
   session: { id: string | null; startedAt: string | null; endedAt: null; lastRecordedAt: string | null; runs: number; finishedRuns: number; resets: number }
   latestRun: { id: string; taskId: string; startedAt: string; finishedAt: string | null; status: string; stopReason: string | null } | null
   errors: { count: number; last: { runId: string; stage: string; errorKind: string; safeMessage: string; requestId?: string; toolCallId?: string; httpStatus?: number } | null }
-  requests: { main: number; summary: number; preDispatchRejected: number; preparedUnsent: number; missingUsage: number; estimatedUsage: number }
+  requests: { main: number; summary: number; retries: number; preDispatchRejected: number; preparedUnsent: number; missingUsage: number; estimatedUsage: number }
   tools: { calls: number; confirmedErrors: number; unknownOutcomes: number; skipped: number }
   providerUsage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheReadFieldMissing: number }
   mechanisms: { compactionAttempts: number; compactionApplied: number; compactionDeclined: number; historyReads: number; previewTruncations: number }
@@ -19,7 +19,7 @@ export interface InspectReport {
 }
 
 type Request = { kind: 'main' | 'summary'; rejected: boolean; usage: boolean; estimated: boolean }
-const knownTypes = new Set(['verification/start', 'verification/result', 'file/baseline', 'file/observed', 'file/change', 'file/change-result', 'session/start', 'session/config', 'session/reset', 'context/snapshot', 'user/message', 'assistant/message', 'assistant/tool_calls', 'tool/result', 'run/start', 'run/error', 'run/finish', 'model/start', 'model/rejected', 'context/projection', 'context/summary-start', 'context/summary-end', 'context/summary', 'model/fragment', 'model/end', 'model/usage', 'tool/start'])
+const knownTypes = new Set(['verification/start', 'verification/result', 'file/baseline', 'file/observed', 'file/change', 'file/change-result', 'session/start', 'session/config', 'session/reset', 'context/snapshot', 'user/message', 'assistant/message', 'assistant/tool_calls', 'tool/result', 'run/start', 'run/error', 'run/finish', 'model/start', 'model/retry', 'model/rejected', 'context/projection', 'context/summary-start', 'context/summary-end', 'context/summary', 'model/fragment', 'model/end', 'model/usage', 'tool/start'])
 const safeToolName = (name: string | undefined) => name && /^[\w.:-]{1,80}$/.test(name) ? name : undefined
 
 function warning(error: unknown, line: number, byteOffset: number): InspectWarning {
@@ -37,7 +37,7 @@ export async function inspectSession(file: string, options: { trace?: boolean } 
     session: { id: null, startedAt: null, endedAt: null, lastRecordedAt: null, runs: 0, finishedRuns: 0, resets: 0 },
     latestRun: null,
     errors: { count: 0, last: null },
-    requests: { main: 0, summary: 0, preDispatchRejected: 0, preparedUnsent: 0, missingUsage: 0, estimatedUsage: 0 },
+    requests: { main: 0, summary: 0, retries: 0, preDispatchRejected: 0, preparedUnsent: 0, missingUsage: 0, estimatedUsage: 0 },
     tools: { calls: 0, confirmedErrors: 0, unknownOutcomes: 0, skipped: 0 },
     providerUsage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheReadFieldMissing: 0 },
     mechanisms: { compactionAttempts: 0, compactionApplied: 0, compactionDeclined: 0, historyReads: 0, previewTruncations: 0 },
@@ -120,6 +120,9 @@ export async function inspectSession(file: string, options: { trace?: boolean } 
         requests.set(event.data.requestId, { kind, rejected: false, usage: false, estimated: false })
         break
       }
+      case 'model/retry':
+        report.requests.retries++
+        break
       case 'model/rejected':
         requests.get(event.data.requestId)!.rejected = true
         report.requests.preDispatchRejected++

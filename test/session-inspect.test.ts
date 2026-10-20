@@ -48,7 +48,7 @@ test('inspect counts dispatch, summary cache, missing usage, stops and multiple 
     assert.equal(report.integrity.complete, true)
     assert.equal(report.session.runs, 2)
     assert.equal(report.latestRun?.status, 'token_budget')
-    assert.deepEqual(report.requests, { main: 2, summary: 1, preDispatchRejected: 1, preparedUnsent: 0, missingUsage: 1, estimatedUsage: 0 })
+    assert.deepEqual(report.requests, { main: 2, summary: 1, retries: 0, preDispatchRejected: 1, preparedUnsent: 0, missingUsage: 1, estimatedUsage: 0 })
     assert.deepEqual(report.providerUsage, { inputTokens: 40, outputTokens: 6, cacheReadTokens: 7, cacheReadFieldMissing: 0 })
     assert.equal(report.tools.calls, 2)
     assert.equal(report.tools.confirmedErrors, 1)

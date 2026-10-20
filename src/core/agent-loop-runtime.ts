@@ -6,7 +6,9 @@ import { CompactionRuntime } from './compaction-runtime.js'
 import type { CompactionTrigger, DeclineReason } from './compaction-runtime.js'
 import { estimateUsage } from './token-estimator.js'
 import { StreamJournal } from './stream-journal.js'
-import { ModelStreamError, runErrorData } from './model-error.js'
+import { ModelStreamError, ProviderError, runErrorData } from './model-error.js'
+import { retryDelay, waitForRetry } from './retry-policy.js'
+import { systemClock } from './run-budget-runtime.js'
 import { ModelNotDispatchedError } from './model-dispatch.js'
 import type { BudgetPolicy, RunState, Usage, StopReason } from './budget.js'
 import { createHash, randomUUID } from 'node:crypto'
@@ -35,6 +37,7 @@ export class AgentLoopRuntime {
     }
 
     clock?: Clock
+    random = Math.random
     budget?: import('./budget.js').BudgetPolicy
     async run(agent: Agent, input: string | undefined, { signal, onReasoning, onContent, onToolCall, onToolResult, budget }: RunOptions = {}) {
         const configured = { ...this.budget, ...agent.budget, ...budget }
@@ -135,54 +138,68 @@ export class AgentLoopRuntime {
             control.check()
             state.estimatedInputTokens = estimatedInputTokens
             if (overflowing()) throw new BudgetStop('context_overflow', state)
-            append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId, estimatedInputTokens })
-            const settle = (usage?: Usage) => {
+            const settle = (attemptRequestId: string, usage?: Usage) => {
                 if (!usage) return
                 state.usage.push(usage)
                 state.counters.inputTokens += usage.inputTokens
                 state.counters.outputTokens += usage.outputTokens
                 state.counters.totalTokens += usage.totalTokens
                 state.counters.cacheReadTokens += usage.cacheReadTokens ?? 0
-                append(sessionId, 'model/usage', { taskId: state.taskId, runId: state.runId, requestId, usage })
+                append(sessionId, 'model/usage', { taskId: state.taskId, runId: state.runId, requestId: attemptRequestId, usage })
             }
-            await control.wait(() => this.sessions.flush(sessionId))
-            control.check()
-            state.counters.modelRequests++
-            const journal = new StreamJournal(requestId, data => append(sessionId, 'model/fragment', data))
-            failureStage = 'model'
-            activeRequestId = requestId
-            const response = await control.wait(() => this.llm.chat(
-                {
-                    purpose: 'main',
-                    maxOutputTokens,
-                    system,
-                    messages,
-                    tools: schemas,
-                    signal: control.signal,
-                    onReasoning: chunk => { if (control.signal.aborted || journal.closed) return; journal.add('reasoning', chunk); onReasoning?.(chunk) },
-                    onContent: chunk => { if (control.signal.aborted || journal.closed) return; journal.add('content', chunk); onContent?.(chunk) },
-                },
-                agent.model,
-            ), policy.requestTimeoutMs ?? 180_000).catch(error => {
-                journal.close()
-                if (error instanceof ModelNotDispatchedError) {
-                    state.counters.modelRequests--
-                    append(sessionId, 'model/rejected', { requestId, reason: error.reason })
+            let response: Awaited<ReturnType<LlmRuntime['chat']>>
+            let attemptRequestId = requestId
+            for (let attemptIndex = 0; ; attemptIndex++) {
+                append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId: attemptRequestId, estimatedInputTokens })
+                await control.wait(() => this.sessions.flush(sessionId))
+                control.check()
+                state.counters.modelRequests++
+                const journal = new StreamJournal(attemptRequestId, data => append(sessionId, 'model/fragment', data))
+                failureStage = 'model'
+                activeRequestId = attemptRequestId
+                try {
+                    response = await control.wait(() => this.llm.chat({
+                        purpose: 'main', maxOutputTokens, system, messages, tools: schemas, signal: control.signal,
+                        onReasoning: chunk => { if (control.signal.aborted || journal.closed) return; journal.add('reasoning', chunk); onReasoning?.(chunk) },
+                        onContent: chunk => { if (control.signal.aborted || journal.closed) return; journal.add('content', chunk); onContent?.(chunk) },
+                    }, agent.model), policy.requestTimeoutMs ?? 180_000)
+                } catch (error) {
+                    journal.close()
+                    if (error instanceof ModelNotDispatchedError) {
+                        state.counters.modelRequests--
+                        append(sessionId, 'model/rejected', { requestId: attemptRequestId, reason: error.reason })
+                        errorRecorded = true
+                        if (error.reason === 'request_limit') throw new BudgetStop('max_steps', state)
+                        throw error
+                    }
+                    const partial = error instanceof ModelStreamError ? error.partial : { content: journal.content, reasoningContent: journal.reasoningContent, usage: undefined }
+                    settle(attemptRequestId, partial.usage ?? estimateUsage(estimatedInputTokens, partial))
+                    append(sessionId, 'model/end', { requestId: attemptRequestId, complete: false })
+                    const remaining = policy.maxActiveDurationMs === undefined ? Number.POSITIVE_INFINITY : policy.maxActiveDurationMs - control.activeDurationMs
+                    const delay = !journal.content && !journal.reasoningContent &&
+                        (policy.maxModelRequests === undefined || state.counters.modelRequests < policy.maxModelRequests) &&
+                        (policy.maxTotalTokens === undefined || state.counters.totalTokens < policy.maxTotalTokens)
+                        ? retryDelay(error, attemptIndex, remaining, this.random) : undefined
+                    if (delay !== undefined && error instanceof ProviderError) {
+                        const nextRequestId = randomUUID()
+                        append(sessionId, 'model/retry', { rootRequestId: requestId, failedRequestId: attemptRequestId, nextRequestId, attempt: attemptIndex + 1, delayMs: delay, errorKind: error.kind })
+                        await control.wait(() => this.sessions.flush(sessionId))
+                        await waitForRetry(delay, control.signal, this.clock ?? systemClock)
+                        control.check()
+                        attemptRequestId = nextRequestId
+                        continue
+                    }
+                    append(sessionId, 'run/error', runErrorData('model', error, { requestId: attemptRequestId }))
                     errorRecorded = true
-                    if (error.reason === 'request_limit') throw new BudgetStop('max_steps', state)
                     throw error
                 }
-                const partial = error instanceof ModelStreamError ? error.partial : { content: journal.content, reasoningContent: journal.reasoningContent, usage: undefined }
-                settle(partial.usage ?? estimateUsage(estimatedInputTokens, partial))
-                append(sessionId, 'model/end', { requestId, complete: false })
-                append(sessionId, 'run/error', runErrorData('model', error, { requestId }))
-                errorRecorded = true
-                throw error
-            }).finally(() => journal.close())
+                journal.close()
+                settle(attemptRequestId, response.usage ?? estimateUsage(estimatedInputTokens, response))
+                append(sessionId, 'model/end', { requestId: attemptRequestId, complete: response.complete !== false, finishReason: response.finishReason })
+                break
+            }
             failureStage = 'runtime'
             activeRequestId = undefined
-            settle(response.usage ?? estimateUsage(estimatedInputTokens, response))
-            append(sessionId, 'model/end', { requestId, complete: response.complete !== false, finishReason: response.finishReason })
             if (response.complete === false) throw new BudgetStop(response.finishReason === 'length' ? 'output_limit' : 'error', state)
 
             const toolCalls = response.toolCalls ?? []

@@ -1,10 +1,16 @@
 # 改动与验收证据
 
-### R03a provider 重试元数据与纯策略（2026-10-20，本地通过，待 CI）
+### R03b 主请求逐次重试账本（2026-10-20，本地通过，待 CI）
+
+主请求收到预流 429/503 或连接失败时，有限重试最多两次。每次 attempt 独立写 `model/start`、usage（provider 缺失则明确 estimated/uncertain）、`model/end`，请求数逐次计入预算；`model/retry` 记录首请求、失败请求、下次请求、序号、等待毫秒和安全错误类别。等待前落盘，下一次仍经过原 LLM dispatch gate；取消可中断定时器。流已产生内容、认证/参数错误、请求/总 token 预算不足或 `Retry-After` 超过剩余活动时间时停止。inspect JSON 的 `requests.retries` 计数是已调度的重试事件数，下一次请求是否真的开始以 `model/start` 为准；旧日志该值为 0。主请求和摘要请求的策略接入分开验收。
+
+合成 429/503→成功测试逐条核对两个 requestId、两条 usage/end、单一终态、JSONL 解析与 inspect；401、部分流、请求上限及超时等待不重试，取消定时器时清除计时器。全套本地 `pnpm check`（syntax 166 files）、`pnpm test`（454 tests / 424 pass / 0 fail / 30 skipped）、`pnpm lint`（180 files / 0 diagnostics）通过。真实模型请求 0，当前提交 CI 待验收。
+
+### R03a provider 重试元数据与纯策略（2026-10-20，工作分支验收完成）
 
 DeepSeek HTTP 失败读取标准 `Retry-After` 秒数或 HTTP 日期并保存为 `ProviderError.retryAfterMs`，不展示响应正文。纯策略仅允许预流 429、5xx 与连接失败，最多额外两次；退避为 500ms 起指数窗口内的 full jitter（上限 8s），并至少遵守 `Retry-After`。等待超出剩余时间、401/400、部分流失败均不重试。此步只定义元数据和纯策略，没有改变运行时派发次数。
 
-假响应和注入随机数/时钟的定向测试 10/10；本地 `pnpm check`（syntax 165 files）、`pnpm test`（451 tests / 421 pass / 0 fail / 30 skipped）、`pnpm lint`（179 files / 0 diagnostics）通过。真实模型请求 0。当前提交 CI 待验证。
+假响应和注入随机数/时钟的定向测试 10/10；本地 `pnpm check`（syntax 165 files）、`pnpm test`（451 tests / 421 pass / 0 fail / 30 skipped）、`pnpm lint`（179 files / 0 diagnostics）通过；提交 `6b04b03` 的 [CI 39347765168](https://github.com/BeforeLanding/mini-DSH/actions/runs/39347765168) 六组通过。真实模型请求 0。
 
 ### R02b 中央工具授权（2026-10-19，工作分支验收完成）
 
