@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### R10 官方无模型判分通道准备（2026-10-20，本地预检通过，官方 Docker 判分待运行）
+
+公开 Verified parquet 固定 revision `c104f840cc67f8b6eec6f759ebc8b2693d585d4a`、SHA-256 `a45b1fe4e2f0c8390b2b2938ac83e92ed5979000856808f3679c07812e9e6dcd`，官方兼容 harness v3.0.17 固定 `3f01bd622c0a22c00406139f69a234ef08225f22`。`scripts/swebench/poc_official.py` 在独立输出目录检查 500 行与固定 `sympy__sympy-20590` base commit；`--execute` 调官方判分两次且使用不同 run_id，只有两次 resolved、零 error、无残留容器与可记录镜像 RepoDigest 才通过。金标准 patch 仅限无模型评分通道，不注入候选 Agent。CI 新增手动 `swebench_poc` 输入，普通 PR CI 不运行该资源较重 job；证据 artifact 不上传 gold patch 或完整数据。Windows 本地固定数据预检及脚本语法、YAML 解析通过。本机 Docker Desktop Service 停止，当前账户不能启动，官方 Docker 判分尚未运行；候选文件/Bash 同树与安全边界仍待独立验证。
+
 ### R06 后续：主请求可选校准接入（2026-10-20，工作分支验收完成）
 
 运行预算新增 `tokenCalibration`（默认关闭）及 `tokenCalibrationMaxMultiplier`（1–10）；从当前会话已确认事件重建 provider usage，只对同模型／同工具 schema 的主请求应用滚动保守分位校准。投影和硬输入上限使用不小于原值的有效估算，`model/start` 仍记录原始估算，避免训练反馈；`context/projection` 另存原始估算与版本、参数、有效样本数、乘数。旧事件可读，默认路径不变；摘要请求仍仅观测。更新 DECISIONS 位移锚点。提交 `d4dc476`：定向 `node --test dist/test/token-calibration.test.js` 7/7；`pnpm check` syntax 181 files；`pnpm test` 487 tests／457 pass／0 fail／30 platform skip；`pnpm lint` 201 files／0 diagnostics。[CI 39385717730](https://github.com/BeforeLanding/mini-DSH/actions/runs/39385717730) 六 job 全绿。无真实 provider 请求，不据此默认开启校准。

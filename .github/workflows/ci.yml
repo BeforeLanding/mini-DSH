@@ -16,6 +16,10 @@ on:
         description: Verify that a failing assertion keeps CI red and uploads TAP
         type: boolean
         default: false
+      swebench_poc:
+        description: Run the pinned public SWE-bench gold adjudication probe without a model
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -196,3 +200,56 @@ jobs:
             echo 'tarball contains files outside the runtime package'
             exit 1
           fi
+
+  swebench-poc:
+    name: Official SWE-bench no-model PoC
+    if: github.event_name == 'workflow_dispatch' && inputs.swebench_poc
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Pin official harness and public dataset
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/swebench-poc"
+          mkdir -p "$root"
+          git clone --depth 1 --branch v3.0.17 https://github.com/SWE-bench/SWE-bench.git "$root/official-harness"
+          test "$(git -C "$root/official-harness" rev-parse HEAD)" = 3f01bd622c0a22c00406139f69a234ef08225f22
+          python -m pip install -e "$root/official-harness" pyarrow
+          curl --fail --location --retry 2 \
+            'https://huggingface.co/datasets/princeton-nlp/SWE-bench_Verified/resolve/c104f840cc67f8b6eec6f759ebc8b2693d585d4a/data/test-00000-of-00001.parquet' \
+            --output "$root/verified.parquet"
+          python scripts/swebench/poc_official.py --dataset "$root/verified.parquet" \
+            --harness "$root/official-harness" --out "$root/result"
+          df -h "$RUNNER_TEMP"
+
+      - name: Execute the official gold adjudication twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/swebench-poc"
+          python scripts/swebench/poc_official.py --dataset "$root/verified.parquet" \
+            --harness "$root/official-harness" --out "$root/result" \
+            --run-id-prefix "mini-dsh-${{ github.run_id }}" --execute
+
+      - name: Upload no-model PoC evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: swebench-poc-evidence
+          path: |
+            ${{ runner.temp }}/swebench-poc/result/manifest.json
+            ${{ runner.temp }}/swebench-poc/result/*.log
+            ${{ runner.temp }}/swebench-poc/result/gold.*.json
+          if-no-files-found: warn
+          retention-days: 7

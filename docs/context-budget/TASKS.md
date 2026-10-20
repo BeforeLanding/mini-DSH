@@ -4,9 +4,9 @@
 
 独立验收步骤：运行策略新增默认关闭的 `tokenCalibration` 与有界 `tokenCalibrationMaxMultiplier`。主请求只从当前会话已确认的 provider usage 重建同模型／同工具 schema 样本；投影与硬输入约束使用不小于原估算的值，`model/start` 保留原始估算以免反馈污染。投影事件记录校准版本、参数、样本数及原始／有效估算；同一日志可复算。摘要请求仍只观测，未启用运行时校准。提交 `d4dc476`：定向 7/7、完整 487 tests／457 pass／0 fail／30 platform skip、check syntax 181 files、lint 201 files／0 diagnostics；[CI 39385717730](https://github.com/BeforeLanding/mini-DSH/actions/runs/39385717730) 六 job 全绿。默认开启须另有真实观测收益证据。
 
-### R10 后续：官方无模型判分 PoC（2026-10-20，待 R06 验收）
+### R10 后续：官方无模型判分 PoC（2026-10-20，固定材料与手动运行器本地通过，官方判分待运行）
 
-先固定官方数据集／harness／任务镜像版本，建立候选目录与容器路径的一致性适配，并用一条公开已知 patch 在独立判分容器实测。验证文件和 Bash 同树、无密钥／oracle 挂载、失败清理与重复判分；记录镜像 digest、命令、结果和环境限制。五题及正式付费运行需另行授权。
+固定官方 Verified 数据集 revision `c104f840cc67f8b6eec6f759ebc8b2693d585d4a`，parquet SHA-256 `a45b1fe4e2f0c8390b2b2938ac83e92ed5979000856808f3679c07812e9e6dcd`；官方兼容 harness v3.0.17 commit `3f01bd622c0a22c00406139f69a234ef08225f22`。固定 `sympy__sympy-20590`（base `cffd4e0f…`），本地 500 行数据与 commit/hash/instance 预检通过。新增 `scripts/swebench/poc_official.py` 和现有 CI 的手动 `swebench_poc` job；金标准 patch 仅用于无模型判分通道，两个不同 run_id 防缓存误判，校验两次 resolved、零 error、无残留容器并记录镜像 digest。本机 Docker Desktop Service 停止，当前账户无法启动；官方判分需在手动 CI job 实跑后才能验收。随后验证候选目录中文件工具与 Bash 同树、无密钥／oracle 挂载、失败清理与路径边界，不能把判分通道通过当完整候选适配。五题及正式付费运行需另行授权。
 
 ### R11 可安装、可展示、可解释（2026-10-20，工作分支验收完成）
 

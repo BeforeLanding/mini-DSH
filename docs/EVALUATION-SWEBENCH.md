@@ -21,11 +21,17 @@ This document describes the **protocol and offline adapters**, not a result. No 
 
 ## Preconditions still blocking a real run
 
-- A fixed dataset revision and the official harness commit.
+- Dataset revision `c104f840cc67f8b6eec6f759ebc8b2693d585d4a` and official v3.0.17 harness commit `3f01bd622c0a22c00406139f69a234ef08225f22` are pinned for the first no-model probe. The downloaded 500-row parquet was SHA-256 checked (`a45b1fe4e2f0c8390b2b2938ac83e92ed5979000856808f3679c07812e9e6dcd`). The full 50-task subset still needs its own frozen selection file and image digests.
 - A no-model PoC proving: a known test patch is scored through the official adjudication channel; the candidate workspace and container `/testbed` see the same tree; the candidate container has no provider key, host HOME, Docker socket, or oracle mount; cleanup leaves no residue.
 - Per-instance image digests, frozen after that PoC.
 - A same-model baseline configuration and a price snapshot.
 - Explicit authorization for paid model calls and any new cloud/compute resources.
+
+## Pinned no-model adjudication probe
+
+`scripts/swebench/poc_official.py` first verifies the dataset bytes, official harness commit, 500-row count and fixed `sympy__sympy-20590` base commit. Its `--execute` path uses the **public gold patch only for the scoring-channel probe**, with two distinct run IDs, and requires both official reports to resolve the instance. It records the pulled image RepoDigest and checks for leftover containers. Gold text remains in a temporary single-instance JSON file and must never be passed to an Agent run. This proves only the official adjudication channel, not mini-DSH's ability to solve the task.
+
+The existing CI workflow has an explicit `workflow_dispatch` input `swebench_poc`; ordinary PR CI leaves this resource-heavy job off. The local preflight passed with the pinned dataset and official checkout. Local Docker Desktop is installed but its service cannot be started by the current account, so **official Docker scoring has not yet passed**. The candidate workspace and file/Bash consistency portion remains a separate acceptance step after scoring works.
 
 ## Commands
 
