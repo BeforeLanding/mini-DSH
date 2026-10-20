@@ -136,7 +136,8 @@ try {
     })
   } finally { await harness.dispose() }
   assert.deepEqual(results.map(result => result.name), calls.map(call => call.name))
-  assert.ok(results.every(result => !result.isError))
+  const failed = results.filter(result => result.isError)
+  assert.equal(failed.length, 0, `candidate tool errors: ${JSON.stringify(failed).slice(0, 4000)}`)
   const bashRead = results[1]!.value as { stdout: { text: string } }
   assert.equal(bashRead.stdout.text, 'host-visible\n')
   assert.equal(await fs.readFile(path.join(candidate, 'mini_dsh_probe.txt'), 'utf8'), 'host-visible\ncontainer-visible\n')
