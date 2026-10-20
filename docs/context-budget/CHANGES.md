@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### R10 SWE-bench 离线预注册与预算适配（2026-10-20，离线完成，运行未授权）
+
+新增 `scripts/swebench/protocol.ts`：repository 分层 + seeded 轮转选题、预算上限、prediction 校验、宿主→`/testbed` 映射与 episode 汇总。`scripts/swebench/preregister.ts` 输出 `instances.json`，记录 dataset revision、官方 harness commit、选中实例、四臂、评分规则、配置上限与 `paidRequests: 0`；镜像 digest 明确列为待补。`docs/EVALUATION-SWEBENCH.md` 固定 PoC 前置条件：独立判分、工作区/容器文件与 Bash 一致、容器无密钥/HOME/Docker socket/oracle、清理无残留。
+
+验收：`test/swebench-protocol.test.ts` 5/5；用 60 条合成元数据实跑 CLI，得到 50 题 / 3 repository / 4 臂 / $109.50 配置上限 / 付费请求 0。**未执行且未声称完成**：真实 SWE-bench 数据集与镜像、无模型判分 PoC、开发批次、正式 50 题、任何付费模型调用。这些阻塞于 dataset revision、镜像 digest、同模型基线与付费授权。
+
 ### R09 公开合成证据包与离线复算（2026-10-20，本地通过，待 CI）
 
 `scripts/export-public-evidence.ts` 生成两条脚本化完整轨迹：`normal-fix` 与 `provider-recovery`（首次 429→重试成功，事件含 `model/retry`）。每条包含 events、patch、verification、manifest、report、SHA256SUMS；manifest 记录 source commit/dirty、模型标签、预算、任务集与 seed、tool-schema digest、策略版本、环境、合成价格快照与缺失计数。事件写入前把临时目录与主目录替换为 `<tmp>`/`<home>`；合成 usage 明确标为 provider 形态但仅用于复算，不冒充真实计费。
@@ -16,7 +22,9 @@
 
 首次远端 isolation job 在“准备固定 runtime”步骤失败：旧脚本的 `.deb` 版本清单（如 `libada-url0-3`）不在 ubuntu-latest 的仓库里。处置：`eval-v2-prepare-runtime.sh` 改为下载官方 `node-v22.22.1-linux-x64.tar.xz`，用固定 SHA-256 校验后解包到同一条 `usr/bin/node` 路径；不再依赖发行版包版本。`probe` 也改为在 backend 自己的 workspace 内建探测目录，sentinel 放在绑定范围之外。第二次远端运行进入测试后暴露 Ubuntu 24.04 的 AppArmor 无特权 userns 限制：`bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`；CI 在安装 bubblewrap 后关闭 `kernel.apparmor_restrict_unprivileged_userns`，没有降低隔离参数或跳过测试。
 
-本地用 WSL 的原生 bwrap 与同一固定 runtime 实跑：契约 4/4、隔离实测 3/3、V2 fixture 31/31，均 **0 skipped**；Linux 后端真实执行了命名空间隐藏、超时收进程与 fixture 验收。Windows 宿主完整 `pnpm test` 仍为 478 tests / 448 pass / 0 fail / 30 skipped（本机无 Linux runtime，按条件跳过），`pnpm check` syntax 173 files、`pnpm lint` 187 files / 0 diagnostics。远端 isolation job 修复后待验证；真实 provider 请求 0。
+本地用 WSL 的原生 bwrap 与同一固定 runtime 实跑：契约 4/4、隔离实测 3/3、V2 fixture 31/31，均 **0 skipped**；Linux 后端真实执行了命名空间隐藏、超时收进程与 fixture 验收。Windows 宿主完整 `pnpm test` 仍为 478 tests / 448 pass / 0 fail / 30 skipped（本机无 Linux runtime，按条件跳过），`pnpm check` syntax 173 files、`pnpm lint` 187 files / 0 diagnostics。
+
+`642f693` 的 [CI 39381000750](https://github.com/BeforeLanding/mini-DSH/actions/runs/39381000750) 五个 job 全部通过；其中 `Isolation (ubuntu-latest, Node 22)` 的 TAP 为 **38 tests / 38 pass / 0 fail / 0 skipped**，证明 required isolation 在远端真实执行且没有以平台条件跳过。R08 在工作分支验收完成，main 未合并；真实 provider 请求 0。
 
 ### R06 当前提交 CI 验收（2026-10-20）
 
@@ -24,7 +32,7 @@
 
 ### R07 修正最低 Node 版本（2026-10-20，本地通过，待 CI）
 
-`f413f44` 的 CI 在 Node 20.18.1 两组红：MCP SDK 使用 `Promise.withResolvers`，插件加载报 `Promise.withResolvers is not a function`，随后两条 MCP 集成测试失败。这不是可跳过的平台差异——声明的最低版本必须能加载已交付的依赖。处置：`package.json` 的 `engines` 提高到 `>=22`，CI matrix 改为 Node 22/24（不再测试已 EOL 且无法加载 MCP 的 Node 20），README 与 AGENTS 同步；`loadMcpServers` 与 `createHarness` 在配置了 server 且运行时低于 22 时显式失败，未配置 MCP 的路径不受影响。没有删除测试、没有按平台 skip。本地 Node 22 下 `pnpm check` syntax 173 files、`pnpm test` 478 tests / 448 pass / 0 fail / 30 skipped、`pnpm lint` 187 files / 0 diagnostics。当前提交 CI 待验证（Node 22/24 + isolation）。
+`f413f44` 的 CI 在 Node 20.18.1 两组红：MCP SDK 使用 `Promise.withResolvers`，插件加载报 `Promise.withResolvers is not a function`，随后两条 MCP 集成测试失败。这不是可跳过的平台差异——声明的最低版本必须能加载已交付的依赖。处置：`package.json` 的 `engines` 提高到 `>=22`，CI matrix 改为 Node 22/24（不再测试已 EOL 且无法加载 MCP 的 Node 20），README 与 AGENTS 同步；`loadMcpServers` 与 `createHarness` 在配置了 server 且运行时低于 22 时显式失败，未配置 MCP 的路径不受影响。没有删除测试、没有按平台 skip。本地 Node 22 下 `pnpm check` syntax 173 files、`pnpm test` 478 tests / 448 pass / 0 fail / 30 skipped、`pnpm lint` 187 files / 0 diagnostics。`642f693` 的 [CI 39381000750](https://github.com/BeforeLanding/mini-DSH/actions/runs/39381000750) 五个 job 全部通过（Ubuntu/Windows × Node 22/24 四项测试 + isolation），MCP 集成测试在提高后的最低版本上真实执行。
 
 ### R07 MCP 默认关闭与可控装配（2026-10-20，本地通过，待 CI）
 

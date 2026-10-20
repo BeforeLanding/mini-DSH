@@ -27,6 +27,7 @@
     "token:error": "pnpm build && node dist/scripts/report-token-error.js",
     "evidence:export": "pnpm build && node dist/scripts/export-public-evidence.js",
     "evidence:recompute": "pnpm build && node dist/scripts/recompute-report.js",
+    "swebench:preregister": "pnpm build && node dist/scripts/swebench/preregister.js",
     "eval:v2": "pnpm build && node dist/scripts/eval-v2.js",
     "eval:v2-freeze": "pnpm build && node dist/scripts/eval-v2-freeze.js",
     "eval:v2-report": "pnpm build && node dist/scripts/eval-v2-report.js",

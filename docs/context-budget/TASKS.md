@@ -1,22 +1,28 @@
 # 任务清单
 
+### R10 外部子集与上下文消融（2026-10-20，离线适配完成，运行阻塞）
+
+新增 `scripts/swebench/protocol.ts` 与 `scripts/swebench/preregister.ts`、`test/swebench-protocol.test.ts`、`docs/EVALUATION-SWEBENCH.md`。离线适配包括：按 repository 分层、固定 seed 的确定性子集选择（不使用事后自造难度）；配置上限预算（题数 × 臂数 × 每题 cap + 开发批次 + 计算储备，明确不是预期花费）；官方 predictions 三字段校验（空 patch 允许）；宿主候选目录→容器 `/testbed` 的显式映射与越界拒绝；episode 汇总保留基础设施失败在主分母、未知成本单列。预注册 CLI 需要真实 dataset revision 与官方 harness commit，写入 arms、scoring、镜像 digest 待补项与 `paidRequests: 0`。
+
+验收：协议测试 5/5；用 60 条合成元数据跑 CLI，得到 50 题、3 个 repository、4 臂、上限 $109.50、`paidRequests: 0`。**未执行**：真实 SWE-bench 数据集下载、任务镜像 pull、无模型判分 PoC、5 题开发批次、正式 50 题或任何付费模型调用。阻塞于数据集 revision/官方 harness commit、镜像 digest、同模型基线与付费授权；不预填“50 题约 $2”。
+
 ### R09 公开合成证据包与离线复算（2026-10-20，进行中）
 
 新增 `scripts/export-public-evidence.ts`：用脚本化 `repair` fixture 生成两条专门合成的完整轨迹——`normal-fix`（正常修复）与 `provider-recovery`（首次 429 后重试成功）。每条包含 `events.jsonl`、`patch.diff`、`verification.json`、`manifest.json`（schemaVersion、source commit/dirty、模型标签、预算、任务集与 seed、工具 schema digest、策略版本、环境、价格快照、缺失计数）、`report.json` 与 `SHA256SUMS`。事件在写入前把临时工作区/主目录替换为 `<tmp>`/`<home>`，不包含密钥、真实用户提示或私有工具输出。新增 `docs/EVALUATION.md` 与 `docs/RESULTS.md`，明确合成轨迹不是能力证据、历史 NX-45 原始日志保持私有。新增 `scripts/recompute-report.ts`：离线校验 checksum、从事件复算 report、用 `inspect` 确认完整可读，并重建/比对 RESULTS，不需要 API key 或网络。成本按 `(input−cacheRead)×inputPrice + cacheRead×cacheReadPrice + output×outputPrice` 计算；estimated 尝试单列不进成本，不用零填补。
 
 验收：新目录只需 `events.jsonl` 与已提交文件即可复算；`node dist/scripts/recompute-report.js docs/samples --check` 输出完全匹配；`test/public-evidence.test.ts` 在 CI 中执行同一校验，并断言 provider-recovery 至少有一次 retry；两条样例均通过 fixture 验收。真实 provider 请求 0；当前提交 CI 待验证。
 
-### R08 隔离测试进入 required CI（2026-10-20，进行中）
+### R08 隔离测试进入 required CI（2026-10-20，工作分支验收完成）
 
 抽出 `IsolationBackend` 接口（`visibleHostPath`、`capabilityManifest`、`preflight`、`run`、`dispose`）：Windows 保留 WSL→bwrap；新增 Linux 原生 bwrap，使用宿主 Linux 路径与 `MINI_DSH_V2_RUNTIME` 固定的 Node 22 runtime，不搬 WSL 路径转换。preflight 实际验证命名空间可用、无非回环网络接口、工作区可写、工作区外 sentinel 不可见、超时能收掉后代进程，并输出 runtime digest。CI 新增 `Isolation (ubuntu-latest, Node 22)` job：安装 bubblewrap、用 `eval-v2-prepare-runtime.sh` 准备固定 runtime、运行契约/隔离/fixture 三组测试；TAP 中出现 `# SKIP` 即失败，失败上传 TAP。平台无关契约测试与平台专用实测分开；WSL 专用参数仍在 `isolatedCommandArgs`，Linux 自动选择 `linux-bwrap`。`eval-v2-run`、`smoke-run`、fixture probe 改用统一后端；`distro` 只在 WSL 需要。
 
-首次远端 isolation job 在准备 runtime 时失败（旧 `.deb` 清单的 `libada-url0-3` 不在 ubuntu-latest 仓库），已改为官方 Node 22.22.1 tarball + 固定 SHA。第二次已进入测试，但 Ubuntu 24.04 的 AppArmor 限制使 bwrap 配置 loopback 失败（`RTM_NEWADDR: Operation not permitted`）；CI 改为关闭 `kernel.apparmor_restrict_unprivileged_userns`，不降低隔离参数、不跳过测试。本地用 WSL 原生 bwrap 和同一 runtime 实跑：契约 4/4、隔离 3/3、V2 fixture 31/31，**0 skipped**；Windows 宿主完整 `pnpm test` 478 tests／448 pass／0 fail／30 skipped（本机无 Linux runtime，按条件跳过），`pnpm check` syntax 173 files，`pnpm lint` 187 files／0 diagnostics。远端 isolation job 修复后待验证；真实 provider 请求 0。
+首次远端 isolation job 在准备 runtime 时失败（旧 `.deb` 清单的 `libada-url0-3` 不在 ubuntu-latest 仓库），已改为官方 Node 22.22.1 tarball + 固定 SHA。第二次已进入测试，但 Ubuntu 24.04 的 AppArmor 限制使 bwrap 配置 loopback 失败（`RTM_NEWADDR: Operation not permitted`）；CI 改为关闭 `kernel.apparmor_restrict_unprivileged_userns`，不降低隔离参数、不跳过测试。本地用 WSL 原生 bwrap 和同一 runtime 实跑：契约 4/4、隔离 3/3、V2 fixture 31/31，**0 skipped**；Windows 宿主完整 `pnpm test` 478 tests／448 pass／0 fail／30 skipped（本机无 Linux runtime，按条件跳过），`pnpm check` syntax 173 files，`pnpm lint` 187 files／0 diagnostics。`642f693` 的 [CI 39381000750](https://github.com/BeforeLanding/mini-DSH/actions/runs/39381000750) 五个 job 全部通过，isolation job TAP 为 38 tests／38 pass／0 fail／0 skipped。R08 在工作分支验收完成，main 未合并；真实 provider 请求 0。
 
-### R07 MCP 成为可控插件能力（2026-10-20，进行中）
+### R07 MCP 成为可控插件能力（2026-10-20，工作分支验收完成）
 
 删除内置 context7 条目，`plugins.config.ts` 默认为空；MCP 只从用户目录级 `~/.mini-dsh/mcp.json`、`MINI_DSH_MCP_CONFIG` 或显式 `--mcp-config <path>` 读取，工作区本地文件不自动加载，`MINI_DSH_MCP=0` 可关闭。新增 `src/app/mcp-config.ts`：严格校验 serverName/transport/字段，stdio `env` 与 HTTP `headers` 只接受完整 `${ENV_NAME}` 引用，缺变量时启动失败并点名，`--show-config` 只展示变量名与缺失项、不连接 server。MCP 装配移入 `createHarness` 的可选 `mcpServers`，评测/离线入口不传即禁用；重复 serverName 拒绝，连接失败固定 `failOnStartupError=false`。第三方工具经 ToolRuntime 中央授权按 unknown 默认询问，`autoApprove` 不自动授权；dispose 释放注册项与子进程。
 
-验收：默认无配置时无 MCP 工具、不加载插件；用户级/显式配置可加载本地 stdio mock server 的 list/call；超时与调用中退出返回错误而非挂住；拒绝审批时 mock 计数器不增加；重复 serverName、字面 secret、缺失变量、非法 transport/url/未知字段均拒绝；show-config 不展开 secret 且不连接；dispose 后工具不可解析。新增 `test/mcp-config.test.ts` 6 条与 `test/fixtures/mcp/mock-server.mjs`；本地 `pnpm check` syntax 172 files、`pnpm test` 474 tests／444 pass／0 fail／30 skipped、`pnpm lint` 186 files／0 diagnostics。`f413f44` 的 Node 20.18.1 两组因 MCP SDK 的 `Promise.withResolvers` 红灯；最低版本已提高到 Node 22，CI matrix 改为 22/24，配置 MCP 时低版本显式失败，未删除或跳过测试。真实 provider 请求 0；当前提交 CI 待验证。
+验收：默认无配置时无 MCP 工具、不加载插件；用户级/显式配置可加载本地 stdio mock server 的 list/call；超时与调用中退出返回错误而非挂住；拒绝审批时 mock 计数器不增加；重复 serverName、字面 secret、缺失变量、非法 transport/url/未知字段均拒绝；show-config 不展开 secret 且不连接；dispose 后工具不可解析。新增 `test/mcp-config.test.ts` 6 条与 `test/fixtures/mcp/mock-server.mjs`；本地 `pnpm check` syntax 172 files、`pnpm test` 474 tests／444 pass／0 fail／30 skipped、`pnpm lint` 186 files／0 diagnostics。`f413f44` 的 Node 20.18.1 两组因 MCP SDK 的 `Promise.withResolvers` 红灯；最低版本已提高到 Node 22，CI matrix 改为 22/24，配置 MCP 时低版本显式失败，未删除或跳过测试。`642f693` 的 [CI 39381000750](https://github.com/BeforeLanding/mini-DSH/actions/runs/39381000750) 五个 job 全部通过，R07 在工作分支验收完成。真实 provider 请求 0。
 
 ### R06 token 估算在线观测与受控校准（2026-10-20，进行中）
 
