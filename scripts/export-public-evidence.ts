@@ -43,7 +43,9 @@ function sanitizeEvent(event: SessionEvent): SessionEvent {
 }
 
 function filePatch(file: string, oldText: string, newText: string) {
-  const oldLines = oldText.split('\n'), newLines = newText.split('\n')
+  // checksum 必须描述可跨平台检出的字节：统一为 LF，配合 .gitattributes 的 -text。
+  const oldLines = oldText.replaceAll('\r\n', '\n').split('\n')
+  const newLines = newText.replaceAll('\r\n', '\n').split('\n')
   return `--- a/${file}\n+++ b/${file}\n@@ -1,${oldLines.length} +1,${newLines.length} @@\n${oldLines.map(line => `-${line}`).join('\n')}\n${newLines.map(line => `+${line}`).join('\n')}\n`
 }
 
