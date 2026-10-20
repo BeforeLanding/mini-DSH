@@ -112,6 +112,12 @@ jobs:
       - name: Install bubblewrap
         run: sudo apt-get update && sudo apt-get install -y bubblewrap
 
+      # Ubuntu 24.04 的 AppArmor 默认限制无特权 user namespace，bwrap 会在配置
+      # loopback 时得到 RTM_NEWADDR: Operation not permitted。解除这条系统限制；
+      # 若内核没有该键，allow 失败仍由下面的 preflight/测试显式暴露。
+      - name: Allow unprivileged user namespaces for bubblewrap
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+
       - name: Prepare pinned Linux runtime
         run: |
           sh scripts/eval-v2-prepare-runtime.sh "$RUNNER_TEMP/v2-runtime"

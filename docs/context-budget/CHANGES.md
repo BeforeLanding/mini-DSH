@@ -1,12 +1,20 @@
 # 改动与验收证据
 
+### R09 公开合成证据包与离线复算（2026-10-20，本地通过，待 CI）
+
+`scripts/export-public-evidence.ts` 生成两条脚本化完整轨迹：`normal-fix` 与 `provider-recovery`（首次 429→重试成功，事件含 `model/retry`）。每条包含 events、patch、verification、manifest、report、SHA256SUMS；manifest 记录 source commit/dirty、模型标签、预算、任务集与 seed、tool-schema digest、策略版本、环境、合成价格快照与缺失计数。事件写入前把临时目录与主目录替换为 `<tmp>`/`<home>`；合成 usage 明确标为 provider 形态但仅用于复算，不冒充真实计费。
+
+`scripts/recompute-report.ts` 不联网、不需要 key：逐个校验 SHA256SUMS，从 `events.jsonl` 重算 `report.json`，用 `inspectSession` 确认完整可读，并重建/比对 `docs/RESULTS.md`。成本口径为 `(input−cacheRead)×inputPrice + cacheRead×cacheReadPrice + output×outputPrice`（每百万 token）；estimated 尝试 excluded 并记入 `costBasis`，不补零。新增 `test/public-evidence.test.ts` 在 CI 中执行同一校验，并断言 provider-recovery 至少一次 retry、轨迹无绝对用户路径。`docs/EVALUATION.md` 区分回归 fixture、合成样例与真实模型运行，明确 NX-45 原始日志私有。
+
+本地两条样例均 `accepted=true`；`normal-fix` 5 请求/4 工具/1 预期前置检查错误/$0.001218；`provider-recovery` 6 请求/1 retry/4 工具/$0.001218；`recompute-report --check` 与 `test/public-evidence.test.ts` 通过。真实 provider 请求 0；当前提交 CI 待验证。
+
 ### R08 隔离后端与 required CI job（2026-10-20，本地契约通过，待远端隔离验证）
 
 `scripts/eval-v2-isolation.ts` 改为 `IsolationBackend` 接口：平台选择、capability manifest、preflight、run、dispose 分离。Windows 继续走 `wsl.exe` + `bwrap`；Linux 新增原生 `bwrap` 参数（宿主 `/usr/bin` 提供 bash/coreutils，固定 runtime 提供 Node 22 与 `/usr/share/nodejs`，工作区以外不挂载）。preflight 在真实 bwrap 中检查工作区可写、无宿主 sentinel、无非回环网络接口、150 ms 超时后后代进程不能继续写文件，并计算 runtime digest（Node 二进制 + `eval-v2-runtime.sha256`）。`createIsolatedCommandRunner` 保持原入口并自动选择后端；`eval-v2-run`、`smoke-run`、fixture probe 与 V2 fixture 改为传 `runtimeRoot`，`distro` 仅 WSL 使用。
 
 `.github/workflows/ci.yml` 新增 `isolation` job（ubuntu-latest / Node 22）：安装 bubblewrap、准备固定 runtime、构建，然后运行契约、隔离实测与 V2 fixture 测试。任何 `# SKIP` 都使 job 失败，失败上传 TAP，避免“跳过即绿”。新增 `test/eval-v2-isolation-contract.test.ts` 4 条覆盖路径映射、平台专用参数、后端选择与 runtime 指纹；隔离实测测试改为在 Windows/Linux 都只依赖 `MINI_DSH_V2_RUNTIME`。
 
-首次远端 isolation job 在“准备固定 runtime”步骤失败：旧脚本的 `.deb` 版本清单（如 `libada-url0-3`）不在 ubuntu-latest 的仓库里。处置：`eval-v2-prepare-runtime.sh` 改为下载官方 `node-v22.22.1-linux-x64.tar.xz`，用固定 SHA-256 校验后解包到同一条 `usr/bin/node` 路径；不再依赖发行版包版本。`probe` 也改为在 backend 自己的 workspace 内建探测目录，sentinel 放在绑定范围之外。
+首次远端 isolation job 在“准备固定 runtime”步骤失败：旧脚本的 `.deb` 版本清单（如 `libada-url0-3`）不在 ubuntu-latest 的仓库里。处置：`eval-v2-prepare-runtime.sh` 改为下载官方 `node-v22.22.1-linux-x64.tar.xz`，用固定 SHA-256 校验后解包到同一条 `usr/bin/node` 路径；不再依赖发行版包版本。`probe` 也改为在 backend 自己的 workspace 内建探测目录，sentinel 放在绑定范围之外。第二次远端运行进入测试后暴露 Ubuntu 24.04 的 AppArmor 无特权 userns 限制：`bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`；CI 在安装 bubblewrap 后关闭 `kernel.apparmor_restrict_unprivileged_userns`，没有降低隔离参数或跳过测试。
 
 本地用 WSL 的原生 bwrap 与同一固定 runtime 实跑：契约 4/4、隔离实测 3/3、V2 fixture 31/31，均 **0 skipped**；Linux 后端真实执行了命名空间隐藏、超时收进程与 fixture 验收。Windows 宿主完整 `pnpm test` 仍为 478 tests / 448 pass / 0 fail / 30 skipped（本机无 Linux runtime，按条件跳过），`pnpm check` syntax 173 files、`pnpm lint` 187 files / 0 diagnostics。远端 isolation job 修复后待验证；真实 provider 请求 0。
 
