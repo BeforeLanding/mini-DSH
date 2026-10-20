@@ -4,13 +4,15 @@
 
 ## 当前状态
 
+- **工作分支已合并到 main（2026-10-20）**：草稿 [PR #3](https://github.com/BeforeLanding/mini-DSH/pull/3) 以保留提交历史的 merge commit `a58ab5d441185479f4bc83aca30f4b6f63f3f902` 合并；`origin/main` 已从 `32e2598` 前进到 `a58ab5d`。main 的 [CI 39428240871](https://github.com/BeforeLanding/mini-DSH/actions/runs/39428240871) 六个 job 全绿（Ubuntu/Windows × Node 22/24、isolation、package-install）；`Official SWE-bench no-model PoC` 按普通 PR 配置 skipped。历史红灯 run 39133594202 保留作证据，不代表当前 main。工作分支保留，未删除。
+
 - **R10 正式评测执行器零付费准备完成（2026-10-20）**：`430234e` 新增 `scripts/swebench/{run,report,workspace}.ts`，并扩展 `protocol.ts`/`preregister.ts`：开发批次与正式批次分开冻结、gold 字段机械拒绝、确定性 arm 交错顺序、每任务金额/请求/工具/时间/输出上限、批次硬上限、基础设施失败与未知 usage 停批、空 patch 保存、批次级 `--resume`（不重跑已完成/中断 episode）、独立官方评分与每批新 run_id、Wilson/McNemar/配对四格报告与原始证据关联。脚本化零模型端到端测试覆盖正常、基础设施停止、未知 usage、恢复、draft/gold 拒绝。基线：`pnpm test` 508 tests／478 pass／0 fail／30 skipped，`pnpm check` syntax 192 files，`pnpm lint` 213 files／0 diagnostics；定向 swebench 17/17。**仍未执行** 5 题开发批次、正式 50 题或任何付费模型调用；外部 mini-SWE-agent 基线适配器、50 题镜像 digest、价格快照、开发批次观测与付费授权仍需补齐，manifest 保持 draft。
 
 - **MCP stdio 子进程 env 边界收紧（2026-10-20）**：`6113bc7` 在 `createHarness` 装配处把 stdio MCP 条目改由内置启动器拉起。启动器用 `childEnvironment` 显式构造变量（PATH/locale/临时目录/Windows 系统目录），HOME 指向独立临时目录，显式 `${ENV_NAME}` 引用按名转交、值不经过 argv；provider key、代理、SSH agent、`NODE_OPTIONS` 与真实 HOME 不再继承，`HOME`/`USERPROFILE`/`NODE_OPTIONS` 也不接受显式转发。真实 mock 子进程测试验证 list/call/timeout/disconnect/dispose、审批拒绝、启动器幂等、泄漏边界与 dispose 后 server 进程被回收。`pnpm test` 497 tests／467 pass／0 fail／30 skipped；[CI 39421704013](https://github.com/BeforeLanding/mini-DSH/actions/runs/39421704013) 六个 job 全绿，SWE-bench PoC 按配置跳过。SDK 仍负责协议与连接，启动器只代理 stdio；server 不响应 stdin EOF 时会在宽限后被终止，文件系统访问边界不变。
 
 - **R10 候选环境一致性与无模型 PoC 通过（2026-10-20）**：`5b296d3` 起改为逐路径 blob OID 比较并以 raw diff 交叉核对，确认镜像 HEAD `5efaed…` 与数据集 base `cffd4e0…` 的 1828 个条目内容完全一致，只有 1758 个 `100644→100755` mode 差异。`74144db`、`bc7a704`、`217fd95`、`9bff11a`、`f52699c` 依次修正挂载参数、Git 信任项、失败诊断与容器 UID。最终 `f52699c` 的手动 [CI 39395532729](https://github.com/BeforeLanding/mini-DSH/actions/runs/39395532729) 七个 job 全绿；候选证据显示宿主文件工具与容器 Bash 双向可见、无网络/仅 `/testbed` 挂载/只读根/非特权/零 provider 请求，候选 patch 独立官方判分 1/1 resolved、0 error、无残留容器。证据在 `D:\Agent\outputs\mini-dsh-swebench-poc\ci-39395532729`。这只验收候选路径与评分通道，不证明模型能力；5 题开发批次、正式 50 题、付费调用与新增云资源仍未授权。
 
-- **R00—R11 状态核查（2026-10-20）**：当前工作分支 HEAD 的完整 `pnpm test` 为 494 tests／464 pass／0 fail／30 skipped，`pnpm check` 186 files、`pnpm lint` 206 files／0 diagnostics；离线的 fixtures、eval:offline、eval:estimate、evidence 复算均通过。R00—R05、R07—R09、R11 的代码与工作分支 CI 证据齐全；R06 默认关闭、R10 无模型 PoC 与正式执行器零付费准备已完成；R11 未发布。**main 仍是 `32e2598` 且历史 CI 红灯（run 39133594202），工作分支绿色不等于 main 已修复**。剩余边界：付费的 5 题/50 题、npm 发布、tag/Release、ECS 部署均未授权；R06 默认开启缺真实 provider 观测；R10 缺外部基线适配器、50 题镜像 digest、价格快照与开发批次观测；作者归属中 `unknown`/`CodexSandboxOffline` 与「个人负责范围」仍待用户确认，未做 `.mailmap` 或历史改写。
+- **R00—R11 状态核查（2026-10-20）**：当前工作分支 HEAD 的完整 `pnpm test` 为 494 tests／464 pass／0 fail／30 skipped，`pnpm check` 186 files、`pnpm lint` 206 files／0 diagnostics；离线的 fixtures、eval:offline、eval:estimate、evidence 复算均通过。R00—R05、R07—R09、R11 的代码与工作分支 CI 证据齐全；R06 默认关闭、R10 无模型 PoC 与正式执行器零付费准备已完成；R11 未发布。**main 已由 `a58ab5d` 合并，main CI [39428240871](https://github.com/BeforeLanding/mini-DSH/actions/runs/39428240871) 六 job 全绿；历史红灯 run 39133594202 仅保留为历史证据**。剩余边界：付费的 5 题/50 题、npm 发布、tag/Release、ECS 部署均未授权；R06 默认开启缺真实 provider 观测；R10 缺外部基线适配器、50 题镜像 digest、价格快照与开发批次观测；作者归属中 `unknown`/`CodexSandboxOffline` 与「个人负责范围」仍待用户确认，未做 `.mailmap` 或历史改写。
 
 - **R10 候选适配本地通过（2026-10-20；远端容器实测已由顶部条目验收）**：Docker exec runner 限定候选目录 `/testbed`，脚本化 harness 准备双向文件/Bash 可见性、容器隔离与独立候选 patch 判分。定向 2/2，完整 `pnpm test` 489/459/0/30，check/lint 通过。前序官方 gold 判分已通过；本步骤必须再次手动触发 `swebench_poc` 并检查 candidate evidence，才能验收 R10 无模型 PoC。
 
@@ -140,7 +142,7 @@
 
 ## 当前阻塞与授权边界
 
-- **main 未合并**：工作分支 `fix/mini-dsh-portfolio-r00` 的 CI 绿不等于 `main` 已修复；`main` 仍为 `32e2598`，合并是最终验收的外部条件。
+- **main 已合并**：`fix/mini-dsh-portfolio-r00` 经 PR #3 以 merge commit `a58ab5d` 合并；main CI [39428240871](https://github.com/BeforeLanding/mini-DSH/actions/runs/39428240871) 六 job 全绿。合并后的改动仍需按对应 main 提交核对 CI，不能把合并前的工作分支 run 当作合并后证据。
 - **R10 付费运行未授权**：5 题开发批次与正式 50 题都没有执行；还缺外部 mini-SWE-agent 基线适配器、50 题镜像 digest、价格快照、开发批次观测与用户对金额上限的明确批准。manifest 保持 `draft`。
 - **发布未授权**：npm 发布、tag/Release、ECS 部署均未执行。部署已与发布拆开：`Deploy ECS` 只能手动派发，tag/Release 不再触发生产部署。
 - **作者归属待确认**：`unknown`/`CodexSandboxOffline` 不映射为个人，未做 `.mailmap` 或历史改写；个人负责范围仍需用户确认。
@@ -173,7 +175,7 @@
 
 ## 下一步
 
-1. **合并前**：等待 `main` 合并授权；合并后重新核对 `main` 的 required CI，不能用工作分支绿色替代。
+1. **合并后**：main 的 required CI 已在 `a58ab5d` 上通过；后续改动若再合并，须重新核对对应 main 提交的 CI，不能用旧 run 替代。
 2. **R10 付费前**：提供并审核 5 题开发批次配置——模型 id、官方价格快照（来源与日期）、同模型 mini-SWE-agent 的固定 commit 与适配器、50 题选择文件及逐题镜像 digest、批次金额上限。先跑开发批次，按实测使用量重估正式批次，再单独申请正式 50 题授权。
 3. **发布前**：确认作者归属与个人负责范围；npm 发布、tag/Release 与 ECS 部署分别取得明确授权；`Deploy ECS` 保持手动派发。
 4. **不在现有授权内自动执行**：任何付费模型调用、新增付费云资源、npm 发布、tag/Release、ECS 部署。

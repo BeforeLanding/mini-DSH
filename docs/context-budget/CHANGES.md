@@ -5,7 +5,8 @@
 - 代码 tip `bece051`（其后仅文档提交）。本轮新增提交：`6113bc7`（MCP stdio 显式 env）、`430234e`（SWE-bench 执行器）、`d11fb80`（发布/部署拆分）、`0568c6d`（Windows MCP 进程树终止）及对应文档回填。
 - 本地最终验证：`pnpm test` → 509 tests / 479 pass / 0 fail / 30 skipped；`pnpm check` → syntax ok: 193 files；`pnpm lint` → 214 files / 0 diagnostics；`pnpm fixtures:check`、`pnpm eval:offline`、`pnpm eval:estimate`、`node dist/scripts/recompute-report.js docs/samples --check` 均退出 0。
 - tip CI：[run 39426019898](https://github.com/BeforeLanding/mini-DSH/actions/runs/39426019898) → 六个 job 全绿（Ubuntu/Windows × Node 22/24、isolation、package-install）；`Official SWE-bench no-model PoC` 在普通 PR 配置下 skipped，按配置跳过，不计为通过或失败。
-- 边界：`main` 仍未合并且历史 CI 仍红；5 题/50 题付费运行、外部基线适配器、50 题镜像 digest、官方价格快照未完成/未授权；npm 发布、tag/Release、ECS 部署未执行；作者归属中 `unknown`/`CodexSandboxOffline` 待用户确认。工作分支绿色不等于 `main` 已修复。
+- 合并：PR #3 以保留提交历史的 merge commit `a58ab5d441185479f4bc83aca30f4b6f63f3f902` 合并到 main；main [CI 39428240871](https://github.com/BeforeLanding/mini-DSH/actions/runs/39428240871) 六个 job 全绿，PoC 同样按配置 skipped。历史红灯 run 39133594202 保留为历史证据。
+- 边界：5 题/50 题付费运行、外部基线适配器、50 题镜像 digest、官方价格快照未完成/未授权；npm 发布、tag/Release、ECS 部署未执行；作者归属中 `unknown`/`CodexSandboxOffline` 待用户确认。
 
 ### R10 正式评测执行器零付费准备（2026-10-20，工作分支验收完成）
 
