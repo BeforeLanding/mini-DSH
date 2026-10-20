@@ -1,3 +1,4 @@
 # Evidence checksums describe the checked-out bytes. Never convert line endings
 # for these files on Windows; the generator writes LF and SHA256SUMS is over LF.
 docs/samples/** -text
+docs/RESULTS.md -text
