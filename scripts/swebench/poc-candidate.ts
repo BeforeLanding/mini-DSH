@@ -96,7 +96,7 @@ try {
   started = true
   docker('run', '-d', '--name', candidateName, '--network', 'none', '--cap-drop', 'ALL',
     '--security-opt', 'no-new-privileges', '--read-only', '--tmpfs', '/tmp:rw,nosuid,nodev',
-    '--mount', `type=bind,src=${candidate},dst=/testbed,rw`, '--workdir', '/testbed',
+    '--mount', `type=bind,src=${candidate},dst=/testbed`, '--workdir', '/testbed',
     '--env', 'HOME=/tmp/mini-dsh-poc', image, 'sh', '-lc', 'sleep 900')
   const container = JSON.parse(docker('inspect', candidateName))[0]
   assert.equal(container.HostConfig.NetworkMode, 'none')
@@ -104,6 +104,7 @@ try {
   assert.equal(container.HostConfig.ReadonlyRootfs, true)
   assert.deepEqual(container.Mounts.map((mount: { Destination: string }) => mount.Destination), ['/testbed'])
   assert.equal(path.resolve(container.Mounts[0].Source), path.resolve(candidate))
+  assert.equal(container.Mounts[0].RW, true)
   assert.ok(!container.Config.Env.some((variable: string) => /^(?:DEEPSEEK_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|GITHUB_TOKEN|GH_TOKEN)=/.test(variable)))
   docker('exec', candidateName, 'sh', '-lc', 'test ! -e /var/run/docker.sock && test ! -e /oracle && test ! -e /reference')
   assert.equal(docker('exec', '--workdir', '/testbed', candidateName, 'git', 'rev-parse', 'HEAD'), official.baseCommit)
