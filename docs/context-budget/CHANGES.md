@@ -1,8 +1,8 @@
 # 改动与验收证据
 
-### R06 后续：主请求可选校准接入（2026-10-20，本地通过，待 CI）
+### R06 后续：主请求可选校准接入（2026-10-20，工作分支验收完成）
 
-运行预算新增 `tokenCalibration`（默认关闭）及 `tokenCalibrationMaxMultiplier`（1–10）；从当前会话已确认事件重建 provider usage，只对同模型／同工具 schema 的主请求应用滚动保守分位校准。投影和硬输入上限使用不小于原值的有效估算，`model/start` 仍记录原始估算，避免训练反馈；`context/projection` 另存原始估算与版本、参数、有效样本数、乘数。旧事件可读，默认路径不变；摘要请求仍仅观测。更新 DECISIONS 位移锚点。定向 `node --test dist/test/token-calibration.test.js` 7/7；`pnpm check` syntax 181 files；`pnpm test` 487 tests／457 pass／0 fail／30 platform skip；`pnpm lint` 201 files／0 diagnostics。当前提交 CI 待验证；无真实 provider 请求，不据此默认开启校准。
+运行预算新增 `tokenCalibration`（默认关闭）及 `tokenCalibrationMaxMultiplier`（1–10）；从当前会话已确认事件重建 provider usage，只对同模型／同工具 schema 的主请求应用滚动保守分位校准。投影和硬输入上限使用不小于原值的有效估算，`model/start` 仍记录原始估算，避免训练反馈；`context/projection` 另存原始估算与版本、参数、有效样本数、乘数。旧事件可读，默认路径不变；摘要请求仍仅观测。更新 DECISIONS 位移锚点。提交 `d4dc476`：定向 `node --test dist/test/token-calibration.test.js` 7/7；`pnpm check` syntax 181 files；`pnpm test` 487 tests／457 pass／0 fail／30 platform skip；`pnpm lint` 201 files／0 diagnostics。[CI 39385717730](https://github.com/BeforeLanding/mini-DSH/actions/runs/39385717730) 六 job 全绿。无真实 provider 请求，不据此默认开启校准。
 
 ### R09/R11 当前提交 CI 验收（2026-10-20）
 

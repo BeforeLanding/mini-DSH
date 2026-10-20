@@ -1,8 +1,8 @@
 # 任务清单
 
-### R06 后续：运行时可选校准（2026-10-20，本地验收完成，待 CI）
+### R06 后续：运行时可选校准（2026-10-20，工作分支验收完成）
 
-独立验收步骤：运行策略新增默认关闭的 `tokenCalibration` 与有界 `tokenCalibrationMaxMultiplier`。主请求只从当前会话已确认的 provider usage 重建同模型／同工具 schema 样本；投影与硬输入约束使用不小于原估算的值，`model/start` 保留原始估算以免反馈污染。投影事件记录校准版本、参数、样本数及原始／有效估算；同一日志可复算。摘要请求仍只观测，未启用运行时校准。定向 7/7、完整 487 tests／457 pass／0 fail／30 platform skip、check syntax 181 files、lint 201 files／0 diagnostics。当前提交 CI 待验证；默认开启须另有真实观测收益证据。
+独立验收步骤：运行策略新增默认关闭的 `tokenCalibration` 与有界 `tokenCalibrationMaxMultiplier`。主请求只从当前会话已确认的 provider usage 重建同模型／同工具 schema 样本；投影与硬输入约束使用不小于原估算的值，`model/start` 保留原始估算以免反馈污染。投影事件记录校准版本、参数、样本数及原始／有效估算；同一日志可复算。摘要请求仍只观测，未启用运行时校准。提交 `d4dc476`：定向 7/7、完整 487 tests／457 pass／0 fail／30 platform skip、check syntax 181 files、lint 201 files／0 diagnostics；[CI 39385717730](https://github.com/BeforeLanding/mini-DSH/actions/runs/39385717730) 六 job 全绿。默认开启须另有真实观测收益证据。
 
 ### R10 后续：官方无模型判分 PoC（2026-10-20，待 R06 验收）
 
