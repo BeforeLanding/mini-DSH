@@ -11,21 +11,21 @@ const safeMessages: Record<ProviderErrorKind, string> = {
 export const safeRunMessages = new Set([...Object.values(safeMessages), 'Model request failed', 'Summary request failed', 'Tool call failed', 'Run failed'])
 export class ProviderError extends Error {
   readonly safeMessage: string
-  constructor(public readonly kind: ProviderErrorKind, public readonly status?: number, public readonly retryable = false, public readonly providerRequestId?: string) {
+  constructor(public readonly kind: ProviderErrorKind, public readonly status?: number, public readonly retryable = false, public readonly providerRequestId?: string, public readonly retryAfterMs?: number) {
     super(safeMessages[kind])
     this.name = 'ProviderError'
     this.safeMessage = safeMessages[kind]
   }
 }
 
-export function classifyHttpError(status: number, preview = '', requestId?: string): ProviderError {
+export function classifyHttpError(status: number, preview = '', requestId?: string, retryAfterMs?: number): ProviderError {
   const kind: ProviderErrorKind = status === 401 || status === 403 ? 'auth'
     : status === 429 ? 'rate_limit'
     : status === 408 || status === 504 ? 'timeout'
     : status >= 500 ? 'transient'
     : /context.{0,30}(?:length|window)|maximum.{0,30}(?:context|tokens)/i.test(preview) ? 'context_overflow'
     : status >= 400 && status < 500 ? 'invalid_request' : 'unknown'
-  return new ProviderError(kind, status, kind === 'rate_limit' || kind === 'transient' || kind === 'timeout', requestId && /^[\w.:-]{1,128}$/.test(requestId) ? requestId : undefined)
+  return new ProviderError(kind, status, kind === 'rate_limit' || kind === 'transient' || kind === 'timeout', requestId && /^[\w.:-]{1,128}$/.test(requestId) ? requestId : undefined, retryAfterMs)
 }
 
 export function classifyTransportError(error: unknown, aborted = false): ProviderError {

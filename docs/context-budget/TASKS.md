@@ -1,8 +1,12 @@
 # 任务清单
 
-### R02 环境与统一工具授权（2026-10-19，进行中）
+### R03 有账本的 provider 重试（2026-10-20，进行中）
 
-R01b 提交 `2eb28d3` 的 [CI 39258324293](https://github.com/BeforeLanding/mini-DSH/actions/runs/39258324293) 六组通过。独立提交边界：① R02a 子进程环境最小继承、独立临时 HOME、显式额外变量提交 `70d4048`，[CI 39259211634](https://github.com/BeforeLanding/mini-DSH/actions/runs/39259211634) 六组通过。现有 MCP 配置为 streamable HTTP，没有 stdio 子进程启动点；R07 增 stdio 时必须调用同一环境构造器。② R02b ToolRuntime 执行前中央授权、未知/第三方默认请求单次批准、内置工具保留已有审批和操作前复核；本地定向 2/2、完整 418 通过／30 跳过、check/lint 通过，待独立提交及当前提交 CI。env 过滤降低传播面，HOME 隔离不等于文件系统或进程级沙箱。
+R02b `7519753` 的 [CI 39261106135](https://github.com/BeforeLanding/mini-DSH/actions/runs/39261106135) 六组通过。预计独立提交：① 从响应头解析 `Retry-After`，定义仅限预流 429／可恢复 5xx／连接失败的纯重试策略、指数退避和 full jitter，注入时钟与随机数；本地定向 10/10、完整 421 通过／30 跳过、check/lint 通过，待提交及当前提交 CI。② 主请求与摘要请求的每次 attempt 独立 `model/start`/usage/end、dispatch gate、预算计数及 `model/retry` 链接；模拟 429→成功、503→成功、401 即停、取消/超时、等待超剩余 wall-clock、部分流禁止重试，恢复读数一致。本项不调用真实 provider；未通过前序 CI 或测试不进入下一项。
+
+### R02 环境与统一工具授权（2026-10-19，工作分支验收完成）
+
+R01b 提交 `2eb28d3` 的 [CI 39258324293](https://github.com/BeforeLanding/mini-DSH/actions/runs/39258324293) 六组通过。独立提交边界：① R02a 子进程环境最小继承、独立临时 HOME、显式额外变量提交 `70d4048`，[CI 39259211634](https://github.com/BeforeLanding/mini-DSH/actions/runs/39259211634) 六组通过。现有 MCP 配置为 streamable HTTP，没有 stdio 子进程启动点；R07 增 stdio 时必须调用同一环境构造器。② R02b ToolRuntime 执行前中央授权、未知/第三方默认请求单次批准、内置工具保留已有审批和操作前复核提交 `7519753`，[CI 39261106135](https://github.com/BeforeLanding/mini-DSH/actions/runs/39261106135) 六组通过；本地 418 通过／30 跳过、check/lint 通过。env 过滤降低传播面，HOME 隔离不等于文件系统或进程级沙箱。
 
 ### R01 结构化错误与可恢复诊断（2026-10-19，工作分支验收完成）
 

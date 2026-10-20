@@ -1,10 +1,16 @@
 # 改动与验收证据
 
-### R02b 中央工具授权（2026-10-19，本地通过，待 CI）
+### R03a provider 重试元数据与纯策略（2026-10-20，本地通过，待 CI）
+
+DeepSeek HTTP 失败读取标准 `Retry-After` 秒数或 HTTP 日期并保存为 `ProviderError.retryAfterMs`，不展示响应正文。纯策略仅允许预流 429、5xx 与连接失败，最多额外两次；退避为 500ms 起指数窗口内的 full jitter（上限 8s），并至少遵守 `Retry-After`。等待超出剩余时间、401/400、部分流失败均不重试。此步只定义元数据和纯策略，没有改变运行时派发次数。
+
+假响应和注入随机数/时钟的定向测试 10/10；本地 `pnpm check`（syntax 165 files）、`pnpm test`（451 tests / 421 pass / 0 fail / 30 skipped）、`pnpm lint`（179 files / 0 diagnostics）通过。真实模型请求 0。当前提交 CI 待验证。
+
+### R02b 中央工具授权（2026-10-19，工作分支验收完成）
 
 ToolRuntime 每次 execute 在工具代码前调用授权钩子。内置工具声明 effect/origin/resource 并与固定名称和 effect 清单核对；可信内置读操作按现有路径策略执行，写与 Bash 仍由原工具执行一次审批、真实路径和内容复核，不新增第二次弹窗。第三方与未声明元数据工具默认要求人工批准，即使 `autoApprove` 用于受控评测也不自动授予。批准摘要含 toolCallId、参数 SHA-256、资源真实路径、工作区及策略版本；批准返回后重新核查参数、资源与工作区。钩子释放后拒绝执行，避免已启用授权的 Runtime 失效开放。插件代码本身与本进程同权，中央授权约束的是经 ToolRuntime 发起的调用，不能声称进程隔离。
 
-定向用例覆盖第三方伪写工具无审批不执行、autoApprove 不扩权、换参数或工作区拒绝，模拟工具需显式测试批准。内置 Bash/文件工具原审批与路径复核回归通过。本地 `pnpm check`（syntax 163 files）、`pnpm test`（448 tests / 418 pass / 0 fail / 30 skipped）、`pnpm lint`（177 files / 0 diagnostics）通过；真实模型请求 0。当前提交 CI 待验证。
+定向用例覆盖第三方伪写工具无审批不执行、autoApprove 不扩权、换参数或工作区拒绝，模拟工具需显式测试批准。内置 Bash/文件工具原审批与路径复核回归通过。本地 `pnpm check`（syntax 163 files）、`pnpm test`（448 tests / 418 pass / 0 fail / 30 skipped）、`pnpm lint`（177 files / 0 diagnostics）通过；提交 `7519753` 的 [CI 39261106135](https://github.com/BeforeLanding/mini-DSH/actions/runs/39261106135) 六组通过。真实模型请求 0。
 
 ### R02a Bash 子进程环境边界（2026-10-19，工作分支验收完成）
 

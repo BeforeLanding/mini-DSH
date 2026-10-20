@@ -1,6 +1,7 @@
 import type { Usage } from '../core/budget.js'
 import { isRecord } from '../core/event-store.js'
 import { ModelStreamError, ProviderError, classifyHttpError, classifyTransportError } from '../core/model-error.js'
+import { parseRetryAfter } from '../core/retry-policy.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Adapter, Arguments, ChatRequest } from '../core/contracts.js'
 interface WireCall { id: string; name: string; arguments: string }
@@ -139,7 +140,8 @@ export function createDeepSeekAdapter(config: DeepSeekConfig = {}): Adapter {
           ...(tools.length ? { tools } : {}),
         }),
       }) } catch (error) { throw classifyTransportError(error, signal?.aborted) }
-      if (!response.ok) throw classifyHttpError(response.status, await errorPreview(response), response.headers.get('x-request-id') ?? undefined)
+      if (!response.ok) throw classifyHttpError(response.status, await errorPreview(response), response.headers.get('x-request-id') ?? undefined,
+        parseRetryAfter(response.headers.get('retry-after')))
       let content = ''
       let reasoningContent = ''
       const calls = new Map<number, WireCall>()
