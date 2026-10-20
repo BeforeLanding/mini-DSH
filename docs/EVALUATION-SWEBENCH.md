@@ -31,12 +31,31 @@ The earlier official-channel run [39387381791](https://github.com/BeforeLanding/
 
 This proves the candidate tool path, patch export and independent scoring channel. It does **not** prove model capability or environment equivalence for all tasks.
 
+## Reviewable zero-cost draft (not frozen)
+
+A real dataset run of the pre-registration was produced without model calls or Docker:
+
+- Sanitized dataset: `D:\Agent\outputs\mini-dsh-swebench-preregistration-20261020\verified-sanitized.json` (500 rows; `instance_id`, `repo`, `base_commit`, `version`, `environment_setup_commit`, `problem_statement` only; gold/hidden fields absent).
+- Draft manifest: `D:\Agent\outputs\mini-dsh-swebench-preregistration-20261020\manifest-draft.json`.
+- `seed=20261020`, development 5, formal 50, 11 repositories, 4 arms, 200 formal episodes + 20 development episodes; budget ceiling $110.00 at $0.50/task/arm. This is a configuration ceiling, not an expected spend.
+- `freezeStatus` is **draft**, `paidRequests: 0`; missing: candidate model id, price snapshot, same-model baseline commit/command, per-instance image digests. It must not be described as the final frozen protocol until a development batch has been observed and the budget is confirmed.
+
+The price snapshot shape is fixed but its values must come from an official source with a capture date:
+
+```json
+{ "currency": "USD", "inputUsdPerMillion": null, "cachedInputUsdPerMillion": null,
+  "outputUsdPerMillion": null, "capturedAt": "YYYY-MM-DD", "source": "official price page URL" }
+```
+
+Replace each `null` with the observed number; the validator rejects missing or non-USD prices.
+
 ## Preconditions still blocking a real run
 
 - A frozen 50-task selection and per-instance image digests. The current `preregister` output lists the missing digests; it does not invent them.
 - A same-model mini-SWE-agent baseline: commit and invocation are part of the manifest contract, but the batch runner intentionally refuses to execute an `external` arm. A dedicated adapter must be supplied and reviewed; otherwise only different-system results may be reported.
 - A price snapshot with an official source and capture date. The runner refuses paid execution without one and never zero-fills unknown usage.
 - Development-batch observations (5 tasks × arms) and a budget decision based on them. Until then the manifest remains `draft`; `--finalize` is an explicit claim that those prerequisites are met.
+- The official harness v3.0.17 must already be installed in the Python environment used by the runner (`python -m swebench.harness.run_evaluation`); the runner does not install or upgrade it.
 - Explicit user authorization for paid model calls and any new cloud/compute resources. The manifest records `paidRequests: 0`; it does not grant authorization.
 
 ## Commands
