@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -49,6 +50,14 @@ async function main() {
   let finished = false
   let terminateTimer: NodeJS.Timeout | undefined
   let killTimer: NodeJS.Timeout | undefined
+  // Windows 上 cross-spawn 可能经 cmd.exe 启动 .cmd shim；只杀直接子进程会留下孙进程。
+  const killChild = (signal: NodeJS.Signals) => {
+    if (process.platform === 'win32' && child.pid) {
+      spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
+      return
+    }
+    child.kill(signal)
+  }
   const finish = async (code: number) => {
     if (finished) return
     finished = true
@@ -81,15 +90,15 @@ async function main() {
   process.stdin.on('end', () => {
     if (!stdin.destroyed) stdin.end()
     terminateTimer = setTimeout(() => {
-      if (!finished && child.exitCode === null) child.kill('SIGTERM')
+      if (!finished && child.exitCode === null) killChild('SIGTERM')
       killTimer = setTimeout(() => {
-        if (!finished && child.exitCode === null) child.kill('SIGKILL')
+        if (!finished && child.exitCode === null) killChild('SIGKILL')
       }, killGraceMs)
       killTimer.unref()
     }, shutdownGraceMs)
     terminateTimer.unref()
   })
-  for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => { if (!finished) child.kill(signal) })
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => { if (!finished) killChild(signal) })
 }
 
 void main().catch(error => {
