@@ -1,0 +1,26 @@
+{
+  "status": "completed",
+  "requests": {
+    "dispatched": 5,
+    "retries": 0,
+    "rejected": 0,
+    "summaries": 0,
+    "missingUsage": 0,
+    "estimatedUsage": 0
+  },
+  "usage": {
+    "inputTokens": 4500,
+    "outputTokens": 200,
+    "cacheReadTokens": 500,
+    "cacheReadMissing": 0
+  },
+  "costUsd": 0.001218,
+  "missingUsage": 0,
+  "tools": {
+    "calls": 4,
+    "errors": 1,
+    "skipped": 0
+  },
+  "errors": 1,
+  "costBasis": "provider usage"
+}

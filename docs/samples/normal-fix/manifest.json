@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "kind": "synthetic",
+  "episode": "normal-fix",
+  "sourceCommit": "4049a9c9e40c479a4b3654ddd6ac2ea58e9b2f45",
+  "dirty": false,
+  "model": {
+    "provider": "scripted",
+    "model": "fixture",
+    "observed": null
+  },
+  "budget": {
+    "maxModelRequests": 32,
+    "maxToolCalls": 64,
+    "maxActiveDurationMs": 300000,
+    "maxTotalTokens": 2000000,
+    "maxOutputTokens": 16384,
+    "minimumOutputTokens": 4096,
+    "inputTargetTokens": 65536,
+    "safetyMarginTokens": 2048,
+    "requestTimeoutMs": 180000,
+    "approvalTimeoutMs": 300000,
+    "finalizationTimeoutMs": 5000,
+    "compactionRatio": 0.8,
+    "retainRatio": 0.16,
+    "compactionMaxTokens": 8192,
+    "maxSummaryFailures": 2,
+    "maxOverflowRetries": 1,
+    "auto": true
+  },
+  "taskSet": [
+    "repair"
+  ],
+  "orderSeed": 0,
+  "toolSchemaSha256": "920a53d520b26f5f726a42430fc8d0e5b3030eeda28e6bbac90a61645592a016",
+  "policyVersion": "839511fc94ca60079e3ddc770fa78035dbef16af8d4637c59912f76ddb1e13a5",
+  "environment": {
+    "node": "v24.16.0",
+    "platform": "win32"
+  },
+  "priceSnapshot": {
+    "currency": "USD",
+    "unit": "per_million_tokens",
+    "input": 0.28,
+    "cacheRead": 0.028,
+    "output": 0.42,
+    "source": "synthetic example; not a provider bill"
+  },
+  "missing": {
+    "usage": 0,
+    "cacheRead": 0
+  }
+}
