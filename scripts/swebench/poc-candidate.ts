@@ -96,11 +96,14 @@ try {
   started = true
   docker('run', '-d', '--name', candidateName, '--network', 'none', '--cap-drop', 'ALL',
     '--security-opt', 'no-new-privileges', '--read-only', '--tmpfs', '/tmp:rw,nosuid,nodev',
-    // Keep the image's own HOME. Its /root/.gitconfig carries the
-    // safe.directory entry that the official evaluation container relies on;
-    // overriding HOME makes git reject the bind-mounted checkout.
+    // The official evaluation script runs `git config --global --add
+    // safe.directory /testbed` before grading. The bind mount is owned by the
+    // host runner, so git inside the container needs the same trust entry.
+    // Passing it through git's environment config avoids writing to the
+    // read-only container root and does not relax any other check.
     '--mount', `type=bind,src=${candidate},dst=/testbed`, '--workdir', '/testbed',
-    image, 'sh', '-lc', 'sleep 900')
+    '--env', 'GIT_CONFIG_COUNT=1', '--env', 'GIT_CONFIG_KEY_0=safe.directory',
+    '--env', 'GIT_CONFIG_VALUE_0=/testbed', image, 'sh', '-lc', 'sleep 900')
   const container = JSON.parse(docker('inspect', candidateName))[0]
   assert.equal(container.HostConfig.NetworkMode, 'none')
   assert.equal(container.HostConfig.Privileged, false)
