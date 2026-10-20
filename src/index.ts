@@ -26,7 +26,7 @@ try {
     const { default: dotenv } = await import('dotenv')
     const { productionHarnessConfig } = await import('./app/production-config.js')
     const initiallySet = new Set(['MINI_DSH_SESSION_ID', 'MINI_DSH_MODEL', 'MINI_DSH_WORKSPACE', 'MINI_DSH_PROFILE',
-      'MINI_DSH_CONTEXT_LAYOUT', 'MINI_DSH_PROJECT_DIRECTORY', 'MINI_DSH_TOOL_PREVIEW_BYTES', 'MINI_DSH_BUDGET',
+      'MINI_DSH_CONTEXT_LAYOUT', 'MINI_DSH_RUNTIME_TIME_MODE', 'MINI_DSH_PROJECT_DIRECTORY', 'MINI_DSH_TOOL_PREVIEW_BYTES', 'MINI_DSH_BUDGET',
       'MINI_DSH_AUTO_APPROVE'].filter(key => process.env[key] !== undefined))
     const dotenvResult = dotenv.config({ quiet: true })
     if (args[0] === '--show-config') {
@@ -45,7 +45,7 @@ try {
       const { default: externalConfig } = await import('../plugins.config.js')
       await root.plugin(deepseek)
       await root.plugin(externalPlugins, { entries: externalConfig })
-      await root.plugin(cli, { model: process.env.MINI_DSH_MODEL, contextLayout: productionConfig.contextLayout ?? 'live' })
+      await root.plugin(cli, { model: process.env.MINI_DSH_MODEL, contextLayout: productionConfig.contextLayout ?? 'live', runtimeClockMode: productionConfig.runtimeClockMode })
     }
   }
 } catch (error) {

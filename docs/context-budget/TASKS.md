@@ -1,8 +1,12 @@
 # 任务清单
 
-### R04 保留真实命令尾部（2026-10-20，本地通过，待当前提交 CI）
+### R05 稳定前缀与压缩策略（2026-10-20，进行中）
 
-R03c `9cac19b` 的 [CI 39348950645](https://github.com/BeforeLanding/mini-DSH/actions/runs/39348950645) 六组通过。>9 MiB stdout/stderr 真实尾部反例先红后绿。各流独立计实际字节，内存保留有界前缀与 8 KiB 尾环，管道始终排空；provider 预览含真实尾。稀疏结果版本 2 保存前后可读区间，`read_tool_result` 在缺口返回 `unavailable` 与尾部起点，不能伪称全文可回读；旧结果版本 1 保持可读。新测试验证重启回读。当前本地 `pnpm check`（syntax 166 files）、`pnpm test`（459 tests / 429 pass / 0 fail / 30 skipped）、`pnpm lint`（180 files / 0 diagnostics）通过；当前提交 CI 待验证，之后进入 R05。真实 provider 请求 0。
+R04 `0e19c0c` 的 [CI 39349743566](https://github.com/BeforeLanding/mini-DSH/actions/runs/39349743566) 六组通过。① 时间与规则选择分离：生产默认会话时钟 frozen、项目规则 live；旧 `MINI_DSH_CONTEXT_LAYOUT` 显式选择继续同时映射两项，新增 `MINI_DSH_RUNTIME_TIME_MODE` 可单独覆盖时钟。定向及本地完整 430 通过／30 跳过、check/lint 通过，待本项独立提交及 CI。② 规则版本变化提示和快照语义；③ 摘要原目标引用及结构校验；④ 阈值、滞回与重复摘要抑制，均待实施和验证。真实 provider 请求 0。
+
+### R04 保留真实命令尾部（2026-10-20，工作分支验收完成）
+
+R03c `9cac19b` 的 [CI 39348950645](https://github.com/BeforeLanding/mini-DSH/actions/runs/39348950645) 六组通过。>9 MiB stdout/stderr 真实尾部反例先红后绿。各流独立计实际字节，内存保留有界前缀与 8 KiB 尾环，管道始终排空；provider 预览含真实尾。稀疏结果版本 2 保存前后可读区间，`read_tool_result` 在缺口返回 `unavailable` 与尾部起点，不能伪称全文可回读；旧结果版本 1 保持可读。新测试验证重启回读。提交 `0e19c0c` 本地 `pnpm check`（syntax 166 files）、`pnpm test`（459 tests / 429 pass / 0 fail / 30 skipped）、`pnpm lint`（180 files / 0 diagnostics）通过；[CI 39349743566](https://github.com/BeforeLanding/mini-DSH/actions/runs/39349743566) 六组通过。真实 provider 请求 0。
 
 ### R03 有账本的 provider 重试（2026-10-20，工作分支验收完成）
 

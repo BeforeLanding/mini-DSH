@@ -7,6 +7,8 @@ export function productionHarnessConfig(env: Environment = process.env, cwd = pr
   if (profile !== 'general' && profile !== 'coding') throw new Error('MINI_DSH_PROFILE must be general or coding')
   const contextLayout = env.MINI_DSH_CONTEXT_LAYOUT ?? 'live'
   if (contextLayout !== 'live' && contextLayout !== 'frozen') throw new Error('MINI_DSH_CONTEXT_LAYOUT must be live or frozen')
+  const runtimeClockMode = env.MINI_DSH_RUNTIME_TIME_MODE ?? (env.MINI_DSH_CONTEXT_LAYOUT === undefined ? 'frozen' : contextLayout)
+  if (runtimeClockMode !== 'live' && runtimeClockMode !== 'frozen') throw new Error('MINI_DSH_RUNTIME_TIME_MODE must be live or frozen')
   const preview = env.MINI_DSH_TOOL_PREVIEW_BYTES
   let toolOutputMaxPreviewBytes: number | undefined
   if (preview !== undefined) {
@@ -17,6 +19,7 @@ export function productionHarnessConfig(env: Environment = process.env, cwd = pr
     workspace: env.MINI_DSH_WORKSPACE ?? cwd,
     profile,
     contextLayout,
+    runtimeClockMode,
     ...(env.MINI_DSH_PROJECT_DIRECTORY === undefined ? {} : { projectDirectory: env.MINI_DSH_PROJECT_DIRECTORY }),
     ...(toolOutputMaxPreviewBytes === undefined ? {} : { toolOutputMaxPreviewBytes }),
   }

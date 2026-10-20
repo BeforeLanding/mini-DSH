@@ -1,5 +1,15 @@
 # 改动与验收证据
 
+### R05a 会话时钟与规则模式分离（2026-10-20，本地通过，待 CI）
+
+生产入口默认冻结会话时间，同时保留项目规则每轮实时读取；新增 `MINI_DSH_RUNTIME_TIME_MODE=live|frozen`，显式设置优先于兼容的 `MINI_DSH_CONTEXT_LAYOUT`，旧布局显式选择仍同时控制两项。直接 Harness 配置与历史评测中显式传入的 live/frozen 行为保持不变。有效时钟模式写入 capability manifest 和无密钥 `--show-config`，标示环境、`.env` 或默认来源；CLI 提示单独冻结时间的语义。默认同会话改规则、时钟不变及旧 live/frozen 映射定向测试通过。
+
+本地 `pnpm check` syntax 166 files、`pnpm test` 460 tests / 430 pass / 0 fail / 30 skipped、`pnpm lint` 180 files / 0 diagnostics。当前提交 CI 待验证。规则版本变化提示、摘要目标与阈值滞回属于后续独立行为；真实 provider 请求 0。
+
+### R04 当前提交 CI 验收（2026-10-20）
+
+真实尾部与稀疏回读提交 `0e19c0c48cc3b2fb4fa46dfd619ff9c085fe1caf` 的 [CI 39349743566](https://github.com/BeforeLanding/mini-DSH/actions/runs/39349743566) Ubuntu/Windows × Node 20.18.1/22/24 六组全部通过。与下节本地读数分开记账；main 尚未合并。
+
 ### R04 真实命令尾部与诚实稀疏回读（2026-10-20，本地通过，待 CI）
 
 先加 >9 MiB stdout 与并发大 stderr 末尾标记测试：旧实现把 stdout `bytes` 记成 8,388,608 而实际为 9,437,203，断言先红。现命令采集对两流各自计实际字节，前缀分别受 `maxCaptureBytes` 限制，另保留最多 8 KiB 真正末尾；输出管道持续排空。UTF-8 前缀与尾部均切在字符边界。`CommandStream.bytes` 对超限输出从“保留字节数”改为“实际观测字节数”，`truncated` 明确标示内存采集缺口。

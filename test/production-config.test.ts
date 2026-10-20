@@ -15,15 +15,18 @@ test('production defaults and explicit context/preview choices use the shared ha
     const defaults = productionHarnessConfig({}, workspace)
     assert.equal(defaults.profile, 'coding')
     assert.equal(defaults.contextLayout, 'live')
+    assert.equal(defaults.runtimeClockMode, 'frozen')
     assert.equal(defaults.toolOutputMaxPreviewBytes, undefined)
     const live = await createHarness(defaults)
     try {
       assert.equal(live.capabilityManifest.policy.contextLayout, 'live')
+      assert.equal(live.capabilityManifest.policy.runtimeClockMode, 'frozen')
       assert.equal(live.capabilityManifest.policy.toolOutputMaxPreviewBytes, null)
       assert.ok(live.capabilityManifest.tools.includes('read_history'))
     } finally { await live.dispose() }
 
     const chosen = productionHarnessConfig({ MINI_DSH_CONTEXT_LAYOUT: 'frozen', MINI_DSH_TOOL_PREVIEW_BYTES: '32768' }, workspace)
+    assert.equal(chosen.runtimeClockMode, 'frozen')
     const frozen = await createHarness(chosen)
     try {
       assert.equal(frozen.capabilityManifest.policy.contextLayout, 'frozen')
@@ -35,6 +38,7 @@ test('production defaults and explicit context/preview choices use the shared ha
 
 test('invalid production layout and preview values fail before assembly', () => {
   for (const layout of ['', 'FULL', 'cached']) assert.throws(() => productionHarnessConfig({ MINI_DSH_CONTEXT_LAYOUT: layout }), /MINI_DSH_CONTEXT_LAYOUT/)
+  for (const mode of ['', 'FULL', 'cached']) assert.throws(() => productionHarnessConfig({ MINI_DSH_RUNTIME_TIME_MODE: mode }), /MINI_DSH_RUNTIME_TIME_MODE/)
   for (const preview of ['', '0', '-1', '1.5', 'Infinity', '9007199254740992']) assert.throws(() => productionHarnessConfig({ MINI_DSH_TOOL_PREVIEW_BYTES: preview }), /MINI_DSH_TOOL_PREVIEW_BYTES/)
 })
 
@@ -126,13 +130,13 @@ test('frozen session snapshot survives JSONL restore; legacy sessions explicitly
   } finally { await fs.rm(workspace, { recursive: true, force: true }) }
 })
 
-test('live prompt follows disk and clock across turns', async () => {
+test('explicit legacy live layout follows disk and clock across turns', async () => {
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-live-lifecycle-'))
   try {
     const rules = path.join(workspace, 'AGENTS.md')
     await fs.writeFile(rules, 'before-rule')
     let clock = 0
-    const harness = await createHarness({ ...productionHarnessConfig({}, workspace), runtimeTime: () => `tick-${++clock}` })
+    const harness = await createHarness({ ...productionHarnessConfig({ MINI_DSH_CONTEXT_LAYOUT: 'live' }, workspace), runtimeTime: () => `tick-${++clock}` })
     try {
       const session = harness.root.sessions.create()
       const before = await harness.root.systemPrompt.assemble({ sessionId: session.id })
@@ -143,6 +147,28 @@ test('live prompt follows disk and clock across turns', async () => {
       assert.match(after, /tick-2/)
       assert.equal(harness.root.sessions.visibleEvents(session.id).filter(e => e.type === 'context/snapshot').length, 0)
     } finally { await harness.dispose() }
+  } finally { await fs.rm(workspace, { recursive: true, force: true }) }
+})
+
+test('production default freezes the session clock while project rules stay live', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-clock-default-'))
+  try {
+    const rules = path.join(workspace, 'AGENTS.md')
+    await fs.writeFile(rules, 'initial-rule')
+    let clock = 0
+    const harness = await createHarness({ ...productionHarnessConfig({}, workspace), runtimeTime: () => `tick-${++clock}` })
+    try {
+      const session = harness.root.sessions.create({ workspace })
+      const before = await harness.root.systemPrompt.assemble({ sessionId: session.id })
+      await fs.writeFile(rules, 'updated-rule')
+      const after = await harness.root.systemPrompt.assemble({ sessionId: session.id })
+      assert.match(before, /tick-1/)
+      assert.match(after, /tick-1/)
+      assert.match(after, /updated-rule/)
+      assert.equal(clock, 1)
+      assert.deepEqual(harness.root.sessions.visibleEvents(session.id).filter(e => e.type === 'context/snapshot').map(e => e.data.name), ['runtime:environment'])
+    } finally { await harness.dispose() }
+    assert.equal(productionHarnessConfig({ MINI_DSH_CONTEXT_LAYOUT: 'frozen', MINI_DSH_RUNTIME_TIME_MODE: 'live' }, workspace).runtimeClockMode, 'live')
   } finally { await fs.rm(workspace, { recursive: true, force: true }) }
 })
 
@@ -157,6 +183,7 @@ test('show-config needs no key, reports effective values and sources, and reveal
     assert.equal(result.status, 0, result.stderr)
     const shown = JSON.parse(result.stdout)
     assert.deepEqual(shown.contextLayout, { value: 'frozen', source: 'environment' })
+    assert.deepEqual(shown.runtimeClockMode, { value: 'frozen', source: 'environment' })
     assert.deepEqual(shown.toolResultPreviewBytes, { value: 32768, source: 'environment' })
     assert.equal(shown.budget.effective.maxModelRequests, 8)
     assert.equal(shown.budget.sources.maxModelRequests, 'environment')
@@ -173,6 +200,7 @@ test('show-config needs no key, reports effective values and sources, and reveal
     assert.equal(dotenvView.status, 0, dotenvView.stderr)
     const dotenvShown = JSON.parse(dotenvView.stdout)
     assert.deepEqual(dotenvShown.contextLayout, { value: 'frozen', source: '.env' })
+    assert.deepEqual(dotenvShown.runtimeClockMode, { value: 'frozen', source: '.env' })
     assert.deepEqual(dotenvShown.toolResultPreviewBytes, { value: 16_384, source: 'default' })
     for (const [key, value] of [['MINI_DSH_CONTEXT_LAYOUT', 'invalid'], ['MINI_DSH_TOOL_PREVIEW_BYTES', '0'],
       ['MINI_DSH_BUDGET', '{"bad":1}']] as const) {

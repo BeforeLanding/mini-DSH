@@ -20,6 +20,7 @@ export interface CliConfig {
   budget?: BudgetPolicy; sessionDirectory?: string | false; resumeSessionId?: string
   maxChangeOutputBytes?: number
   contextLayout?: 'live' | 'frozen'
+  runtimeClockMode?: 'live' | 'frozen'
 }
 function parsePolicy(text: string): BudgetPolicy {
   const value: unknown = JSON.parse(text)
@@ -67,13 +68,16 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
     print('Commands: /tools /models /model /history /prompt /reset /continue /compact /budget [JSON] /changes [fileOffset] /diff [fileOffset] [byteOffset] /report [fileOffset] [verificationOffset] [byteOffset] /trace [requestOffset] [byteOffset] /exit')
     print(`Sandbox workspace: ${workspace}`)
     print(`Session: ${session.id}${store ? ` (${store.directory})` : ' (memory)'}`)
-    if (config.contextLayout === 'frozen') {
+    const clockMode = config.runtimeClockMode ?? config.contextLayout
+    if (config.contextLayout === 'frozen' || clockMode === 'frozen') {
       const snapshots = ctx.sessions.visibleEvents(session.id).filter(event => event.type === 'context/snapshot')
       if (snapshots.some(event => event.type === 'context/snapshot' && event.data.source === 'legacy-current'))
         print('[Frozen compatibility] This session contains a snapshot reconstructed from the then-current environment; its original time/rules were unavailable.')
-      if (resumeId && ctx.sessions.visibleEvents(session.id).some(event => event.type === 'model/start') && snapshots.length < 2)
+      const expectedSnapshots = (clockMode === 'frozen' ? 1 : 0) + (config.contextLayout === 'frozen' ? 1 : 0)
+      if (resumeId && ctx.sessions.visibleEvents(session.id).some(event => event.type === 'model/start') && snapshots.length < expectedSnapshots)
         print('[Frozen compatibility] This older session lacks a saved prompt snapshot. Its original time/rules cannot be recovered; missing parts will be captured from the current environment before the next model request.')
-      print('[Frozen] The prompt uses this session\'s saved time/rules. project_context reads the current disk; if rules change, its result may differ from the prompt. Use /reset (clears visible history) or start a new session to apply new rules.')
+      if (config.contextLayout === 'frozen') print('[Frozen] The prompt uses this session\'s saved time/rules. project_context reads the current disk; if rules change, its result may differ from the prompt. Use /reset (clears visible history) or start a new session to apply new rules.')
+      else print('[Frozen time] This session keeps its first runtime clock value; project rules are read from the current workspace each turn.')
     }
     print('Writes and bash execution ask [Y/n] first. Press Esc to cancel, including during approval.')
     print(`Model: ${agent.model}`)

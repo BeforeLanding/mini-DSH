@@ -32,6 +32,8 @@ export async function inspectProductionConfig(env: NodeJS.ProcessEnv, origin: Or
       workspace: { value: harness.root.sandbox.workspace, source: configured('MINI_DSH_WORKSPACE') },
       profile: { value: config.profile, source: configured('MINI_DSH_PROFILE') },
       contextLayout: { value: config.contextLayout, source: configured('MINI_DSH_CONTEXT_LAYOUT') },
+      runtimeClockMode: { value: config.runtimeClockMode, source: env.MINI_DSH_RUNTIME_TIME_MODE !== undefined
+        ? origin('MINI_DSH_RUNTIME_TIME_MODE') : env.MINI_DSH_CONTEXT_LAYOUT !== undefined ? origin('MINI_DSH_CONTEXT_LAYOUT') : 'default' },
       projectContext: { enabled: config.profile === 'coding', directory: config.projectDirectory ?? '.', source: configured('MINI_DSH_PROJECT_DIRECTORY') },
       toolResultPreviewBytes: { value: config.toolOutputMaxPreviewBytes ?? 16_384, source: configured('MINI_DSH_TOOL_PREVIEW_BYTES') },
       readHistory: { enabled: harness.capabilityManifest.tools.includes('read_history'), source: 'createHarness' },
