@@ -112,7 +112,7 @@ export async function createV2Fixture(id: HarnessV2Id, isolation?: Omit<V2Isolat
         const report = path.join(directory, `groups-${Date.now()}-${Math.random().toString(16).slice(2)}.json`)
         const result = spawnSync(process.execPath, [path.join(source, 'verify.mjs'), candidate, report], {
           cwd: candidate, timeout: 30_000, maxBuffer: 64 * 1024, encoding: 'utf8', windowsHide: true,
-          env: { ...process.env, V2_RUNTIME_ROOT: isolation.runtimeRoot, V2_DISTRO: isolation.distro },
+          env: { ...process.env, V2_RUNTIME_ROOT: isolation.runtimeRoot, ...(isolation.distro ? { V2_DISTRO: isolation.distro } : {}) },
         })
         let groups: V2ContractGroup[] = []
         try {

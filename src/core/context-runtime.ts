@@ -42,13 +42,14 @@ export function groupHistory(events: SessionEvent[], currentTaskId: string): His
   return [...groups.values()]
 }
 export class ContextBudgetRuntime {
-  project(events: SessionEvent[], taskId: string, request: ChatRequest, policy: Readonly<BudgetPolicy>, derive: (events: SessionEvent[]) => Message[], outputAllowance?: (inputTokens: number) => number | undefined) {
+  project(events: SessionEvent[], taskId: string, request: ChatRequest, policy: Readonly<BudgetPolicy>, derive: (events: SessionEvent[]) => Message[], outputAllowance?: (inputTokens: number) => number | undefined, calibrate?: (rawInputTokens: number) => number) {
     const groups = groupHistory(events, taskId)
     const removedTaskIds: string[] = []
     let selected = [...groups]
     const measure = () => {
       const messages = derive(selected.flatMap(g => g.events))
-      const estimatedInputTokens = estimateInput({ ...request, messages })
+      const rawEstimatedInputTokens = estimateInput({ ...request, messages })
+      const estimatedInputTokens = calibrate?.(rawEstimatedInputTokens) ?? rawEstimatedInputTokens
       let reservedOutputTokens = request.maxOutputTokens ?? 0
       let tokenFits = true
       if (outputAllowance) {
@@ -62,7 +63,7 @@ export class ContextBudgetRuntime {
       const safetyMarginTokens = Math.max(policy.safetyMarginTokens ?? 2048, Math.ceil(estimatedInputTokens * 0.1))
       const fits = tokenFits && (policy.inputTargetTokens === undefined || estimatedInputTokens <= policy.inputTargetTokens) &&
         (policy.contextWindowTokens === undefined || estimatedInputTokens + reservedOutputTokens + safetyMarginTokens <= policy.contextWindowTokens)
-      return { messages, estimatedInputTokens, safetyMarginTokens, reservedOutputTokens, fits }
+      return { messages, rawEstimatedInputTokens, estimatedInputTokens, safetyMarginTokens, reservedOutputTokens, fits }
     }
     let projection = measure()
     for (const group of groups) {

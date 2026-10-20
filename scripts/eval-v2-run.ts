@@ -13,7 +13,7 @@ import type { RunOutcome } from './eval-runner.js'
 import { deriveV2Observation, developmentBatchStopReason, diagnoseV2Error, recoverV2UnverifiedEvents } from './eval-v2-observation.js'
 import { developmentReserveUsd } from './eval-v2-plan.js'
 import { createSmokeAmountGuard } from './smoke-cost.js'
-import { createIsolatedCommandRunner, windowsToWslPath } from './eval-v2-isolation.js'
+import { createIsolationBackend } from './eval-v2-isolation.js'
 import { reportV2, verifyV2FrozenFiles } from './eval-v2-report.js'
 import type { V2Manifest, V2Observation } from './eval-v2-report.js'
 
@@ -50,11 +50,13 @@ try {
   const sentinel = path.join(path.dirname(preflight), `${path.basename(preflight)}-hidden.txt`)
   await fs.writeFile(sentinel, 'host-only', { flag: 'wx' })
   try {
-    const result = await createIsolatedCommandRunner({ workspace: preflight, runtimeRoot, distro: 'Ubuntu' })({
-      executable: 'ignored', args: [], command: `node --version && test ! -r '${windowsToWslPath(sentinel)}'`, cwd: preflight,
+    const backend = createIsolationBackend({ workspace: preflight, runtimeRoot })
+    const capabilities = await backend.preflight()
+    const result = await backend.run({
+      executable: 'ignored', args: [], command: `node --version && test ! -r '${backend.visibleHostPath(sentinel)}'`, cwd: preflight,
       signal: new AbortController().signal, timeoutMs: 10_000,
     })
-    if (result.status !== 'exited' || result.exitCode !== 0 || !result.stdout.text.includes('v22.22.1')) throw new Error('V2 Linux isolation preflight failed')
+    if (result.status !== 'exited' || result.exitCode !== 0 || !result.stdout.text.includes('v22.22.1')) throw new Error(`V2 Linux isolation preflight failed (${capabilities.kind})`)
   } finally { await fs.rm(sentinel, { force: true }) }
 } finally {
   if (path.dirname(preflight) === path.resolve(os.tmpdir()) && path.basename(preflight).startsWith('mini-dsh-v2-preflight-')) await fs.rm(preflight, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
@@ -148,7 +150,7 @@ for (let index = 0; index < manifest.episodes.length; index += blockSize) {
     try {
       const result = await runFixtureTask(episode.taskId as Parameters<typeof runFixtureTask>[0],
         () => ({ provider: 'deepseek', model: modelId, capabilities: adapter.capabilities, chat: developmentAmountGuard?.chat ?? adapter.chat }),
-        arm.budget, sessionDirectory, arm.toolOutput, arm.promptLayout, path.join(episodeDirectory, 'snapshots'), { runtimeRoot, distro: 'Ubuntu' })
+        arm.budget, sessionDirectory, arm.toolOutput, arm.promptLayout, path.join(episodeDirectory, 'snapshots'), { runtimeRoot })
       outcome = result
       events = await readDurableEvents(sessionDirectory)
       evidenceComplete = result.episode?.stages.length === (manifest.tasks.find(task => task.id === episode.taskId)?.shape === 'multi-stage' ? 4 : 1)

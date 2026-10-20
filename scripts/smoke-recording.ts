@@ -26,10 +26,16 @@ function stable(value: unknown): string {
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex')
 const workspaceToken = '$' + '{WORKSPACE}'
 const normalize = (value: unknown, workspace: string): Json => {
-  if (typeof value === 'string') return value.replaceAll(workspace, workspaceToken).replaceAll(workspace.replaceAll('\\', '/'), workspaceToken)
-  if (Array.isArray(value)) return value.map(item => normalize(item, workspace))
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined).map(([key, item]) => [key, normalize(item, workspace)]))
-  return value as Json
+  const roots = new Set([workspace, path.resolve(workspace)])
+  try { roots.add(fs.realpathSync(workspace)); roots.add(fs.realpathSync.native(workspace)) } catch { /* synthetic requests may have no local workspace */ }
+  const forms = [...roots].flatMap(root => [JSON.stringify(root).slice(1, -1), root, root.replaceAll('\\', '/')]).sort((a, b) => b.length - a.length)
+  const visit = (item: unknown): Json => {
+    if (typeof item === 'string') return forms.reduce((text, form) => text.replaceAll(form, workspaceToken), item)
+    if (Array.isArray(item)) return item.map(visit)
+    if (item && typeof item === 'object') return Object.fromEntries(Object.entries(item).filter(([, nested]) => nested !== undefined).map(([key, nested]) => [key, visit(nested)]))
+    return item as Json
+  }
+  return visit(value)
 }
 
 export function requestMaterial(request: ChatRequest, wire: SmokeWireOptions, workspace: string) {
@@ -195,13 +201,11 @@ export function createSmokeReplay(options: { file: string; workspace: string; ve
       const index = lines.indexOf('## Project Context')
       if (index < 0 || index + 3 >= lines.length) throw new Error('smoke replay project context path mapping unavailable; no API fallback')
       const project = JSON.parse(lines[index + 3]!) as { workspace?: string }
-      if (project.workspace !== options.workspace) throw new Error('smoke replay project context workspace mismatch; no API fallback')
-      project.workspace = options.recordedProjectWorkspace
-      lines[index + 3] = JSON.stringify(project)
-      material.system = lines.join('\n')
+      if (project.workspace !== workspaceToken) throw new Error('smoke replay project context workspace mismatch; no API fallback')
     }
     if (entry?.kind !== 'start' || entry.purpose !== request.purpose || entry.fingerprint !== requestFingerprint(entry.request)) throw new Error('smoke replay request fingerprint/order mismatch; no API fallback')
-    const expected = options.recordedBashFixtureWorkspace ? normalizeBashResults(entry.request, options.recordedBashFixtureWorkspace) : entry.request
+    const recordedRequest = options.recordedProjectWorkspace ? normalize(entry.request, options.recordedProjectWorkspace) : entry.request
+    const expected = options.recordedBashFixtureWorkspace ? normalizeBashResults(recordedRequest, options.recordedBashFixtureWorkspace) : recordedRequest
     const actual = options.recordedBashFixtureWorkspace ? normalizeBashResults(material, options.workspace) : material
     if (requestFingerprint(expected) !== requestFingerprint(actual) || stable(expected) !== stable(actual)) throw new Error('smoke replay request fingerprint/order mismatch; no API fallback')
     cursor++

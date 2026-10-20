@@ -1,9 +1,7 @@
 name: Deploy ECS
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  # 发布与部署分离：创建 tag/Release 不会触发生产部署，部署只能手动派发。
   workflow_dispatch:
     inputs:
       ref:
@@ -27,7 +25,7 @@ jobs:
       - name: Check out the requested release
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+          ref: ${{ inputs.ref }}
           fetch-depth: 0
           persist-credentials: false
       - name: Resolve and verify deployment target

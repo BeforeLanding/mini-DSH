@@ -1,5 +1,9 @@
 # 上下文与执行预算管理：计划与设计
 
+## R01 错误诊断设计（2026-10-19）
+
+先在模型适配器边界给 HTTP／传输失败构造 `ProviderError`，只保留分类、可选状态码、限长 provider request ID 与重试性；响应正文仅用于有界分类判断，不进入错误消息。重试性是供后续 R03 使用的元数据，本项不自动重试。再在现有事件 version 1 中增加 `run/error`，只保存阶段、分类和固定安全消息，运行时 payload 校验及 JSONL 读取器同步更新，重放不再调用模型或工具。主请求与摘要请求各按 requestId 归因，工具异常按 toolCallId 归因；`run/finish` 仍唯一终态。inspect 的 JSON 字段与文字摘要均以已记录错误为准，旧日志未记录死因时写 unknown 而不猜测。
+
 ## NX-42：当前评测方案入口（2026-10-15）
 
 用户本轮授权确定新版测试方案。具体任务合同、四组配置、整题预算、校准/正式运行、六指标和实施边界见 [20-task Harness Benchmark v2](NX-42-EVAL-V2-PLAN.md)。本附属计划属于本文件的规范内容；NX-42范围内与旧NX-39/R-23不同的口径以新方案及R-24为准，旧批次协议和原始结果不改写。只完成设计，代码/题库/付费运行未实施。
@@ -252,13 +256,13 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 
 修订 D-02／R-03 的契约：当前 task 的所有 run 原文不再无条件进入模型请求。仍先免费裁剪最旧的已结束任务；裁剪救不了时，才用模型把当前 task 的早期消息段换成持久化摘要。原始事件一条不删，system、当前 task 的原始用户请求、未决及 `unknown` 工具组与保留尾部不被遮蔽。当前请求位于消息开头时，从其后选择连续段，摘要 frame 插在该段原位置；这修正了“从最早消息取前缀”与“保留原始请求”不能同时成立的问题。边界须通过 `assertToolProtocol`。
 
-默认 `compactionBudgetTokens = inputTargetTokens`（65,536）、`compactionRatio = 0.8`、`retainRatio = 0.16`、`compactionMaxTokens = 8192`、`maxSummaryFailures = 2`、`maxOverflowRetries = 1`，`auto = true`。压缩预算不能默认取 1M 的 `contextWindowTokens`，否则 80% 阈值在 65,536 输入目标之前永远到不了。默认配置下 0.8 实际等价于“裁剪救不了”；只有显式调整压缩预算时才有独立意义。摘要调用计入 run 的请求数、主动时间与 token，预留输出走现有预算机制；预算不足依现有 `token_budget` 停止。三入口是自动压力、溢出兜底及 CLI `/compact`；后者不受失败闩影响。压缩不是模型可调用的工具。
+默认 `compactionBudgetTokens = inputTargetTokens`（65,536）、`compactionRatio = 0.8`、`postCompactionTargetRatio = 0.65`、`retainRatio = 0.16`、`compactionMaxTokens = 8192`、`maxSummaryFailures = 2`、`maxOverflowRetries = 1`，`auto = true`。三个阈值分名：`inputTargetTokens` 是硬输入上限，`compactionBudgetTokens × compactionRatio` 是压力触发线，`compactionBudgetTokens × postCompactionTargetRatio` 是压缩后目标线。压缩预算不能默认取 1M 的 `contextWindowTokens`，否则 80% 阈值在 65,536 输入目标之前永远到不了。默认配置下 0.8 实际等价于“裁剪救不了”；只有显式调整压缩预算时才有独立意义。摘要调用计入 run 的请求数、主动时间与 token，预留输出走现有预算机制；预算不足依现有 `token_budget` 停止。三入口是自动压力、溢出兜底及 CLI `/compact`；后者不受失败闩影响。压缩不是模型可调用的工具。
 
-**NX-42 校准后收口（2026-10-15）**：一次主动压力压缩已应用、重新投影后仍高于同一压力线时，本次 run 不再每轮重复主动压缩。这个情形下不可压缩的原始请求或较早任务仍占据输入，再次压缩当前 task 的少量新增消息会耗费模型请求与 token，却不能解除压力条件。输入目标/窗口真正溢出时的兜底压缩、显式 `/compact` 以及一次有效压缩后随新历史增长再次越线的主动压缩均保留。抑制只持续当前 run，不跨阶段或 `/continue`；它是按既有压缩结果作反馈，而非调整 65,536／0.8 默认值。旧付费校准在此行为修订前完成，仅用于诊断；新的正式清单和校准需重新冻结执行。
+**NX-42 校准后收口（2026-10-15，R05 阈值滞回修订 2026-10-20）**：一次主动压力压缩已应用后，若重新投影仍高于压缩后目标线，或本次压缩使输入减少不足 `max(64, 5%)`，本次 run 不再每轮重复主动压缩，并追加 `context/pressure-suppressed`（原因 `above-target` 或 `insufficient-reduction`，含压缩前后与目标 token）。这比“仍高于压力线才抑制”更保守：一次只降到压力线与目标线之间的压缩也被视为未达到目标，避免下一轮因轻微增长再次付费压缩。这个情形下不可压缩的原始请求或较早任务仍占据输入，再次压缩当前 task 的少量新增消息会耗费模型请求与 token，却不能解除压力条件。输入目标/窗口真正溢出时的兜底压缩、显式 `/compact` 以及一次有效压缩后随新历史增长再次越线的主动压缩均保留。抑制只持续当前 run，不跨阶段或 `/continue`；它是按既有压缩结果作反馈，而非调整 65,536／0.8 默认值。旧付费校准在此行为修订前完成，仅用于诊断；新的正式清单和校准需重新冻结执行。
 
 纯规划器只读事件，摘要尝试在付费调用前记录开始事件，结果以结束事件闭合；失败闩从当前 run 日志折叠。恢复只读已记录的摘要，不重新调用模型；未闭合的尝试按事实补结束事件——已经写下摘要的补 `applied`，连正文都没有的才补 `unclosed`。模型若缺事实，可用有界、session 隔离的 `read_history` 按事件号读回。摘要调用使用主循环的 system 和 tool schema，原样重放遮蔽段；DeepSeek 当前适配器未显式实现前缀缓存，因此缓存收益尚未兑现。与参考实现不同，本仓库的 `beginRun` 排斥同 session 并发 run，不需完整的 after-await 计划重校验；写 applied 前仍复查取消和主动预算。摘要可能遗漏或捏造事实，事件号与回读入口让事实可核对，却不保证模型一定主动核对。
 
-**`resolveBudget` 的两档放宽（NX-34-4）。** `compactionRatio` 与 `retainRatio` 是比率，0.8 存不进「非负安全整数」这条统一契约，因此为这两个键开一个**分数集**（要求 `0 < v ≤ 1`）、为 `auto` 开一个**布尔集**，其余键仍是安全整数。这是有意的契约放宽，代价是 `resolveBudget` 的判定从一档变两档；越过域的值（0、负数、>1、NaN、Infinity、非布尔）仍逐条拒绝。`compactionBudgetTokens` **不进** `CLI_BUDGET`：它默认取 `inputTargetTokens`，写死成 65,536 会让调整输入目标时压缩阈值不再跟着走。
+**`resolveBudget` 的两档放宽（NX-34-4）。** `compactionRatio`、`postCompactionTargetRatio` 与 `retainRatio` 是比率，0.8 存不进「非负安全整数」这条统一契约，因此为这两个键开一个**分数集**（要求 `0 < v ≤ 1`）、为 `auto` 开一个**布尔集**，其余键仍是安全整数。这是有意的契约放宽，代价是 `resolveBudget` 的判定从一档变两档；越过域的值（0、负数、>1、NaN、Infinity、非布尔）仍逐条拒绝。`compactionBudgetTokens` **不进** `CLI_BUDGET`：它默认取 `inputTargetTokens`，写死成 65,536 会让调整输入目标时压缩阈值不再跟着走。
 
 **`/compact` 的维护型 run（NX-34-4）。** R-22 要求摘要请求计入同一 run，而 `beginRun` 的三道续跑守卫（任务已完成／未知工具结果／配置未变的 `context_overflow`）恰在「任务刚做完」时把 `/compact` 拒之门外——那一刻正是最该压缩的时候。`beginMaintenanceRun` 因此**复用当前 task**（另开任务只会把旧历史变成可免费裁剪的旧任务，那就不需要压缩了），保留与「这段 run 能否安全记账」有关的三道检查，跳过为续跑工作设的三道守卫。它**不写 `previousRunId`**；配套地 `beginRun(continuing)` 改为从「最后一条非维护型 run」取 previous——否则一次 `/compact` 会让 `beginRun` 看着那条 `completed` 报 `task already completed`，把「预算停止后还能续跑」打掉。
 
@@ -274,6 +278,18 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 
 **本决策不产生新数字**，它约束的是后续 fixture 的设计与报告的写法：报告不得把「结局饱和」写成能力结论（R-21 的强制约束继续适用），也不得把「工作区里少了一份 oracle」写成天花板已被打破——NX-08h 的结论逐字仍是「这一次没有失败」。验收见 REQUIREMENTS 的 R-23。
 
+### MCP 插件边界（R07）
+
+**默认零 server、零出网。** 原内置 context7 条目已删除；启动、`--help`、`--show-config`、inspect 与离线 demo 都不连接 MCP。配置只来自用户目录级 `~/.mini-dsh/mcp.json`、`MINI_DSH_MCP_CONFIG` 或显式 `--mcp-config <path>`；工作区里出现的 `mcp.json` 不会自动成为可信服务器。`MINI_DSH_MCP=0` 可整体关闭。
+
+**secret 只接受完整的 `${ENV_NAME}` 引用。** stdio `env` 与 HTTP `headers` 的字面值一律拒绝；缺变量时交互启动失败并点名变量，`--show-config` 只列出变量名与缺失项，不展开值。stdio 由现有 `@deepseek-ai/dsh-mcp-client` 启动，复用其脱敏父环境；本轮不另写适配器。
+
+**装配与授权。** MCP server 经 `createHarness` 的可选 `mcpServers` 参数装配，不在 CLI 路径单独挂载；评测与离线入口不传该参数即明确禁用。工具名由插件命名为 `mcp__<server>__<raw>`，重复 `serverName` 在配置层拒绝。插件不声明 effect/origin，因此经 ToolRuntime 中央授权按 unknown 默认询问；`autoApprove` 不会替第三方工具自动授权。连接、调用超时与传输断开只使该 server 的工具失败或消失，不阻断主循环；dispose 释放子进程、连接与注册项。
+
+### 隔离后端（R08）
+
+隔离能力抽为 `IsolationBackend`：Windows 使用 WSL→bwrap，Linux 使用原生 bwrap；平台专用路径和参数不共享。两端都要求 `MINI_DSH_V2_RUNTIME` 指向固定 Node 22 runtime，工作区以外不挂载宿主目录，`/tmp` 为 tmpfs，`--unshare-all --die-with-parent`。`preflight` 不是环境变量检查：它实际运行候选命令，验证命名空间、无网络接口、工作区可写、隐藏 sentinel 不可见、超时能收掉后代，并输出 runtime digest。required CI 的 `isolation` job 安装 bwrap、准备固定 runtime 后运行这些测试；出现 skip 即失败，不能以“本平台不适用”自动转绿。WSL 的路径转换仍保留在 `isolatedCommandArgs`，Linux 不调用它。
+
 ## 默认参数与行为
 
 ### 请求规模与估算
@@ -284,6 +300,7 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 - 先移除最旧已结束完整任务/轮次；不截短当前 task 过程。当前集合无法容纳时 context_overflow；/continue 不自动扩大输入目标。
 - 输出触及 length 时标 output_limit，不执行残缺调用；usage 结算后记录估算偏差。
 - 估算偏差已实测（NX-08c，核验日期 2026-09-30，估算器 SHA-256 见 [CHANGES](CHANGES.md#nx-08c-输入估算误差实验)）：中文 +28%、英文 +40% 一致高估；代码与 JSON 不是一致安全，40 个样本中 4 个低估、最深 −22.5%，**超过容量余量的 10%**。因此输入目标 65,536 与容量余量都只按估算器口径成立，按真实 token 计会更宽松；反向地，单个请求仍可能超出估算判断。参数按估算器口径固定，不因本结论在真实调用开始前调整。
+- **R06 在线观测（2026-10-20）**：`model/start` 记录当次请求的 `model` 与 `schemaDigest`；只读观测把 `model/start.estimatedInputTokens` 与同 `requestId` 的 `model/usage` 配对，且只采信 `usage.source=provider`。误差口径为 `(estimated−actual)/actual`，报低估率与绝对相对误差 p50/p95；主请求与摘要请求按 `context/summary-start`/`end` 的 run 窗口分组，摘要重试仍留在摘要组。缺 usage、estimated usage、实际值为零、孤立 usage、被拒绝请求与重复 usage 单列，不进入样本。入口是 `inspect`（默认只读）与 `pnpm token:error <events.jsonl>`。阶段 B 的校准是纯函数：rolling `actual/estimated` 保守分位 × 安全边际，样本不足回退 1；乘数下限恒为 1、上限可配置，因此只能让估算更保守，不会放宽硬上限。默认关闭，只有观测显示收益且回归无退化后才考虑接入运行时；本轮未启用。
 
 ### 每段执行与续跑
 - 模型请求 64 次，工具调用 128 次，主动时间 600,000ms，累计输入加输出 2,000,000 token。

@@ -1,0 +1,20 @@
+mini-DSH
+
+The README records that this repository's tutorial baseline is
+https://github.com/huangjunsen0406/mini-dsh through commit c5fc9c4, and that
+independent extensions start at commit 43e3829. The baseline repository is
+MIT-licensed; its copyright notice is preserved in LICENSE.
+
+The historical commit authors "CodexSandboxOffline" and "unknown" are not
+mapped to a person in this repository. No .mailmap or history rewrite is
+performed without an explicit identity confirmation.
+
+Runtime dependencies retain their own licenses. The direct dependencies are
+@deepseek-ai/cordis (MIT), @deepseek-ai/dsh-mcp-client (MIT), and dotenv
+(BSD-2-Clause). Development dependencies (TypeScript, Biome, @types/node) are
+not shipped in the package.
+
+The synthetic evidence under docs/samples/ is generated from this repository's
+scripted fixtures. It contains no real user prompt, provider response, or
+private tool output. The historical NX-45 raw run remains private and is not
+republished by this notice.

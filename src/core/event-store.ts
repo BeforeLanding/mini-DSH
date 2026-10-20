@@ -162,7 +162,9 @@ export function createLogRecordParser(sessionId: string): (line: string) => Sess
   let count = 0
   const ids = new Set<string>()
   const runs = new Map<string, { taskId: string; ended: boolean }>()
-  const requests = new Set<string>(), usages = new Set<string>(), ends = new Set<string>()
+  const requests = new Set<string>(), usages = new Set<string>(), ends = new Set<string>(), errorIds = new Set<string>()
+  const requestScopes = new Map<string, string>()
+  const retryTargets = new Map<string, string>()
   const changes = new Map<string, { taskId: string; runId: string; planned: boolean }>(), results = new Set<string>()
   const snapshots = new Set<string>()
   const verifications = new Map<string, { taskId: string; runId: string; data: import('./task-verification.js').VerificationStart }>(), verificationResults = new Set<string>()
@@ -217,9 +219,20 @@ export function createLogRecordParser(sessionId: string): (line: string) => Sess
         run.ended = true
       }
     }
+    if (parsed.type === 'run/error') {
+      const run = parsed.runId ? runs.get(parsed.runId) : undefined
+      if (!run || run.ended || run.taskId !== parsed.taskId || errorIds.has(parsed.data.errorId) || (parsed.data.requestId !== undefined && !requests.has(parsed.data.requestId))) throw new Error('invalid run error scope or duplicate error')
+      errorIds.add(parsed.data.errorId)
+    }
+    if (parsed.type === 'model/retry') {
+      if (!parsed.runId || requestScopes.get(parsed.data.rootRequestId) !== parsed.runId || requestScopes.get(parsed.data.failedRequestId) !== parsed.runId ||
+        !ends.has(parsed.data.failedRequestId) || requests.has(parsed.data.nextRequestId) || retryTargets.has(parsed.data.nextRequestId)) throw new Error('invalid model retry chain')
+      retryTargets.set(parsed.data.nextRequestId, parsed.runId)
+    }
     if (parsed.type === 'model/start') {
-      if (requests.has(parsed.data.requestId)) throw new Error('duplicate model request')
+      if (requests.has(parsed.data.requestId) || (retryTargets.has(parsed.data.requestId) && retryTargets.get(parsed.data.requestId) !== parsed.runId)) throw new Error('duplicate or cross-run model request')
       requests.add(parsed.data.requestId)
+      if (parsed.runId) requestScopes.set(parsed.data.requestId, parsed.runId)
     }
     if (parsed.type === 'model/usage' || parsed.type === 'model/end' || parsed.type === 'model/fragment' || parsed.type === 'model/rejected') {
       const requestId = parsed.data.requestId

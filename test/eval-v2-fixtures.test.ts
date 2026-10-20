@@ -8,7 +8,7 @@ import { runFixtureTask, scriptedAdapter } from '../scripts/eval-fixture.js'
 import { evalPolicy } from '../scripts/eval-runner.js'
 
 const runtimeRoot = process.env.MINI_DSH_V2_RUNTIME
-const isolation = runtimeRoot ? { runtimeRoot, distro: 'Ubuntu' } : undefined
+const isolation = runtimeRoot ? { runtimeRoot } : undefined
 
 test('every public V2 stage states the exact editable-file boundary', async () => {
   for (const id of harnessV2Ids) {

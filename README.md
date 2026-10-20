@@ -4,26 +4,30 @@
 
 mini-DSH 是一个 TypeScript / Cordis 编写的本地编程 Agent Harness。它把读项目规则、定位代码、可靠编辑、运行公开检查、交付 diff 与验证证据串成可恢复的任务流程；用事件日志、上下文投影、预算和工具审批说明每一步发生了什么。它面向单 Agent、单本地工作区，路径/命令闸门是应用策略，不是操作系统隔离。
 
-仓库的教程基线来自[从零手写 mini-dsh](https://github.com/huangjunsen0406/mini-dsh/blob/main/LEARNING.zh-CN.md)，止于 `c5fc9c4`；`43e3829` 起是本项目的独立扩展。
+先看 [两条合成轨迹与离线复算](docs/RESULTS.md)、[评测口径](docs/EVALUATION.md) 和 [三个工程案例](docs/CASES.md)。合成轨迹只证明机制，不是模型能力分数。
+
+仓库的教程基线来自[从零手写 mini-dsh](https://github.com/huangjunsen0406/mini-dsh/blob/main/LEARNING.zh-CN.md)，止于 `c5fc9c4`；`43e3829` 起是本项目的独立扩展。许可证与来源边界见 [LICENSE](LICENSE) 和 [NOTICE](NOTICE)。
 
 ![当前架构：入口、Agent Loop、模型、工具、事件与恢复](docs/images/architecture-v1.png)
 
 ## 五分钟上手
 
-需要 Node.js ≥ 20.18.1、pnpm 11.22.0。Windows 的 Bash 工具使用 Git for Windows；Linux/macOS 使用 PATH 中的 `bash`。以下命令不需要 API key，不发出模型请求：
+需要 Node.js ≥ 22、pnpm 11.22.0。Windows 的 Bash 工具使用 Git for Windows；Linux/macOS 使用 PATH 中的 `bash`。以下命令不需要 API key，不发出模型请求：
 
 ```powershell
 pnpm install --frozen-lockfile
 pnpm check
+node dist/src/index.js demo fix
 node dist/src/index.js --show-config
-pnpm demo:compact
 ```
+
+`demo fix` 在一个临时项目里由脚本化模型完成“失败测试 → 读文件 → 修复 → 再测试”，不读 `.env`、不联网、不需要 API key，输出 `demo result: PASS`。`pnpm demo:compact` 另外演示压缩与按事件号回读。
 
 `--show-config` 只读装配同一个 Harness，输出**新会话**实际配置及来源（环境、`.env`、默认或 provider 容量），包括模型、布局、工具预览、预算和 `read_history`；不打印密钥、环境变量全集、项目规则正文，也不创建 CLI 会话。非法配置直接报错。若设置了 `MINI_DSH_SESSION_ID`，它拒绝把新会话配置冒充恢复会话的配置；恢复后用 CLI `/budget` 查看预算。`pnpm demo:compact` 使用脚本化模型演示单任务摘要、原始事件保留及 `read_history` 按事件号回读。完整离线回归可运行 `pnpm test`（会在本机执行 Bash 和文件工具）。
 
 ### 本地打包与安装
 
-项目**尚未发布到 npm**。下面从当前仓库生成 tarball，在仓库外的临时目录安装；已在 Windows 的含空格路径验证 `mini-dsh.cmd`。依赖首次安装可能需要访问包注册表；CLI 的前三个命令无需 API key，也不会请求模型。
+项目**尚未发布到 npm**，`private: true` 保留以防误发。下面从当前仓库生成 tarball，在仓库外的临时目录安装；已在 Windows 的含空格路径验证 `mini-dsh.cmd`。依赖首次安装可能需要访问包注册表；`--help`、`--version`、`--show-config`、`demo` 与 `inspect` 不需要 API key，也不会请求模型。
 
 ```powershell
 $packRoot = Join-Path $env:TEMP ("mini-dsh-local-" + [guid]::NewGuid().ToString('N'))
@@ -31,12 +35,14 @@ $installRoot = Join-Path $packRoot 'consumer space'
 $workspace = Join-Path $packRoot 'sample project'
 New-Item -ItemType Directory -Path $packRoot, $installRoot, $workspace | Out-Null
 pnpm pack --pack-destination $packRoot
-pnpm --dir $installRoot add --ignore-scripts (Join-Path $packRoot 'mini-DSH-0.0.1.tgz')
+$tarball = (Get-ChildItem (Join-Path $packRoot '*.tgz')).FullName
+pnpm --dir $installRoot add --ignore-scripts $tarball
 $miniDsh = Join-Path $installRoot 'node_modules\.bin\mini-dsh.cmd'
 Set-Location $workspace
 & $miniDsh --help
 & $miniDsh --version
 & $miniDsh --show-config
+& $miniDsh demo fix
 ```
 
 ### 只读检查会话日志
@@ -52,7 +58,7 @@ $log = Join-Path $env:USERPROFILE '.mini-dsh\sessions\<session-id>\events.jsonl'
 
 文本默认只列会话和最近一次 run 的状态、主请求/摘要请求/派发前拒绝、工具结果、provider token 与缓存、缺 usage、摘要及 `read_history` 次数、frozen 快照来源。`--trace` 只附带最近 40 条所选事件的序号、类型、工具名或终止原因；不显示提示正文和工具输出。`--json` 返回版本为 `1` 的结构化数据，含 `integrity.complete`、`integrity.warnings`，与 `--trace` 可组合。退出码：`0` 表示读到的 JSONL 全部通过校验，`2` 表示只能确认损坏/截断前的部分证据，`1` 表示参数或文件读取失败。`0` 不表示任务成功：没有 `run/finish` 时最近 run 为 `unrecorded_end`，生产日志没有独立产物验收。派发后缺 usage 计入未知请求数，不按零 token 补算；provider 输入 token 已包含缓存命中，不再重复相加，也不估算历史费用。会话结束时间没有独立事件时显示未记录，最近事件时间另列。旧日志反映当时的模型和代码，不代表当前配置。
 
-要处理自己的项目时，先切换到**该项目目录**，再运行 `& $miniDsh` 启动交互；需要先在环境变量或该目录的 `.env` 设置 `DEEPSEEK_API_KEY`，实际对话可能产生费用。默认工作区是启动命令时的当前目录（可用 `MINI_DSH_WORKSPACE` 覆盖），`.env` 也只从当前目录读取，已有环境变量优先；安装包内不带 `.env`。会话默认存于用户主目录的 `.mini-dsh/sessions`（可用 `MINI_DSH_SESSION_DIR` 覆盖），超长工具结果存于工作区的 `.mini-dsh/tool-results`；这些用户数据不写入安装包目录。`/exit` 会释放会话写入锁。当前本地安装验收只覆盖 Windows，未据此声称其他平台的安装验证通过。
+要处理自己的项目时，先切换到**该项目目录**，再运行 `& $miniDsh` 启动交互；需要先在环境变量或该目录的 `.env` 设置 `DEEPSEEK_API_KEY`，实际对话可能产生费用。默认工作区是启动命令时的当前目录（可用 `MINI_DSH_WORKSPACE` 覆盖），`.env` 也只从当前目录读取，已有环境变量优先；安装包内不带 `.env`。会话默认存于用户主目录的 `.mini-dsh/sessions`（可用 `MINI_DSH_SESSION_DIR` 覆盖），超长工具结果存于工作区的 `.mini-dsh/tool-results`；这些用户数据不写入安装包目录。`/exit` 会释放会话写入锁。本地安装验收已覆盖 Windows 含空格路径；CI 的 `package-install` job（ubuntu-latest、Node 22）也在仓库外路径完成同一套 `--help`/`--version`/`--show-config`/`demo`/`inspect` 检查。macOS 安装仍未验证。
 
 接入真实模型需先在 `.env` 填写 `DEEPSEEK_API_KEY`，再运行 `pnpm start`；**后续 CLI 对话可能产生模型费用**。不要覆盖已有 `.env`：
 
@@ -70,9 +76,12 @@ pnpm start
 
 ## 生产配置与 v2.1 对照
 
-生产入口 [src/index.ts](src/index.ts) 调用共用的 [createHarness](src/app/create-harness.ts)，评测入口也调用它；没有另复制一套 Harness。日常默认是 `coding`、`contextLayout=live`、16 KiB 工具结果预览，以及 [CLI_BUDGET](src/core/budget.ts) 的输入目标 65,536 token、主动压缩比例 0.8、一次溢出兜底、每段 2M 累计 token 上限。`read_history` 默认可用；它按事件号读取保留的原始历史，不是主动压缩开关。
+生产入口 [src/index.ts](src/index.ts) 调用共用的 [createHarness](src/app/create-harness.ts)，评测入口也调用它；没有另复制一套 Harness。日常默认是 `coding`、会话时钟 `frozen`、项目规则 `live`、16 KiB 工具结果预览，以及 [CLI_BUDGET](src/core/budget.ts) 的输入目标 65,536 token、主动压缩比例 0.8、一次溢出兜底、每段 2M 累计 token 上限。`read_history` 默认可用；它按事件号读取保留的原始历史，不是主动压缩开关。
 
-- `MINI_DSH_CONTEXT_LAYOUT=live|frozen` 只控制运行时钟和项目上下文在系统提示里的文本是否固定，用于稳定前缀。默认 `live`；非法值拒绝。它**不是**完整 Full 配置。
+- `MINI_DSH_CONTEXT_LAYOUT=live|frozen` 是旧版兼容入口；显式设置时同时控制运行时钟和项目上下文在系统提示里的文本是否固定。未设置时，项目上下文 `live`、运行时钟 `frozen`。它**不是**完整 Full 配置。
+- `MINI_DSH_RUNTIME_TIME_MODE=live|frozen` 只控制运行时钟，优先于旧版布局对时钟的设置；默认 `frozen`。新会话有效值及来源可用 `--show-config` 核对。
+
+项目规则以 SHA-256 版本跟踪。同会话规则变化时提示 `Context version changed`，事件只记录摘要和前一版本摘要，不把规则正文或变化伪装成用户请求。实时规则布局显示当前版本；显式冻结布局仍用保存的规则快照，并提示用 `/reset` 或新会话刷新。
 - `MINI_DSH_TOOL_PREVIEW_BYTES` 控制有界工具结果进入模型历史的预览大小，默认 16,384 字节；超长结果可用 `read_tool_result` 回读。必须是正安全整数。
 - `MINI_DSH_BUDGET` 沿用 CLI 的 JSON 预算配置，可调整输入目标、主动压缩、调用/工具/token/时间上限；`/budget` 查看当前会话的有效预算。溢出兜底与主动压缩是两条路径，关闭或推迟主动压缩不会自动关闭兜底。
 - `MINI_DSH_PROFILE`、`MINI_DSH_WORKSPACE`、`MINI_DSH_PROJECT_DIRECTORY` 沿用既有配置；项目目录只决定初始规则上下文，不更改文件/Bash 工作区。
@@ -82,6 +91,15 @@ pnpm start
 **frozen 会话与恢复：** `Time:` 和初始项目规则在该会话首次组装系统提示时取样，写入会话 JSONL；同一会话的后续轮次以及重启后用 `MINI_DSH_SESSION_ID` 恢复时复用原快照。同进程创建新的 sessionId 会重新取样；CLI 的 `/reset` 会清除可见历史，并在下次组装时重新取样。旧会话若没有保存快照、但已有模型请求，恢复时会明确提示：原始时间与规则无法还原，缺失部分按**当前**环境取样并标记为 `legacy-current`，不代表恢复了原快照。会话日志因此可能包含规则正文，应按工作区数据保护。
 
 会话内 `AGENTS.md` 或项目配置变化不会自动修改 frozen 系统提示；`project_context` 工具读的是**当前磁盘内容**，可能与**本会话提示快照**不同。要让新规则进入系统提示，使用 `/reset`（丢弃可见历史）或启动新会话；仅恢复同一会话不会刷新。默认 live 在下一次组装时读取当前内容。没有全局热更新。新版本 frozen 日志增加两条快照事件，后续事件序号会变化；旧实验记录与严格回放规则未改，跨版本逐事件比较可能分歧。
+
+## 已知限制
+
+- 路径/命令闸门是应用层策略，不是操作系统隔离；Bash 仍能访问当前用户可读写的文件。
+- MCP 默认不加载。stdio server 经内置启动器启动：只继承 PATH、locale、临时目录与 Windows 系统目录等运行变量，HOME/USERPROFILE 指向独立临时目录，显式配置的 `${ENV_NAME}` 引用按名字转交。provider key、代理、SSH agent 与 `NODE_OPTIONS` 默认不继承（这三个名字也不允许显式转发）。这不是文件系统隔离：MCP server 仍能读取当前用户可读的文件。启动器是 SDK 与 server 之间的一个中间进程；server 不响应 stdin EOF 时会在宽限后被终止。显式配置 server 即表示信任该进程。
+- 工具调用在会话内串行执行，只读并发尚未实现。
+- token 校准默认关闭；开启需要真实 provider usage 证据，固定 40 条语料的历史误差不代表完整请求分布。
+- `docs/samples/` 的合成轨迹只验证机制，不是模型能力分数；SWE-bench 单题无模型 PoC 只验证候选路径与评分通道，5 题开发批次与正式 50 题未运行。
+- 未发布 npm、未打 tag/Release、未部署 ECS；安装验证覆盖 Windows 含空格路径与 Ubuntu CI，macOS 未验证。
 
 ## 实现入口
 

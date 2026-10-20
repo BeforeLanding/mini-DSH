@@ -1,9 +1,13 @@
 {
-  "name": "mini-DSH",
-  "version": "0.0.1",
+  "name": "@beforelanding/mini-dsh",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "a mini handwritten runtime for DSH",
+  "description": "A minimal, reproducible coding-agent harness with event sourcing, context budgets, and offline evidence.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BeforeLanding/mini-DSH.git"
+  },
   "bin": {
     "mini-dsh": "dist/src/index.js"
   },
@@ -12,7 +16,7 @@
     "dist/plugins.config.js"
   ],
   "engines": {
-    "node": ">=20.18.1"
+    "node": ">=22"
   },
   "packageManager": "pnpm@11.22.0",
   "scripts": {
@@ -24,6 +28,12 @@
     "eval:screening": "pnpm build && node dist/scripts/eval-screening.js",
     "eval:sequence": "pnpm build && node dist/scripts/eval-screening.js --phase sequence",
     "eval:estimate": "pnpm build && node dist/scripts/eval-estimate.js",
+    "token:error": "pnpm build && node dist/scripts/report-token-error.js",
+    "evidence:export": "pnpm build && node dist/scripts/export-public-evidence.js",
+    "evidence:recompute": "pnpm build && node dist/scripts/recompute-report.js",
+    "swebench:preregister": "pnpm build && node dist/scripts/swebench/preregister.js",
+    "swebench:run": "pnpm build && node dist/scripts/swebench/run.js",
+    "swebench:report": "pnpm build && node dist/scripts/swebench/report.js",
     "eval:v2": "pnpm build && node dist/scripts/eval-v2.js",
     "eval:v2-freeze": "pnpm build && node dist/scripts/eval-v2-freeze.js",
     "eval:v2-report": "pnpm build && node dist/scripts/eval-v2-report.js",
@@ -53,6 +63,7 @@
   "dependencies": {
     "@deepseek-ai/cordis": "4.0.1",
     "@deepseek-ai/dsh-mcp-client": "0.1.1-rc.2",
+    "cross-spawn": "7.0.6",
     "dotenv": "17.4.2"
   },
   "devDependencies": {

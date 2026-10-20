@@ -1,4 +1,4 @@
-# 阿里云 CLI 部署与自动发布
+# 阿里云 CLI 部署与手动发布
 
 适用于当前已配置的 Alibaba Cloud Linux 4 x86_64 服务器。mini-DSH 是交互式终端程序；在服务器终端登录 `deploy` 用户后运行，不提供网页入口。
 
@@ -12,13 +12,13 @@
 
 ## 发布流程
 
-普通 `main` 推送不会发布生产版本。候选提交的四组 Ubuntu/Windows、Node22/24 CI 全部成功后，由用户创建并推送 `vMAJOR.MINOR.PATCH` 标签触发 **Deploy ECS**。工作流也保留手动入口，要求明确填写 tag、分支或提交 SHA；目标提交必须可从 `main` 到达。手动 **ECS SSH Check** 只检查连接和环境，不发布版本。
+普通 `main` 推送、tag 推送和 GitHub Release 都不会发布生产版本。**Deploy ECS 只能手动派发**，要求明确填写 tag、分支或提交 SHA；目标提交必须可从 `main` 到达。发布与部署分离：创建 tag/Release 只形成源码锚点，部署是独立的受控动作。手动 **ECS SSH Check** 只检查连接和环境，不发布版本。
 
 Deploy ECS 在 GitHub runner 检出标签或手动指定的精确提交，确认提交属于 `main` 历史后打包为完整 Git bundle，通过严格主机密钥校验的 SSH/SCP 传送 bundle 和该版本的 scripts/deploy-ecs-bundle.sh。服务器从本地 bundle 导入精确提交，创建独立版本目录、安装锁定依赖、执行 `pnpm check` 和 `pnpm test`，成功后才原子切换 `current`。工作流串行执行；服务器脚本另使用 `flock` 锁。服务器发布代码时无需连接 github.com；安装依赖仍需要访问包注册表。
 
 bundle 保留 Git 提交与 HEAD，可离线校验；依据见 [Git 官方 bundle 文档](https://git-scm.com/docs/git-bundle)。临时传包目录位于 `~/apps/mini-DSH/incoming`，传输文件在运行结束时清理，旧版本目录保留。
 
-触发机制使用 GitHub 官方的 [tag push](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#push) 与 [workflow_dispatch](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch)。标签名在工作流内再次校验为 `vMAJOR.MINOR.PATCH`；普通分支推送和 PR 不触发生产部署。
+触发机制只使用 GitHub 官方的 [workflow_dispatch](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch)。标签名在工作流内再次校验为 `vMAJOR.MINOR.PATCH`；分支推送、PR、tag push 与 Release 均不触发生产部署。
 
 ## 版本标签与发布锚点
 
@@ -47,7 +47,7 @@ git show --no-patch --decorate "$version"
 git push origin "$version"
 ```
 
-标签 push 触发 Deploy ECS。工作流解析最终 commit SHA、确认它属于 main 历史，并将该 SHA 写入服务器发布目录的 `REVISION`；因此 tag → commit SHA → REVISION → release 目录构成可审计的部署与回滚锚点。标签一旦推送不得删除、强推或改指向；错误标签保留审计记录，修复后递增版本号创建新标签。
+标签 push 本身不触发 Deploy ECS。部署由操作者随后手动派发；工作流解析最终 commit SHA、确认它属于 main 历史，并将该 SHA 写入服务器发布目录的 `REVISION`；因此 tag → commit SHA → REVISION → release 目录构成可审计的部署与回滚锚点。标签一旦推送不得删除、强推或改指向；错误标签保留审计记录，修复后递增版本号创建新标签。
 
 Deploy ECS 成功后可选择创建同名 GitHub Release，用于发布说明，不改变部署目标，也不再次触发部署：
 
@@ -55,7 +55,7 @@ Deploy ECS 成功后可选择创建同名 GitHub Release，用于发布说明，
 gh release create v1.2.3 --verify-tag --generate-notes --title v1.2.3
 ```
 
-`workflow_dispatch` 是受控恢复入口，不替代版本发布。Actions 页面运行 Deploy ECS 时填写已存在 tag（推荐）或明确 commit SHA；CLI 等价命令如下，其中 `--ref main` 选择默认分支上的工作流定义，`ref` 输入才是部署目标：
+`workflow_dispatch` 是唯一部署入口，不替代版本发布。Actions 页面运行 Deploy ECS 时填写已存在 tag（推荐）或明确 commit SHA；CLI 等价命令如下，其中 `--ref main` 选择默认分支上的工作流定义，`ref` 输入才是部署目标：
 
 ```bash
 gh workflow run deploy-ecs.yml --ref main -f ref=v1.2.3

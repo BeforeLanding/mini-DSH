@@ -11,6 +11,35 @@ const wire: SmokeWireOptions = { provider: 'deepseek', baseUrl: 'https://api.dee
 const version: SmokeVersion = { codeSHA: 'a'.repeat(40), fixtureId: 'synthetic', manifestDigest: 'b'.repeat(64), toolSchemaSha256: 'c'.repeat(64) }
 const request = (purpose: 'main' | 'summary', content: string) => ({ purpose, model: 'test', maxOutputTokens: 16, system: 'fixture system', messages: [{ role: 'user' as const, content }], tools: [] })
 
+test('request material normalizes a Windows workspace inside serialized project JSON', () => {
+  const workspace = 'C:\\runner\\candidate'
+  const material = requestMaterial({ ...request('main', 'same'), system: `## Project Context\nguidance\nlimits\n${JSON.stringify({ workspace, directory: '.', rules: [] })}` }, wire, workspace)
+  const system = (material as { system: string }).system
+  assert.equal(JSON.parse(system.split('\n').at(-1)!).workspace, '$' + '{WORKSPACE}')
+  assert.equal(system.includes('C:\\runner'), false)
+})
+
+test('request material maps a resolved project root when the supplied workspace has another spelling', () => {
+  const workspace = `${path.parse(process.cwd()).root}candidate${path.sep}nested${path.sep}..${path.sep}fixture`
+  const resolved = path.resolve(workspace)
+  const material = requestMaterial({ ...request('main', 'same'), system: `## Project Context\nguidance\nlimits\n${JSON.stringify({ workspace: resolved, directory: '.', rules: [] })}` }, wire, workspace)
+  const system = (material as { system: string }).system
+  assert.equal(JSON.parse(system.split('\n').at(-1)!).workspace, '$' + '{WORKSPACE}')
+})
+
+test('request material maps the real project root behind a workspace directory alias', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-workspace-alias-'))
+  try {
+    const real = path.join(directory, 'real'), alias = path.join(directory, 'alias')
+    await fs.mkdir(real)
+    await fs.symlink(real, alias, process.platform === 'win32' ? 'junction' : 'dir')
+    const canonical = await fs.realpath(alias)
+    const material = requestMaterial({ ...request('main', 'same'), system: `## Project Context\nguidance\nlimits\n${JSON.stringify({ workspace: canonical, directory: '.', rules: [] })}` }, wire, alias)
+    const system = (material as { system: string }).system
+    assert.equal(JSON.parse(system.split('\n').at(-1)!).workspace, '$' + '{WORKSPACE}')
+  } finally { await fs.rm(directory, { recursive: true, force: true }) }
+})
+
 test('recording retains reconstructible requests, fixture bytes, streams and separate main/summary order', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-record-'))
   try {
@@ -151,6 +180,8 @@ test('strict replay permits only the declared project workspace remap and still 
     const replay = createSmokeReplay({ file, workspace: restored, version, wire, recordedProjectWorkspace: original })
     assert.equal((await replay.chat({ ...request('main', 'same'), system: system(restored) })).content, 'OK')
     replay.assertConsumed()
+    const wrongWorkspace = createSmokeReplay({ file, workspace: restored, version, wire, recordedProjectWorkspace: original })
+    await assert.rejects(wrongWorkspace.chat({ ...request('main', 'same'), system: system(path.join(directory, 'unrelated')) }), /workspace mismatch/)
     const changed = createSmokeReplay({ file, workspace: restored, version, wire, recordedProjectWorkspace: original })
     await assert.rejects(changed.chat({ ...request('main', 'changed'), system: system(restored) }), /fingerprint\/order mismatch/)
     const badSystem = createSmokeReplay({ file, workspace: restored, version, wire, recordedProjectWorkspace: original })

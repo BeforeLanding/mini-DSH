@@ -21,14 +21,29 @@ test('command runner separates streams and preserves nonzero exit and spawn fail
   assert.equal(missing.status, 'spawn_error'); assert.equal(missing.exitCode, null); assert.ok(missing.error)
 })
 
-test('command collection shares a cap, drains streams and avoids a cut Unicode suffix', async () => {
+test('command collection caps each stream, drains pipes and avoids a cut Unicode suffix', async () => {
   const result = await run('process.stdout.write("中".repeat(100000));process.stderr.write("err".repeat(100000))', 4)
-  assert.equal(result.exitCode, 0); assert.ok(result.stdout.bytes + result.stderr.bytes <= 4)
-  assert.ok(result.stdout.truncated || result.stderr.truncated)
+  assert.equal(result.exitCode, 0); assert.equal(result.stdout.bytes, 300000); assert.equal(result.stderr.bytes, 300000)
+  assert.equal(result.stdout.truncated, true); assert.equal(result.stderr.truncated, true)
+  assert.ok(Buffer.byteLength(result.stdout.text) + Buffer.byteLength(result.stdout.tail ?? '') <= 8)
+  assert.ok(Buffer.byteLength(result.stderr.text) + Buffer.byteLength(result.stderr.tail ?? '') <= 8)
   assert.ok(!result.stdout.text.includes('\ufffd')); assert.ok(!result.stderr.text.includes('\ufffd'))
   const empty = await run('')
   assert.deepEqual(empty.stdout, { text: '', bytes: 0, truncated: false })
   await assert.rejects(run('', 0), /positive/)
+})
+
+test('command collection preserves the real tail after more than 9 MiB of stdout and independent stderr', async () => {
+  const marker = 'FINAL_ERROR_MARKER'
+  const result = await run(`process.stdout.write('x'.repeat(9 * 1024 * 1024 + 1));process.stdout.write('${marker}');process.stderr.write('y'.repeat(9 * 1024 * 1024));process.stderr.write('STDERR_END')`)
+  assert.equal(result.status, 'exited')
+  assert.equal(result.exitCode, 0)
+  assert.equal(result.stdout.bytes, 9 * 1024 * 1024 + 1 + marker.length)
+  assert.equal(result.stderr.bytes, 9 * 1024 * 1024 + 'STDERR_END'.length)
+  assert.equal(result.stdout.truncated, true)
+  assert.ok(result.stdout.tail?.endsWith(marker))
+  assert.ok(result.stderr.tail?.endsWith('STDERR_END'))
+  assert.ok(Buffer.byteLength(result.stdout.text) + Buffer.byteLength(result.stdout.tail ?? '') <= 8 * 1024 * 1024 + 8 * 1024)
 })
 
 test('foreground timeout retains partial streams and actual termination information', async () => {

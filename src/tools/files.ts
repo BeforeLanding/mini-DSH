@@ -171,5 +171,9 @@ export function apply(ctx: Context, config: FilesConfig = {}) {
       async execute(args, exec) { return searchFiles(resolve, matchFilePattern, args, searchLimits, exec.signal, true) },
     },
   ]
-  for (const definition of definitions) ctx.effect(() => ctx.tools.register(definition), `register ${definition.name}`)
+  for (const definition of definitions) ctx.effect(() => ctx.tools.register({ ...definition, origin: 'builtin',
+    effect: definition.name === 'write_file' || definition.name === 'edit_file' ? 'write' : 'read',
+    resources: args => ['read_file', 'write_file', 'edit_file'].includes(definition.name) ? [args.path as string] :
+      ['glob', 'grep'].includes(definition.name) ? [typeof args.path === 'string' ? args.path : '.'] : [],
+    exposeErrors: true }), `register ${definition.name}`)
 }

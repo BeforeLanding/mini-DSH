@@ -14,6 +14,7 @@ import * as toolResults from '../src/plugins/tool-results.js'
 import * as readHistoryPlugin from '../src/plugins/read-history.js'
 import type { RunState } from '../src/core/budget.js'
 import { harness } from './harness.js'
+import { structuredSummary } from './structured-summary.js'
 
 const policy = { contextWindowTokens: 1_000_000, inputTargetTokens: 65_536, maxOutputTokens: 16_384 } as const
 
@@ -25,7 +26,7 @@ type H = ReturnType<typeof harness>
 // 一条单任务会话：原始请求（恒受保护）之后是一段会被压掉的历史，其中一条 assistant 消息承载了
 // 「摘要可能丢掉、但事件号还在」的那种事实。压缩后它就不在投影里了——正是回读要补上的那一段。
 function compactedSession() {
-  const h = harness(async () => ({ content: 'early range summary' }))
+  const h = harness(async () => ({ content: structuredSummary('Read the early range.') }))
   const run: RunState = h.sessions.beginRun(h.session.id, policy, 'mock/test')
   h.sessions.append(h.session.id, 'user/message', { content: REQUEST }, run)
   h.sessions.append(h.session.id, 'assistant/message', { content: `noted. ${CONSTRAINT}` }, run)

@@ -3,7 +3,9 @@ import assert from 'node:assert/strict'
 import { resolveBudget } from '../src/core/budget.js'
 import type { BudgetPolicy } from '../src/core/budget.js'
 import type { Adapter, ChatRequest, ChatResponse, ToolCall } from '../src/core/contracts.js'
+import { ProviderError } from '../src/core/model-error.js'
 import { harness } from './harness.js'
+import { structuredSummary } from './structured-summary.js'
 
 // 压缩预算刻意与输入目标解耦：这样压力触发可以独立于溢出触发被检验。默认配置下两者等价
 // （compactionBudgetTokens 默认取 inputTargetTokens），那正是 §4.1 要如实写下来的事情。
@@ -17,7 +19,7 @@ const SUMMARY_MARK = '上面的对话正在被摘要'
 const isSummaryCall = (request: ChatRequest) => typeof request.messages?.at(-1)?.content === 'string' && request.messages!.at(-1)!.content!.includes(SUMMARY_MARK)
 
 // 脚本化模型：摘要调用与主循环调用要能分开认。摘要调用一眼可辨——它的最后一条消息就是固定指令。
-function scripted(steps: readonly ToolCall[], summarize: () => ChatResponse = () => ({ content: 'early range summary' })) {
+function scripted(steps: readonly ToolCall[], summarize: () => ChatResponse = () => ({ content: structuredSummary('Read the early range.') })) {
   const state = { calls: 0, summaries: 0 }
   let step = 0
   return {
@@ -60,13 +62,15 @@ function seedPriorTask(h: H, policy: BudgetPolicy) {
 }
 
 test('budget policy carries compaction knobs and rejects values outside their domain', () => {
-  const policy = resolveBudget({ compactionRatio: 0.8, retainRatio: 0.16, auto: true, compactionBudgetTokens: 1000, maxOverflowRetries: 0 })
+  const policy = resolveBudget({ compactionRatio: 0.8, retainRatio: 0.16, postCompactionTargetRatio: 0.65, auto: true, compactionBudgetTokens: 1000, maxOverflowRetries: 0 })
   assert.equal(policy.compactionRatio, 0.8)
   assert.equal(policy.retainRatio, 0.16)
+  assert.equal(policy.postCompactionTargetRatio, 0.65)
   assert.equal(policy.auto, true)
   assert.equal(policy.maxOverflowRetries, 0)
   for (const value of [0, -0.5, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) assert.throws(() => resolveBudget({ compactionRatio: value }), /fraction/)
   for (const value of [0, 2]) assert.throws(() => resolveBudget({ retainRatio: value }), /fraction/)
+  for (const value of [0, 2]) assert.throws(() => resolveBudget({ postCompactionTargetRatio: value }), /fraction/)
   assert.throws(() => resolveBudget({ auto: 1 as unknown as boolean }), /boolean/)
   assert.throws(() => resolveBudget({ compactionBudgetTokens: 0 }), /positive/)
 })
@@ -86,6 +90,29 @@ test('pressure compacts a fitting projection that has crossed the compaction rat
   assert.equal(new Set(projections(h).map(event => event.data.requestId)).size, 1)
 })
 
+test('agent loop retries a failed summary before the main request without repeating compaction', async () => {
+  let summaryCalls = 0, mainCalls = 0
+  const h = harness(async request => {
+    if (isSummaryCall(request)) {
+      summaryCalls++
+      if (summaryCalls === 1) throw new ProviderError('rate_limit', 429, true)
+      return { content: structuredSummary('Read the early range.') }
+    }
+    mainCalls++
+    return { content: 'done' }
+  })
+  h.loop.random = () => 0
+  const policy = base({ maxModelRequests: 4 })
+  seed(h, policy)
+  assert.equal(await h.agent.continue({ budget: policy }), 'done')
+  assert.equal(summaryCalls, 2)
+  assert.equal(mainCalls, 1)
+  assert.equal(starts(h).length, 1)
+  assert.equal(ends(h).length, 1)
+  assert.equal(events(h).filter(event => event.type === 'model/retry').length, 1)
+  assert.equal(h.sessions.latestRun(h.session.id)?.counters.modelRequests, 3)
+})
+
 test('pressure does not repeatedly summarize a prefix that stays above the pressure line', async () => {
   const steps: ToolCall[] = [1, 2, 3].map(index => ({ id: `tick-${index}`, name: 'tick', arguments: {} }))
   const scriptedRun = scripted(steps)
@@ -102,6 +129,9 @@ test('pressure does not repeatedly summarize a prefix that stays above the press
   const projected = projections(h)
   const afterPressure = projected.find((event, index) => index > 0 && event.data.requestId === projected[index - 1]!.data.requestId)
   assert.ok(afterPressure && afterPressure.data.estimatedInputTokens > 3000 * 0.8, 'summary cannot shrink the retained earlier task')
+  const suppressed = events(h).filter(event => event.type === 'context/pressure-suppressed')
+  assert.equal(suppressed.length, 1)
+  assert.equal(suppressed[0]?.type === 'context/pressure-suppressed' && suppressed[0].data.targetTokens, 1950)
   assert.equal(h.sessions.latestRun(h.session.id)?.status, 'completed')
 })
 
@@ -115,6 +145,27 @@ test('pressure can run again after an effective summary and new history growth',
 
   assert.equal(await h.agent.continue({ budget: policy }), 'done')
   assert.ok(scriptedRun.state.summaries >= 2, 'effective compaction must not disable later pressure checks')
+  assert.equal(events(h).filter(event => event.type === 'context/pressure-suppressed').length, 0)
+  assert.equal(h.sessions.latestRun(h.session.id)?.status, 'completed')
+})
+
+test('a 52k–65k irreducible prefix records hysteresis and does not resummarize each turn', async () => {
+  const scriptedRun = scripted([1, 2, 3].map(index => ({ id: `wide-${index}`, name: 'tick', arguments: {} })))
+  const h = harness(scriptedRun.chat)
+  h.tools.register({ name: 'tick', execute: () => 'small result' })
+  const policy = base({ inputTargetTokens: 65_536, compactionBudgetTokens: 65_536, maxModelRequests: 10 })
+  const old = h.sessions.beginRun(h.session.id, policy, 'mock/test')
+  h.sessions.append(h.session.id, 'user/message', { content: 'older finished task' }, old)
+  h.sessions.append(h.session.id, 'assistant/tool_calls', { toolCalls: [{ id: 'old-wide', name: 'read_file', arguments: {} }] }, old)
+  h.sessions.append(h.session.id, 'tool/result', { toolCallId: 'old-wide', name: 'read_file', content: 'x'.repeat(180_000) }, old)
+  h.sessions.finishRun(old, 'completed')
+
+  assert.equal(await h.agent.send('new task', { budget: policy }), 'done')
+  const suppressed = events(h).filter(event => event.type === 'context/pressure-suppressed')
+  assert.equal(starts(h).length, 1)
+  assert.equal(suppressed.length, 1)
+  assert.equal(suppressed[0]?.type === 'context/pressure-suppressed' && suppressed[0].data.targetTokens, Math.floor(65_536 * 0.65))
+  assert.equal(scriptedRun.state.summaries, 1)
   assert.equal(h.sessions.latestRun(h.session.id)?.status, 'completed')
 })
 
@@ -188,7 +239,7 @@ test('explicit compaction is exempt from the latch and opens a maintenance run o
   const steps: ToolCall[] = [1, 2, 3].map(index => ({ id: `c${index}`, name: 'read_file', arguments: { path: `${index}.ts` } }))
   let failing = true
   const h = harness((async (request: ChatRequest): Promise<ChatResponse> => {
-    if (isSummaryCall(request)) { if (failing) throw new Error('provider exploded'); return { content: 'early range summary' } }
+    if (isSummaryCall(request)) { if (failing) throw new Error('provider exploded'); return { content: structuredSummary('Read the early range.') } }
     const step = steps.shift()
     return step ? { toolCalls: [step] } : { content: 'done' }
   }) as Adapter['chat'])
@@ -242,7 +293,7 @@ test('a declined compaction is recorded with a closed-set reason and re-projecti
 test('a summary call consumes the run model-request budget like any other request', async () => {
   let mainCalls = 0
   const h = harness(async (request: ChatRequest) => {
-    if (isSummaryCall(request)) return { content: 'early range summary' }
+    if (isSummaryCall(request)) return { content: structuredSummary('Read the early range.') }
     mainCalls += 1
     return { content: 'done' }
   })
@@ -257,7 +308,7 @@ test('a summary call consumes the run model-request budget like any other reques
 })
 
 test('a summary call that exhausts the request budget stops the run before dispatching the main request', async () => {
-  const h = harness(async (request: ChatRequest) => isSummaryCall(request) ? { content: 'early range summary' } : { content: 'should not happen' })
+  const h = harness(async (request: ChatRequest) => isSummaryCall(request) ? { content: structuredSummary('Read the early range.') } : { content: 'should not happen' })
   const policy = base({ maxModelRequests: 1 })
   seed(h, policy)
 

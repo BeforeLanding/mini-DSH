@@ -29,6 +29,9 @@ class ToolsService extends Service {
     setResultProjection(...args: Parameters<ToolRuntime['setResultProjection']>) {
         return this.runtime.setResultProjection(...args)
     }
+    setAuthorization(...args: Parameters<ToolRuntime['setAuthorization']>) {
+        return this.runtime.setAuthorization(...args)
+    }
 }
 
 export const name = 'mini-tools'

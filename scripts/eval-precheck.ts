@@ -91,7 +91,7 @@ const PADDING_CHARS = 64_000
 // 11 轮。留到 16 是余量而不是目标——步数越多探针越慢，而它每次都要真跑一遍引擎。
 const PADDING_STEPS = 16
 const COMPACTION_MARK = '上面的对话正在被摘要'
-const PROBE_SUMMARY = '## Primary Request\npadding probe\n## Next Step\ncontinue padding'
+const PROBE_SUMMARY = '## Primary Request\npadding probe\n## Completed Work\nread padding\n## Pending Work\ncontinue padding\n## Key Evidence\noriginal events remain in the log'
 const PADDING_COMMAND = `node -e 'process.stdout.write("x".repeat(${PADDING_CHARS}))'`
 
 function paddingAdapter(): FixtureAdapter {

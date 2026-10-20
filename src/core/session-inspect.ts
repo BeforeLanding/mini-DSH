@@ -1,24 +1,29 @@
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { createLogRecordParser, isRecord } from './event-store.js'
+import { TokenObservationCollector } from './token-calibration.js'
+import type { TokenErrorSummary } from './token-calibration.js'
 import type { SessionEvent } from './contracts.js'
 
 export interface InspectWarning { code: 'truncated_tail' | 'corrupt_json' | 'unknown_event_type' | 'invalid_record' | 'invalid_utf8' | 'changed_during_read' | 'read_error' | 'missing_session_start'; line: number; byteOffset: number; message: string }
 export interface InspectReport {
-  version: 1
+  version: 2
   integrity: { complete: boolean; confirmedEvents: number; confirmedBytes: number; warnings: InspectWarning[] }
   session: { id: string | null; startedAt: string | null; endedAt: null; lastRecordedAt: string | null; runs: number; finishedRuns: number; resets: number }
   latestRun: { id: string; taskId: string; startedAt: string; finishedAt: string | null; status: string; stopReason: string | null } | null
-  requests: { main: number; summary: number; preDispatchRejected: number; preparedUnsent: number; missingUsage: number; estimatedUsage: number }
+  errors: { count: number; last: { runId: string; stage: string; errorKind: string; safeMessage: string; requestId?: string; toolCallId?: string; httpStatus?: number } | null }
+  requests: { main: number; summary: number; retries: number; preDispatchRejected: number; preparedUnsent: number; missingUsage: number; estimatedUsage: number }
   tools: { calls: number; confirmedErrors: number; unknownOutcomes: number; skipped: number }
   providerUsage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheReadFieldMissing: number }
   mechanisms: { compactionAttempts: number; compactionApplied: number; compactionDeclined: number; historyReads: number; previewTruncations: number }
   frozenSnapshots: { currentEpoch: { runtime: string | null; project: string | null }; legacyCurrentRecorded: number }
+  // R06 阶段 A：只读观测。只用 provider usage 配对 model/start；缺失、估算或零实际值单列，不进误差统计。
+  tokenError: TokenErrorSummary
   trace?: { events: { seq: number; type: string; detail?: string }[]; truncated: boolean }
 }
 
 type Request = { kind: 'main' | 'summary'; rejected: boolean; usage: boolean; estimated: boolean }
-const knownTypes = new Set(['verification/start', 'verification/result', 'file/baseline', 'file/observed', 'file/change', 'file/change-result', 'session/start', 'session/config', 'session/reset', 'context/snapshot', 'user/message', 'assistant/message', 'assistant/tool_calls', 'tool/result', 'run/start', 'run/finish', 'model/start', 'model/rejected', 'context/projection', 'context/summary-start', 'context/summary-end', 'context/summary', 'model/fragment', 'model/end', 'model/usage', 'tool/start'])
+const knownTypes = new Set(['verification/start', 'verification/result', 'file/baseline', 'file/observed', 'file/change', 'file/change-result', 'session/start', 'session/config', 'session/reset', 'context/snapshot', 'context/project-version', 'user/message', 'assistant/message', 'assistant/tool_calls', 'tool/result', 'run/start', 'run/error', 'run/finish', 'model/start', 'model/retry', 'model/rejected', 'context/projection', 'context/summary-start', 'context/summary-end', 'context/pressure-suppressed', 'context/summary', 'model/fragment', 'model/end', 'model/usage', 'tool/start'])
 const safeToolName = (name: string | undefined) => name && /^[\w.:-]{1,80}$/.test(name) ? name : undefined
 
 function warning(error: unknown, line: number, byteOffset: number): InspectWarning {
@@ -31,15 +36,17 @@ export async function inspectSession(file: string, options: { trace?: boolean } 
   const before = await stat(file)
   if (!before.isFile()) throw new Error('inspect path must be a JSONL file')
   const report: InspectReport = {
-    version: 1,
+    version: 2,
     integrity: { complete: true, confirmedEvents: 0, confirmedBytes: 0, warnings: [] },
     session: { id: null, startedAt: null, endedAt: null, lastRecordedAt: null, runs: 0, finishedRuns: 0, resets: 0 },
     latestRun: null,
-    requests: { main: 0, summary: 0, preDispatchRejected: 0, preparedUnsent: 0, missingUsage: 0, estimatedUsage: 0 },
+    errors: { count: 0, last: null },
+    requests: { main: 0, summary: 0, retries: 0, preDispatchRejected: 0, preparedUnsent: 0, missingUsage: 0, estimatedUsage: 0 },
     tools: { calls: 0, confirmedErrors: 0, unknownOutcomes: 0, skipped: 0 },
     providerUsage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheReadFieldMissing: 0 },
     mechanisms: { compactionAttempts: 0, compactionApplied: 0, compactionDeclined: 0, historyReads: 0, previewTruncations: 0 },
     frozenSnapshots: { currentEpoch: { runtime: null, project: null }, legacyCurrentRecorded: 0 },
+    tokenError: new TokenObservationCollector().summary(),
     ...(options.trace ? { trace: { events: [], truncated: false } } : {}),
   }
   const requests = new Map<string, Request>()
@@ -55,16 +62,21 @@ export async function inspectSession(file: string, options: { trace?: boolean } 
     report.integrity.complete = false
     report.integrity.warnings.push({ code, line, byteOffset, message })
   }
+  const tokenCollector = new TokenObservationCollector()
   function accept(event: SessionEvent) {
+    tokenCollector.observe(event)
     report.integrity.confirmedEvents++
     report.session.lastRecordedAt = event.at
     if (report.trace && !['model/fragment', 'user/message', 'assistant/message', 'assistant/tool_calls'].includes(event.type)) {
       let detail: string | undefined
       if (event.type === 'tool/start' || event.type === 'tool/result') detail = safeToolName(event.data.name)
       else if (event.type === 'run/finish') detail = event.data.state.status
+      else if (event.type === 'run/error') detail = `${event.data.stage}: ${event.data.errorKind}`
       else if (event.type === 'model/rejected') detail = event.data.reason
       else if (event.type === 'context/snapshot') detail = `${event.data.name}: ${event.data.source}`
+      else if (event.type === 'context/project-version') detail = event.data.previousDigest ? 'changed' : 'initial'
       else if (event.type === 'context/summary-end') detail = event.data.outcome.kind
+      else if (event.type === 'context/pressure-suppressed') detail = event.data.reason
       report.trace.events.push({ seq: event.seq, type: event.type, ...(detail ? { detail } : {}) })
       if (report.trace.events.length > 40) { report.trace.events.shift(); report.trace.truncated = true }
     }
@@ -93,6 +105,12 @@ export async function inspectSession(file: string, options: { trace?: boolean } 
           report.latestRun.stopReason = event.data.state.status
         }
         break
+      case 'run/error':
+        report.errors.count++
+        report.errors.last = { runId: event.runId!, stage: event.data.stage, errorKind: event.data.errorKind, safeMessage: event.data.safeMessage,
+          ...(event.data.requestId ? { requestId: event.data.requestId } : {}), ...(event.data.toolCallId ? { toolCallId: event.data.toolCallId } : {}),
+          ...(event.data.httpStatus ? { httpStatus: event.data.httpStatus } : {}) }
+        break
       case 'context/projection':
         if (event.data.requestId && event.runId) projections.set(event.data.requestId, event.runId)
         break
@@ -111,6 +129,9 @@ export async function inspectSession(file: string, options: { trace?: boolean } 
         requests.set(event.data.requestId, { kind, rejected: false, usage: false, estimated: false })
         break
       }
+      case 'model/retry':
+        report.requests.retries++
+        break
       case 'model/rejected':
         requests.get(event.data.requestId)!.rejected = true
         report.requests.preDispatchRejected++
@@ -196,20 +217,24 @@ export async function inspectSession(file: string, options: { trace?: boolean } 
     projections.delete(requestId)
   }
   for (const [requestId, runId] of projections) if (!requests.has(requestId) && finishedRuns.has(runId)) report.requests.preparedUnsent++
+  report.tokenError = tokenCollector.summary()
   return report
 }
 
 export function formatInspect(report: InspectReport) {
-  const { session, latestRun, requests, tools, providerUsage, mechanisms, frozenSnapshots, integrity } = report
+  const { session, latestRun, errors, requests, tools, providerUsage, mechanisms, frozenSnapshots, tokenError, integrity } = report
+  const percent = (value: number) => `${(value * 100).toFixed(2)}%`
   return [
     `Session ${session.id ?? 'unknown'} — ${integrity.complete ? 'complete JSONL' : 'PARTIAL EVIDENCE'} (${integrity.confirmedEvents} events)`,
     `Started: ${session.startedAt ?? 'unknown'}; session end: not recorded; last event: ${session.lastRecordedAt ?? 'none'}`,
     `Runs: ${session.runs} (${session.finishedRuns} finished, ${session.resets} resets); latest: ${latestRun ? `${latestRun.status} (${latestRun.stopReason ?? 'no recorded end'})` : 'none'}`,
+    `Recorded errors: ${errors.count}; last: ${errors.last ? `${errors.last.stage}/${errors.last.errorKind}: ${errors.last.safeMessage}${errors.last.httpStatus ? ` (HTTP ${errors.last.httpStatus})` : ''}` : latestRun?.status === 'error' ? 'unknown (legacy or interrupted log)' : 'none'}`,
     `Requests dispatched: main ${requests.main}, summary ${requests.summary}; pre-dispatch rejected ${requests.preDispatchRejected}, prepared unsent ${requests.preparedUnsent}; missing usage ${requests.missingUsage}, estimated usage ${requests.estimatedUsage}`,
     `Tools: calls ${tools.calls}, confirmed errors ${tools.confirmedErrors}, unknown outcomes ${tools.unknownOutcomes}, skipped ${tools.skipped}`,
     `Provider usage: input ${providerUsage.inputTokens}, output ${providerUsage.outputTokens}, cache read ${providerUsage.cacheReadTokens} (${providerUsage.cacheReadFieldMissing} provider records omit cache field)`,
     `Mechanisms: compaction attempts ${mechanisms.compactionAttempts}, applied ${mechanisms.compactionApplied}, declined ${mechanisms.compactionDeclined}; read_history ${mechanisms.historyReads}; preview truncations ${mechanisms.previewTruncations}`,
     `Frozen snapshot source (current epoch): runtime ${frozenSnapshots.currentEpoch.runtime ?? 'none'}, project ${frozenSnapshots.currentEpoch.project ?? 'none'}; legacy-current records ${frozenSnapshots.legacyCurrentRecorded}`,
+    `Token error (provider usage only): ${tokenError.samples} samples in ${tokenError.groups.length} groups; median ${percent(tokenError.medianRelativeError)}, underestimate ${percent(tokenError.underestimateRate)}, |error| p50 ${percent(tokenError.p50AbsRelativeError)} / p95 ${percent(tokenError.p95AbsRelativeError)}; excluded missing usage ${tokenError.excluded.missingUsage}, estimated usage ${tokenError.excluded.estimatedUsage}, zero actual ${tokenError.excluded.actualZero}, orphan usage ${tokenError.excluded.orphanUsage}, rejected ${tokenError.excluded.rejected}`,
     ...integrity.warnings.map(item => `WARNING ${item.code} at line ${item.line}, byte ${item.byteOffset}: ${item.message}`),
     ...(report.trace ? ['Trace (last 40 selected metadata events):', ...report.trace.events.map(event => `  #${event.seq} ${event.type}${event.detail ? ` ${event.detail}` : ''}`), ...(report.trace.truncated ? ['  ... earlier selected events omitted'] : [])] : []),
   ].join('\n')

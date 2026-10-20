@@ -10,6 +10,7 @@ import { SessionRuntime } from '../src/core/session-runtime.js'
 import type { BudgetPolicy, RunState } from '../src/core/budget.js'
 import type { Adapter, ChatRequest, ChatResponse } from '../src/core/contracts.js'
 import { harness } from './harness.js'
+import { structuredSummary } from './structured-summary.js'
 
 // NX-16 点名的三类失效：约束丢失、事实幻觉、跨恢复失效。三条都在**机制**层面判，不在文笔层面判。
 //
@@ -58,7 +59,7 @@ const compact = (h: H, run: RunState, extra: Partial<Parameters<CompactionRuntim
   })
 
 test('constraint loss: what the user actually asked for stays, and what got replaced stays checkable', async () => {
-  const { h, run, request, restated } = longSession('## Primary Request\n- repair the cart\n\n## Files and Code\n- src/cart.mjs')
+  const { h, run, request, restated } = longSession(structuredSummary('Read src/cart.mjs.'))
   assert.equal((await compact(h, run)).kind, 'applied')
 
   const projected = h.sessions.deriveMessages(h.session.id).map(message => message.content).join('\n')
@@ -78,7 +79,7 @@ test('constraint loss: what the user actually asked for stays, and what got repl
 })
 
 test('fabricated facts: the summary is reproduced verbatim so nothing invented is attributable to the harness', async () => {
-  const fabricated = '## Errors and Fixes\n- the tests were already passing before any edit; no fix was needed'
+  const fabricated = structuredSummary('The tests were already passing before any edit; no fix was needed.')
   const { h, run } = longSession(fabricated)
   assert.equal((await compact(h, run)).kind, 'applied')
 
@@ -104,7 +105,7 @@ test('across a restart: the summary survives, the projection is identical and th
   const h = harness((async (request: ChatRequest): Promise<ChatResponse> => {
     if (!isSummaryCall(request)) return { content: 'unused' }
     summaryCalls += 1
-    return { content: '## Current Work\n- repairing src/cart.mjs' }
+    return { content: structuredSummary('Repairing src/cart.mjs.') }
   }) as Adapter['chat'])
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-compaction-fixtures-'))
   const { run } = longSessionInto(h)
@@ -125,7 +126,7 @@ test('across a restart: the summary survives, the projection is identical and th
     assert.deepEqual(restored.deriveMessages(h.session.id), before)
     const applied = restored.visibleEvents(h.session.id).flatMap(event => event.type === 'context/summary' ? [event] : [])
     assert.equal(applied.length, 1)
-    assert.equal(applied[0]!.data.summary, '## Current Work\n- repairing src/cart.mjs')
+    assert.equal(applied[0]!.data.summary, structuredSummary('Repairing src/cart.mjs.'))
     // 被遮蔽的原文跨重启也读得回来——事件日志是唯一事实来源，这一点不随进程生死改变。
     assert.ok(readHistory(restored, h.session.id, applied[0]!.data.shadowedSeqs[0]!).content.includes('l'.repeat(1000)))
     await reopened.close()

@@ -6,7 +6,10 @@ import { CompactionRuntime } from './compaction-runtime.js'
 import type { CompactionTrigger, DeclineReason } from './compaction-runtime.js'
 import { estimateUsage } from './token-estimator.js'
 import { StreamJournal } from './stream-journal.js'
-import { ModelStreamError } from './model-error.js'
+import { TokenObservationCollector, applyTokenCalibration, calibrateTokenEstimate, requestModelLabel, toolSchemaDigest } from './token-calibration.js'
+import { ModelStreamError, ProviderError, runErrorData } from './model-error.js'
+import { retryDelay, waitForRetry } from './retry-policy.js'
+import { systemClock } from './run-budget-runtime.js'
 import { ModelNotDispatchedError } from './model-dispatch.js'
 import type { BudgetPolicy, RunState, Usage, StopReason } from './budget.js'
 import { createHash, randomUUID } from 'node:crypto'
@@ -35,6 +38,7 @@ export class AgentLoopRuntime {
     }
 
     clock?: Clock
+    random = Math.random
     budget?: import('./budget.js').BudgetPolicy
     async run(agent: Agent, input: string | undefined, { signal, onReasoning, onContent, onToolCall, onToolResult, budget }: RunOptions = {}) {
         const configured = { ...this.budget, ...agent.budget, ...budget }
@@ -46,6 +50,10 @@ export class AgentLoopRuntime {
         const control = new RunBudgetRuntime(policy, state, signal, this.clock)
         const enteredTools = new Set<string>()
         let terminalStatus: StopReason | undefined
+        let failureStage: 'model' | 'summary' | 'tool' | 'runtime' = 'runtime'
+        let activeRequestId: string | undefined
+        let activeToolCallId: string | undefined
+        let errorRecorded = false
         const observeCommit = (confirmed: boolean, status: StopReason = terminalStatus!) => {
             state.counters.approvalDurationMs = control.approvalDurationMs
             state.counters.activeDurationMs = control.activeDurationMs
@@ -75,8 +83,20 @@ export class AgentLoopRuntime {
 
             control.check()
             const schemas = this.tools.schemas()
+            const schemaDigest = toolSchemaDigest(schemas)
+            const modelLabel = requestModelLabel(agent.model)
+            // 只从已确认日志中的同模型、同工具 schema 主请求取样；model/start 保留原始估算，
+            // 防止把已放大的值反过来训练校准器。每条投影也记录本轮决策，供恢复与审计。
+            const calibration = policy.tokenCalibration ? (() => {
+                const collector = new TokenObservationCollector()
+                for (const event of this.sessions.confirmedEvents(sessionId)) collector.observe(event)
+                return calibrateTokenEstimate(collector.observations().filter(observation =>
+                    observation.kind === 'main' && observation.model === modelLabel && observation.schemaDigest === schemaDigest),
+                    { enabled: true, maxMultiplier: policy.tokenCalibrationMaxMultiplier })
+            })() : undefined
             const project = () => new ContextBudgetRuntime().project(this.sessions.visibleEvents(sessionId), state.taskId,
-                { system, tools: schemas, maxOutputTokens: policy.maxOutputTokens }, policy, events => this.sessions.deriveMessages(sessionId, events), inputTokens => control.outputAllowance(inputTokens))
+                { system, tools: schemas, maxOutputTokens: policy.maxOutputTokens }, policy, events => this.sessions.deriveMessages(sessionId, events),
+                inputTokens => control.outputAllowance(inputTokens), calibration ? raw => applyTokenCalibration(raw, calibration) : undefined)
             let projection = project()
             const absorb = () => { state.removedTaskIds = [...new Set([...state.removedTaskIds, ...projection.removedTaskIds])] }
             absorb()
@@ -90,7 +110,9 @@ export class AgentLoopRuntime {
             const recordProjection = () => {
                 maxOutputTokens = control.outputAllowance(projection.estimatedInputTokens) ?? 0
                 append(sessionId, 'context/projection', {
-                    requestId, estimatedInputTokens: projection.estimatedInputTokens, reservedOutputTokens: maxOutputTokens,
+                    requestId, estimatedInputTokens: projection.estimatedInputTokens,
+                    ...(calibration ? { rawEstimatedInputTokens: projection.rawEstimatedInputTokens, calibration } : {}),
+                    reservedOutputTokens: maxOutputTokens,
                     safetyMarginTokens: projection.safetyMarginTokens, removedTaskIds: projection.removedTaskIds,
                     // NX-39 因子 2 的读数：本轮装配出的系统提示的摘要。投影是「这一轮要发出去的东西」的记录，
                     // 系统提示正是其中一部分，记在这里就不必为了量前缀稳定性再多一条事件类型。
@@ -99,11 +121,15 @@ export class AgentLoopRuntime {
             recordProjection()
 
             // NX-34 §4：压缩插在裁剪之后、抛错之前。免费的先做完，贵的才出手。
-            const overflowing = () => (policy.inputTargetTokens !== undefined && projection.estimatedInputTokens > policy.inputTargetTokens) ||
+            const hardInputCapTokens = policy.inputTargetTokens
+            const overflowing = () => (hardInputCapTokens !== undefined && projection.estimatedInputTokens > hardInputCapTokens) ||
                 (policy.contextWindowTokens !== undefined && projection.estimatedInputTokens + maxOutputTokens + projection.safetyMarginTokens > policy.contextWindowTokens)
             const compactionBudget = policy.compactionBudgetTokens ?? policy.inputTargetTokens
             const attempt = async (trigger: CompactionTrigger) => {
-                if (!await this.#compact(sessionId, state, policy, control, agent, { system, tools: schemas }, trigger, projection)) return false
+                failureStage = 'summary'
+                const applied = await this.#compact(sessionId, state, policy, control, agent, { system, tools: schemas }, trigger, projection)
+                failureStage = 'runtime'
+                if (!applied) return false
                 projection = project()
                 absorb()
                 control.check()
@@ -116,9 +142,19 @@ export class AgentLoopRuntime {
             }
             // pressure 是主路径：装得下但已逼近阈值。它只该做一次——压完还在带内说明这次压缩没解决问题，
             // 再压一遍只是重复花钱。context-overflow 是兜底，按 maxOverflowRetries 限次，防止一步内无限重试。
-            const pressureLine = compactionBudget === undefined ? undefined : compactionBudget * (policy.compactionRatio ?? 0.8)
-            if (!pressureSuppressed && !overflowing() && pressureLine !== undefined && projection.estimatedInputTokens > pressureLine) {
-                if (await attempt('pressure') && projection.estimatedInputTokens > pressureLine) pressureSuppressed = true
+            const pressureTriggerTokens = compactionBudget === undefined ? undefined : Math.floor(compactionBudget * (policy.compactionRatio ?? 0.8))
+            const postCompactionTargetTokens = compactionBudget === undefined ? undefined : Math.floor(compactionBudget * (policy.postCompactionTargetRatio ?? 0.65))
+            if (!pressureSuppressed && !overflowing() && pressureTriggerTokens !== undefined && projection.estimatedInputTokens > pressureTriggerTokens) {
+                const beforeTokens = projection.estimatedInputTokens
+                if (await attempt('pressure')) {
+                    const afterTokens = projection.estimatedInputTokens
+                    const insufficientReduction = beforeTokens - afterTokens < Math.max(64, Math.ceil(beforeTokens * 0.05))
+                    if (insufficientReduction || (postCompactionTargetTokens !== undefined && afterTokens > postCompactionTargetTokens)) {
+                        pressureSuppressed = true
+                        append(sessionId, 'context/pressure-suppressed', { reason: insufficientReduction ? 'insufficient-reduction' : 'above-target',
+                            beforeTokens, afterTokens, targetTokens: postCompactionTargetTokens! })
+                    }
+                }
             }
             for (let retries = 0; overflowing() && retries < (policy.maxOverflowRetries ?? 1); retries++) {
                 if (!await attempt('context-overflow')) break
@@ -128,47 +164,69 @@ export class AgentLoopRuntime {
             control.check()
             state.estimatedInputTokens = estimatedInputTokens
             if (overflowing()) throw new BudgetStop('context_overflow', state)
-            append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId, estimatedInputTokens })
-            const settle = (usage?: Usage) => {
+            const settle = (attemptRequestId: string, usage?: Usage) => {
                 if (!usage) return
                 state.usage.push(usage)
                 state.counters.inputTokens += usage.inputTokens
                 state.counters.outputTokens += usage.outputTokens
                 state.counters.totalTokens += usage.totalTokens
                 state.counters.cacheReadTokens += usage.cacheReadTokens ?? 0
-                append(sessionId, 'model/usage', { taskId: state.taskId, runId: state.runId, requestId, usage })
+                append(sessionId, 'model/usage', { taskId: state.taskId, runId: state.runId, requestId: attemptRequestId, usage })
             }
-            await control.wait(() => this.sessions.flush(sessionId))
-            control.check()
-            state.counters.modelRequests++
-            const journal = new StreamJournal(requestId, data => append(sessionId, 'model/fragment', data))
-            const response = await control.wait(() => this.llm.chat(
-                {
-                    purpose: 'main',
-                    maxOutputTokens,
-                    system,
-                    messages,
-                    tools: schemas,
-                    signal: control.signal,
-                    onReasoning: chunk => { if (control.signal.aborted || journal.closed) return; journal.add('reasoning', chunk); onReasoning?.(chunk) },
-                    onContent: chunk => { if (control.signal.aborted || journal.closed) return; journal.add('content', chunk); onContent?.(chunk) },
-                },
-                agent.model,
-            ), policy.requestTimeoutMs ?? 180_000).catch(error => {
-                journal.close()
-                if (error instanceof ModelNotDispatchedError) {
-                    state.counters.modelRequests--
-                    append(sessionId, 'model/rejected', { requestId, reason: error.reason })
-                    if (error.reason === 'request_limit') throw new BudgetStop('max_steps', state)
+            let response: Awaited<ReturnType<LlmRuntime['chat']>>
+            let attemptRequestId = requestId
+            for (let attemptIndex = 0; ; attemptIndex++) {
+                append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId: attemptRequestId,
+                    estimatedInputTokens: projection.rawEstimatedInputTokens, model: modelLabel, schemaDigest })
+                await control.wait(() => this.sessions.flush(sessionId))
+                control.check()
+                state.counters.modelRequests++
+                const journal = new StreamJournal(attemptRequestId, data => append(sessionId, 'model/fragment', data))
+                failureStage = 'model'
+                activeRequestId = attemptRequestId
+                try {
+                    response = await control.wait(() => this.llm.chat({
+                        purpose: 'main', maxOutputTokens, system, messages, tools: schemas, signal: control.signal,
+                        onReasoning: chunk => { if (control.signal.aborted || journal.closed) return; journal.add('reasoning', chunk); onReasoning?.(chunk) },
+                        onContent: chunk => { if (control.signal.aborted || journal.closed) return; journal.add('content', chunk); onContent?.(chunk) },
+                    }, agent.model), policy.requestTimeoutMs ?? 180_000)
+                } catch (error) {
+                    journal.close()
+                    if (error instanceof ModelNotDispatchedError) {
+                        state.counters.modelRequests--
+                        append(sessionId, 'model/rejected', { requestId: attemptRequestId, reason: error.reason })
+                        errorRecorded = true
+                        if (error.reason === 'request_limit') throw new BudgetStop('max_steps', state)
+                        throw error
+                    }
+                    const partial = error instanceof ModelStreamError ? error.partial : { content: journal.content, reasoningContent: journal.reasoningContent, usage: undefined }
+                    settle(attemptRequestId, partial.usage ?? estimateUsage(projection.rawEstimatedInputTokens, partial))
+                    append(sessionId, 'model/end', { requestId: attemptRequestId, complete: false })
+                    const remaining = policy.maxActiveDurationMs === undefined ? Number.POSITIVE_INFINITY : policy.maxActiveDurationMs - control.activeDurationMs
+                    const delay = !journal.content && !journal.reasoningContent &&
+                        (policy.maxModelRequests === undefined || state.counters.modelRequests < policy.maxModelRequests) &&
+                        (policy.maxTotalTokens === undefined || state.counters.totalTokens < policy.maxTotalTokens)
+                        ? retryDelay(error, attemptIndex, remaining, this.random) : undefined
+                    if (delay !== undefined && error instanceof ProviderError) {
+                        const nextRequestId = randomUUID()
+                        append(sessionId, 'model/retry', { rootRequestId: requestId, failedRequestId: attemptRequestId, nextRequestId, attempt: attemptIndex + 1, delayMs: delay, errorKind: error.kind })
+                        await control.wait(() => this.sessions.flush(sessionId))
+                        await waitForRetry(delay, control.signal, this.clock ?? systemClock)
+                        control.check()
+                        attemptRequestId = nextRequestId
+                        continue
+                    }
+                    append(sessionId, 'run/error', runErrorData('model', error, { requestId: attemptRequestId }))
+                    errorRecorded = true
                     throw error
                 }
-                const partial = error instanceof ModelStreamError ? error.partial : { content: journal.content, reasoningContent: journal.reasoningContent, usage: undefined }
-                settle(partial.usage ?? estimateUsage(estimatedInputTokens, partial))
-                append(sessionId, 'model/end', { requestId, complete: false })
-                throw error
-            }).finally(() => journal.close())
-            settle(response.usage ?? estimateUsage(estimatedInputTokens, response))
-            append(sessionId, 'model/end', { requestId, complete: response.complete !== false, finishReason: response.finishReason })
+                journal.close()
+                settle(attemptRequestId, response.usage ?? estimateUsage(projection.rawEstimatedInputTokens, response))
+                append(sessionId, 'model/end', { requestId: attemptRequestId, complete: response.complete !== false, finishReason: response.finishReason })
+                break
+            }
+            failureStage = 'runtime'
+            activeRequestId = undefined
             if (response.complete === false) throw new BudgetStop(response.finishReason === 'length' ? 'output_limit' : 'error', state)
 
             const toolCalls = response.toolCalls ?? []
@@ -228,6 +286,8 @@ export class AgentLoopRuntime {
                 control.check()
                 state.counters.toolCalls++
                 enteredTools.add(`${batch.seq}/${call.id}`)
+                failureStage = 'tool'
+                activeToolCallId = call.id
                 const result = await control.wait(() => this.tools.execute(call.name, call.arguments, {
                     signal: control.signal,
                     sessionId,
@@ -255,7 +315,10 @@ export class AgentLoopRuntime {
                     // 语义里（content 是给人看的那串文本），靠正则去认它是把渲染细节当契约。
                     ...(result.previewTruncated ? { previewTruncated: true } : {}),
                 })
+                if (result.isError) append(sessionId, 'run/error', runErrorData('tool', undefined, { toolCallId: call.id }))
                 await this.sessions.flush(sessionId)
+                failureStage = 'runtime'
+                activeToolCallId = undefined
                 onToolResult?.({ ...result, renderedContent, name: call.name, toolCallId: call.id })
             }
 
@@ -269,6 +332,9 @@ export class AgentLoopRuntime {
                 throw error
             }
             const events = this.sessions.visibleEvents(sessionId)
+            if (!errorRecorded && !(error instanceof BudgetStop && !['timeout', 'request_timeout', 'approval_timeout'].includes(error.reason))) {
+                append(sessionId, 'run/error', runErrorData(failureStage, error, { ...(activeRequestId ? { requestId: activeRequestId } : {}), ...(activeToolCallId ? { toolCallId: activeToolCallId } : {}) }))
+            }
             for (const { call, scope } of pendingTools(events)) {
                 if (scope.runId !== state.runId) continue
                 const started = enteredTools.has(`${scope.seq}/${call.id}`)
@@ -291,10 +357,10 @@ export class AgentLoopRuntime {
     }
 
     // §8.4：失败闩从**日志折叠**得出，不是内存计数器——这样事后可解释。作用域是当前 run：新 run
-    // （含 /continue）重获机会。只有前三个原因是「这个摘要器不行」，它们计数；applied 归零；其余原因
+    // （含 /continue）重获机会。只有四个摘要内容/调用原因计数；applied 归零；其余原因
     // 说的是「环境变了」，既不计入也不清零。
     #summaryFailures(sessionId: string, state: RunState) {
-        const counting = new Set<DeclineReason>(['summary-failed', 'summary-empty', 'summary-not-smaller'])
+        const counting = new Set<DeclineReason>(['summary-failed', 'summary-empty', 'summary-invalid', 'summary-not-smaller'])
         let failures = 0
         for (const event of this.sessions.visibleEvents(sessionId)) {
             if (event.type !== 'context/summary-end' || event.runId !== state.runId) continue
@@ -318,6 +384,11 @@ export class AgentLoopRuntime {
             retainRatio: policy.retainRatio ?? 0.16, maxSummaryTokens: policy.compactionMaxTokens ?? 8_192,
             system: prompt.system, tools: prompt.tools, model: agent.model, signal: control.signal,
             check: () => control.check(), outputAllowance: inputTokens => control.outputAllowance(inputTokens),
+            retry: {
+                remainingMs: () => policy.maxActiveDurationMs === undefined ? Number.POSITIVE_INFINITY : policy.maxActiveDurationMs - control.activeDurationMs,
+                wait: delayMs => control.wait(() => waitForRetry(delayMs, control.signal, this.clock ?? systemClock)),
+                random: () => this.random(),
+            },
             // §7.1：带 seq 范围的 recall 提示只在本部署确实挂载了回读工具时出现——不能承诺一个不存在的入口。
             ...(prompt.tools.some(schema => schema.function.name === REQUEST_TOOL) ? { recallTool: REQUEST_TOOL } : {}),
         })
@@ -347,6 +418,7 @@ export class AgentLoopRuntime {
         } catch (error) {
             terminal = control.stopReason ?? (error instanceof BudgetStop ? error.reason : 'error')
             failure = error
+            this.sessions.append(sessionId, 'run/error', runErrorData('summary', error), state)
         }
         state.counters.approvalDurationMs = control.approvalDurationMs
         state.counters.activeDurationMs = control.activeDurationMs

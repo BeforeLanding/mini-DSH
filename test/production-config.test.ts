@@ -15,15 +15,18 @@ test('production defaults and explicit context/preview choices use the shared ha
     const defaults = productionHarnessConfig({}, workspace)
     assert.equal(defaults.profile, 'coding')
     assert.equal(defaults.contextLayout, 'live')
+    assert.equal(defaults.runtimeClockMode, 'frozen')
     assert.equal(defaults.toolOutputMaxPreviewBytes, undefined)
     const live = await createHarness(defaults)
     try {
       assert.equal(live.capabilityManifest.policy.contextLayout, 'live')
+      assert.equal(live.capabilityManifest.policy.runtimeClockMode, 'frozen')
       assert.equal(live.capabilityManifest.policy.toolOutputMaxPreviewBytes, null)
       assert.ok(live.capabilityManifest.tools.includes('read_history'))
     } finally { await live.dispose() }
 
     const chosen = productionHarnessConfig({ MINI_DSH_CONTEXT_LAYOUT: 'frozen', MINI_DSH_TOOL_PREVIEW_BYTES: '32768' }, workspace)
+    assert.equal(chosen.runtimeClockMode, 'frozen')
     const frozen = await createHarness(chosen)
     try {
       assert.equal(frozen.capabilityManifest.policy.contextLayout, 'frozen')
@@ -35,6 +38,7 @@ test('production defaults and explicit context/preview choices use the shared ha
 
 test('invalid production layout and preview values fail before assembly', () => {
   for (const layout of ['', 'FULL', 'cached']) assert.throws(() => productionHarnessConfig({ MINI_DSH_CONTEXT_LAYOUT: layout }), /MINI_DSH_CONTEXT_LAYOUT/)
+  for (const mode of ['', 'FULL', 'cached']) assert.throws(() => productionHarnessConfig({ MINI_DSH_RUNTIME_TIME_MODE: mode }), /MINI_DSH_RUNTIME_TIME_MODE/)
   for (const preview of ['', '0', '-1', '1.5', 'Infinity', '9007199254740992']) assert.throws(() => productionHarnessConfig({ MINI_DSH_TOOL_PREVIEW_BYTES: preview }), /MINI_DSH_TOOL_PREVIEW_BYTES/)
 })
 
@@ -54,14 +58,17 @@ test('frozen snapshots follow session and reset epochs; project_context still re
       await fs.writeFile(rules, 'second-rule', 'utf8')
       const anotherSession = first.root.sessions.create()
       assert.ok(anotherSession.id)
-      assert.equal(await first.root.systemPrompt.assemble({ sessionId: a.id }), initial)
+      const stale = await first.root.systemPrompt.assemble({ sessionId: a.id })
+      assert.match(stale, /first-rule/)
+      assert.doesNotMatch(stale, /second-rule/)
+      assert.match(stale, /Context version changed/)
       const run = first.root.sessions.beginRun(anotherSession.id, {}, 'offline-model')
       const second = await first.root.systemPrompt.assemble({ sessionId: anotherSession.id })
       assert.deepEqual(first.root.sessions.visibleEvents(anotherSession.id).filter(e => e.type === 'context/snapshot').map(e => e.data.source), ['new-session', 'new-session'])
       first.root.sessions.finishRun(run, 'completed')
       assert.match(second, /second-rule/)
       assert.match(second, /clock-2/)
-      assert.equal(await first.root.systemPrompt.assemble({ sessionId: a.id }), initial, 'switching back restores the original snapshot')
+      assert.match(await first.root.systemPrompt.assemble({ sessionId: a.id }), /Context version changed/, 'switching back retains the saved rules and the change notice')
       const current = await first.root.tools.get('project_context')!.execute({}, { signal: new AbortController().signal })
       assert.match(JSON.stringify(current), /second-rule/)
       assert.doesNotMatch(JSON.stringify(current), /first-rule/)
@@ -99,7 +106,11 @@ test('frozen session snapshot survives JSONL restore; legacy sessions explicitly
     const second = await make()
     const reopened = await JsonlStore.open(directory, saved.id)
     await second.root.sessions.restore(reopened, workspace)
-    assert.equal(await second.root.systemPrompt.assemble({ sessionId: saved.id }), original)
+    const restored = await second.root.systemPrompt.assemble({ sessionId: saved.id })
+    assert.ok(restored.startsWith(original), 'the saved prompt remains intact before the version notice')
+    assert.match(restored, /original-rule/)
+    assert.doesNotMatch(restored, /changed-rule/)
+    assert.match(restored, /Context version changed/)
     assert.equal(clock, 1, 'restore does not read the clock again')
     const current = await second.root.tools.get('project_context')!.execute({}, { signal: new AbortController().signal })
     assert.match(JSON.stringify(current), /changed-rule/)
@@ -126,13 +137,13 @@ test('frozen session snapshot survives JSONL restore; legacy sessions explicitly
   } finally { await fs.rm(workspace, { recursive: true, force: true }) }
 })
 
-test('live prompt follows disk and clock across turns', async () => {
+test('explicit legacy live layout follows disk and clock across turns', async () => {
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-live-lifecycle-'))
   try {
     const rules = path.join(workspace, 'AGENTS.md')
     await fs.writeFile(rules, 'before-rule')
     let clock = 0
-    const harness = await createHarness({ ...productionHarnessConfig({}, workspace), runtimeTime: () => `tick-${++clock}` })
+    const harness = await createHarness({ ...productionHarnessConfig({ MINI_DSH_CONTEXT_LAYOUT: 'live' }, workspace), runtimeTime: () => `tick-${++clock}` })
     try {
       const session = harness.root.sessions.create()
       const before = await harness.root.systemPrompt.assemble({ sessionId: session.id })
@@ -143,6 +154,31 @@ test('live prompt follows disk and clock across turns', async () => {
       assert.match(after, /tick-2/)
       assert.equal(harness.root.sessions.visibleEvents(session.id).filter(e => e.type === 'context/snapshot').length, 0)
     } finally { await harness.dispose() }
+  } finally { await fs.rm(workspace, { recursive: true, force: true }) }
+})
+
+test('production default freezes the session clock while project rules stay live', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-clock-default-'))
+  try {
+    const rules = path.join(workspace, 'AGENTS.md')
+    await fs.writeFile(rules, 'initial-rule')
+    let clock = 0
+    const harness = await createHarness({ ...productionHarnessConfig({}, workspace), runtimeTime: () => `tick-${++clock}` })
+    try {
+      const session = harness.root.sessions.create({ workspace })
+      const before = await harness.root.systemPrompt.assemble({ sessionId: session.id })
+      await fs.writeFile(rules, 'updated-rule')
+      const after = await harness.root.systemPrompt.assemble({ sessionId: session.id })
+      assert.match(before, /tick-1/)
+      assert.match(after, /tick-1/)
+      assert.match(after, /updated-rule/)
+      assert.match(after, /Context version changed/)
+      assert.equal(clock, 1)
+      assert.deepEqual(harness.root.sessions.visibleEvents(session.id).filter(e => e.type === 'context/snapshot').map(e => e.data.name), ['runtime:environment'])
+      assert.deepEqual(harness.root.sessions.visibleEvents(session.id).filter(e => e.type === 'context/project-version').map(e => e.data.previousDigest === undefined), [true, false])
+      assert.equal(harness.root.sessions.visibleEvents(session.id).filter(e => e.type === 'user/message').length, 0)
+    } finally { await harness.dispose() }
+    assert.equal(productionHarnessConfig({ MINI_DSH_CONTEXT_LAYOUT: 'frozen', MINI_DSH_RUNTIME_TIME_MODE: 'live' }, workspace).runtimeClockMode, 'live')
   } finally { await fs.rm(workspace, { recursive: true, force: true }) }
 })
 
@@ -157,6 +193,7 @@ test('show-config needs no key, reports effective values and sources, and reveal
     assert.equal(result.status, 0, result.stderr)
     const shown = JSON.parse(result.stdout)
     assert.deepEqual(shown.contextLayout, { value: 'frozen', source: 'environment' })
+    assert.deepEqual(shown.runtimeClockMode, { value: 'frozen', source: 'environment' })
     assert.deepEqual(shown.toolResultPreviewBytes, { value: 32768, source: 'environment' })
     assert.equal(shown.budget.effective.maxModelRequests, 8)
     assert.equal(shown.budget.sources.maxModelRequests, 'environment')
@@ -173,6 +210,7 @@ test('show-config needs no key, reports effective values and sources, and reveal
     assert.equal(dotenvView.status, 0, dotenvView.stderr)
     const dotenvShown = JSON.parse(dotenvView.stdout)
     assert.deepEqual(dotenvShown.contextLayout, { value: 'frozen', source: '.env' })
+    assert.deepEqual(dotenvShown.runtimeClockMode, { value: 'frozen', source: '.env' })
     assert.deepEqual(dotenvShown.toolResultPreviewBytes, { value: 16_384, source: 'default' })
     for (const [key, value] of [['MINI_DSH_CONTEXT_LAYOUT', 'invalid'], ['MINI_DSH_TOOL_PREVIEW_BYTES', '0'],
       ['MINI_DSH_BUDGET', '{"bad":1}']] as const) {

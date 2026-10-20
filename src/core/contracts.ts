@@ -1,5 +1,6 @@
 import type { BudgetPolicy, RunState, Usage } from './budget.js'
 import type { FileSnapshot } from './file-edit.js'
+import type { ProviderErrorKind } from './model-error.js'
 export type Arguments = Record<string, unknown>
 export type ModelSelection = string | { provider: string; model: string } | null
 
@@ -47,6 +48,10 @@ export interface ContentBlock { type: string; text?: string; [key: string]: unkn
 export interface ToolResult { value: unknown; content: ContentBlock[]; isError: boolean; previewTruncated?: boolean }
 export interface ToolDefinition {
   name: string; description?: string; parameters?: Arguments
+  exposeErrors?: boolean
+  effect?: 'read' | 'write' | 'exec' | 'network' | 'unknown'
+  origin?: 'builtin' | 'external'
+  resources?(args: Arguments): string[]
   execute(args: Arguments, execution: Execution): unknown | Promise<unknown>
   output?: { render(args: Arguments, value: unknown): ContentBlock[]; isError?(value: unknown): boolean }
   finalizeContent?(execution: Execution, result: ToolResult): ContentBlock[] | undefined | Promise<ContentBlock[] | undefined>
@@ -66,9 +71,13 @@ export interface EventData {
   'session/config': { model: string; budget: BudgetPolicy }
   'session/reset': { epoch: number }
   'context/snapshot': { name: 'runtime:environment' | 'project:context'; text: string; source: 'new-session' | 'legacy-current' }
+  'context/project-version': { digest: string; previousDigest?: string }
   'run/start': { state: RunState }
+  'run/error': { errorId: string; stage: 'model' | 'summary' | 'tool' | 'runtime'; errorKind: ProviderErrorKind; safeMessage: string; requestId?: string; toolCallId?: string; httpStatus?: number; retryable?: boolean; providerRequestId?: string }
   'run/finish': { state: RunState }
-  'model/start': { taskId: string; runId: string; requestId: string; estimatedInputTokens?: number }
+  // model/schemaDigest 只用于 R06 的分层观测：旧日志没有这两个字段时按 unknown 归组。
+  'model/start': { taskId: string; runId: string; requestId: string; estimatedInputTokens?: number; model?: string; schemaDigest?: string }
+  'model/retry': { rootRequestId: string; failedRequestId: string; nextRequestId: string; attempt: number; delayMs: number; errorKind: import('./model-error.js').ProviderErrorKind }
   'model/rejected': { requestId: string; reason: 'request_limit' | 'amount_limit' | 'usage_unknown' | 'other_limit' }
   // requestId 可缺省以兼容旧日志；存在时它与随后的 model/start 相同，使投影归属成为日志中可读的事实，
   // 而不是依赖“同一 run 内最近一个投影”的位置推断。投影已发出但对应 model/start 缺失，即该请求因
@@ -77,9 +86,10 @@ export interface EventData {
   // 由评估侧现算：付费跑留下的只有这份日志，而「第 2 轮起系统提示与前一轮逐字相同」这条预注册要求报的量
   // 除了这里没有第二个来源。**摘要而不是原文**：系统提示含工作区内容，整段入库会让证据体积随轮次膨胀，
   // 而判据只问「两轮是不是同一串」。
-  'context/projection': { requestId?: string; estimatedInputTokens: number; reservedOutputTokens: number; safetyMarginTokens: number; removedTaskIds: string[]; systemPromptDigest?: string }
+  'context/projection': { requestId?: string; estimatedInputTokens: number; rawEstimatedInputTokens?: number; calibration?: import('./token-calibration.js').CalibrationState; reservedOutputTokens: number; safetyMarginTokens: number; removedTaskIds: string[]; systemPromptDigest?: string }
   'context/summary-start': { trigger: 'pressure' | 'context-overflow' | 'explicit'; budgetTokens: number; projectedTokens: number; plannedStart: number; plannedEnd: number; plannedNodes: number }
-  'context/summary-end': { startSeq: number; outcome: { kind: 'applied' } | { kind: 'declined'; reason: 'summary-failed' | 'summary-empty' | 'summary-not-smaller' | 'turn-started' | 'plan-stale' | 'agent-gone' | 'cancelled' | 'unclosed' } }
+  'context/summary-end': { startSeq: number; outcome: { kind: 'applied' } | { kind: 'declined'; reason: 'summary-failed' | 'summary-empty' | 'summary-invalid' | 'summary-not-smaller' | 'turn-started' | 'plan-stale' | 'agent-gone' | 'cancelled' | 'unclosed' } }
+  'context/pressure-suppressed': { reason: 'above-target' | 'insufficient-reduction'; beforeTokens: number; afterTokens: number; targetTokens: number }
   'context/summary': { startSeq: number; trigger: 'pressure' | 'context-overflow' | 'explicit'; budgetTokens: number; projectedTokens: number; shadowedSeqs: number[]; shadowedTokens: number; summaryTokens: number; retainedNodes: number; summary: string; frame: string }
   'model/fragment': { requestId: string; content: string; reasoningContent: string }
   'model/end': { requestId: string; complete: boolean; finishReason?: string }

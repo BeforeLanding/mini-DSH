@@ -1,5 +1,107 @@
 # 任务清单
 
+### R10 正式评测执行器零付费准备（2026-10-20，工作分支验收完成）
+
+独立提交 `430234e`：新增 `scripts/swebench/{run,report,workspace}.ts`，并扩展 `protocol.ts`/`preregister.ts`/`docs/EVALUATION-SWEBENCH.md`。行为边界：① 冻结文件同时包含开发批次（默认 5 题）与正式批次（50 题），开发题先选并从正式批排除，排除规则与确定性 arm 交错顺序写入 manifest；② 原始数据集只保留 `instance_id/repo/base_commit/version/environment_setup_commit/problem_statement/image`，gold/hidden 字段在预注册时剥离，执行器再拒绝仍带 `patch`/`test_patch`/`FAIL_TO_PASS` 的输入；③ `preregister` 缺模型、价格、基线命令、镜像 digest 或批次上限时保持 `draft`，只有齐备且 `--finalize` 才成为 `frozen`；④ 执行器复用 `createHarness`，每任务应用请求/工具/时间/输出/token 上限（金额上限按最大单价反推保守 token 上限），保存 session JSONL、终态、usage、空/非空 patch，基础设施失败与未知 usage 停批，批次金额与 episode 数量有硬上限，`--resume` 跳过已完成/中断 episode 而不重跑；⑤ 独立判分只读已保存 prediction，每批每臂使用新 run_id，官方判分失败保留为 error 分类并留在主分母；⑥ 报告给出 planned/executed 分母、每臂 Wilson 区间、预先声明的 candidate/baseline 与 context 两臂配对四格、精确 McNemar、失败分类与三条预声明失败轨迹，并关联 events/patch/session 路径。
+
+验收：`node --test dist/test/swebench-protocol.test.js dist/test/swebench-preregister.test.js dist/test/swebench-run.test.js` 17/17；脚本化零模型端到端覆盖正常批次（空 patch、独立 mock 判分、四格统计）、基础设施停批、未知 usage 停批、批次恢复、draft 与 gold 拒绝。完整 `pnpm test` 508 tests／478 pass／0 fail／30 skipped，`pnpm check` syntax 192 files，`pnpm lint` 213 files／0 diagnostics。**未执行**任何付费模型调用、5 题开发批次或正式 50 题；外部 mini-SWE-agent 臂只有配置契约（执行器明确拒绝未提供适配器的 external arm），50 题镜像 digest、价格快照、开发批次观测与付费授权仍缺，manifest 保持 draft。
+
+### R07 后续：MCP stdio 显式 env 边界（2026-10-20，工作分支 CI 验收完成）
+
+提交 `6113bc7`：`createHarness` 对 stdio MCP 条目应用 `secureStdioEntry`，由 `src/app/mcp-stdio-launcher.ts` 用 `childEnvironment` 构造子进程 env 并代理 stdio。只继承 PATH、locale、临时目录与 Windows 系统目录；HOME/USERPROFILE 指向独立临时目录；显式 `${ENV_NAME}` 引用按名转交，值不进入 argv；provider key、代理、SSH agent、`NODE_OPTIONS` 与真实 HOME 不再继承；`HOME`/`USERPROFILE`/`XDG_*`/`NODE_OPTIONS` 拒绝显式转发。启动器对启动器自身显式置空 `NODE_OPTIONS`，避免 SDK 继承的 loader 注入先于清洗生效。SDK 继续负责连接、协议与生命周期；未修改 `node_modules`，也未临时改写 `process.env`。官方 server 若不响应 stdin EOF，启动器在 1 秒宽限后终止，避免 Windows 留下孙进程。
+
+验收：真实 mock stdio 子进程测试验证 provider key/代理/SSH agent/`NODE_OPTIONS` 不泄漏、显式引用与 PATH 按契约传入、HOME 为独立临时目录、dispose 后 server 进程被回收；既有 list/call/timeout/disconnect/dispose 与拒绝审批用例保持通过；`secureStdioEntry` 幂等；show-config 仍只输出变量名。完整 `pnpm test` 497 tests／467 pass／0 fail／30 skipped，`pnpm check` syntax 187 files，`pnpm lint` 208 files／0 diagnostics；[CI 39421704013](https://github.com/BeforeLanding/mini-DSH/actions/runs/39421704013) 六个 job 全绿，SWE-bench 手动 PoC 按未触发配置跳过。上述记录取代本节 R07 残差中“仍可能继承代理/SSH agent/NODE_OPTIONS/真实 HOME”的历史描述。
+
+### R10 候选环境一致性与无模型 PoC（2026-10-20，工作分支 CI 验收通过）
+
+独立提交：`5b296d3` 改为逐路径 blob OID 比较（忽略 mode），并用 `git diff-tree --raw` 交叉核对，内容、增删路径或类型差异仍拒绝；`74144db` 修正 bind mount 参数并断言 `/testbed` 可写；`bc7a704` 恢复官方镜像 HOME（该提交把根因写成 `/root/.gitconfig` 不准确，后续实测证明镜像并未持久化 `safe.directory`），`217fd95` 最终以 `GIT_CONFIG_COUNT/KEY_0/VALUE_0` 注入 `safe.directory=/testbed`；`9bff11a` 输出失败工具调用的有界诊断；`f52699c` 让候选容器使用宿主 uid/gid，避免 `--cap-drop ALL` 下 root 不能写宿主创建的文件。
+
+最终提交 `f52699c` 的手动 [CI 39395532729](https://github.com/BeforeLanding/mini-DSH/actions/runs/39395532729) 七个 job 全绿。候选证据 `D:\Agent\outputs\mini-dsh-swebench-poc\ci-39395532729\candidate-evidence.json`：镜像 HEAD `5efaed…`／base `cffd4e0…`，1828 个条目内容完全一致，1758 个仅 `100644→100755` mode 差异，`git diff-tree --raw` 为 1758 个 `M` 且对象变化 0；`write_file`、容器 Bash 与 `read_file` 双向可见，路径逃逸拒绝；网络 `none`、只挂 `/testbed`、只读根、非特权、`--cap-drop ALL`、容器用户 `1001:1001`；provider 请求 0。候选 patch 的独立官方判分为 1 submitted／1 completed／1 resolved、0 unresolved／0 empty／0 error、0 unstopped containers／0 unremoved images；同一 run 的两次 gold 判分也均 resolved／0 error。本地 `pnpm test` 494 tests／464 pass／0 fail／30 skipped、`pnpm check` 186 files、`pnpm lint` 206 files／0 diagnostics。
+
+边界：本项只验收候选工作区、文件/Bash 同树、补丁导出与官方评分通道，不证明 mini-DSH 的模型能力或环境在所有任务上的等价性；5 题开发批次、正式 50 题、付费模型调用与新增云资源仍未执行、未授权。
+
+### R06 后续：运行时可选校准（2026-10-20，工作分支验收完成）
+
+独立验收步骤：运行策略新增默认关闭的 `tokenCalibration` 与有界 `tokenCalibrationMaxMultiplier`。主请求只从当前会话已确认的 provider usage 重建同模型／同工具 schema 样本；投影与硬输入约束使用不小于原估算的值，`model/start` 保留原始估算以免反馈污染。投影事件记录校准版本、参数、样本数及原始／有效估算；同一日志可复算。摘要请求仍只观测，未启用运行时校准。提交 `d4dc476`：定向 7/7、完整 487 tests／457 pass／0 fail／30 platform skip、check syntax 181 files、lint 201 files／0 diagnostics；[CI 39385717730](https://github.com/BeforeLanding/mini-DSH/actions/runs/39385717730) 六 job 全绿。默认开启须另有真实观测收益证据。
+
+### R10 后续：官方无模型判分 PoC（2026-10-20，判分通道通过；候选适配已由顶部条目验收）
+
+固定官方 Verified 数据集 revision `c104f840cc67f8b6eec6f759ebc8b2693d585d4a`，parquet SHA-256 `a45b1fe4e2f0c8390b2b2938ac83e92ed5979000856808f3679c07812e9e6dcd`；官方兼容 harness v3.0.17 commit `3f01bd622c0a22c00406139f69a234ef08225f22`。固定 `sympy__sympy-20590`（base `cffd4e0f…`），本地 500 行数据与 commit/hash/instance 预检通过。提交 `1007c68` 的手动 [CI 39387381791](https://github.com/BeforeLanding/mini-DSH/actions/runs/39387381791) 七 job 全绿；金标准 patch 仅用于无模型判分通道，两个不同 run_id 都为 resolved／0 error／无残留容器。镜像 digest `swebench/sweb.eval.x86_64.sympy_1776_sympy-20590@sha256:3a282752833ce34730ee0621e22033501c993f45742775ca57f04c9ff27178a0`。本机 Docker Desktop Service 停止，当前账户无法启动，但云端既有 CI runner 已完成判分。随后验证候选目录中文件工具与 Bash 同树、无密钥／oracle 挂载、失败清理与路径边界，不能把判分通道通过当完整候选适配。五题及正式付费运行需另行授权。
+
+（历史记录：以下候选适配步骤已由顶部「R10 候选环境一致性与无模型 PoC」验收；保留原文作为当时计划与验收顺序的证据。）候选适配作为下一独立提交：把 Docker exec runner 接入 `createHarness`，只映射候选目录到 `/testbed`，用脚本化零模型请求验证宿主文件工具写入→容器 Bash 读取、容器 Bash 写入→宿主文件工具读取。由官方镜像导出 base checkout，记录一致的 base commit；探针结束后才由控制器在候选目录应用公开已知 patch，导出预测并交给新的官方 run_id 判分。预期验收还包括无网络／密钥／oracle／Docker socket 挂载、超时撤销容器、失败清理、路径逃逸拒绝和镜像 digest；CI 实测通过之前不能标记完成。
+
+候选代码、脚本与手动 CI 步骤已写，本地 `pnpm check` syntax 184 files、`pnpm test` 489/459/0/30、`pnpm lint` 204 files／0 diagnostics；新增路径／env／超时定向契约 2/2。固定镜像上的候选容器与独立预测判分已由顶部 2026-10-20 条目验收。候选脚本结束前不把公开 gold patch 输入 Agent。
+
+首次候选实测 [CI 39388591825](https://github.com/BeforeLanding/mini-DSH/actions/runs/39388591825) **红灯**：官方 gold 判分及构建通过，候选目录从官方发布镜像导出后 `git rev-parse HEAD` 为 `5efaed257c694e4452b4c8361aae1cd9cdefd6d1`，固定数据集的 `base_commit` 为 `cffd4e0f86fefd4802349a9f9b19ed70934ea354`。程序在运行 Agent 前拒绝该不一致。需核查导出目录的 Git 根与 base 对象是否存在，再决定重建镜像或修正导出路径；不能跳过校验，也不能把两次 gold resolved 当作环境匹配证据。
+
+[诊断 run 39389384812](https://github.com/BeforeLanding/mini-DSH/actions/runs/39389384812) 确认 Git 根正确、base 对象存在（commit）、HEAD 标题为 `SWE-bench`。已把下一道门槛改为比较 HEAD 与 base 的整棵 Git tree 哈希；只有字节树完全相同时才能把候选 HEAD 重置到 base 后继续。若 tree 不同仍需重建镜像，不能仅靠 `git reset` 掩盖环境差异。后续 `5b296d3` 的逐路径 OID 比较与 `f52699c` 的手动 CI 已完成该差异的界定与验收（见顶部条目）。
+
+[tree run 39389944509](https://github.com/BeforeLanding/mini-DSH/actions/runs/39389944509) 证实镜像 tree `67df329450c30a6d53661f9c01ce3d486df750ba` 与数据集 base tree `7d23c0279ecd62722b2c0d71d6596bbd9eabdd32` 不同，继续红灯。后续 `5b296d3` 的逐路径 OID 比较证明这是 **1758 个 `100644→100755` 的纯 mode 差异**，内容零差异；最终结果见顶部条目。原始发布镜像的两次 gold 成绩仍只是其自身评分通道证据。
+
+### R11 可安装、可展示、可解释（2026-10-20，工作分支验收完成）
+
+新增 `LICENSE` 与 `NOTICE`：教程基线 `huangjunsen0406/mini-dsh`（MIT，止于 `c5fc9c4`）的版权声明保留，自有扩展写 Jeffery JIA；`unknown`/`CodexSandboxOffline` 不映射为个人，不做 `.mailmap` 或历史改写。包名改为有效的 `@beforelanding/mini-dsh`，版本 `0.1.0`，保留 `private: true` 防误发；`npm view` 确认两个名称当前均未注册。新增打包内的 `mini-dsh demo [fix]`：在临时项目里脚本化完成失败测试→读文件→修复→通过，零网络、零 key、不依赖 `test/fixtures`。新增 `docs/CASES.md`、`docs/ARCHITECTURE.md`、`docs/README.md`；README 首屏加入证据入口与 `demo fix`，本地 tarball 安装命令改为通配实际文件名。CI 新增 `package-install` job：在仓库外含空格路径安装 tarball，运行版本/帮助/show-config/demo/inspect，并拒绝包含 test/docs/samples/.env 的包。
+
+验收：Windows 含空格路径安装后 `--version`=0.1.0、`--help`、`--show-config`、`inspect` 样例与 `demo fix`（PASS）均通过；tarball 内容仅 `dist/`、`plugins.config.js`、README/LICENSE/package.json。本地完整 `pnpm test` 485 tests／455 pass／0 fail／30 skipped、`pnpm check` syntax 181 files、`pnpm lint` 201 files／0 diagnostics。`30ec880` 的 [CI 39382540216](https://github.com/BeforeLanding/mini-DSH/actions/runs/39382540216) 六 job 全绿，其中 `package-install` 在 Ubuntu 完成同一套 tarball 安装与零 key 命令验证。R11 在工作分支验收完成；未发布 npm、未打 tag/Release、未部署 ECS，这些仍需明确授权。
+
+### R10 外部子集与上下文消融（2026-10-20，执行器零付费准备完成，付费运行阻塞）
+
+新增 `scripts/swebench/protocol.ts` 与 `scripts/swebench/preregister.ts`、`test/swebench-protocol.test.ts`、`docs/EVALUATION-SWEBENCH.md`。离线适配包括：按 repository 分层、固定 seed 的确定性子集选择（不使用事后自造难度）；配置上限预算（题数 × 臂数 × 每题 cap + 开发批次 + 计算储备，明确不是预期花费）；官方 predictions 三字段校验（空 patch 允许）；宿主候选目录→容器 `/testbed` 的显式映射与越界拒绝；episode 汇总保留基础设施失败在主分母、未知成本单列。预注册 CLI 需要真实 dataset revision 与官方 harness commit，写入 arms、scoring、镜像 digest 待补项与 `paidRequests: 0`。
+
+验收：协议测试 5/5；用 60 条合成元数据跑 CLI，得到 50 题、3 个 repository、4 臂、上限 $109.50、`paidRequests: 0`。真实数据集 revision、官方 harness commit、单题镜像 digest 与无模型判分/候选 PoC 已由顶部 2026-10-20 条目执行并验收。后续 `430234e` 补齐开发/正式批次冻结、执行器、独立判分与报告；其零付费端到端验收见顶部「R10 正式评测执行器零付费准备」。**仍未执行**：5 题开发批次、正式 50 题或任何付费模型调用；同模型基线适配器、50 题选择文件与镜像 digest、价格快照仍需在付费授权前冻结。不预填“50 题约 $2”。
+
+### R09 公开合成证据包与离线复算（2026-10-20，工作分支验收完成）
+
+新增 `scripts/export-public-evidence.ts`：用脚本化 `repair` fixture 生成两条专门合成的完整轨迹——`normal-fix`（正常修复）与 `provider-recovery`（首次 429 后重试成功）。每条包含 `events.jsonl`、`patch.diff`、`verification.json`、`manifest.json`（schemaVersion、source commit/dirty、模型标签、预算、任务集与 seed、工具 schema digest、策略版本、环境、价格快照、缺失计数）、`report.json` 与 `SHA256SUMS`。事件在写入前把临时工作区/主目录替换为 `<tmp>`/`<home>`，不包含密钥、真实用户提示或私有工具输出。新增 `docs/EVALUATION.md` 与 `docs/RESULTS.md`，明确合成轨迹不是能力证据、历史 NX-45 原始日志保持私有。新增 `scripts/recompute-report.ts`：离线校验 checksum、从事件复算 report、用 `inspect` 确认完整可读，并重建/比对 RESULTS，不需要 API key 或网络。成本按 `(input−cacheRead)×inputPrice + cacheRead×cacheReadPrice + output×outputPrice` 计算；estimated 尝试单列不进成本，不用零填补。
+
+验收：新目录只需 `events.jsonl` 与已提交文件即可复算；`node dist/scripts/recompute-report.js docs/samples --check` 输出完全匹配；`test/public-evidence.test.ts` 在 CI 中执行同一校验，并断言 provider-recovery 至少有一次 retry；两条样例均通过 fixture 验收。样例提交 `f334b3e`，checksum 行尾修复 `acd193e`；`30ec880` 的 [CI 39382540216](https://github.com/BeforeLanding/mini-DSH/actions/runs/39382540216) 六组通过，R09 在工作分支验收完成。真实 provider 请求 0。
+
+### R08 隔离测试进入 required CI（2026-10-20，工作分支验收完成）
+
+抽出 `IsolationBackend` 接口（`visibleHostPath`、`capabilityManifest`、`preflight`、`run`、`dispose`）：Windows 保留 WSL→bwrap；新增 Linux 原生 bwrap，使用宿主 Linux 路径与 `MINI_DSH_V2_RUNTIME` 固定的 Node 22 runtime，不搬 WSL 路径转换。preflight 实际验证命名空间可用、无非回环网络接口、工作区可写、工作区外 sentinel 不可见、超时能收掉后代进程，并输出 runtime digest。CI 新增 `Isolation (ubuntu-latest, Node 22)` job：安装 bubblewrap、用 `eval-v2-prepare-runtime.sh` 准备固定 runtime、运行契约/隔离/fixture 三组测试；TAP 中出现 `# SKIP` 即失败，失败上传 TAP。平台无关契约测试与平台专用实测分开；WSL 专用参数仍在 `isolatedCommandArgs`，Linux 自动选择 `linux-bwrap`。`eval-v2-run`、`smoke-run`、fixture probe 改用统一后端；`distro` 只在 WSL 需要。
+
+首次远端 isolation job 在准备 runtime 时失败（旧 `.deb` 清单的 `libada-url0-3` 不在 ubuntu-latest 仓库），已改为官方 Node 22.22.1 tarball + 固定 SHA。第二次已进入测试，但 Ubuntu 24.04 的 AppArmor 限制使 bwrap 配置 loopback 失败（`RTM_NEWADDR: Operation not permitted`）；CI 改为关闭 `kernel.apparmor_restrict_unprivileged_userns`，不降低隔离参数、不跳过测试。本地用 WSL 原生 bwrap 和同一 runtime 实跑：契约 4/4、隔离 3/3、V2 fixture 31/31，**0 skipped**；Windows 宿主完整 `pnpm test` 478 tests／448 pass／0 fail／30 skipped（本机无 Linux runtime，按条件跳过），`pnpm check` syntax 173 files，`pnpm lint` 187 files／0 diagnostics。`642f693` 的 [CI 39381000750](https://github.com/BeforeLanding/mini-DSH/actions/runs/39381000750) 五个 job 全部通过，isolation job TAP 为 38 tests／38 pass／0 fail／0 skipped。R08 在工作分支验收完成，main 未合并；真实 provider 请求 0。
+
+### R07 MCP 成为可控插件能力（2026-10-20，工作分支验收完成）
+
+删除内置 context7 条目，`plugins.config.ts` 默认为空；MCP 只从用户目录级 `~/.mini-dsh/mcp.json`、`MINI_DSH_MCP_CONFIG` 或显式 `--mcp-config <path>` 读取，工作区本地文件不自动加载，`MINI_DSH_MCP=0` 可关闭。新增 `src/app/mcp-config.ts`：严格校验 serverName/transport/字段，stdio `env` 与 HTTP `headers` 只接受完整 `${ENV_NAME}` 引用，缺变量时启动失败并点名，`--show-config` 只展示变量名与缺失项、不连接 server。MCP 装配移入 `createHarness` 的可选 `mcpServers`，评测/离线入口不传即禁用；重复 serverName 拒绝，连接失败固定 `failOnStartupError=false`。第三方工具经 ToolRuntime 中央授权按 unknown 默认询问，`autoApprove` 不自动授权；dispose 释放注册项与子进程。
+
+残差（2026-10-20 核查，**已由 `6113bc7` 解决**）：当时 stdio 子进程最终由 MCP SDK 启动，使用 `@deepseek-ai/dsh-subprocess` 的共享清洗（只丢弃名称含 `KEY`/`PASSWORD`/`SECRET`/`TOKEN` 的变量与 `DSH_*`，再合并显式引用），**没有**复用 Bash 的 `childEnvironment` 严格允许列表；代理、SSH agent、`NODE_OPTIONS` 与真实 HOME 仍可能被继承。该历史边界不再成立；当前实现见顶部「R07 后续」条目与 README「已知限制」。显式配置 MCP server 属于用户主动授权。
+
+验收：默认无配置时无 MCP 工具、不加载插件；用户级/显式配置可加载本地 stdio mock server 的 list/call；超时与调用中退出返回错误而非挂住；拒绝审批时 mock 计数器不增加；重复 serverName、字面 secret、缺失变量、非法 transport/url/未知字段均拒绝；show-config 不展开 secret 且不连接；dispose 后工具不可解析。新增 `test/mcp-config.test.ts` 6 条与 `test/fixtures/mcp/mock-server.mjs`；本地 `pnpm check` syntax 172 files、`pnpm test` 474 tests／444 pass／0 fail／30 skipped、`pnpm lint` 186 files／0 diagnostics。`f413f44` 的 Node 20.18.1 两组因 MCP SDK 的 `Promise.withResolvers` 红灯；最低版本已提高到 Node 22，CI matrix 改为 22/24，配置 MCP 时低版本显式失败，未删除或跳过测试。`642f693` 的 [CI 39381000750](https://github.com/BeforeLanding/mini-DSH/actions/runs/39381000750) 五个 job 全部通过，R07 在工作分支验收完成。真实 provider 请求 0。
+
+### R06 token 估算在线观测与受控校准（2026-10-20，工作分支验收完成；阶段 B 运行时接入未启用）
+
+新增 `src/core/token-calibration.ts` 与 `scripts/report-token-error.ts`，并以可选字段 `model`、`schemaDigest` 扩展 `model/start`（旧日志缺字段时归 unknown，读取兼容）。阶段 A 默认只读：`inspect` 文本/JSON 与 `pnpm token:error <events.jsonl>` 都只用 `usage.source=provider` 的已配对请求，报告 `(estimated−actual)/actual`、低估率、绝对相对误差 p50/p95，按 main/summary、model、schema digest 和估算器版本分层；缺 usage、estimated usage、实际为零、孤立 usage、被拒绝与重复 usage 单列且不参与统计。阶段 B 校准是默认关闭的纯函数：rolling `actual/estimated` 保守分位乘安全边际，样本不足回退 1，乘数下限 1、上限可配置；确定性可由同一事件序列重建。保留 `token-estimator.ts` 原文件与 NX-08c 语料/估算器哈希，不删也不放宽历史测量。
+
+验收：合成 provider usage 可逐条复算误差；摘要重试归入摘要组；缺 usage/估算 usage 等不进样本；`inspect` 与 JSONL 重放得到相同摘要；校准关闭时乘数为 1，样本不足回退，异常巨大比率被上限夹紧且 `applyTokenCalibration` 不会降低原估算；历史 40 条语料测试保持通过。本地新增 5 条测试，完整 `pnpm test` 468 tests／438 pass／0 fail／30 skipped，`pnpm check` syntax 170 files，`pnpm lint` 184 files／0 diagnostics；提交 `051f962`：[CI 39378725489](https://github.com/BeforeLanding/mini-DSH/actions/runs/39378725489) 六组通过。R06 在工作分支验收完成。运行时默认不应用校准，阶段 B 接入需观测收益与独立验收。真实 provider 请求 0。
+
+### R05 稳定前缀与压缩策略（2026-10-20，工作分支验收完成）
+
+R04 `0e19c0c` 的 [CI 39349743566](https://github.com/BeforeLanding/mini-DSH/actions/runs/39349743566) 六组通过。① 时间与规则选择分离提交 `740a453`：[CI 39350164894](https://github.com/BeforeLanding/mini-DSH/actions/runs/39350164894) 六组通过。② 规则版本提交 `da7d728`：[CI 39350675148](https://github.com/BeforeLanding/mini-DSH/actions/runs/39350675148) 六组通过。③ 摘要目标及修订引用提交 `23e036c`：[CI 39351116486](https://github.com/BeforeLanding/mini-DSH/actions/runs/39351116486) 六组通过。④ 摘要结构校验提交 `e7b2985`：[CI 39351872653](https://github.com/BeforeLanding/mini-DSH/actions/runs/39351872653) 仅五组绿，Windows Node 20 的既有 Bash 验证组合用例在 800 ms 超时下误使落盘失败探针未执行。修复把超时/取消与落盘失败拆成独立测试，后者用正常命令超时并在缺标记时带出实际错误，提交 `fd0277a`：[CI 39352323711](https://github.com/BeforeLanding/mini-DSH/actions/runs/39352323711) 六组通过，R05d 验收完成。⑤ 阈值分名、压缩后目标线与滞回抑制已实现：硬输入上限、压力触发线（预算 × 0.8）与压缩后目标线（预算 × 0.65）分名；应用压力压缩后仍高于目标线或减少不足 `max(64, 5%)` 时，本 run 抑制重复压力压缩并记录 `context/pressure-suppressed`；溢出兜底与显式 `/compact` 保留。既有 52k–65k 反复压缩用例改为断言只压缩 1 次并记录原因。提交 `8521547`：[CI 39378211275](https://github.com/BeforeLanding/mini-DSH/actions/runs/39378211275) 六组通过；本地 `pnpm check` syntax 167 files、`pnpm test` 463 tests／433 pass／0 fail／30 skipped、`pnpm lint` 181 files／0 diagnostics。R05 在工作分支验收完成，main 未合并。真实 provider 请求 0。
+
+### R04 保留真实命令尾部（2026-10-20，工作分支验收完成）
+
+R03c `9cac19b` 的 [CI 39348950645](https://github.com/BeforeLanding/mini-DSH/actions/runs/39348950645) 六组通过。>9 MiB stdout/stderr 真实尾部反例先红后绿。各流独立计实际字节，内存保留有界前缀与 8 KiB 尾环，管道始终排空；provider 预览含真实尾。稀疏结果版本 2 保存前后可读区间，`read_tool_result` 在缺口返回 `unavailable` 与尾部起点，不能伪称全文可回读；旧结果版本 1 保持可读。新测试验证重启回读。提交 `0e19c0c` 本地 `pnpm check`（syntax 166 files）、`pnpm test`（459 tests / 429 pass / 0 fail / 30 skipped）、`pnpm lint`（180 files / 0 diagnostics）通过；[CI 39349743566](https://github.com/BeforeLanding/mini-DSH/actions/runs/39349743566) 六组通过。真实 provider 请求 0。
+
+### R03 有账本的 provider 重试（2026-10-20，工作分支验收完成）
+
+R02b `7519753` 的 [CI 39261106135](https://github.com/BeforeLanding/mini-DSH/actions/runs/39261106135) 六组通过。独立提交：① `Retry-After` 与纯策略 `6b04b03`，[CI 39347765168](https://github.com/BeforeLanding/mini-DSH/actions/runs/39347765168) 六组通过。② 主请求逐次账本 `f6afb07`，[CI 39348450133](https://github.com/BeforeLanding/mini-DSH/actions/runs/39348450133) 六组通过；本地完整 424 通过／30 跳过。③ 摘要请求复用有账本策略，合成 429/503→成功与 401/部分流即停、AgentLoop 压缩集成通过；提交 `9cac19b`，本地完整 427 通过／30 跳过、check/lint 通过，[CI 39348950645](https://github.com/BeforeLanding/mini-DSH/actions/runs/39348950645) 六组通过。本项真实 provider 请求 0；进入 R04。
+
+### R02 环境与统一工具授权（2026-10-19，工作分支验收完成）
+
+R01b 提交 `2eb28d3` 的 [CI 39258324293](https://github.com/BeforeLanding/mini-DSH/actions/runs/39258324293) 六组通过。独立提交边界：① R02a 子进程环境最小继承、独立临时 HOME、显式额外变量提交 `70d4048`，[CI 39259211634](https://github.com/BeforeLanding/mini-DSH/actions/runs/39259211634) 六组通过。现有 MCP 配置为 streamable HTTP，没有 stdio 子进程启动点；R07 增 stdio 时必须调用同一环境构造器。② R02b ToolRuntime 执行前中央授权、未知/第三方默认请求单次批准、内置工具保留已有审批和操作前复核提交 `7519753`，[CI 39261106135](https://github.com/BeforeLanding/mini-DSH/actions/runs/39261106135) 六组通过；本地 418 通过／30 跳过、check/lint 通过。env 过滤降低传播面，HOME 隔离不等于文件系统或进程级沙箱。
+
+### R01 结构化错误与可恢复诊断（2026-10-19，工作分支验收完成）
+
+基线为 R00 工作分支 `b8ba09d`。① provider 安全分类 `5a96257` 已独立提交、推送，[CI 39256249087](https://github.com/BeforeLanding/mini-DSH/actions/runs/39256249087) 六组通过。② `run/error` 契约、运行时校验、JSONL 解析/恢复/inspect 和主请求、摘要、工具阶段记录提交 `2eb28d3`，[CI 39258324293](https://github.com/BeforeLanding/mini-DSH/actions/runs/39258324293) 六组通过；本地 `pnpm test` 413 通过／30 跳过、check/lint 通过。测试覆盖旧日志可读、新日志可重放、唯一 `run/finish`、坏 JSONL 与假 token 脱敏。旧读取器遇新事件可能只显示部分前缀。
+
+### R00 可信 CI 恢复（2026-10-19，工作分支验收完成；main 待合并）
+
+基线 `32e25989d1d36354cba91664cd304fb8250769a2`，独立克隆 `D:\Agent\mini-DSH-execution`，分支 `fix/mini-dsh-portfolio-r00`。历史 [CI 39133594202](https://github.com/BeforeLanding/mini-DSH/actions/runs/39133594202) 四个 required job 在测试步骤失败：Windows Node 22/24 各 1 条、Ubuntu Node 22/24 各 2 条；共同错误为 `smoke replay project context workspace mismatch; no API fallback`。根因：工作区路径在嵌入 JSON 中的转义形式未被规范化，重放又按原路径而非规范化 token 检查；Windows 本机基线定向测试 9/9 通过，未复现 CI 的路径环境，但新增跨平台用例覆盖了该分支。
+
+独立验收与提交：① 首个修复 `93c6ab0` 本地通过，但 [PR run 39254115258](https://github.com/BeforeLanding/mini-DSH/actions/runs/39254115258) Ubuntu 3/3 通过、Windows 3/3 仍在 repair smoke 失败；真实路径补丁 `21fac6b` 补齐 `fs.realpath`／`path.resolve` 别名映射和回归。本地定向 12/12、完整 408 通过／30 跳过、check/lint 通过；[PR CI 39255149181](https://github.com/BeforeLanding/mini-DSH/actions/runs/39255149181) 六组均通过，**完成**。② CI 失败诊断 `ed9151d`；[手动失败探针 39254181030](https://github.com/BeforeLanding/mini-DSH/actions/runs/39254181030) 六个 job 全红、六份 TAP 均上传，已下载 Ubuntu Node22 产物核对 `not ok 21 - CI diagnostic probe`，**完成**。③ `21fac6b` 的 Ubuntu/Windows × Node 20.18.1/22/24 各 job `438 executed / 408 passed / 0 failed / 30 skipped`，工作分支 R00 验收完成。main 尚未合并，不能宣称 main CI 已恢复。
+
 ### NX-49 只读会话 inspect（2026-10-18，done）
 
 基线 `1de2d5007e26024a764e1084cc55c009cd1486b6`，工作树干净。独立验收和预计本地提交边界：① 复用 JSONL 校验规则的逐行解析，提供无模型／工具运行时的 `mini-dsh inspect <events.jsonl> [--json]`、证据完整性告警和会话／最近 run 统计；合成日志覆盖正常、预算、拒绝、缺 usage、摘要缓存、多轮、legacy-current 与坏尾，验证只读及 NX-45 交叉读数（**done**，`64477e1`）。② 增 `--trace` 的有界脱敏事件轨迹，只显示事件号／类型／工具名称／停止原因；测试敏感正文不泄露（**done**，`1ac11c1`）。③ README 说明命令、口径和退出码，从新 tarball 在仓库外安装验证无 key 的文本／JSON／轨迹（**done**，本步提交）。每步通过相关检查后独立本地提交；不改策略、预算、旧日志或回放规则，不付费、不发布或推送。
