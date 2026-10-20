@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- **R05 稳定前缀与压缩策略待本步 CI，随后进入 R06（2026-10-20）**：R05a `740a453`、R05b `da7d728`、R05c `23e036c` 各六组 CI 通过；R05d 结构校验 `e7b2985` 曾因 Windows Node 20 的 800 ms 超时与落盘失败探针共用而红灯，修复提交 `fd0277a` 的 [CI 39352323711](https://github.com/BeforeLanding/mini-DSH/actions/runs/39352323711) 六组通过。R05e 已本地实现阈值分名与滞回：压力触发线为预算 × 0.8，压缩后目标线为预算 × 0.65；压缩后仍高于目标或减少不足 `max(64, 5%)` 时本 run 抑制重复压力压缩并记录 `context/pressure-suppressed`。本地 463 tests／433 pass／0 fail／30 skipped、check/lint 通过；当前提交 CI 待验证。真实 provider 请求 0；下一步 R06 在线误差观测。
+- **R05 工作分支验收完成，R06 进行中（2026-10-20）**：R05a `740a453`、R05b `da7d728`、R05c `23e036c`、R05e `8521547` 各六组 CI 通过；R05d 结构校验 `e7b2985` 曾因 Windows Node 20 的 800 ms 超时与落盘失败探针共用而红灯，修复提交 `fd0277a` 的 [CI 39352323711](https://github.com/BeforeLanding/mini-DSH/actions/runs/39352323711) 六组通过。R05e 的 [CI 39378211275](https://github.com/BeforeLanding/mini-DSH/actions/runs/39378211275) 六组通过：压力触发线为预算 × 0.8，压缩后目标线为预算 × 0.65；压缩后仍高于目标或减少不足 `max(64, 5%)` 时本 run 抑制重复压力压缩并记录 `context/pressure-suppressed`。R06 阶段 A 已实现只读 provider usage 误差观测（`inspect` 与 `pnpm token:error`），阶段 B 校准保持默认关闭；待提交与 CI 验证。真实 provider 请求 0。
 
 - **R02 环境与中央授权工作分支验收完成（2026-10-19）**：R02a `70d4048` 的 [CI 39259211634](https://github.com/BeforeLanding/mini-DSH/actions/runs/39259211634)、R02b `7519753` 的 [CI 39261106135](https://github.com/BeforeLanding/mini-DSH/actions/runs/39261106135) 均六组通过。未知/第三方工具默认需人工批准，内置写/Bash 保留已有一次审批与复核。当前 MCP 仅 HTTP，无 stdio 启动点；后续增加 stdio 必须复用安全 env。env 边界不提供文件系统隔离。
 

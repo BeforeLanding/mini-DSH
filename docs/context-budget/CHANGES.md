@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### R05e 当前提交 CI 验收（2026-10-20）
+
+`85215474b02ddaa1e24e3d4b4c6d1b8524052451` 的 [CI 39378211275](https://github.com/BeforeLanding/mini-DSH/actions/runs/39378211275) Ubuntu/Windows × Node 20.18.1/22/24 六组全部通过；R05 在工作分支验收完成，main 未合并。
+
 ### R05e 阈值分名与压缩滞回（2026-10-20，本地通过，待 CI）
 
 新增 `postCompactionTargetRatio`（默认 0.65，0 < v ≤ 1，随 `resolveBudget` 校验）并与现有 `inputTargetTokens`、`compactionRatio` 分名：硬输入上限、压力触发线（`compactionBudgetTokens × 0.8`）、压缩后目标线（`compactionBudgetTokens × 0.65`）。一次压力压缩应用后重新投影，若仍高于目标线或减少量小于 `max(64, 5%)`，本 run 将 `pressureSuppressed` 置真并追加 `context/pressure-suppressed`，含 `above-target`／`insufficient-reduction`、压缩前后与目标 token；新事件同步进入 contracts、JSONL 运行时校验、inspect 已知类型与轨迹详情，旧日志读取不受影响。溢出兜底仍按 `maxOverflowRetries` 出现，显式 `/compact` 不受抑制；抑制只持续当前 run。
