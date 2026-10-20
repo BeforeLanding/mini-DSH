@@ -1,6 +1,32 @@
 # 改动与验收证据
 
-### R10 发布镜像与数据集源码树确实不同（2026-10-20，拒绝候选，待差异归因）
+### R10 候选环境一致性与无模型 PoC 验收（2026-10-20，工作分支 CI 通过）
+
+**结论**：固定发布镜像与数据集 base 的源码树哈希不同，但逐路径内容完全一致；差异是镜像构建留下的纯 mode 变化。候选容器已完成宿主文件工具↔容器 Bash 双向验证、隔离检查、候选补丁导出与独立官方判分。最终提交 `f52699c` 的手动 [CI 39395532729](https://github.com/BeforeLanding/mini-DSH/actions/runs/39395532729) 七个 job 全部通过。
+
+**根因证据**：镜像 HEAD `5efaed257c694e4452b4c8361aae1cd9cdefd6d1`（tree `67df329450c30a6d53661f9c01ce3d486df750ba`）与数据集 base `cffd4e0f86fefd4802349a9f9b19ed70934ea354`（tree `7d23c0279ecd62722b2c0d71d6596bbd9eabdd32`）比较，`git ls-tree -r` 共 1828 个条目，blob/type 差异 0，唯 1758 个路径为 `100644→100755`；`git diff-tree -r --raw` 同样是 1758 个 `M`、对象变化 0。因此不是内容漂移。
+
+**提交**：
+- `5b296d3` 新增 `scripts/swebench/source-consistency.ts` 与 `test/swebench-source-consistency.test.ts`：先比较逐路径对象 ID（忽略 mode），再以 raw diff 交叉核对；内容、增删路径、类型差异一律拒绝。仅当内容等价才把 HEAD/工作区 mode 归一到 base，mode 证据写入候选证据。定向 7/7。
+- `74144db` 修正非法 `--mount … ,rw`（bind mount 默认读写），并断言 `Mounts[0].RW=true`。
+- `bc7a704` 恢复官方镜像 HOME。该提交把根因写成 `/root/.gitconfig`，后续 CI 证明该判断不成立（镜像未持久化 `safe.directory`），由下一条修正。
+- `217fd95` 用 `GIT_CONFIG_COUNT=1`／`GIT_CONFIG_KEY_0=safe.directory`／`GIT_CONFIG_VALUE_0=/testbed` 注入信任项，等价于官方评分脚本运行时的 `git config --global --add safe.directory`，且不写只读根。
+- `9bff11a` 在工具失败时输出有界的 name/value，避免远端只看到断言失败。
+- `f52699c` 候选容器改用宿主 uid/gid。原配置是 root + `--cap-drop ALL`，失去 `CAP_DAC_OVERRIDE` 后无法写宿主用户拥有的 bind mount 文件；改 UID 比加回能力更严格，仍保留 cap drop、无网络、只读根与单一挂载。官方评分仍由独立官方容器完成。
+
+**CI 结果**（`f52699c`，[39395532729](https://github.com/BeforeLanding/mini-DSH/actions/runs/39395532729)）：Ubuntu/Windows × Node 22/24 四组测试通过，isolation 38/38/0/0 通过，package-install 通过，SWE-bench PoC 通过。候选证据已下载到 `D:\Agent\outputs\mini-dsh-swebench-poc\ci-39395532729`：
+
+- `sourceConsistency`：`contentEqual=true`、`entries=1828`、`modeDifferenceCount=1758`、`modeTransitions={"100644->100755":1758}`、`rawDiffEntries=1758`、`rawContentChanges=0`。
+- 工具调用 `write_file → bash(cat) → bash(append) → read_file` 全部非错误，`hostWriteVisibleInContainer=true`、`containerWriteVisibleOnHost=true`、`pathEscapeRejected=true`。
+- `network="none"`、`mounts=["/testbed"]`、`privileged=false`、`readonlyRoot=true`、`containerUser="1001:1001"`、`providerRequests=0`。
+- 候选 patch 独立判分报告：`submitted=1`、`completed=1`、`resolved=1`、`unresolved=0`、`empty_patch=0`、`error=0`；评分日志 `Unstopped containers: 0`、`Unremoved images: 0`。同一 run 两次 gold 判分均 resolved／0 error。
+- 镜像 digest 仍为 `swebench/sweb.eval.x86_64.sympy_1776_sympy-20590@sha256:3a282752833ce34730ee0621e22033501c993f45742775ca57f04c9ff27178a0`。
+
+**本地验证（`f52699c`）**：`pnpm test` 494 tests／464 pass／0 fail／30 skipped；`pnpm check` syntax 186 files；`pnpm lint` 206 files／0 diagnostics；`pnpm fixtures:check`、`pnpm eval:offline`、`pnpm eval:estimate`、`node dist/scripts/recompute-report.js docs/samples --check` 均退出 0（离线复算与 RESULTS 完全一致）。
+
+**边界**：本项只证明候选工作区/工具路径与官方评分通道，不证明模型能力、候选环境对所有任务的等价性，也不等于 5 题开发批次或 50 题正式结果。付费模型调用、数据集全量运行与新增云资源仍需单独授权。
+
+### R10 发布镜像与数据集源码树确实不同（2026-10-20，拒绝候选，待差异归因；已由上方条目解决）
 
 [CI 39389944509](https://github.com/BeforeLanding/mini-DSH/actions/runs/39389944509) 的两次 gold 判分仍通过，但候选预检确认发布镜像 HEAD tree `67df329450c30a6d53661f9c01ce3d486df750ba`，数据集 base tree `7d23c0279ecd62722b2c0d71d6596bbd9eabdd32`，并非只差提交元数据。程序仍在 Agent 启动前失败，不能用 `git reset` 掩盖差异。已加受限的变更路径诊断（不输出源码或 patch），下一次实测用于判断镜像内有哪些额外文件；若来源不适配，要另建固定 base 的镜像并标明派生环境，不能称其为原发布镜像。
 

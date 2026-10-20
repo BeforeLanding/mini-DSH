@@ -1,10 +1,18 @@
 # 任务清单
 
+### R10 候选环境一致性与无模型 PoC（2026-10-20，工作分支 CI 验收通过）
+
+独立提交：`5b296d3` 改为逐路径 blob OID 比较（忽略 mode），并用 `git diff-tree --raw` 交叉核对，内容、增删路径或类型差异仍拒绝；`74144db` 修正 bind mount 参数并断言 `/testbed` 可写；`bc7a704` 恢复官方镜像 HOME（该提交把根因写成 `/root/.gitconfig` 不准确，后续实测证明镜像并未持久化 `safe.directory`），`217fd95` 最终以 `GIT_CONFIG_COUNT/KEY_0/VALUE_0` 注入 `safe.directory=/testbed`；`9bff11a` 输出失败工具调用的有界诊断；`f52699c` 让候选容器使用宿主 uid/gid，避免 `--cap-drop ALL` 下 root 不能写宿主创建的文件。
+
+最终提交 `f52699c` 的手动 [CI 39395532729](https://github.com/BeforeLanding/mini-DSH/actions/runs/39395532729) 七个 job 全绿。候选证据 `D:\Agent\outputs\mini-dsh-swebench-poc\ci-39395532729\candidate-evidence.json`：镜像 HEAD `5efaed…`／base `cffd4e0…`，1828 个条目内容完全一致，1758 个仅 `100644→100755` mode 差异，`git diff-tree --raw` 为 1758 个 `M` 且对象变化 0；`write_file`、容器 Bash 与 `read_file` 双向可见，路径逃逸拒绝；网络 `none`、只挂 `/testbed`、只读根、非特权、`--cap-drop ALL`、容器用户 `1001:1001`；provider 请求 0。候选 patch 的独立官方判分为 1 submitted／1 completed／1 resolved、0 unresolved／0 empty／0 error、0 unstopped containers／0 unremoved images；同一 run 的两次 gold 判分也均 resolved／0 error。本地 `pnpm test` 494 tests／464 pass／0 fail／30 skipped、`pnpm check` 186 files、`pnpm lint` 206 files／0 diagnostics。
+
+边界：本项只验收候选工作区、文件/Bash 同树、补丁导出与官方评分通道，不证明 mini-DSH 的模型能力或环境在所有任务上的等价性；5 题开发批次、正式 50 题、付费模型调用与新增云资源仍未执行、未授权。
+
 ### R06 后续：运行时可选校准（2026-10-20，工作分支验收完成）
 
 独立验收步骤：运行策略新增默认关闭的 `tokenCalibration` 与有界 `tokenCalibrationMaxMultiplier`。主请求只从当前会话已确认的 provider usage 重建同模型／同工具 schema 样本；投影与硬输入约束使用不小于原估算的值，`model/start` 保留原始估算以免反馈污染。投影事件记录校准版本、参数、样本数及原始／有效估算；同一日志可复算。摘要请求仍只观测，未启用运行时校准。提交 `d4dc476`：定向 7/7、完整 487 tests／457 pass／0 fail／30 platform skip、check syntax 181 files、lint 201 files／0 diagnostics；[CI 39385717730](https://github.com/BeforeLanding/mini-DSH/actions/runs/39385717730) 六 job 全绿。默认开启须另有真实观测收益证据。
 
-### R10 后续：官方无模型判分 PoC（2026-10-20，判分通道通过，候选适配待验收）
+### R10 后续：官方无模型判分 PoC（2026-10-20，判分通道通过；候选适配已由顶部条目验收）
 
 固定官方 Verified 数据集 revision `c104f840cc67f8b6eec6f759ebc8b2693d585d4a`，parquet SHA-256 `a45b1fe4e2f0c8390b2b2938ac83e92ed5979000856808f3679c07812e9e6dcd`；官方兼容 harness v3.0.17 commit `3f01bd622c0a22c00406139f69a234ef08225f22`。固定 `sympy__sympy-20590`（base `cffd4e0f…`），本地 500 行数据与 commit/hash/instance 预检通过。提交 `1007c68` 的手动 [CI 39387381791](https://github.com/BeforeLanding/mini-DSH/actions/runs/39387381791) 七 job 全绿；金标准 patch 仅用于无模型判分通道，两个不同 run_id 都为 resolved／0 error／无残留容器。镜像 digest `swebench/sweb.eval.x86_64.sympy_1776_sympy-20590@sha256:3a282752833ce34730ee0621e22033501c993f45742775ca57f04c9ff27178a0`。本机 Docker Desktop Service 停止，当前账户无法启动，但云端既有 CI runner 已完成判分。随后验证候选目录中文件工具与 Bash 同树、无密钥／oracle 挂载、失败清理与路径边界，不能把判分通道通过当完整候选适配。五题及正式付费运行需另行授权。
 
@@ -16,7 +24,7 @@
 
 [诊断 run 39389384812](https://github.com/BeforeLanding/mini-DSH/actions/runs/39389384812) 确认 Git 根正确、base 对象存在（commit）、HEAD 标题为 `SWE-bench`。已把下一道门槛改为比较 HEAD 与 base 的整棵 Git tree 哈希；只有字节树完全相同时才能把候选 HEAD 重置到 base 后继续。若 tree 不同仍需重建镜像，不能仅靠 `git reset` 掩盖环境差异。CI 待复跑。
 
-[tree run 39389944509](https://github.com/BeforeLanding/mini-DSH/actions/runs/39389944509) 证实镜像 tree `67df329450c30a6d53661f9c01ce3d486df750ba` 与数据集 base tree `7d23c0279ecd62722b2c0d71d6596bbd9eabdd32` 不同，继续红灯。下一次只输出受限的变更路径列表，确定额外文件来源；根据差异准备与 pinned base 匹配的镜像，再重跑候选与官方判分。原始发布镜像的两次 gold 成绩仍只是其自身评分通道证据。
+[tree run 39389944509](https://github.com/BeforeLanding/mini-DSH/actions/runs/39389944509) 证实镜像 tree `67df329450c30a6d53661f9c01ce3d486df750ba` 与数据集 base tree `7d23c0279ecd62722b2c0d71d6596bbd9eabdd32` 不同，继续红灯。后续 `5b296d3` 的逐路径 OID 比较证明这是 **1758 个 `100644→100755` 的纯 mode 差异**，内容零差异；最终结果见顶部条目。原始发布镜像的两次 gold 成绩仍只是其自身评分通道证据。
 
 ### R11 可安装、可展示、可解释（2026-10-20，工作分支验收完成）
 
