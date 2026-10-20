@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { ToolResultStore, utf8Prefix, utf8Suffix, PREVIEW_TAIL_DIVISOR, type ResultStoreConfig } from '../core/tool-result-store.js'
 import { positiveLimit } from '../core/bounded-text.js'
 import type { CommandResult, CommandStream } from '../core/command-runner.js'
+import type { AvailableRange } from '../core/tool-result-store.js'
 
 export const name = 'mini-tool-results'
 export const inject = ['tools', 'sandbox']
@@ -20,18 +21,23 @@ export function apply(ctx: Context, config: ToolResultsConfig = {}) {
       const limit = Math.max(1, Math.floor(maxPreviewBytes / 2))
       const project = async (stream: CommandStream): Promise<CommandStream> => {
         const bytes = Buffer.from(stream.text)
-        if (bytes.length <= limit) return stream
+        if (bytes.length <= limit && !stream.truncated) return stream
         const head = utf8Prefix(bytes, limit)
         const preview = head.toString('utf8')
-        const tail = utf8Suffix(bytes.subarray(head.length), tailLimit)
-        const omittedBytes = bytes.length - head.length - tail.length
+        const tail = stream.truncated ? utf8Suffix(Buffer.from(stream.tail ?? ''), tailLimit)
+          : utf8Suffix(bytes.subarray(head.length), tailLimit)
+        const omittedBytes = stream.bytes - head.length - tail.length
+        const window = omittedBytes > 0 ? { tail: tail.toString('utf8'), omittedBytes, resumeOffset: head.length } : {}
         try {
           ctx.sandbox.resolvePath(directory)
-          const saved = await store.save(execution.sessionId!, stream.text, execution.signal)
-          return { ...stream, text: preview, ...(omittedBytes > 0 ? { tail: tail.toString('utf8'), omittedBytes, resumeOffset: head.length } : {}), previewTruncated: true, ref: saved.ref,
-            storedBytes: saved.bytes, storageTruncated: saved.truncated }
+          const saved = stream.truncated
+            ? await store.saveSparse(execution.sessionId!, stream.text, stream.tail ?? '', stream.bytes, execution.signal)
+            : await store.save(execution.sessionId!, stream.text, execution.signal)
+          return { ...stream, text: preview, ...window, previewTruncated: true, ref: saved.ref,
+            storedBytes: saved.bytes, storageTruncated: saved.truncated,
+            ...('availableRanges' in saved ? { availableRanges: saved.availableRanges as AvailableRange[] } : {}) }
         } catch (error) {
-          return { ...stream, text: preview, previewTruncated: true,
+          return { ...stream, text: preview, ...window, previewTruncated: true,
             storageError: error instanceof Error ? error.message : String(error) }
         }
       }
@@ -60,7 +66,7 @@ export function apply(ctx: Context, config: ToolResultsConfig = {}) {
     name: 'read_tool_result',
     exposeErrors: true,
     origin: 'builtin', effect: 'read',
-    description: 'Read a stored tool result from this session using its ref. Truncated results may include text (head), tail (end), omittedBytes (missing middle) and resumeOffset (middle start). UTF-8 byte offset starts at 0; use nextOffset until eof. captureTruncated means collection was bounded. References survive restart while result files remain.',
+    description: 'Read a stored tool result from this session using its ref. Truncated results may include text (head), tail (end), omittedBytes (missing middle) and resumeOffset (middle start). UTF-8 byte offset starts at 0; use nextOffset until eof. For sparse command output, availableRanges identifies readable byte intervals; unavailable=true means the requested middle was not saved and nextOffset points to the tail. captureTruncated means collection was bounded. References survive restart while result files remain.',
     parameters: { type: 'object', properties: { ref: { type: 'string' }, offset: { type: 'integer', minimum: 0 }, maxBytes: { type: 'integer', minimum: 1, maximum: store.maxReadBytes } }, required: ['ref'] },
     async execute(args, execution) {
       ctx.sandbox.resolvePath(directory)

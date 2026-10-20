@@ -22,6 +22,7 @@ export function utf8Suffix(bytes: Buffer, maxBytes: number): Buffer {
 }
 
 export interface ResultStoreConfig { directory: string; maxCaptureBytes?: number; maxStoreBytes?: number; maxFiles?: number; maxReadBytes?: number }
+export interface AvailableRange { start: number; end: number }
 
 export class ToolResultStore {
   readonly directory: string
@@ -43,27 +44,51 @@ export class ToolResultStore {
       if (!sessionId) throw new Error('sessionId is required for result storage')
       const original = Buffer.from(text), kept = utf8Prefix(original, this.maxCaptureBytes)
       const record = { version: 1, owner: digest(sessionId), sha256: digest(kept.toString('utf8')), content: kept.toString('utf8'), truncated: kept.length < original.length }
-      const payload = JSON.stringify(record)
-      await fs.mkdir(this.directory, { recursive: true })
-      let total = 0, files = 0
-      for await (const entry of await fs.opendir(this.directory)) {
-        signal.throwIfAborted()
-        if (++files >= this.maxFiles) throw new Error('result store file limit reached')
-        if (!entry.isFile()) throw new Error('unexpected entry in result store')
-        total += (await fs.stat(resolveInside(this.directory, entry.name))).size
-        if (total > this.maxStoreBytes) throw new Error('result store byte limit reached')
-      }
-      if (total + Buffer.byteLength(payload) > this.maxStoreBytes) throw new Error('result store byte limit reached')
-      const ref = randomUUID(), target = resolveInside(this.directory, `${ref}.json`)
-      signal.throwIfAborted()
-      const handle = await fs.open(target, 'wx', 0o600)
-      try { await handle.writeFile(payload, { encoding: 'utf8', signal }); await handle.sync() }
-      catch (error) { await handle.close(); await fs.unlink(target).catch(() => {}); throw error }
-      await handle.close()
+      const ref = await this.#write(record, signal)
       return { ref, bytes: kept.length, truncated: record.truncated }
     })
     this.#queue = operation.catch(() => {})
     return operation
+  }
+  saveSparse(sessionId: string, headText: string, tailText: string, totalBytes: number, signal: AbortSignal) {
+    const operation = this.#queue.then(async () => {
+      signal.throwIfAborted()
+      if (!sessionId) throw new Error('sessionId is required for result storage')
+      const headBytes = Buffer.from(headText), tailBytes = Buffer.from(tailText)
+      if (!Number.isSafeInteger(totalBytes) || totalBytes < headBytes.length + tailBytes.length) throw new Error('invalid sparse result length')
+      const tailBudget = Math.min(tailBytes.length, Math.max(1, Math.floor(this.maxCaptureBytes / 8)))
+      const tail = utf8Suffix(tailBytes, tailBudget).toString('utf8')
+      const head = utf8Prefix(headBytes, this.maxCaptureBytes - Buffer.byteLength(tail)).toString('utf8')
+      const headEnd = Buffer.byteLength(head), tailStart = totalBytes - Buffer.byteLength(tail)
+      const availableRanges: AvailableRange[] = [{ start: 0, end: headEnd }, { start: tailStart, end: totalBytes }]
+        .filter(range => range.end > range.start)
+      const record = { version: 2, owner: digest(sessionId), totalBytes, head, tail,
+        sha256: digest(`${totalBytes}:${head}:${tail}`) }
+      const ref = await this.#write(record, signal)
+      return { ref, bytes: headEnd + Buffer.byteLength(tail), truncated: headEnd + Buffer.byteLength(tail) < totalBytes, availableRanges }
+    })
+    this.#queue = operation.catch(() => {})
+    return operation
+  }
+  async #write(record: object, signal: AbortSignal) {
+    const payload = JSON.stringify(record)
+    await fs.mkdir(this.directory, { recursive: true })
+    let total = 0, files = 0
+    for await (const entry of await fs.opendir(this.directory)) {
+      signal.throwIfAborted()
+      if (++files >= this.maxFiles) throw new Error('result store file limit reached')
+      if (!entry.isFile()) throw new Error('unexpected entry in result store')
+      total += (await fs.stat(resolveInside(this.directory, entry.name))).size
+      if (total > this.maxStoreBytes) throw new Error('result store byte limit reached')
+    }
+    if (total + Buffer.byteLength(payload) > this.maxStoreBytes) throw new Error('result store byte limit reached')
+    const ref = randomUUID(), target = resolveInside(this.directory, `${ref}.json`)
+    signal.throwIfAborted()
+    const handle = await fs.open(target, 'wx', 0o600)
+    try { await handle.writeFile(payload, { encoding: 'utf8', signal }); await handle.sync() }
+    catch (error) { await handle.close(); await fs.unlink(target).catch(() => {}); throw error }
+    await handle.close()
+    return ref
   }
   async read(sessionId: string | undefined, ref: unknown, offset: unknown, maxBytes: unknown, signal: AbortSignal) {
     signal.throwIfAborted()
@@ -93,7 +118,27 @@ export class ToolResultStore {
     } finally { await handle.close() }
     if (!record || typeof record !== 'object') throw new Error('invalid result record')
     const data = record as Record<string, unknown>
-    if (data.version !== 1 || data.owner !== digest(sessionId)) throw new Error('result unavailable for this session')
+    if ((data.version !== 1 && data.version !== 2) || data.owner !== digest(sessionId)) throw new Error('result unavailable for this session')
+    if (data.version === 2) {
+      if (typeof data.head !== 'string' || typeof data.tail !== 'string' || typeof data.totalBytes !== 'number'
+        || !Number.isSafeInteger(data.totalBytes) || data.sha256 !== digest(`${data.totalBytes}:${data.head}:${data.tail}`)) throw new Error('result integrity check failed')
+      const head = Buffer.from(data.head), tail = Buffer.from(data.tail), totalBytes = data.totalBytes
+      if (head.length + tail.length > this.maxCaptureBytes || totalBytes < head.length + tail.length) throw new Error('result capture limit exceeded')
+      if (start > totalBytes) throw new Error('offset exceeds result length')
+      const tailStart = totalBytes - tail.length
+      const availableRanges: AvailableRange[] = [{ start: 0, end: head.length }, { start: tailStart, end: totalBytes }]
+        .filter(range => range.end > range.start)
+      if (start >= head.length && start < tailStart) return { ref, content: '', offset: start, nextOffset: tailStart,
+        eof: false, totalBytes, captureTruncated: true, unavailable: true, availableRanges }
+      const segment = start < head.length ? head : tail
+      const local = start < head.length ? start : start - tailStart
+      if (local < segment.length && (segment[local] & 0xc0) === 0x80) throw new Error('offset must be a UTF-8 character boundary inside the result')
+      const page = utf8Prefix(segment.subarray(local), limit)
+      if (!page.length && start < totalBytes) throw new Error('maxBytes cannot fit the next UTF-8 character')
+      const nextOffset = start + page.length
+      return { ref, content: page.toString('utf8'), offset: start, nextOffset, eof: nextOffset === totalBytes,
+        totalBytes, captureTruncated: head.length + tail.length < totalBytes, unavailable: false, availableRanges }
+    }
     if (typeof data.content !== 'string' || typeof data.truncated !== 'boolean' || data.sha256 !== digest(data.content)) throw new Error('result integrity check failed')
     const content = Buffer.from(data.content)
     if (content.length > this.maxCaptureBytes) throw new Error('result capture limit exceeded')

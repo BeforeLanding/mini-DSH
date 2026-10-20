@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- **R03 有账本的 provider 重试进行中（2026-10-20）**：R03a `6b04b03` 的 [CI 39347765168](https://github.com/BeforeLanding/mini-DSH/actions/runs/39347765168)、主请求 `f6afb07` 的 [CI 39348450133](https://github.com/BeforeLanding/mini-DSH/actions/runs/39348450133) 均六组通过。摘要路径本地完整 427 通过／30 跳过、check/lint 通过，待独立提交和当前提交 CI。真实 provider 请求 0；R03 通过后继续 R04。
+- **R04 真实命令尾部本地通过，待 CI（2026-10-20）**：R03 三项提交均六组 CI 通过，摘要提交 [CI 39348950645](https://github.com/BeforeLanding/mini-DSH/actions/runs/39348950645)。R04 >9 MiB 双流反例先红后绿，真实尾部进入预览；稀疏 ref 明示可读区间与不可读中段，重启后尾部可回读。当前本地完整 429 通过／30 跳过、check/lint 通过；待当前提交六组 CI。真实 provider 请求 0，R04 验收后进入 R05。
 
 - **R02 环境与中央授权工作分支验收完成（2026-10-19）**：R02a `70d4048` 的 [CI 39259211634](https://github.com/BeforeLanding/mini-DSH/actions/runs/39259211634)、R02b `7519753` 的 [CI 39261106135](https://github.com/BeforeLanding/mini-DSH/actions/runs/39261106135) 均六组通过。未知/第三方工具默认需人工批准，内置写/Bash 保留已有一次审批与复核。当前 MCP 仅 HTTP，无 stdio 启动点；后续增加 stdio 必须复用安全 env。env 边界不提供文件系统隔离。
 

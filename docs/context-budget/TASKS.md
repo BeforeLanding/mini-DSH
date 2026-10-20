@@ -1,8 +1,12 @@
 # 任务清单
 
-### R03 有账本的 provider 重试（2026-10-20，进行中）
+### R04 保留真实命令尾部（2026-10-20，本地通过，待当前提交 CI）
 
-R02b `7519753` 的 [CI 39261106135](https://github.com/BeforeLanding/mini-DSH/actions/runs/39261106135) 六组通过。独立提交：① `Retry-After` 与纯策略 `6b04b03`，[CI 39347765168](https://github.com/BeforeLanding/mini-DSH/actions/runs/39347765168) 六组通过。② 主请求逐次账本 `f6afb07`，[CI 39348450133](https://github.com/BeforeLanding/mini-DSH/actions/runs/39348450133) 六组通过；本地完整 424 通过／30 跳过。③ 摘要请求复用有账本策略，合成 429/503→成功与 401/部分流即停、AgentLoop 压缩集成通过；本地完整 427 通过／30 跳过、check/lint 通过，待独立提交及当前提交 CI。本项真实 provider 请求 0；R03 全部当前提交 CI 通过后进入 R04。
+R03c `9cac19b` 的 [CI 39348950645](https://github.com/BeforeLanding/mini-DSH/actions/runs/39348950645) 六组通过。>9 MiB stdout/stderr 真实尾部反例先红后绿。各流独立计实际字节，内存保留有界前缀与 8 KiB 尾环，管道始终排空；provider 预览含真实尾。稀疏结果版本 2 保存前后可读区间，`read_tool_result` 在缺口返回 `unavailable` 与尾部起点，不能伪称全文可回读；旧结果版本 1 保持可读。新测试验证重启回读。当前本地 `pnpm check`（syntax 166 files）、`pnpm test`（459 tests / 429 pass / 0 fail / 30 skipped）、`pnpm lint`（180 files / 0 diagnostics）通过；当前提交 CI 待验证，之后进入 R05。真实 provider 请求 0。
+
+### R03 有账本的 provider 重试（2026-10-20，工作分支验收完成）
+
+R02b `7519753` 的 [CI 39261106135](https://github.com/BeforeLanding/mini-DSH/actions/runs/39261106135) 六组通过。独立提交：① `Retry-After` 与纯策略 `6b04b03`，[CI 39347765168](https://github.com/BeforeLanding/mini-DSH/actions/runs/39347765168) 六组通过。② 主请求逐次账本 `f6afb07`，[CI 39348450133](https://github.com/BeforeLanding/mini-DSH/actions/runs/39348450133) 六组通过；本地完整 424 通过／30 跳过。③ 摘要请求复用有账本策略，合成 429/503→成功与 401/部分流即停、AgentLoop 压缩集成通过；提交 `9cac19b`，本地完整 427 通过／30 跳过、check/lint 通过，[CI 39348950645](https://github.com/BeforeLanding/mini-DSH/actions/runs/39348950645) 六组通过。本项真实 provider 请求 0；进入 R04。
 
 ### R02 环境与统一工具授权（2026-10-19，工作分支验收完成）
 

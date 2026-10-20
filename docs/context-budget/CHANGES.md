@@ -1,5 +1,17 @@
 # 改动与验收证据
 
+### R04 真实命令尾部与诚实稀疏回读（2026-10-20，本地通过，待 CI）
+
+先加 >9 MiB stdout 与并发大 stderr 末尾标记测试：旧实现把 stdout `bytes` 记成 8,388,608 而实际为 9,437,203，断言先红。现命令采集对两流各自计实际字节，前缀分别受 `maxCaptureBytes` 限制，另保留最多 8 KiB 真正末尾；输出管道持续排空。UTF-8 前缀与尾部均切在字符边界。`CommandStream.bytes` 对超限输出从“保留字节数”改为“实际观测字节数”，`truncated` 明确标示内存采集缺口。
+
+Bash 结果投影使用真实尾部。源流有缺口时，`ToolResultStore` 新增版本 2 稀疏记录：保存容量仍受原 `maxCaptureBytes` 和总目录配额约束，返回 `availableRanges`；缺口读请求返回 `unavailable: true`、空内容和指向真实尾部的 `nextOffset`，`eof` 不会在缺口虚报。版本 1 的连续结果保持原样可读。存储失败仍显式 `storageError`，结果保留真实尾部、退出状态及失败分类。
+
+定向 16/16，包括超 9 MiB 双流、真实 marker、缺口与重启回读；`pnpm check` syntax 166 files、`pnpm test` 459 tests / 429 pass / 0 fail / 30 skipped、`pnpm lint` 180 files / 0 diagnostics、`git diff --check` 通过。当前提交 CI 待验证。真实 provider 请求 0；main 未合并。
+
+### R03c 摘要请求当前提交 CI 验收（2026-10-20）
+
+摘要请求逐次重试提交 `9cac19b20c287b6579a40f34ac27af35d42caa21` 的 [CI 39348950645](https://github.com/BeforeLanding/mini-DSH/actions/runs/39348950645) Ubuntu/Windows × Node 20.18.1/22/24 六组全部通过。与下节记录的本地 427 通过／30 跳过分开记账；真实 provider 请求 0。R03 工作分支验收完成，main 尚未合并。下一项 R04。
+
 ### R03c 摘要请求逐次重试账本（2026-10-20，本地通过，待 CI）
 
 CompactionRuntime 为每次摘要 attempt 写独立 model/start、usage/end；预流 429/503 有限重试并写 model/retry，等待前落盘，受剩余活动时间、请求和 token 预算及取消约束。摘要失败闩只看最终一次压缩括号的结论，不把其中两次网络 attempt 误数为两次压缩失败。直接定向测试覆盖 429/503 成功、401/部分流无重试；AgentLoop 集成测试确认 429→摘要成功→主请求完成时总模型请求数 3、压缩括号只开闭一次。旧摘要失败与维护型 run 用例不变。

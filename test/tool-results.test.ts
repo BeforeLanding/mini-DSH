@@ -255,6 +255,43 @@ test('Bash collection flags its cap and nonzero exit logs retain retrievable err
   } finally { await root.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
 })
 
+test('large Bash streams expose real ends and sparse refs report an unreadable middle', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'result-real-tail-'))
+  const root = await bootResults(workspace)
+  let restarted: Context | undefined
+  try {
+    await root.plugin(toolResults, { maxPreviewBytes: 256, maxCaptureBytes: 128 * 1024 })
+    await root.plugin(bash, { maxCaptureBytes: 64 * 1024 })
+    const result = await root.tools.execute('bash', { command: `node -e 'process.stdout.write("x".repeat(9*1024*1024));process.stdout.write("FINAL_ERROR_MARKER");process.stderr.write("y".repeat(9*1024*1024));process.stderr.write("STDERR_END")'` }, { sessionId: 's' })
+    assert.equal(result.isError, false)
+    const { stdout, stderr } = result.value as CommandResult
+    assert.ok(root.tools.renderResult(result).includes('FINAL_ERROR_MARKER'))
+    assert.ok(root.tools.renderResult(result).includes('STDERR_END'))
+    assert.notEqual(stdout.ref, stderr.ref)
+    for (const [stream, marker] of [[stdout, 'FINAL_ERROR_MARKER'], [stderr, 'STDERR_END']] as const) {
+      assert.ok(stream.bytes > 9 * 1024 * 1024)
+      assert.equal(stream.truncated, true)
+      assert.equal(stream.previewTruncated, true)
+      assert.equal(stream.storageTruncated, true)
+      assert.ok(stream.tail?.endsWith(marker))
+      assert.ok(stream.availableRanges && stream.availableRanges.length === 2)
+      assert.ok(stream.availableRanges[0].end < stream.availableRanges[1].start)
+      const gap = await root.tools.execute('read_tool_result', { ref: stream.ref, offset: stream.availableRanges[0].end }, { sessionId: 's' })
+      assert.equal(gap.isError, false)
+      assert.equal((gap.value as { unavailable: boolean; content: string; nextOffset: number }).unavailable, true)
+      assert.equal((gap.value as { content: string }).content, '')
+      assert.equal((gap.value as { nextOffset: number }).nextOffset, stream.availableRanges[1].start)
+    }
+    restarted = await bootResults(workspace)
+    await restarted.plugin(toolResults, { maxCaptureBytes: 128 * 1024 })
+    const tailStart = stdout.availableRanges![1].start
+    const tail = await restarted.tools.execute('read_tool_result', { ref: stdout.ref, offset: tailStart }, { sessionId: 's' })
+    assert.equal(tail.isError, false)
+    assert.ok((tail.value as { content: string }).content.endsWith('FINAL_ERROR_MARKER'))
+    assert.equal((tail.value as { eof: boolean }).eof, true)
+  } finally { await root.fiber.dispose(); await restarted?.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
+})
+
 test('command projection keeps stream refs separate and preserves exit metadata on storage failure', async () => {
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'result-streams-'))
   const root = await bootResults(workspace)

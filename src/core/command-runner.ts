@@ -1,13 +1,14 @@
 import { spawn, execFile } from 'node:child_process'
 import { performance } from 'node:perf_hooks'
 import { positiveLimit } from './bounded-text.js'
-import { utf8Prefix } from './tool-result-store.js'
+import { utf8Prefix, utf8Suffix, type AvailableRange } from './tool-result-store.js'
 import fs from 'node:fs/promises'
 import { childEnvironment, temporaryChildHome } from './child-environment.js'
 
 export interface CommandStream {
   text: string; bytes: number; truncated: boolean; tail?: string; omittedBytes?: number; resumeOffset?: number
   ref?: string; storedBytes?: number; storageTruncated?: boolean; previewTruncated?: boolean; storageError?: string
+  availableRanges?: AvailableRange[]
 }
 export interface CommandResult {
   type: 'command'; version: 1; command: string; cwd: string
@@ -29,26 +30,31 @@ const treeKillDeadlineMs = 2_000
 
 export async function runCommand(options: CommandOptions): Promise<CommandResult> {
   const limit = positiveLimit(options.maxCaptureBytes, 8 * 1024 * 1024, 'maxCaptureBytes')
+  const tailLimit = Math.min(limit, 8 * 1024)
   const timeoutMs = positiveLimit(options.timeoutMs, 30_000, 'timeoutMs', 2_147_483_647)
   options.signal.throwIfAborted()
   const home = await temporaryChildHome()
   const started = performance.now()
   try { return await new Promise<CommandResult>(resolve => {
-    const stdout = { chunks: [] as Buffer[], truncated: false }
-    const stderr = { chunks: [] as Buffer[], truncated: false }
-    let bytes = 0, status: CommandResult['status'] = 'exited', error: string | undefined
+    const stdout = { chunks: [] as Buffer[], captured: 0, bytes: 0, tail: Buffer.alloc(0) }
+    const stderr = { chunks: [] as Buffer[], captured: 0, bytes: 0, tail: Buffer.alloc(0) }
+    let status: CommandResult['status'] = 'exited', error: string | undefined
     const stream = (target: typeof stdout): CommandStream => {
       const raw = Buffer.concat(target.chunks), kept = utf8Prefix(raw, raw.length)
+      const truncated = target.bytes > target.captured
       // Remove an incomplete UTF-8 suffix when collection cut a character.
       let end = kept.length
-      if (target.truncated && end) {
+      if (truncated && end) {
         let lead = end - 1
         while (lead > 0 && (kept[lead] & 0xc0) === 0x80) lead--
         const first = kept[lead], width = first >= 0xf0 ? 4 : first >= 0xe0 ? 3 : first >= 0xc0 ? 2 : 1
         if (end - lead < width) end = lead
       }
       const content = kept.subarray(0, end)
-      return { text: content.toString('utf8'), bytes: content.length, truncated: target.truncated }
+      if (!truncated) return { text: content.toString('utf8'), bytes: target.bytes, truncated: false }
+      const tail = utf8Suffix(target.tail, tailLimit)
+      return { text: content.toString('utf8'), bytes: target.bytes, truncated: true,
+        tail: tail.toString('utf8'), omittedBytes: target.bytes - content.length - tail.length, resumeOffset: content.length }
     }
     const result = (exitCode: number | null, signal: NodeJS.Signals | null): CommandResult => ({
       type: 'command', version: 1, command: options.command, cwd: options.cwd, status,
@@ -60,9 +66,14 @@ export async function runCommand(options: CommandOptions): Promise<CommandResult
       detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] }) }
     catch (cause) { status = 'spawn_error'; error = String(cause); resolve(result(null, null)); return }
     const collect = (target: typeof stdout, chunk: Buffer) => {
-      const remaining = limit - bytes
-      if (chunk.length > remaining) target.truncated = true
-      if (remaining > 0) { const kept = chunk.subarray(0, remaining); target.chunks.push(kept); bytes += kept.length }
+      target.bytes += chunk.length
+      const take = Math.min(chunk.length, limit - target.captured)
+      if (take > 0) { target.chunks.push(chunk.subarray(0, take)); target.captured += take }
+      if (take < chunk.length) {
+        const overflow = chunk.subarray(take)
+        target.tail = overflow.length >= tailLimit ? Buffer.from(overflow.subarray(overflow.length - tailLimit))
+          : Buffer.concat([target.tail, overflow]).subarray(Math.max(0, target.tail.length + overflow.length - tailLimit))
+      }
     }
     // 杀进程树，返回一个**永不 reject** 的 Promise，表示「树已经收掉了」这件事何时落定。
     // POSIX 上 `kill(-pgid, SIGKILL)` 在系统调用层面同步送达，返回即已送达（SIGKILL 不可捕获，
