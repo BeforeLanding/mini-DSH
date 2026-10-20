@@ -10,6 +10,7 @@
 - 缺模型 id、价格快照、基线 commit/命令、镜像 digest 或批次上限时 `freezeStatus: draft`；只有齐备且显式 `--finalize` 才为 `frozen`，执行器拒绝 draft。
 - 每 episode 复用 `createHarness`，预算取冻结的请求/工具/时间/输出上限；单题金额上限用最大单价反推保守 token 上限。保存 session JSONL、终态、usage、空/非空 patch；基础设施失败或未知 usage 停批；批次金额与 episode 数有硬上限；`--resume` 跳过已完成/中断 episode。
 - 判分独立于 Agent：每个 arm 写官方 predictions（含空 patch），每批每臂新 `run_id`；官方判分失败记为 error 并保留在主分母。报告输出 planned/executed、每臂 Wilson、预声明配对四格与精确 McNemar、失败分类和三条预声明失败轨迹，并关联 events/patch/session。
+- 用真实 500 行 Verified 数据生成了零付费 draft：`D:\Agent\outputs\mini-dsh-swebench-preregistration-20261020\manifest-draft.json`（`seed=20261020`，开发 5、正式 50、11 个 repository、4 臂、200 + 20 episodes、$110 配置上限、`paidRequests: 0`）。`freezeStatus: draft`，缺模型、价格、基线命令与逐题镜像 digest；不是最终冻结，也未据此宣称任何成绩。
 
 **实际命令与结果**：
 - `node --test dist/test/swebench-protocol.test.js dist/test/swebench-preregister.test.js dist/test/swebench-run.test.js` → 17 tests / 17 pass / 0 fail。覆盖 sanitize/gold 拒绝、schedule、Wilson/McNemar、成本与未知 usage、manifest 校验、预注册 draft→frozen、脚本化 runner 的正常/空 patch/停批/恢复。
