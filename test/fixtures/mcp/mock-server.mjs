@@ -9,6 +9,13 @@ const tools = [
   { name: 'counter', description: 'Read the in-process counter', inputSchema: { type: 'object', properties: {} } },
   { name: 'slow', description: 'Never answers quickly', inputSchema: { type: 'object', properties: {} } },
   { name: 'crash', description: 'Drop the transport', inputSchema: { type: 'object', properties: {} } },
+  { name: 'environment', description: 'Report the environment this server was started with', inputSchema: { type: 'object', properties: {} } },
+  { name: 'pid', description: 'Report this server process id', inputSchema: { type: 'object', properties: {} } },
+]
+
+const reportedEnvironmentNames = [
+  'DEEPSEEK_API_KEY', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'SSH_AUTH_SOCK', 'NODE_OPTIONS',
+  'HOME', 'USERPROFILE', 'MOCK_TOKEN', 'PATH', 'TEMP', 'TMPDIR', 'LANG',
 ]
 
 function send(message) {
@@ -34,6 +41,11 @@ async function handle(message) {
     if (name === 'counter') return send({ jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: String(counter) }] } })
     if (name === 'slow') { await new Promise(resolve => setTimeout(resolve, 10_000)); return send({ jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: 'late' }] } }) }
     if (name === 'crash') { process.exit(1) }
+    if (name === 'environment') {
+      const environment = Object.fromEntries(reportedEnvironmentNames.map(key => [key, process.env[key] ?? null]))
+      return send({ jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: JSON.stringify(environment) }] } })
+    }
+    if (name === 'pid') return send({ jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: String(process.pid) }] } })
     return send({ jsonrpc: '2.0', id: message.id, error: { code: -32602, message: `Unknown tool ${name}` } })
   }
   if (message.id !== undefined) send({ jsonrpc: '2.0', id: message.id, error: { code: -32601, message: 'Method not found' } })

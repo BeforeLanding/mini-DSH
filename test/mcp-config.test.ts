@@ -4,7 +4,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { createHarness } from '../src/app/create-harness.js'
-import { describeMcpConfig, loadMcpServers } from '../src/app/mcp-config.js'
+import { describeMcpConfig, loadMcpServers, secureStdioEntry } from '../src/app/mcp-config.js'
 
 const mockServer = path.resolve('test/fixtures/mcp/mock-server.mjs')
 // 配置要求的是字面量 ${NAME}，不是本文件的模板插值。
@@ -18,6 +18,15 @@ async function writeConfig(directory: string, servers: unknown[]) {
   const file = path.join(directory, 'mcp.json')
   await fs.writeFile(file, JSON.stringify({ servers }))
   return file
+}
+
+async function waitForProcessExit(pid: number, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try { process.kill(pid, 0) } catch { return true }
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+  return false
 }
 
 const stdioServer = (overrides: Record<string, unknown> = {}) => ({
@@ -138,4 +147,84 @@ test('third-party MCP tools cannot bypass central authorization', async () => {
     assert.equal(harness.root.tools.renderResult(after).trim(), '1')
   } finally { await harness.dispose() }
   await fs.rm(home, { recursive: true, force: true })
+})
+
+test('stdio entries are launched through the explicit-environment launcher, idempotently', async () => {
+  const home = await temporaryDirectory()
+  try {
+    const file = await writeConfig(home, [stdioServer()])
+    const loaded = await loadMcpServers({ configPath: file, env: {} })
+    const wrapped = secureStdioEntry(loaded.servers[0]!)
+    assert.equal(wrapped.config.transport, 'stdio')
+    if (wrapped.config.transport !== 'stdio') return
+    assert.equal(wrapped.config.command, process.execPath)
+    assert.match(wrapped.config.args[1] ?? '', /^--env-names$/)
+    assert.match(wrapped.config.args[0] ?? '', /mcp-stdio-launcher\.js$/)
+    assert.deepEqual(secureStdioEntry(wrapped), wrapped)
+  } finally { await fs.rm(home, { recursive: true, force: true }) }
+})
+
+test('HOME, USERPROFILE and NODE_OPTIONS cannot be forwarded to a stdio server', async () => {
+  const home = await temporaryDirectory()
+  try {
+    const file = await writeConfig(home, [])
+    for (const name of ['HOME', 'USERPROFILE', 'NODE_OPTIONS']) {
+      await writeConfig(home, [stdioServer({ env: { [name]: reference(name) } })])
+      await assert.rejects(loadMcpServers({ configPath: file, env: { [name]: '/somewhere' } }), new RegExp(`${name} cannot be forwarded`))
+    }
+  } finally { await fs.rm(home, { recursive: true, force: true }) }
+})
+
+test('the real stdio child gets only the explicit environment, its own HOME, and is reaped on dispose', async () => {
+  const home = await temporaryDirectory()
+  const workspace = path.join(home, 'workspace')
+  await fs.mkdir(workspace)
+  const file = await writeConfig(home, [stdioServer({ env: { MOCK_TOKEN: reference('MOCK_TOKEN') } })])
+  const leaks = {
+    DEEPSEEK_API_KEY: 'fake-provider-key',
+    HTTP_PROXY: 'http://proxy.invalid:8080',
+    HTTPS_PROXY: 'http://proxy.invalid:8443',
+    ALL_PROXY: 'socks5://proxy.invalid:1080',
+    SSH_AUTH_SOCK: '/tmp/mini-dsh-fake-agent.sock',
+    NODE_OPTIONS: '--no-warnings',
+    MOCK_TOKEN: 'explicit-token',
+  }
+  const previous = new Map(Object.keys(leaks).map(name => [name, process.env[name]] as const))
+  for (const [name, value] of Object.entries(leaks)) process.env[name] = value
+  let harness: Awaited<ReturnType<typeof createHarness>> | undefined
+  let pid: number | undefined
+  try {
+    const loaded = await loadMcpServers({ configPath: file, env: process.env })
+    harness = await createHarness({ workspace, profile: 'coding', mcpServers: loaded.servers })
+    harness.root.sandbox.setApprover(async () => true)
+    const result = await harness.root.tools.execute('mcp__mock__environment', {})
+    assert.equal(result.isError, false)
+    const reported = JSON.parse(harness.root.tools.renderResult(result)) as Record<string, string | null>
+    assert.equal(reported.DEEPSEEK_API_KEY, null)
+    assert.equal(reported.HTTP_PROXY, null)
+    assert.equal(reported.HTTPS_PROXY, null)
+    assert.equal(reported.ALL_PROXY, null)
+    assert.equal(reported.SSH_AUTH_SOCK, null)
+    assert.equal(reported.NODE_OPTIONS, null)
+    // 显式引用按契约传入，且允许运行所需的 PATH 仍在。
+    assert.equal(reported.MOCK_TOKEN, 'explicit-token')
+    assert.ok(reported.PATH)
+    // 独立 HOME：不是父进程的真实目录。
+    assert.ok(reported.HOME && path.isAbsolute(reported.HOME))
+    assert.match(reported.HOME, /mini-dsh-mcp-/)
+    if (process.platform === 'win32') assert.notEqual(reported.USERPROFILE, process.env.USERPROFILE)
+    else assert.notEqual(reported.HOME, process.env.HOME)
+    const pidText = harness.root.tools.renderResult(await harness.root.tools.execute('mcp__mock__pid', {}))
+    pid = Number(pidText.trim())
+    assert.ok(Number.isSafeInteger(pid) && pid > 0)
+  } finally {
+    await harness?.dispose()
+    for (const [name, value] of previous) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
+  }
+  try {
+    assert.equal(await waitForProcessExit(pid!), true, `mock MCP server ${pid} survived dispose`)
+  } finally { await fs.rm(home, { recursive: true, force: true }) }
 })

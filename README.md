@@ -95,7 +95,7 @@ pnpm start
 ## 已知限制
 
 - 路径/命令闸门是应用层策略，不是操作系统隔离；Bash 仍能访问当前用户可读写的文件。
-- MCP 默认不加载。stdio server 由 MCP SDK 启动，使用其共享清洗（丢弃名称含 `KEY`/`PASSWORD`/`SECRET`/`TOKEN` 的变量与 `DSH_*`，再合并显式引用），**不是** Bash 的严格允许列表；代理、SSH agent、`NODE_OPTIONS` 与真实 HOME 仍可能被继承。显式配置 server 即表示信任该进程。
+- MCP 默认不加载。stdio server 经内置启动器启动：只继承 PATH、locale、临时目录与 Windows 系统目录等运行变量，HOME/USERPROFILE 指向独立临时目录，显式配置的 `${ENV_NAME}` 引用按名字转交。provider key、代理、SSH agent 与 `NODE_OPTIONS` 默认不继承（这三个名字也不允许显式转发）。这不是文件系统隔离：MCP server 仍能读取当前用户可读的文件。启动器是 SDK 与 server 之间的一个中间进程；server 不响应 stdin EOF 时会在宽限后被终止。显式配置 server 即表示信任该进程。
 - 工具调用在会话内串行执行，只读并发尚未实现。
 - token 校准默认关闭；开启需要真实 provider usage 证据，固定 40 条语料的历史误差不代表完整请求分布。
 - `docs/samples/` 的合成轨迹只验证机制，不是模型能力分数；SWE-bench 单题无模型 PoC 只验证候选路径与评分通道，5 题开发批次与正式 50 题未运行。
