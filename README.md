@@ -10,7 +10,7 @@ mini-DSH 是一个 TypeScript / Cordis 编写的本地编程 Agent Harness。它
 
 ## 五分钟上手
 
-需要 Node.js ≥ 20.18.1、pnpm 11.22.0。Windows 的 Bash 工具使用 Git for Windows；Linux/macOS 使用 PATH 中的 `bash`。以下命令不需要 API key，不发出模型请求：
+需要 Node.js ≥ 22、pnpm 11.22.0。Windows 的 Bash 工具使用 Git for Windows；Linux/macOS 使用 PATH 中的 `bash`。以下命令不需要 API key，不发出模型请求：
 
 ```powershell
 pnpm install --frozen-lockfile

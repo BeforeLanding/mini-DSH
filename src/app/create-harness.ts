@@ -16,6 +16,7 @@ import * as readHistory from '../plugins/read-history.js'
 import * as externalPlugins from '../plugins/external-plugins.js'
 import * as files from '../tools/files.js'
 import * as bash from '../tools/bash.js'
+import { assertMcpRuntime } from './mcp-config.js'
 import type { McpServerEntry } from './mcp-config.js'
 
 export interface HarnessAdapter { provider: string; model: string; chat: Adapter['chat']; capabilities?: Adapter['capabilities'] }
@@ -52,7 +53,7 @@ export async function createHarness(config: HarnessConfig) {
     await root.plugin(bash, { workspace: config.workspace, ...(config.commandRunner ? { commandRunner: config.commandRunner } : {}) })
     // MCP 工具经 ToolRuntime 中央授权：插件不声明 effect/origin，因此按 unknown 默认询问；
     // failOnStartupError 固定为 false，连接失败只丢该 server 的工具，不阻断主循环。
-    if (config.mcpServers?.length) await root.plugin(externalPlugins, { entries: config.mcpServers })
+    if (config.mcpServers?.length) { assertMcpRuntime(); await root.plugin(externalPlugins, { entries: config.mcpServers }) }
     if (config.adapter) root.llm.register(config.adapter.provider, { models: [config.adapter.model], ...(config.adapter.capabilities ? { capabilities: config.adapter.capabilities } : {}), chat: config.adapter.chat })
     const schemas = root.tools.schemas()
     const capabilityManifest = {

@@ -10,7 +10,7 @@
 
 删除内置 context7 条目，`plugins.config.ts` 默认为空；MCP 只从用户目录级 `~/.mini-dsh/mcp.json`、`MINI_DSH_MCP_CONFIG` 或显式 `--mcp-config <path>` 读取，工作区本地文件不自动加载，`MINI_DSH_MCP=0` 可关闭。新增 `src/app/mcp-config.ts`：严格校验 serverName/transport/字段，stdio `env` 与 HTTP `headers` 只接受完整 `${ENV_NAME}` 引用，缺变量时启动失败并点名，`--show-config` 只展示变量名与缺失项、不连接 server。MCP 装配移入 `createHarness` 的可选 `mcpServers`，评测/离线入口不传即禁用；重复 serverName 拒绝，连接失败固定 `failOnStartupError=false`。第三方工具经 ToolRuntime 中央授权按 unknown 默认询问，`autoApprove` 不自动授权；dispose 释放注册项与子进程。
 
-验收：默认无配置时无 MCP 工具、不加载插件；用户级/显式配置可加载本地 stdio mock server 的 list/call；超时与调用中退出返回错误而非挂住；拒绝审批时 mock 计数器不增加；重复 serverName、字面 secret、缺失变量、非法 transport/url/未知字段均拒绝；show-config 不展开 secret 且不连接；dispose 后工具不可解析。新增 `test/mcp-config.test.ts` 6 条与 `test/fixtures/mcp/mock-server.mjs`；本地 `pnpm check` syntax 172 files、`pnpm test` 474 tests／444 pass／0 fail／30 skipped、`pnpm lint` 186 files／0 diagnostics；真实 provider 请求 0。当前提交 CI 待验证。
+验收：默认无配置时无 MCP 工具、不加载插件；用户级/显式配置可加载本地 stdio mock server 的 list/call；超时与调用中退出返回错误而非挂住；拒绝审批时 mock 计数器不增加；重复 serverName、字面 secret、缺失变量、非法 transport/url/未知字段均拒绝；show-config 不展开 secret 且不连接；dispose 后工具不可解析。新增 `test/mcp-config.test.ts` 6 条与 `test/fixtures/mcp/mock-server.mjs`；本地 `pnpm check` syntax 172 files、`pnpm test` 474 tests／444 pass／0 fail／30 skipped、`pnpm lint` 186 files／0 diagnostics。`f413f44` 的 Node 20.18.1 两组因 MCP SDK 的 `Promise.withResolvers` 红灯；最低版本已提高到 Node 22，CI matrix 改为 22/24，配置 MCP 时低版本显式失败，未删除或跳过测试。真实 provider 请求 0；当前提交 CI 待验证。
 
 ### R06 token 估算在线观测与受控校准（2026-10-20，进行中）
 

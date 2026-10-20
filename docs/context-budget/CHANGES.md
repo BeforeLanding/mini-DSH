@@ -12,6 +12,10 @@
 
 `051f96239307927924c1e580d8a4602425cd9a4c` 的 [CI 39378725489](https://github.com/BeforeLanding/mini-DSH/actions/runs/39378725489) Ubuntu/Windows × Node 20.18.1/22/24 六组全部通过；R06 在工作分支验收完成，main 未合并。阶段 B 校准仍未接入运行时。
 
+### R07 修正最低 Node 版本（2026-10-20，本地通过，待 CI）
+
+`f413f44` 的 CI 在 Node 20.18.1 两组红：MCP SDK 使用 `Promise.withResolvers`，插件加载报 `Promise.withResolvers is not a function`，随后两条 MCP 集成测试失败。这不是可跳过的平台差异——声明的最低版本必须能加载已交付的依赖。处置：`package.json` 的 `engines` 提高到 `>=22`，CI matrix 改为 Node 22/24（不再测试已 EOL 且无法加载 MCP 的 Node 20），README 与 AGENTS 同步；`loadMcpServers` 与 `createHarness` 在配置了 server 且运行时低于 22 时显式失败，未配置 MCP 的路径不受影响。没有删除测试、没有按平台 skip。本地 Node 22 下 `pnpm check` syntax 173 files、`pnpm test` 478 tests / 448 pass / 0 fail / 30 skipped、`pnpm lint` 187 files / 0 diagnostics。当前提交 CI 待验证（Node 22/24 + isolation）。
+
 ### R07 MCP 默认关闭与可控装配（2026-10-20，本地通过，待 CI）
 
 `plugins.config.ts` 的内置 context7 条目已删除并改为空数组；启动、`--help`、`--show-config`、inspect 与离线 demo 不再连接 MCP。新增 `src/app/mcp-config.ts`：只读取 `~/.mini-dsh/mcp.json`、`MINI_DSH_MCP_CONFIG` 或 `--mcp-config <path>`，不读取工作区文件；严格校验 serverName（`[A-Za-z0-9_-]{1,32}`，重复即拒绝）、transport、字段白名单、URL 与超时；stdio `env` 与 HTTP `headers` 只接受完整 `${ENV_NAME}`，字面 secret 拒绝，缺变量启动失败并点名，`--show-config` 仅输出变量名与缺失项且不连接 server。MCP 装配移入 `createHarness` 的 `mcpServers` 可选参数；评测/离线入口不传即禁用；连接失败固定 `failOnStartupError=false`。插件工具名 `mcp__<server>__<raw>`，不声明 effect/origin，经 ToolRuntime 中央授权按 unknown 询问，`autoApprove` 不自动授权。

@@ -162,6 +162,13 @@ export async function describeMcpConfig(options: McpLoadOptions = {}): Promise<M
   return { enabled: parsed.length > 0, source: config.source, servers: parsed.map(server => server.descriptor) }
 }
 
+// MCP SDK 依赖 Promise.withResolvers（Node 22+）。不在低版本上静默跳过：配置了 server
+// 就明确失败，未配置则完全不受影响。
+export function assertMcpRuntime() {
+  const major = Number(process.versions.node.split('.')[0])
+  if (!Number.isSafeInteger(major) || major < 22) throw new Error(`MCP servers require Node.js >= 22 (running ${process.versions.node})`)
+}
+
 export async function loadMcpServers(options: McpLoadOptions = {}): Promise<{ servers: McpServerEntry[]; source: string | null }> {
   const env = options.env ?? process.env
   if (env.MINI_DSH_MCP === '0') return { servers: [], source: null }
@@ -169,5 +176,7 @@ export async function loadMcpServers(options: McpLoadOptions = {}): Promise<{ se
   const config = await readConfigFile(file)
   if (!config) return { servers: [], source: null }
   const parsed = parseDocument(config.raw, config.source, env, true)
-  return { servers: parsed.flatMap(server => server.entry ? [server.entry] : []), source: config.source }
+  const servers = parsed.flatMap(server => server.entry ? [server.entry] : [])
+  if (servers.length) assertMcpRuntime()
+  return { servers, source: config.source }
 }

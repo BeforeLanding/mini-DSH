@@ -13,7 +13,7 @@
 - [进度](PROGRESS.md)：已完成、验证、阻塞和下一步。
 
 ## 运行与检查
-- 以 `package.json` 为版本和命令依据：Node.js >= 20.18.1，pnpm 11.22.0。
+- 以 `package.json` 为版本和命令依据：Node.js >= 22，pnpm 11.22.0。MCP 依赖使用 `Promise.withResolvers`，Node 20 无法加载。
 - 安装：`pnpm install --frozen-lockfile`。
 - 启动：复制 `.env.example` 为 `.env`，填写 `DEEPSEEK_API_KEY`，运行 `pnpm start`；不得覆盖已有 `.env`。
 - 必需检查：`pnpm check`（strict 类型、构建及产物语法）和 `pnpm test`（核心及 Cordis 集成）。测试不需要模型 API Key；集成测试实际执行 Bash。
