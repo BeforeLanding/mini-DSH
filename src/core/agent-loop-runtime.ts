@@ -333,7 +333,7 @@ export class AgentLoopRuntime {
     // （含 /continue）重获机会。只有前三个原因是「这个摘要器不行」，它们计数；applied 归零；其余原因
     // 说的是「环境变了」，既不计入也不清零。
     #summaryFailures(sessionId: string, state: RunState) {
-        const counting = new Set<DeclineReason>(['summary-failed', 'summary-empty', 'summary-not-smaller'])
+        const counting = new Set<DeclineReason>(['summary-failed', 'summary-empty', 'summary-invalid', 'summary-not-smaller'])
         let failures = 0
         for (const event of this.sessions.visibleEvents(sessionId)) {
             if (event.type !== 'context/summary-end' || event.runId !== state.runId) continue

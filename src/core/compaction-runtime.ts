@@ -13,7 +13,7 @@ import type { LlmRuntime } from './llm-runtime.js'
 
 export type CompactionTrigger = 'pressure' | 'context-overflow' | 'explicit'
 // §5.1 的闭集。前三个计入失败闩，其余说的是「环境变了」而不是「这个摘要器不行」，既不计入也不清零。
-export type DeclineReason = 'summary-failed' | 'summary-empty' | 'summary-not-smaller'
+export type DeclineReason = 'summary-failed' | 'summary-empty' | 'summary-invalid' | 'summary-not-smaller'
   | 'turn-started' | 'plan-stale' | 'agent-gone' | 'cancelled' | 'unclosed'
 export type CompactionOutcome =
   | { kind: 'applied'; shadowedSeqs: number[]; summaryTokens: number }
@@ -49,21 +49,33 @@ export interface CompactionAttempt {
 // 而不是把旧摘要再摘一遍。第二段因此只在区间里确实含有一份更早的摘要时才出现。
 const COMPACTION_INSTRUCTION = [
   '上面的对话正在被摘要，以便在上下文窗口内继续工作。',
-  '用 Markdown 写摘要，只用简洁的要点，分以下小节，且必须包含具体的文件路径、',
-  '标识符、命令和错误原文——读者将**只有**这份摘要和最近的消息。',
+  '用 Markdown 写摘要，以下四节必须按顺序出现且各有实际内容。保留具体文件路径、',
+  '标识符、命令和错误原文；未完成或无证据时如实写明。读者将**只有**这份摘要和最近的消息。',
   '',
   '## Primary Request',
-  '## Key Concepts',
-  '## Files and Code',
-  '## Errors and Fixes',
+  '## Completed Work',
   '## Pending Work',
-  '## Current Work',
-  '## Next Step',
-  '## Critical Context',
+  '## Key Evidence',
+  '需要时可追加 Key Concepts、Files and Code、Errors and Fixes、Current Work、Next Step、Critical Context。',
   '',
   '如果上面已经出现过一份更早的摘要，请把它的内容**合并**进来，不要逐字照抄。',
   '只回复摘要正文。',
 ].join('\n')
+
+const requiredSections = ['Primary Request', 'Completed Work', 'Pending Work', 'Key Evidence'] as const
+function validSummaryStructure(summary: string) {
+  const headings = [...summary.matchAll(/^## ([^\r\n]+)\s*$/gm)]
+  let previous = -1
+  for (const name of requiredSections) {
+    const index = headings.findIndex((heading, offset) => offset > previous && heading[1] === name)
+    if (index < 0) return false
+    const bodyStart = headings[index]!.index! + headings[index]![0].length
+    const bodyEnd = headings[index + 1]?.index ?? summary.length
+    if (!summary.slice(bodyStart, bodyEnd).trim()) return false
+    previous = index
+  }
+  return true
+}
 
 // frame 是**代码写的**，不是模型写的（§7.1）。门牌号让替换可寻址：没有 seq 范围，模型手里就是一段
 // 「不知道丢了什么」的摘要，也无从问起。
@@ -224,6 +236,7 @@ export class CompactionRuntime {
     if (reason === undefined) {
       if (failure !== undefined || incomplete) reason = 'summary-failed'
       else if (!content?.trim()) reason = 'summary-empty'
+      else if (!validSummaryStructure(content)) reason = 'summary-invalid'
     }
 
     if (reason !== undefined) {

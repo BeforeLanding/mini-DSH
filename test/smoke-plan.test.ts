@@ -66,7 +66,7 @@ test('scripted history smoke consumes one summary before main calls and verifies
   try {
     let main = 0
     const adapter: Adapter = { chat: async request => {
-      if (request.purpose === 'summary') return { content: '## Primary Request\nRemember the audit detail.\n## Next Step\nUse read_history to recover the marker.', complete: true, finishReason: 'stop', usage: syntheticUsage }
+      if (request.purpose === 'summary') return { content: '## Primary Request\nRemember the audit detail.\n## Completed Work\nSaved the original result.\n## Pending Work\nUse read_history to recover the marker.\n## Key Evidence\nThe event number identifies the original result.', complete: true, finishReason: 'stop', usage: syntheticUsage }
       main++
       if (main === 1) {
         const text = request.messages?.at(-1)?.content ?? ''

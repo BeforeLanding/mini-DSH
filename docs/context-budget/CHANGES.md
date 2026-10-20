@@ -1,5 +1,15 @@
 # 改动与验收证据
 
+### R05d 摘要结构校验与拒绝语义（2026-10-20，本地通过，待 CI）
+
+摘要指令要求按顺序给出 `Primary Request`、`Completed Work`、`Pending Work`、`Key Evidence` 四节且各有正文。纯结构检查只判断章节与非空，不声称能验证模型写出的事实真伪；原始事件、带 seq 的来源和代码生成的 frame 范围仍可回读核对。无章节或空章节的完整摘要写 `context/summary-end` 的 `summary-invalid`，不写 `context/summary`，旧投影保持，自动失败闩计入它。输出未完成仍走 `summary-failed`，空串仍走 `summary-empty`，过长仍走 `summary-not-smaller`。合成模型夹具、CLI、预检、smoke 与零付费演示按新契约更新，NX-38 只在模型摘要是否保留判据那一行不同的对照仍成立。
+
+定向 39/39，完整 `pnpm test` 461 tests / 431 pass / 0 fail / 30 skipped，`pnpm check` syntax 167 files，`pnpm lint` 181 files / 0 diagnostics；`pnpm demo:compact` 真实运行、9 项判定全部通过，摘要请求 1、主请求 0，投影从约 4,908 降至约 657 估算 token，原工具结果 13,311 字符逐字回读。演示日志在忽略的 `.demo-runs`，不计为仓库提交证据；真实 provider 请求 0。当前提交 CI 待验证。
+
+### R05c 当前提交 CI 验收（2026-10-20）
+
+目标引用提交 `23e036c9a0557df9f076e56815309c4c9c7dd8b8` 的 [CI 39351116486](https://github.com/BeforeLanding/mini-DSH/actions/runs/39351116486) Ubuntu/Windows × Node 20.18.1/22/24 六组全部通过；main 未合并。
+
 ### R05c 摘要输入包含当前任务目标及修订（2026-10-20，本地通过，待 CI）
 
 摘要规划仍保护首条 `user/message` 不被遮蔽；请求构造新增 `<source-user-requests>`，按事件号列出当前 task 的首条目标及后续修订，明确它们是只读来源而非新请求。原文随摘要请求进入既有 `estimateInput`、输出预留和预算门禁；`model/start.estimatedInputTokens` 与实际请求重新估算一致。测试证明两条用户消息均在来源中且事件号正确，既有压缩投影与重试不变。`pnpm check` syntax 166 files、`pnpm test` 461 tests / 431 pass / 0 fail / 30 skipped、`pnpm lint` 180 files / 0 diagnostics。当前提交 CI 待验证；结构校验随后单独处理。真实 provider 请求 0。

@@ -5,6 +5,7 @@ import type { BudgetPolicy } from '../src/core/budget.js'
 import type { Adapter, ChatRequest, ChatResponse, ToolCall } from '../src/core/contracts.js'
 import { ProviderError } from '../src/core/model-error.js'
 import { harness } from './harness.js'
+import { structuredSummary } from './structured-summary.js'
 
 // 压缩预算刻意与输入目标解耦：这样压力触发可以独立于溢出触发被检验。默认配置下两者等价
 // （compactionBudgetTokens 默认取 inputTargetTokens），那正是 §4.1 要如实写下来的事情。
@@ -18,7 +19,7 @@ const SUMMARY_MARK = '上面的对话正在被摘要'
 const isSummaryCall = (request: ChatRequest) => typeof request.messages?.at(-1)?.content === 'string' && request.messages!.at(-1)!.content!.includes(SUMMARY_MARK)
 
 // 脚本化模型：摘要调用与主循环调用要能分开认。摘要调用一眼可辨——它的最后一条消息就是固定指令。
-function scripted(steps: readonly ToolCall[], summarize: () => ChatResponse = () => ({ content: 'early range summary' })) {
+function scripted(steps: readonly ToolCall[], summarize: () => ChatResponse = () => ({ content: structuredSummary('Read the early range.') })) {
   const state = { calls: 0, summaries: 0 }
   let step = 0
   return {
@@ -93,7 +94,7 @@ test('agent loop retries a failed summary before the main request without repeat
     if (isSummaryCall(request)) {
       summaryCalls++
       if (summaryCalls === 1) throw new ProviderError('rate_limit', 429, true)
-      return { content: 'early range summary' }
+      return { content: structuredSummary('Read the early range.') }
     }
     mainCalls++
     return { content: 'done' }
@@ -212,7 +213,7 @@ test('explicit compaction is exempt from the latch and opens a maintenance run o
   const steps: ToolCall[] = [1, 2, 3].map(index => ({ id: `c${index}`, name: 'read_file', arguments: { path: `${index}.ts` } }))
   let failing = true
   const h = harness((async (request: ChatRequest): Promise<ChatResponse> => {
-    if (isSummaryCall(request)) { if (failing) throw new Error('provider exploded'); return { content: 'early range summary' } }
+    if (isSummaryCall(request)) { if (failing) throw new Error('provider exploded'); return { content: structuredSummary('Read the early range.') } }
     const step = steps.shift()
     return step ? { toolCalls: [step] } : { content: 'done' }
   }) as Adapter['chat'])
@@ -266,7 +267,7 @@ test('a declined compaction is recorded with a closed-set reason and re-projecti
 test('a summary call consumes the run model-request budget like any other request', async () => {
   let mainCalls = 0
   const h = harness(async (request: ChatRequest) => {
-    if (isSummaryCall(request)) return { content: 'early range summary' }
+    if (isSummaryCall(request)) return { content: structuredSummary('Read the early range.') }
     mainCalls += 1
     return { content: 'done' }
   })
@@ -281,7 +282,7 @@ test('a summary call consumes the run model-request budget like any other reques
 })
 
 test('a summary call that exhausts the request budget stops the run before dispatching the main request', async () => {
-  const h = harness(async (request: ChatRequest) => isSummaryCall(request) ? { content: 'early range summary' } : { content: 'should not happen' })
+  const h = harness(async (request: ChatRequest) => isSummaryCall(request) ? { content: structuredSummary('Read the early range.') } : { content: 'should not happen' })
   const policy = base({ maxModelRequests: 1 })
   seed(h, policy)
 

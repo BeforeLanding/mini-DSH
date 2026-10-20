@@ -207,7 +207,7 @@ test('CLI /compact reports only this attempt and says so when there is nothing t
     app.root.sessions.finishRun(run, 'max_steps')
     await app.root.sessions.flush(id)
     app.root.llm.register('compact', { models: ['test'], capabilities: { test: { contextWindowTokens: 1_000_000 } },
-      chat: async () => ({ content: '## Primary Request\n- original request' }) })
+      chat: async () => ({ content: '## Primary Request\n- original request\n## Completed Work\n- read the tool result\n## Pending Work\n- continue\n## Key Evidence\n- session log' }) })
 
     app.input.write('/model compact/test\n')
     await app.waitFor('Model: compact/test')

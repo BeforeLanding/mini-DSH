@@ -25,7 +25,7 @@ const scripted = () => ({
   chat: async (request: ChatRequest): Promise<ChatResponse> => {
     if (isSummaryCall(request)) {
       summaries += 1
-      return { content: '## Primary Request\n- repair cart total\n\n## Files and Code\n- src/cart.mjs total()\n\n## Pending Work\n- rerun node check.mjs' }
+      return { content: '## Primary Request\n- repair cart total\n\n## Completed Work\n- read src/cart.mjs total()\n\n## Pending Work\n- rerun node check.mjs\n\n## Key Evidence\n- original tool result remains in the session log' }
     }
     mainCalls += 1
     return { content: '脚本化模型：这一轮不该被调用' }

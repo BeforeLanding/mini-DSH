@@ -108,6 +108,9 @@ const COMPACTION_INSTRUCTION_MARK = '上面的对话正在被摘要'
 // 带下去，要么就此失传。
 const SUMMARY_WITHOUT_COVENANT = [
     '## Primary Request', '按 `docs/SPEC.md` 逐阶段实现「流水 → 台账」导出工具。',
+    '## Completed Work', '`src/parse.mjs`、`src/summarize.mjs`、`src/render.mjs` 已按阶段落地。',
+    '## Pending Work', '实现 `src/checksum.mjs` 的 `checksum(entries)`。',
+    '## Key Evidence', '阶段说明与原始事件保留在会话日志。',
     '## Files and Code', '`src/parse.mjs`、`src/summarize.mjs`、`src/render.mjs` 已按阶段落地。',
     '## Next Step', '实现 `src/checksum.mjs` 的 `checksum(entries)`。',
 ].join('\n')

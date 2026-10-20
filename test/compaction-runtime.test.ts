@@ -15,6 +15,7 @@ import { estimateInput } from '../src/core/token-estimator.js'
 import type { RunState } from '../src/core/budget.js'
 import type { Adapter } from '../src/core/contracts.js'
 import { harness } from './harness.js'
+import { structuredSummary } from './structured-summary.js'
 
 const policy = { contextWindowTokens: 1_000_000, inputTargetTokens: 65_536, maxOutputTokens: 16_384 } as const
 
@@ -50,7 +51,7 @@ const summaryStarts = (h: H) => events(h).flatMap(event => event.type === 'conte
 const summaryEnds = (h: H) => events(h).flatMap(event => event.type === 'context/summary-end' ? [event] : [])
 
 test('compaction replaces the shadowed range with a code-written frame right after the original request', async () => {
-  const { h, run, request } = longSingleTaskSession(async () => ({ content: '## Summary\n- read src/cart.mjs' }))
+  const { h, run, request } = longSingleTaskSession(async () => ({ content: structuredSummary('Read src/cart.mjs.') }))
   const outcome = await compaction(h).compact(attemptFor(run, h.session.id))
   assert.equal(outcome.kind, 'applied')
 
@@ -66,7 +67,7 @@ test('compaction replaces the shadowed range with a code-written frame right aft
   const applied = summaries(h)[0]!
   const [from, to] = [applied.data.shadowedSeqs[0]!, applied.data.shadowedSeqs.at(-1)!]
   assert.match(messages[1]!.content!, new RegExp(`第 ${from}–${to} 号事件（共 ${applied.data.shadowedSeqs.length} 条）`))
-  assert.match(messages[1]!.content!, /## Summary/)
+  assert.match(messages[1]!.content!, /## Completed Work/)
   assert.equal(messages[2]!.content, 'recent tail')
   // 被遮蔽的原文一条没删，仍躺在日志里。
   assert.ok(events(h).some(event => event.type === 'tool/result' && event.data.content.length === 4000))
@@ -90,7 +91,7 @@ test('summary input references the original task goal and later user revisions w
   const { h, run, request } = longSingleTaskSession(async input => {
     instruction = input.messages?.at(-1)?.content ?? ''
     measuredInput = estimateInput({ system: input.system, messages: input.messages, tools: input.tools })
-    return { content: 'summary body' }
+    return { content: structuredSummary('Read the call site.') }
   })
   const revision = h.sessions.append(h.session.id, 'user/message', { content: 'revision: keep src/cart.mjs unchanged' }, run)
   await compaction(h).compact(attemptFor(run, h.session.id))
@@ -103,7 +104,7 @@ test('summary input references the original task goal and later user revisions w
 })
 
 test('projection of a compacted log is deterministic and survives repeated derivation', async () => {
-  const { h, run } = longSingleTaskSession(async () => ({ content: 'summary body' }))
+  const { h, run } = longSingleTaskSession(async () => ({ content: structuredSummary('Read the call site.') }))
   await compaction(h).compact(attemptFor(run, h.session.id))
 
   assert.deepEqual(h.sessions.deriveMessages(h.session.id), h.sessions.deriveMessages(h.session.id))
@@ -114,7 +115,7 @@ test('projection of a compacted log is deterministic and survives repeated deriv
 })
 
 test('a third compaction still addresses the earliest originals, not the first summary', async () => {
-  const h = harness(async () => ({ content: 'a summary' }))
+  const h = harness(async () => ({ content: structuredSummary('Read the call site.') }))
   const run = h.sessions.beginRun(h.session.id, policy, 'mock/test')
   h.sessions.append(h.session.id, 'user/message', { content: 'the original request' }, run)
   const earliest = h.sessions.append(h.session.id, 'assistant/message', { content: 'EARLIEST-ORIGINAL' }, run).seq
@@ -145,7 +146,7 @@ test('a third compaction still addresses the earliest originals, not the first s
 
 test('the summary call is a real request counted into the same run', async () => {
   let calls = 0
-  const { h, run } = longSingleTaskSession(async request => { calls++; request.onContent?.('summary body'); return { content: 'summary body', usage: { inputTokens: 10, outputTokens: 4, totalTokens: 14, source: 'provider', uncertain: false } } })
+  const { h, run } = longSingleTaskSession(async request => { calls++; request.onContent?.(structuredSummary('Read the call site.')); return { content: structuredSummary('Read the call site.'), usage: { inputTokens: 10, outputTokens: 4, totalTokens: 14, source: 'provider', uncertain: false } } })
   await compaction(h).compact(attemptFor(run, h.session.id))
 
   assert.equal(calls, 1)
@@ -163,7 +164,7 @@ test('the summary call is a real request counted into the same run', async () =>
 
 test('cached summary usage is counted once per request and replay matches live counters', async () => {
   const values = [7, 0, undefined]
-  const { h, run } = longSingleTaskSession(async () => ({ content: 'summary body', usage: {
+  const { h, run } = longSingleTaskSession(async () => ({ content: structuredSummary('Read the call site.'), usage: {
     inputTokens: 20, outputTokens: 3, totalTokens: 23, source: 'provider', uncertain: false,
     ...(values[0] === undefined ? {} : { cacheReadTokens: values.shift() }),
   } }))
@@ -190,7 +191,7 @@ test('cached summary usage is counted once per request and replay matches live c
 
 test('a budget shortage stops the run instead of being recorded as a summary decline', async () => {
   let calls = 0
-  const { h, run } = longSingleTaskSession(async () => { calls++; return { content: 'summary body' } })
+  const { h, run } = longSingleTaskSession(async () => { calls++; return { content: structuredSummary('Read the call site.') } })
 
   await assert.rejects(compaction(h).compact(attemptFor(run, h.session.id, { outputAllowance: () => { throw new BudgetStop('token_budget', run) } })), /token_budget/)
   // 钱不够不是「摘要器不行」——它既不该花掉一次调用，也不该在日志里留下一个尝试。
@@ -203,7 +204,9 @@ test('declines are recorded with a closed-set reason and never produce a summary
   const cases: [string, Adapter['chat'], string][] = [
     ['summary-failed', async () => { throw new Error('provider exploded') }, 'summary-failed'],
     ['summary-empty', async () => ({ content: '   ' }), 'summary-empty'],
-    ['summary-not-smaller', async () => ({ content: 'y'.repeat(6000) }), 'summary-not-smaller'],
+    ['summary-invalid', async () => ({ content: 'a fluent but unstructured summary' }), 'summary-invalid'],
+    ['summary-invalid-empty-section', async () => ({ content: '## Primary Request\n- goal\n## Completed Work\n## Pending Work\n- pending\n## Key Evidence\n- log' }), 'summary-invalid'],
+    ['summary-not-smaller', async () => ({ content: structuredSummary('y'.repeat(6000)) }), 'summary-not-smaller'],
   ]
   for (const [label, chat, expected] of cases) {
     const { h, run } = longSingleTaskSession(chat)
@@ -248,7 +251,7 @@ test('a failed call keeps the partial usage and the text the provider already re
 test('summary retries account each pre-stream attempt while one compaction bracket closes', async () => {
   for (const [kind, status] of [['rate_limit', 429], ['transient', 503]] as const) {
     let calls = 0
-    const { h, run } = longSingleTaskSession(async () => ++calls === 1 ? Promise.reject(new ProviderError(kind, status, true)) : { content: '## Summary\n- retain the request', complete: true })
+    const { h, run } = longSingleTaskSession(async () => ++calls === 1 ? Promise.reject(new ProviderError(kind, status, true)) : { content: structuredSummary('Retain the request.'), complete: true })
     const outcome = await compaction(h).compact(attemptFor(run, h.session.id, { retry: { remainingMs: () => 5000, wait: async () => {}, random: () => 0 } }))
     assert.equal(outcome.kind, 'applied')
     assert.equal(calls, 2)
@@ -276,7 +279,7 @@ test('summary auth and partial stream failures do not retry', async () => {
 
 test('cancellation during the summary call is a decline and never writes an applied summary', async () => {
   const controller = new AbortController()
-  const { h, run } = longSingleTaskSession(async () => { controller.abort(); return { content: 'summary body' } })
+  const { h, run } = longSingleTaskSession(async () => { controller.abort(); return { content: structuredSummary('Read the call site.') } })
 
   const outcome = await compaction(h).compact(attemptFor(run, h.session.id, {
     signal: controller.signal, check: () => { throw new BudgetStop('timeout', run) } }))
@@ -286,7 +289,7 @@ test('cancellation during the summary call is a decline and never writes an appl
 })
 
 test('nothing to plan writes no bracket at all', async () => {
-  const h = harness(async () => ({ content: 'summary body' }))
+  const h = harness(async () => ({ content: structuredSummary('Read the call site.') }))
   const run = h.sessions.beginRun(h.session.id, policy, 'mock/test')
   h.sessions.append(h.session.id, 'user/message', { content: 'only a request' }, run)
 
@@ -308,7 +311,7 @@ test('protecting an unknown tool group keeps the range closed and leaves it out 
 test('restore reads the recorded summary instead of asking the model again', async () => {
   let calls = 0
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-compaction-'))
-  const { h, run } = longSingleTaskSession(async () => { calls++; return { content: 'summary body', usage: {
+  const { h, run } = longSingleTaskSession(async () => { calls++; return { content: structuredSummary('Read the call site.'), usage: {
     inputTokens: 30, outputTokens: 4, totalTokens: 34, cacheReadTokens: 12, source: 'provider', uncertain: false,
   } } })
   const store = await JsonlStore.open(root, h.session.id)
