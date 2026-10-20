@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### R10 首次候选实测红灯诊断（2026-10-20，待复跑）
+
+手动 [CI 39388591825](https://github.com/BeforeLanding/mini-DSH/actions/runs/39388591825) 的固定数据／官方 gold 判分、Node 构建均通过；候选脚本从发布镜像导出的 checkout HEAD `5efaed257c694e4452b4c8361aae1cd9cdefd6d1` 与数据集声明的 base `cffd4e0f86fefd4802349a9f9b19ed70934ea354` 不同，按预设守卫在 Agent 启动前失败。补充导出 Git 根、base 对象有无和 HEAD 标题诊断，下一次 CI 用证据确认是路径误指还是官方镜像与固定 revision 不兼容。此前两次 gold 判分只证实官方评分通道执行，尚不证明候选 base 匹配；不改为跳过该检查。
+
 ### R10 候选路径与容器适配（2026-10-20，本地契约通过，手动 CI 待实测）
 
 新增 `scripts/swebench/docker-candidate.ts`：`createHarness` 的 Bash runner 将候选宿主 cwd 显式映射到容器 `/testbed`，不透传宿主 env；越界路径在 Docker 派发前拒绝，Docker exec 超时／取消后移除拥有的候选容器并禁止再次派发。`scripts/swebench/poc-candidate.ts` 从固定 digest 官方镜像导出 base checkout，核对 base commit 与干净 Git 状态；以 `--network none`、只读根、无权限提升、仅 `/testbed` 候选目录挂载运行脚本化零模型 harness。宿主 `write_file`→容器 Bash `cat`、容器 Bash 写入→宿主 `read_file` 双向验证后销毁候选容器；只有此后才把公开已知 patch 应用于候选目录，导出预测并用新 run_id 交官方判分器。独立测试 `test/swebench-candidate.test.ts` 2/2 覆盖路径逃逸、env 不传播与超时清理；`pnpm check` syntax 184 files、`pnpm test` 489/459/0/30、`pnpm lint` 204 files／0 diagnostics。Docker 实测尚未通过，不提前宣称候选 PoC 完成。

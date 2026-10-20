@@ -35,6 +35,8 @@ The existing CI workflow has an explicit `workflow_dispatch` input `swebench_poc
 
 The next manual run also executes `scripts/swebench/poc-candidate.ts`. It exports the pinned base checkout to a candidate directory, checks that host file tools and Docker Bash share `/testbed`, verifies the single mount and disabled network, then stops that candidate container. Only after the scripted Agent ends does the controller apply the known public patch to the candidate and submit its exported diff to an independent official scoring run. The adapter's path and timeout contracts pass offline; the actual container and candidate prediction are **pending CI**.
 
+The first candidate attempt, [CI 39388591825](https://github.com/BeforeLanding/mini-DSH/actions/runs/39388591825), stopped before Agent startup: the exported official image reported checkout HEAD `5efaed257c694e4452b4c8361aae1cd9cdefd6d1`, while the fixed dataset row declares base commit `cffd4e0f86fefd4802349a9f9b19ed70934ea354`. This is a real environment-equivalence failure until the exported Git root and base object are checked. The guard remains mandatory; the earlier gold reports alone do not establish a matching candidate checkout.
+
 ## Commands
 
 ```sh

@@ -48,7 +48,15 @@ try {
   exported = true
   docker('create', '--name', exportName, image, 'sh', '-lc', 'true')
   docker('cp', `${exportName}:/testbed/.`, candidate)
-  assert.equal(command('git', ['rev-parse', 'HEAD'], { cwd: candidate }), official.baseCommit)
+  const checkoutRoot = command('git', ['rev-parse', '--show-toplevel'], { cwd: candidate })
+  const imageHead = command('git', ['rev-parse', 'HEAD'], { cwd: candidate })
+  const baseObject = spawnSync('git', ['cat-file', '-t', official.baseCommit], { cwd: candidate,
+    encoding: 'utf8', timeout: 30_000 })
+  if (path.resolve(checkoutRoot) !== path.resolve(candidate) || imageHead !== official.baseCommit) {
+    throw new Error(`official image checkout mismatch: root=${checkoutRoot}; imageHead=${imageHead}; ` +
+      `datasetBase=${official.baseCommit}; baseObject=${baseObject.status === 0 ? baseObject.stdout.trim() : 'absent'}; ` +
+      `imageHeadSubject=${command('git', ['show', '-s', '--format=%s', 'HEAD'], { cwd: candidate })}`)
+  }
   assert.equal(command('git', ['status', '--porcelain'], { cwd: candidate }), '')
   assert.equal(mapHostToContainer(candidate, path.join(candidate, 'sympy')), '/testbed/sympy')
   assert.throws(() => mapHostToContainer(candidate, directory), /escapes its workspace/)
