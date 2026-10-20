@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { resolveBudget } from '../src/core/budget.js'
 import type { BudgetPolicy } from '../src/core/budget.js'
 import type { Adapter, ChatRequest, ChatResponse, ToolCall } from '../src/core/contracts.js'
+import { ProviderError } from '../src/core/model-error.js'
 import { harness } from './harness.js'
 
 // 压缩预算刻意与输入目标解耦：这样压力触发可以独立于溢出触发被检验。默认配置下两者等价
@@ -84,6 +85,29 @@ test('pressure compacts a fitting projection that has crossed the compaction rat
   // 压缩后重新投影，且两条投影准备的是同一个请求。
   assert.equal(projections(h).length, 2)
   assert.equal(new Set(projections(h).map(event => event.data.requestId)).size, 1)
+})
+
+test('agent loop retries a failed summary before the main request without repeating compaction', async () => {
+  let summaryCalls = 0, mainCalls = 0
+  const h = harness(async request => {
+    if (isSummaryCall(request)) {
+      summaryCalls++
+      if (summaryCalls === 1) throw new ProviderError('rate_limit', 429, true)
+      return { content: 'early range summary' }
+    }
+    mainCalls++
+    return { content: 'done' }
+  })
+  h.loop.random = () => 0
+  const policy = base({ maxModelRequests: 4 })
+  seed(h, policy)
+  assert.equal(await h.agent.continue({ budget: policy }), 'done')
+  assert.equal(summaryCalls, 2)
+  assert.equal(mainCalls, 1)
+  assert.equal(starts(h).length, 1)
+  assert.equal(ends(h).length, 1)
+  assert.equal(events(h).filter(event => event.type === 'model/retry').length, 1)
+  assert.equal(h.sessions.latestRun(h.session.id)?.counters.modelRequests, 3)
 })
 
 test('pressure does not repeatedly summarize a prefix that stays above the pressure line', async () => {

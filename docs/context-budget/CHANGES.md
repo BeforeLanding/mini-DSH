@@ -1,10 +1,16 @@
 # 改动与验收证据
 
-### R03b 主请求逐次重试账本（2026-10-20，本地通过，待 CI）
+### R03c 摘要请求逐次重试账本（2026-10-20，本地通过，待 CI）
+
+CompactionRuntime 为每次摘要 attempt 写独立 model/start、usage/end；预流 429/503 有限重试并写 model/retry，等待前落盘，受剩余活动时间、请求和 token 预算及取消约束。摘要失败闩只看最终一次压缩括号的结论，不把其中两次网络 attempt 误数为两次压缩失败。直接定向测试覆盖 429/503 成功、401/部分流无重试；AgentLoop 集成测试确认 429→摘要成功→主请求完成时总模型请求数 3、压缩括号只开闭一次。旧摘要失败与维护型 run 用例不变。
+
+本地 `pnpm check`（syntax 166 files）、`pnpm test`（457 tests / 427 pass / 0 fail / 30 skipped）、`pnpm lint`（180 files / 0 diagnostics）通过。真实模型请求 0。当前提交 CI 待验证。
+
+### R03b 主请求逐次重试账本（2026-10-20，工作分支验收完成）
 
 主请求收到预流 429/503 或连接失败时，有限重试最多两次。每次 attempt 独立写 `model/start`、usage（provider 缺失则明确 estimated/uncertain）、`model/end`，请求数逐次计入预算；`model/retry` 记录首请求、失败请求、下次请求、序号、等待毫秒和安全错误类别。等待前落盘，下一次仍经过原 LLM dispatch gate；取消可中断定时器。流已产生内容、认证/参数错误、请求/总 token 预算不足或 `Retry-After` 超过剩余活动时间时停止。inspect JSON 的 `requests.retries` 计数是已调度的重试事件数，下一次请求是否真的开始以 `model/start` 为准；旧日志该值为 0。主请求和摘要请求的策略接入分开验收。
 
-合成 429/503→成功测试逐条核对两个 requestId、两条 usage/end、单一终态、JSONL 解析与 inspect；401、部分流、请求上限及超时等待不重试，取消定时器时清除计时器。全套本地 `pnpm check`（syntax 166 files）、`pnpm test`（454 tests / 424 pass / 0 fail / 30 skipped）、`pnpm lint`（180 files / 0 diagnostics）通过。真实模型请求 0，当前提交 CI 待验收。
+合成 429/503→成功测试逐条核对两个 requestId、两条 usage/end、单一终态、JSONL 解析与 inspect；401、部分流、请求上限及超时等待不重试，取消定时器时清除计时器。全套本地 `pnpm check`（syntax 166 files）、`pnpm test`（454 tests / 424 pass / 0 fail / 30 skipped）、`pnpm lint`（180 files / 0 diagnostics）通过；提交 `f6afb07` 的 [CI 39348450133](https://github.com/BeforeLanding/mini-DSH/actions/runs/39348450133) 六组通过。真实模型请求 0。
 
 ### R03a provider 重试元数据与纯策略（2026-10-20，工作分支验收完成）
 

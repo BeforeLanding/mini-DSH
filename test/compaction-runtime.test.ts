@@ -9,7 +9,7 @@ import { planCompaction, surfaceSeqs } from '../src/core/compaction-plan.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
 import { JsonlStore } from '../src/core/event-store.js'
 import { SessionRuntime } from '../src/core/session-runtime.js'
-import { ModelStreamError } from '../src/core/model-error.js'
+import { ModelStreamError, ProviderError } from '../src/core/model-error.js'
 import { BudgetStop } from '../src/core/budget.js'
 import type { RunState } from '../src/core/budget.js'
 import type { Adapter } from '../src/core/contracts.js'
@@ -225,6 +225,35 @@ test('a failed call keeps the partial usage and the text the provider already re
   // 流式片段照样落盘：崩溃窗口里它是唯一能说明「模型说到哪」的东西。
   assert.ok(events(h).some(event => event.type === 'model/fragment' && event.data.content.includes('half a summary')))
   assert.equal(summaries(h).length, 0)
+})
+
+test('summary retries account each pre-stream attempt while one compaction bracket closes', async () => {
+  for (const [kind, status] of [['rate_limit', 429], ['transient', 503]] as const) {
+    let calls = 0
+    const { h, run } = longSingleTaskSession(async () => ++calls === 1 ? Promise.reject(new ProviderError(kind, status, true)) : { content: '## Summary\n- retain the request', complete: true })
+    const outcome = await compaction(h).compact(attemptFor(run, h.session.id, { retry: { remainingMs: () => 5000, wait: async () => {}, random: () => 0 } }))
+    assert.equal(outcome.kind, 'applied')
+    assert.equal(calls, 2)
+    assert.equal(events(h).filter(event => event.type === 'model/start').length, 2)
+    assert.equal(events(h).filter(event => event.type === 'model/usage').length, 2)
+    assert.equal(events(h).filter(event => event.type === 'model/end').length, 2)
+    assert.equal(events(h).filter(event => event.type === 'model/retry').length, 1)
+    assert.equal(events(h).filter(event => event.type === 'run/error').length, 0)
+    assert.equal(summaryStarts(h).length, 1)
+    assert.equal(summaryEnds(h).length, 1)
+    assert.equal(run.counters.modelRequests, 2)
+  }
+})
+
+test('summary auth and partial stream failures do not retry', async () => {
+  for (const error of [new ProviderError('auth', 401), new ModelStreamError('partial', { content: 'half', complete: false })]) {
+    let calls = 0
+    const { h, run } = longSingleTaskSession(async () => { calls++; throw error })
+    assert.deepEqual(await compaction(h).compact(attemptFor(run, h.session.id, { retry: { remainingMs: () => 5000, wait: async () => {}, random: () => 0 } })),
+      { kind: 'declined', reason: 'summary-failed' })
+    assert.equal(calls, 1)
+    assert.equal(events(h).filter(event => event.type === 'model/retry').length, 0)
+  }
 })
 
 test('cancellation during the summary call is a decline and never writes an applied summary', async () => {

@@ -2,7 +2,7 @@
 
 ### R03 有账本的 provider 重试（2026-10-20，进行中）
 
-R02b `7519753` 的 [CI 39261106135](https://github.com/BeforeLanding/mini-DSH/actions/runs/39261106135) 六组通过。独立提交：① `Retry-After` 与纯策略 `6b04b03`，[CI 39347765168](https://github.com/BeforeLanding/mini-DSH/actions/runs/39347765168) 六组通过。② 主请求每次 attempt 独立 `model/start`/usage/end、dispatch gate、预算计数及 `model/retry` 链接；本地完整 424 通过／30 跳过、check/lint 通过，待提交与当前提交 CI。③ 摘要请求应用同一有账本策略及剩余 wall-clock/取消条件，前一步 CI 通过后执行。②③ 均要求 429→成功、503→成功、401 即停、过长等待与部分流不重试、JSONL 恢复读数一致。本项不调用真实 provider；未通过前序 CI 或测试不进入下一项。
+R02b `7519753` 的 [CI 39261106135](https://github.com/BeforeLanding/mini-DSH/actions/runs/39261106135) 六组通过。独立提交：① `Retry-After` 与纯策略 `6b04b03`，[CI 39347765168](https://github.com/BeforeLanding/mini-DSH/actions/runs/39347765168) 六组通过。② 主请求逐次账本 `f6afb07`，[CI 39348450133](https://github.com/BeforeLanding/mini-DSH/actions/runs/39348450133) 六组通过；本地完整 424 通过／30 跳过。③ 摘要请求复用有账本策略，合成 429/503→成功与 401/部分流即停、AgentLoop 压缩集成通过；本地完整 427 通过／30 跳过、check/lint 通过，待独立提交及当前提交 CI。本项真实 provider 请求 0；R03 全部当前提交 CI 通过后进入 R04。
 
 ### R02 环境与统一工具授权（2026-10-19，工作分支验收完成）
 

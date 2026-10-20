@@ -357,6 +357,11 @@ export class AgentLoopRuntime {
             retainRatio: policy.retainRatio ?? 0.16, maxSummaryTokens: policy.compactionMaxTokens ?? 8_192,
             system: prompt.system, tools: prompt.tools, model: agent.model, signal: control.signal,
             check: () => control.check(), outputAllowance: inputTokens => control.outputAllowance(inputTokens),
+            retry: {
+                remainingMs: () => policy.maxActiveDurationMs === undefined ? Number.POSITIVE_INFINITY : policy.maxActiveDurationMs - control.activeDurationMs,
+                wait: delayMs => control.wait(() => waitForRetry(delayMs, control.signal, this.clock ?? systemClock)),
+                random: () => this.random(),
+            },
             // §7.1：带 seq 范围的 recall 提示只在本部署确实挂载了回读工具时出现——不能承诺一个不存在的入口。
             ...(prompt.tools.some(schema => schema.function.name === REQUEST_TOOL) ? { recallTool: REQUEST_TOOL } : {}),
         })
