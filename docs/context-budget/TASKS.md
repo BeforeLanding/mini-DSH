@@ -1,5 +1,11 @@
 # 任务清单
 
+### R11 可安装、可展示、可解释（2026-10-20，本地 Windows 安装通过，Ubuntu CI 待验证）
+
+新增 `LICENSE` 与 `NOTICE`：教程基线 `huangjunsen0406/mini-dsh`（MIT，止于 `c5fc9c4`）的版权声明保留，自有扩展写 Jeffery JIA；`unknown`/`CodexSandboxOffline` 不映射为个人，不做 `.mailmap` 或历史改写。包名改为有效的 `@beforelanding/mini-dsh`，版本 `0.1.0`，保留 `private: true` 防误发；`npm view` 确认两个名称当前均未注册。新增打包内的 `mini-dsh demo [fix]`：在临时项目里脚本化完成失败测试→读文件→修复→通过，零网络、零 key、不依赖 `test/fixtures`。新增 `docs/CASES.md`、`docs/ARCHITECTURE.md`、`docs/README.md`；README 首屏加入证据入口与 `demo fix`，本地 tarball 安装命令改为通配实际文件名。CI 新增 `package-install` job：在仓库外含空格路径安装 tarball，运行版本/帮助/show-config/demo/inspect，并拒绝包含 test/docs/samples/.env 的包。
+
+验收：Windows 含空格路径安装后 `--version`=0.1.0、`--help`、`--show-config`、`inspect` 样例与 `demo fix`（PASS）均通过；tarball 内容仅 `dist/`、`plugins.config.js`、README/LICENSE/package.json。本地完整 `pnpm test` 485 tests／455 pass／0 fail／30 skipped、`pnpm check` syntax 181 files、`pnpm lint` 201 files／0 diagnostics。Ubuntu 安装由新增 CI job 验证，待当前提交 CI。未发布 npm、未打 tag/Release、未部署 ECS；这些仍需明确授权。
+
 ### R10 外部子集与上下文消融（2026-10-20，离线适配完成，运行阻塞）
 
 新增 `scripts/swebench/protocol.ts` 与 `scripts/swebench/preregister.ts`、`test/swebench-protocol.test.ts`、`docs/EVALUATION-SWEBENCH.md`。离线适配包括：按 repository 分层、固定 seed 的确定性子集选择（不使用事后自造难度）；配置上限预算（题数 × 臂数 × 每题 cap + 开发批次 + 计算储备，明确不是预期花费）；官方 predictions 三字段校验（空 patch 允许）；宿主候选目录→容器 `/testbed` 的显式映射与越界拒绝；episode 汇总保留基础设施失败在主分母、未知成本单列。预注册 CLI 需要真实 dataset revision 与官方 harness commit，写入 arms、scoring、镜像 digest 待补项与 `paidRequests: 0`。

@@ -4,7 +4,9 @@
 
 mini-DSH 是一个 TypeScript / Cordis 编写的本地编程 Agent Harness。它把读项目规则、定位代码、可靠编辑、运行公开检查、交付 diff 与验证证据串成可恢复的任务流程；用事件日志、上下文投影、预算和工具审批说明每一步发生了什么。它面向单 Agent、单本地工作区，路径/命令闸门是应用策略，不是操作系统隔离。
 
-仓库的教程基线来自[从零手写 mini-dsh](https://github.com/huangjunsen0406/mini-dsh/blob/main/LEARNING.zh-CN.md)，止于 `c5fc9c4`；`43e3829` 起是本项目的独立扩展。
+先看 [两条合成轨迹与离线复算](docs/RESULTS.md)、[评测口径](docs/EVALUATION.md) 和 [三个工程案例](docs/CASES.md)。合成轨迹只证明机制，不是模型能力分数。
+
+仓库的教程基线来自[从零手写 mini-dsh](https://github.com/huangjunsen0406/mini-dsh/blob/main/LEARNING.zh-CN.md)，止于 `c5fc9c4`；`43e3829` 起是本项目的独立扩展。许可证与来源边界见 [LICENSE](LICENSE) 和 [NOTICE](NOTICE)。
 
 ![当前架构：入口、Agent Loop、模型、工具、事件与恢复](docs/images/architecture-v1.png)
 
@@ -15,15 +17,17 @@ mini-DSH 是一个 TypeScript / Cordis 编写的本地编程 Agent Harness。它
 ```powershell
 pnpm install --frozen-lockfile
 pnpm check
+node dist/src/index.js demo fix
 node dist/src/index.js --show-config
-pnpm demo:compact
 ```
+
+`demo fix` 在一个临时项目里由脚本化模型完成“失败测试 → 读文件 → 修复 → 再测试”，不读 `.env`、不联网、不需要 API key，输出 `demo result: PASS`。`pnpm demo:compact` 另外演示压缩与按事件号回读。
 
 `--show-config` 只读装配同一个 Harness，输出**新会话**实际配置及来源（环境、`.env`、默认或 provider 容量），包括模型、布局、工具预览、预算和 `read_history`；不打印密钥、环境变量全集、项目规则正文，也不创建 CLI 会话。非法配置直接报错。若设置了 `MINI_DSH_SESSION_ID`，它拒绝把新会话配置冒充恢复会话的配置；恢复后用 CLI `/budget` 查看预算。`pnpm demo:compact` 使用脚本化模型演示单任务摘要、原始事件保留及 `read_history` 按事件号回读。完整离线回归可运行 `pnpm test`（会在本机执行 Bash 和文件工具）。
 
 ### 本地打包与安装
 
-项目**尚未发布到 npm**。下面从当前仓库生成 tarball，在仓库外的临时目录安装；已在 Windows 的含空格路径验证 `mini-dsh.cmd`。依赖首次安装可能需要访问包注册表；CLI 的前三个命令无需 API key，也不会请求模型。
+项目**尚未发布到 npm**，`private: true` 保留以防误发。下面从当前仓库生成 tarball，在仓库外的临时目录安装；已在 Windows 的含空格路径验证 `mini-dsh.cmd`。依赖首次安装可能需要访问包注册表；`--help`、`--version`、`--show-config`、`demo` 与 `inspect` 不需要 API key，也不会请求模型。
 
 ```powershell
 $packRoot = Join-Path $env:TEMP ("mini-dsh-local-" + [guid]::NewGuid().ToString('N'))
@@ -31,12 +35,14 @@ $installRoot = Join-Path $packRoot 'consumer space'
 $workspace = Join-Path $packRoot 'sample project'
 New-Item -ItemType Directory -Path $packRoot, $installRoot, $workspace | Out-Null
 pnpm pack --pack-destination $packRoot
-pnpm --dir $installRoot add --ignore-scripts (Join-Path $packRoot 'mini-DSH-0.0.1.tgz')
+$tarball = (Get-ChildItem (Join-Path $packRoot '*.tgz')).FullName
+pnpm --dir $installRoot add --ignore-scripts $tarball
 $miniDsh = Join-Path $installRoot 'node_modules\.bin\mini-dsh.cmd'
 Set-Location $workspace
 & $miniDsh --help
 & $miniDsh --version
 & $miniDsh --show-config
+& $miniDsh demo fix
 ```
 
 ### 只读检查会话日志

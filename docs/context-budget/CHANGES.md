@@ -1,5 +1,13 @@
 # 改动与验收证据
 
+### R11 许可证、离线 demo 与可安装包（2026-10-20，Windows 本地通过，Ubuntu CI 待验证）
+
+`LICENSE` 由 MIT 文本加两行版权组成：Jeffery JIA 与教程基线 huangjunsen（`huangjunsen0406/mini-dsh`，MIT，README 记录止于 `c5fc9c4`）；`NOTICE` 说明基线边界、不把 `unknown`/`CodexSandboxOffline` 映射为个人、不重写历史，以及直接依赖许可证（cordis MIT、dsh-mcp-client MIT、dotenv BSD-2-Clause）。`package.json` 改为 `@beforelanding/mini-dsh@0.1.0`，保留 `private: true`；`npm view` 确认 `@beforelanding/mini-dsh` 与 `mini-dsh` 当前均 404（未注册）。
+
+新增 `src/app/demo.ts` 与 CLI `mini-dsh demo [fix]`：临时项目初始 `add` 返回 `a-b`，脚本化模型执行失败检查→读文件→edit_file→通过检查；不读 `.env`、不联网、不需要 key，也不依赖仓库测试 fixture。`test/demo.test.ts` 覆盖 PASS 与事件。新增 `docs/CASES.md`、`docs/ARCHITECTURE.md`、`docs/README.md`；README 首屏链接 RESULTS/EVALUATION/CASES，本地 tarball 安装说明改用实际文件名。CI 新增 `package-install` job，在 Ubuntu 的含空格路径安装并执行 `--version`/`--help`/`--show-config`/`demo fix`/`inspect`，并拒绝包里出现 test/docs/samples/.env。
+
+Windows 实测：`pnpm pack` 得到 `beforelanding-mini-dsh-0.1.0.tgz`，内容只有 `dist/src`、`dist/plugins.config.js`、README/LICENSE/package.json，无 test/docs/samples/.env；在 `consumer space` 安装后 `--version`=0.1.0、`--help`、`--show-config`（MCP disabled）、`inspect` provider-recovery 样例（exit 0）与 `demo fix`（PASS）均通过。本地完整 `pnpm test` 485 tests / 455 pass / 0 fail / 30 skipped、`pnpm check` syntax 181 files、`pnpm lint` 201 files / 0 diagnostics。未发布 npm、未打 tag/Release、未部署 ECS；Ubuntu 安装结果待 CI。
+
 ### R10 SWE-bench 离线预注册与预算适配（2026-10-20，离线完成，运行未授权）
 
 新增 `scripts/swebench/protocol.ts`：repository 分层 + seeded 轮转选题、预算上限、prediction 校验、宿主→`/testbed` 映射与 episode 汇总。`scripts/swebench/preregister.ts` 输出 `instances.json`，记录 dataset revision、官方 harness commit、选中实例、四臂、评分规则、配置上限与 `paidRequests: 0`；镜像 digest 明确列为待补。`docs/EVALUATION-SWEBENCH.md` 固定 PoC 前置条件：独立判分、工作区/容器文件与 Bash 一致、容器无密钥/HOME/Docker socket/oracle、清理无残留。

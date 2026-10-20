@@ -1,9 +1,13 @@
 {
-  "name": "mini-DSH",
-  "version": "0.0.1",
+  "name": "@beforelanding/mini-dsh",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "a mini handwritten runtime for DSH",
+  "description": "A minimal, reproducible coding-agent harness with event sourcing, context budgets, and offline evidence.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BeforeLanding/mini-DSH.git"
+  },
   "bin": {
     "mini-dsh": "dist/src/index.js"
   },

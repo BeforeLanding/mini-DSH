@@ -148,3 +148,51 @@ jobs:
           path: isolation.tap
           if-no-files-found: error
           retention-days: 7
+
+  # R11：从 tarball 安装到仓库外的含空格路径，验证打包清单、bin、零 key 命令与离线 demo。
+  package-install:
+    name: Package install (ubuntu-latest, Node 22)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+        with:
+          standalone: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies and build
+        run: pnpm install --frozen-lockfile && pnpm check
+
+      - name: Pack and install outside the repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack="$RUNNER_TEMP/package"
+          install="$RUNNER_TEMP/consumer space"
+          work="$RUNNER_TEMP/sample project"
+          mkdir -p "$pack" "$install" "$work"
+          pnpm pack --pack-destination "$pack"
+          tarball=$(find "$pack" -name '*.tgz' -print -quit)
+          (cd "$install" && pnpm add --ignore-scripts "$tarball")
+          cli="$install/node_modules/.bin/mini-dsh"
+          "$cli" --version | grep -qx '0.1.0'
+          "$cli" --help | grep -q 'demo \[fix\]'
+          (cd "$work" && "$cli" --show-config | grep -q '"readHistory"')
+          (cd "$work" && "$cli" demo fix | grep -q 'demo result: PASS')
+          "$cli" inspect "$GITHUB_WORKSPACE/docs/samples/provider-recovery/events.jsonl" | grep -q 'complete JSONL'
+          if find "$pack" -name '*.tgz' -exec tar -tzf {} \; | grep -Eq 'package/(test|docs|\.env)|package/.*samples'; then
+            echo 'tarball contains files outside the runtime package'
+            exit 1
+          fi
