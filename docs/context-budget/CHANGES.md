@@ -6,7 +6,9 @@
 
 `.github/workflows/ci.yml` 新增 `isolation` job（ubuntu-latest / Node 22）：安装 bubblewrap、准备固定 runtime、构建，然后运行契约、隔离实测与 V2 fixture 测试。任何 `# SKIP` 都使 job 失败，失败上传 TAP，避免“跳过即绿”。新增 `test/eval-v2-isolation-contract.test.ts` 4 条覆盖路径映射、平台专用参数、后端选择与 runtime 指纹；隔离实测测试改为在 Windows/Linux 都只依赖 `MINI_DSH_V2_RUNTIME`。
 
-本地 `pnpm check` syntax 173 files、`pnpm test` 478 tests / 448 pass / 0 fail / 30 skipped、`pnpm lint` 187 files / 0 diagnostics；契约测试 4/4。本机无固定 runtime，30 条隔离实测仍跳过；它们的真实执行与零意外 skip 只能在远端 isolation job 验证，当前提交 CI 待验证。真实 provider 请求 0。
+首次远端 isolation job 在“准备固定 runtime”步骤失败：旧脚本的 `.deb` 版本清单（如 `libada-url0-3`）不在 ubuntu-latest 的仓库里。处置：`eval-v2-prepare-runtime.sh` 改为下载官方 `node-v22.22.1-linux-x64.tar.xz`，用固定 SHA-256 校验后解包到同一条 `usr/bin/node` 路径；不再依赖发行版包版本。`probe` 也改为在 backend 自己的 workspace 内建探测目录，sentinel 放在绑定范围之外。
+
+本地用 WSL 的原生 bwrap 与同一固定 runtime 实跑：契约 4/4、隔离实测 3/3、V2 fixture 31/31，均 **0 skipped**；Linux 后端真实执行了命名空间隐藏、超时收进程与 fixture 验收。Windows 宿主完整 `pnpm test` 仍为 478 tests / 448 pass / 0 fail / 30 skipped（本机无 Linux runtime，按条件跳过），`pnpm check` syntax 173 files、`pnpm lint` 187 files / 0 diagnostics。远端 isolation job 修复后待验证；真实 provider 请求 0。
 
 ### R06 当前提交 CI 验收（2026-10-20）
 

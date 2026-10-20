@@ -1,5 +1,4 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
@@ -30,6 +29,7 @@ export interface IsolationCapabilities {
 
 export interface IsolationBackend {
   kind: IsolationCapabilities['kind']
+  workspaceRoot: string
   visibleHostPath(hostPath: string): string
   capabilityManifest(): Promise<IsolationCapabilities>
   preflight(): Promise<IsolationCapabilities>
@@ -108,8 +108,9 @@ function runtimeDigest(runtimeRoot: string) {
 // preflight 验证的是「这个后端在这个 runner 上真的能隔离」，不是只看环境变量：
 // 命名空间可用、没有非回环网络接口、工作区可写、工作区外的 sentinel 不可见、超时能收掉后代进程。
 async function probe(backend: IsolationBackend) {
-  const workspace = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-v2-preflight-'))
-  const sentinel = path.join(path.dirname(workspace), `${path.basename(workspace)}-hidden.txt`)
+  // 探测目录必须位于被绑定的 workspace 内；sentinel 放在它外面，才能证明宿主文件不可见。
+  const workspace = await fs.promises.mkdtemp(path.join(backend.workspaceRoot, '.mini-dsh-preflight-'))
+  const sentinel = path.join(path.dirname(backend.workspaceRoot), `${path.basename(workspace)}-hidden.txt`)
   let failure: unknown
   try {
     await fs.promises.writeFile(sentinel, 'host-only', { flag: 'wx' })
@@ -135,11 +136,13 @@ async function probe(backend: IsolationBackend) {
 
 class BwrapBackend implements IsolationBackend {
   kind: IsolationCapabilities['kind']
+  workspaceRoot: string
   #config: V2IsolationConfig
   #args: (cwd: string, command: string) => string[]
   constructor(config: V2IsolationConfig, kind: IsolationCapabilities['kind'], args: (cwd: string, command: string) => string[]) {
     this.#config = config
     this.kind = kind
+    this.workspaceRoot = path.resolve(config.workspace)
     this.#args = args
   }
   visibleHostPath(hostPath: string) { return this.kind === 'wsl-bwrap' ? windowsToWslPath(hostPath) : hostPath }

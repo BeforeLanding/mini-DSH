@@ -4,7 +4,7 @@
 
 抽出 `IsolationBackend` 接口（`visibleHostPath`、`capabilityManifest`、`preflight`、`run`、`dispose`）：Windows 保留 WSL→bwrap；新增 Linux 原生 bwrap，使用宿主 Linux 路径与 `MINI_DSH_V2_RUNTIME` 固定的 Node 22 runtime，不搬 WSL 路径转换。preflight 实际验证命名空间可用、无非回环网络接口、工作区可写、工作区外 sentinel 不可见、超时能收掉后代进程，并输出 runtime digest。CI 新增 `Isolation (ubuntu-latest, Node 22)` job：安装 bubblewrap、用 `eval-v2-prepare-runtime.sh` 准备固定 runtime、运行契约/隔离/fixture 三组测试；TAP 中出现 `# SKIP` 即失败，失败上传 TAP。平台无关契约测试与平台专用实测分开；WSL 专用参数仍在 `isolatedCommandArgs`，Linux 自动选择 `linux-bwrap`。`eval-v2-run`、`smoke-run`、fixture probe 改用统一后端；`distro` 只在 WSL 需要。
 
-本地：契约测试 4/4 通过；完整 `pnpm test` 478 tests／448 pass／0 fail／30 skipped，`pnpm check` syntax 173 files，`pnpm lint` 187 files／0 diagnostics。本机没有 `MINI_DSH_V2_RUNTIME`，30 条隔离实测按原条件跳过；它们的真实执行与“零意外 skip”由远端 isolation job 验证，当前提交 CI 待验证。真实 provider 请求 0。
+首次远端 isolation job 在准备 runtime 时失败（旧 `.deb` 清单的 `libada-url0-3` 不在 ubuntu-latest 仓库），已改为官方 Node 22.22.1 tarball + 固定 SHA。本地用 WSL 原生 bwrap 和同一 runtime 实跑：契约 4/4、隔离 3/3、V2 fixture 31/31，**0 skipped**；Windows 宿主完整 `pnpm test` 478 tests／448 pass／0 fail／30 skipped（本机无 Linux runtime，按条件跳过），`pnpm check` syntax 173 files，`pnpm lint` 187 files／0 diagnostics。远端 isolation job 修复后待验证；真实 provider 请求 0。
 
 ### R07 MCP 成为可控插件能力（2026-10-20，进行中）
 
