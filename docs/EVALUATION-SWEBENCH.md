@@ -58,7 +58,7 @@ node dist/scripts/swebench/preregister.js \
   --out outputs/run-manifest.json
 
 # Execute one batch (requires an explicitly approved cap; the draft check runs before any model call)
-pnpm swebench:run --manifest outputs/run-manifest.json --dataset verified-sanitized.json \
+pnpm swebench:run -- --manifest outputs/run-manifest.json --dataset verified-sanitized.json \
   --evidence-root outputs/swebench-<batch> --split development --backend docker --scoring official \
   --batch-id <batch-id> --execute
 
@@ -66,7 +66,7 @@ pnpm swebench:run --manifest outputs/run-manifest.json --dataset verified-saniti
 pnpm swebench:run ... --evidence-root outputs/swebench-<batch> --resume --execute
 
 # Recompute the report from the raw evidence
-pnpm swebench:report --evidence-root outputs/swebench-<batch>
+pnpm swebench:report -- --evidence-root outputs/swebench-<batch>
 ```
 
 The budget in the manifest is a **ceiling**: `formal tasks × arms × per-task cap + development batch + compute reserve`. It is not an estimate that any task is solved within the cap. The per-task cost cap is translated into a conservative total-token cap using the largest of the three unit prices; the actual cost is then estimated only from provider usage.

@@ -1,5 +1,47 @@
 # 改动与验收证据
 
+### R10 正式评测执行器零付费准备（2026-10-20，工作分支验收完成）
+
+**提交**：`430234e`（`feat: add a pre-registered SWE-bench batch runner`）。新增 `scripts/swebench/run.ts`、`report.ts`、`workspace.ts`，扩展 `protocol.ts`、`preregister.ts`、`package.json`、`docs/EVALUATION-SWEBENCH.md` 与三个测试文件。
+
+**行为**：
+- 冻结文件同时含 development（默认 5 题）与 formal（50 题）两个批次；开发题先按独立 seed 选，正式批排除它们；排除规则、arm 顺序与交错 schedule 在预注册时写死。
+- 原始 dataset 行在预注册时只保留运行字段，`patch`/`test_patch`/`FAIL_TO_PASS`/`PASS_TO_PASS`/`hints_text` 被剥离；执行器再次拒绝仍含这些字段的输入。prompt 只插入 `problem_statement`。
+- 缺模型 id、价格快照、基线 commit/命令、镜像 digest 或批次上限时 `freezeStatus: draft`；只有齐备且显式 `--finalize` 才为 `frozen`，执行器拒绝 draft。
+- 每 episode 复用 `createHarness`，预算取冻结的请求/工具/时间/输出上限；单题金额上限用最大单价反推保守 token 上限。保存 session JSONL、终态、usage、空/非空 patch；基础设施失败或未知 usage 停批；批次金额与 episode 数有硬上限；`--resume` 跳过已完成/中断 episode。
+- 判分独立于 Agent：每个 arm 写官方 predictions（含空 patch），每批每臂新 `run_id`；官方判分失败记为 error 并保留在主分母。报告输出 planned/executed、每臂 Wilson、预声明配对四格与精确 McNemar、失败分类和三条预声明失败轨迹，并关联 events/patch/session。
+
+**实际命令与结果**：
+- `node --test dist/test/swebench-protocol.test.js dist/test/swebench-preregister.test.js dist/test/swebench-run.test.js` → 17 tests / 17 pass / 0 fail。覆盖 sanitize/gold 拒绝、schedule、Wilson/McNemar、成本与未知 usage、manifest 校验、预注册 draft→frozen、脚本化 runner 的正常/空 patch/停批/恢复。
+- `pnpm test` → 508 tests / 478 pass / 0 fail / 30 skipped（30 条为需 `MINI_DSH_V2_RUNTIME` 的平台隔离用例）。
+- `pnpm check` → syntax ok: 192 files；`pnpm lint` → 213 files / 0 diagnostics。
+- `430234e` 的 CI run 因后续推送被取消，不作为验收证据；其代码包含在后续 tip 的 required CI 中。
+
+**边界**：没有执行任何付费模型调用、5 题开发批次或正式 50 题。`external` 基线臂只有配置契约，执行器明确拒绝未提供适配器的 external arm；50 题选择/镜像 digest、价格快照、开发批次观测和付费授权仍缺。本条目只证明执行器与离线验收，不构成模型能力结果。
+
+### R07 后续：MCP stdio 显式 env 边界（2026-10-20，工作分支 CI 通过）
+
+**提交**：`6113bc7`（`fix: start stdio MCP servers with an explicit environment`）。新增 `src/app/mcp-stdio-launcher.ts` 与 `cross-spawn` 类型声明，`createHarness` 对 stdio 条目应用 `secureStdioEntry`；`cross-spawn` 7.0.6 作为直接依赖（与 MCP SDK 的 Windows `.cmd` 解析一致）。
+
+**根因证据**：MCP SDK 的 stdio transport 只接受 `env` 对象并在内部 `spawn`；`@deepseek-ai/dsh-mcp-client` 的 `buildChildEnv` 是 `scrubbedParentEnv()`（只按名称丢弃 `KEY`/`PASSWORD`/`SECRET`/`TOKEN` 与 `DSH_*`）加显式 env，因此代理、`SSH_AUTH_SOCK`、`NODE_OPTIONS`、真实 HOME 会继续传给 server；SDK 没有替换 env 的接口。启动器是可行的适配层：SDK 仍负责连接、协议与生命周期，进程由本仓库按 `childEnvironment` 启动。
+
+**行为**：启动器只继承 PATH、locale、临时目录与 Windows 系统目录；HOME/USERPROFILE/XDG 指向独立临时目录；显式 `${ENV_NAME}` 引用按名从启动器环境转交，值不进入 argv；`HOME`/`USERPROFILE`/`HOMEDRIVE`/`HOMEPATH`/`XDG_CONFIG_HOME`/`XDG_CACHE_HOME`/`NODE_OPTIONS` 拒绝显式转发。对启动器自身显式置空 `NODE_OPTIONS`，避免 SDK 继承的 loader 在清洗前生效。stdio EOF 后宽限 1 秒再终止，避免 Windows 留下孙进程。未修改 `node_modules`，未临时改写 `process.env`。
+
+**实际命令与结果**：
+- `node --test dist/test/mcp-config.test.js` → 9 tests / 9 pass / 0 fail；新增真实 mock 子进程断言 fake provider key、`HTTP(S)_PROXY`、`ALL_PROXY`、`SSH_AUTH_SOCK`、`NODE_OPTIONS` 均不出现，显式 `MOCK_TOKEN` 与 PATH 按契约出现，HOME 为 `mini-dsh-mcp-*` 临时目录，dispose 后 server pid 退出；既有 list/call/timeout/disconnect/dispose 与拒绝审批保持通过。
+- `pnpm test` → 497 tests / 467 pass / 0 fail / 30 skipped；`pnpm check` syntax 187 files；`pnpm lint` 208 files / 0 diagnostics。
+- [CI 39421704013](https://github.com/BeforeLanding/mini-DSH/actions/runs/39421704013) 六个 job 全绿；`Official SWE-bench no-model PoC` 为未触发配置下的 skipped，不计为通过或失败。
+
+**边界**：这是环境变量传播面的收敛，不是文件系统或进程级沙箱；MCP server 仍能读取当前用户可读的文件，显式配置 server 仍表示信任。SDK 目前没有直接注入自定义 transport 的接口，故采用启动器而非替换 SDK。
+
+### 发布与生产部署拆分（2026-10-20，工作分支）
+
+**提交**：`d11fb80`。`deploy-ecs.yml` 删除 `push.tags` 触发器，仅保留 `workflow_dispatch`；checkout 直接使用 `inputs.ref`。`docs/ECS_DEPLOYMENT.md` 同步为「tag/Release 不触发部署，部署只能手动派发」。新增 `test/ecs-workflow.test.ts` 机读断言 workflow 无 `push`/`release`/`tags` 触发器。
+
+**实际命令与结果**：`node --test dist/test/ecs-workflow.test.js dist/test/docs-links.test.js` → 2 tests / 2 pass / 0 fail。未推送 tag、未创建 Release、未派发部署、未访问 ECS。
+
+**边界**：本项只改变触发条件与文档；部署机制本身（SSH、bundle、原子切换）未重新执行，也未获得部署授权。
+
 ### R10 候选环境一致性与无模型 PoC 验收（2026-10-20，工作分支 CI 通过）
 
 **结论**：固定发布镜像与数据集 base 的源码树哈希不同，但逐路径内容完全一致；差异是镜像构建留下的纯 mode 变化。候选容器已完成宿主文件工具↔容器 Bash 双向验证、隔离检查、候选补丁导出与独立官方判分。最终提交 `f52699c` 的手动 [CI 39395532729](https://github.com/BeforeLanding/mini-DSH/actions/runs/39395532729) 七个 job 全部通过。

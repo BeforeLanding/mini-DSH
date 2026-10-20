@@ -1,5 +1,17 @@
 # 任务清单
 
+### R10 正式评测执行器零付费准备（2026-10-20，工作分支验收完成）
+
+独立提交 `430234e`：新增 `scripts/swebench/{run,report,workspace}.ts`，并扩展 `protocol.ts`/`preregister.ts`/`docs/EVALUATION-SWEBENCH.md`。行为边界：① 冻结文件同时包含开发批次（默认 5 题）与正式批次（50 题），开发题先选并从正式批排除，排除规则与确定性 arm 交错顺序写入 manifest；② 原始数据集只保留 `instance_id/repo/base_commit/version/environment_setup_commit/problem_statement/image`，gold/hidden 字段在预注册时剥离，执行器再拒绝仍带 `patch`/`test_patch`/`FAIL_TO_PASS` 的输入；③ `preregister` 缺模型、价格、基线命令、镜像 digest 或批次上限时保持 `draft`，只有齐备且 `--finalize` 才成为 `frozen`；④ 执行器复用 `createHarness`，每任务应用请求/工具/时间/输出/token 上限（金额上限按最大单价反推保守 token 上限），保存 session JSONL、终态、usage、空/非空 patch，基础设施失败与未知 usage 停批，批次金额与 episode 数量有硬上限，`--resume` 跳过已完成/中断 episode 而不重跑；⑤ 独立判分只读已保存 prediction，每批每臂使用新 run_id，官方判分失败保留为 error 分类并留在主分母；⑥ 报告给出 planned/executed 分母、每臂 Wilson 区间、预先声明的 candidate/baseline 与 context 两臂配对四格、精确 McNemar、失败分类与三条预声明失败轨迹，并关联 events/patch/session 路径。
+
+验收：`node --test dist/test/swebench-protocol.test.js dist/test/swebench-preregister.test.js dist/test/swebench-run.test.js` 17/17；脚本化零模型端到端覆盖正常批次（空 patch、独立 mock 判分、四格统计）、基础设施停批、未知 usage 停批、批次恢复、draft 与 gold 拒绝。完整 `pnpm test` 508 tests／478 pass／0 fail／30 skipped，`pnpm check` syntax 192 files，`pnpm lint` 213 files／0 diagnostics。**未执行**任何付费模型调用、5 题开发批次或正式 50 题；外部 mini-SWE-agent 臂只有配置契约（执行器明确拒绝未提供适配器的 external arm），50 题镜像 digest、价格快照、开发批次观测与付费授权仍缺，manifest 保持 draft。
+
+### R07 后续：MCP stdio 显式 env 边界（2026-10-20，工作分支 CI 验收完成）
+
+提交 `6113bc7`：`createHarness` 对 stdio MCP 条目应用 `secureStdioEntry`，由 `src/app/mcp-stdio-launcher.ts` 用 `childEnvironment` 构造子进程 env 并代理 stdio。只继承 PATH、locale、临时目录与 Windows 系统目录；HOME/USERPROFILE 指向独立临时目录；显式 `${ENV_NAME}` 引用按名转交，值不进入 argv；provider key、代理、SSH agent、`NODE_OPTIONS` 与真实 HOME 不再继承；`HOME`/`USERPROFILE`/`XDG_*`/`NODE_OPTIONS` 拒绝显式转发。启动器对启动器自身显式置空 `NODE_OPTIONS`，避免 SDK 继承的 loader 注入先于清洗生效。SDK 继续负责连接、协议与生命周期；未修改 `node_modules`，也未临时改写 `process.env`。官方 server 若不响应 stdin EOF，启动器在 1 秒宽限后终止，避免 Windows 留下孙进程。
+
+验收：真实 mock stdio 子进程测试验证 provider key/代理/SSH agent/`NODE_OPTIONS` 不泄漏、显式引用与 PATH 按契约传入、HOME 为独立临时目录、dispose 后 server 进程被回收；既有 list/call/timeout/disconnect/dispose 与拒绝审批用例保持通过；`secureStdioEntry` 幂等；show-config 仍只输出变量名。完整 `pnpm test` 497 tests／467 pass／0 fail／30 skipped，`pnpm check` syntax 187 files，`pnpm lint` 208 files／0 diagnostics；[CI 39421704013](https://github.com/BeforeLanding/mini-DSH/actions/runs/39421704013) 六个 job 全绿，SWE-bench 手动 PoC 按未触发配置跳过。上述记录取代本节 R07 残差中“仍可能继承代理/SSH agent/NODE_OPTIONS/真实 HOME”的历史描述。
+
 ### R10 候选环境一致性与无模型 PoC（2026-10-20，工作分支 CI 验收通过）
 
 独立提交：`5b296d3` 改为逐路径 blob OID 比较（忽略 mode），并用 `git diff-tree --raw` 交叉核对，内容、增删路径或类型差异仍拒绝；`74144db` 修正 bind mount 参数并断言 `/testbed` 可写；`bc7a704` 恢复官方镜像 HOME（该提交把根因写成 `/root/.gitconfig` 不准确，后续实测证明镜像并未持久化 `safe.directory`），`217fd95` 最终以 `GIT_CONFIG_COUNT/KEY_0/VALUE_0` 注入 `safe.directory=/testbed`；`9bff11a` 输出失败工具调用的有界诊断；`f52699c` 让候选容器使用宿主 uid/gid，避免 `--cap-drop ALL` 下 root 不能写宿主创建的文件。
@@ -16,7 +28,7 @@
 
 固定官方 Verified 数据集 revision `c104f840cc67f8b6eec6f759ebc8b2693d585d4a`，parquet SHA-256 `a45b1fe4e2f0c8390b2b2938ac83e92ed5979000856808f3679c07812e9e6dcd`；官方兼容 harness v3.0.17 commit `3f01bd622c0a22c00406139f69a234ef08225f22`。固定 `sympy__sympy-20590`（base `cffd4e0f…`），本地 500 行数据与 commit/hash/instance 预检通过。提交 `1007c68` 的手动 [CI 39387381791](https://github.com/BeforeLanding/mini-DSH/actions/runs/39387381791) 七 job 全绿；金标准 patch 仅用于无模型判分通道，两个不同 run_id 都为 resolved／0 error／无残留容器。镜像 digest `swebench/sweb.eval.x86_64.sympy_1776_sympy-20590@sha256:3a282752833ce34730ee0621e22033501c993f45742775ca57f04c9ff27178a0`。本机 Docker Desktop Service 停止，当前账户无法启动，但云端既有 CI runner 已完成判分。随后验证候选目录中文件工具与 Bash 同树、无密钥／oracle 挂载、失败清理与路径边界，不能把判分通道通过当完整候选适配。五题及正式付费运行需另行授权。
 
-候选适配作为下一独立提交：把 Docker exec runner 接入 `createHarness`，只映射候选目录到 `/testbed`，用脚本化零模型请求验证宿主文件工具写入→容器 Bash 读取、容器 Bash 写入→宿主文件工具读取。由官方镜像导出 base checkout，记录一致的 base commit；探针结束后才由控制器在候选目录应用公开已知 patch，导出预测并交给新的官方 run_id 判分。预期验收还包括无网络／密钥／oracle／Docker socket 挂载、超时撤销容器、失败清理、路径逃逸拒绝和镜像 digest；CI 实测通过之前不能标记完成。
+（历史记录：以下候选适配步骤已由顶部「R10 候选环境一致性与无模型 PoC」验收；保留原文作为当时计划与验收顺序的证据。）候选适配作为下一独立提交：把 Docker exec runner 接入 `createHarness`，只映射候选目录到 `/testbed`，用脚本化零模型请求验证宿主文件工具写入→容器 Bash 读取、容器 Bash 写入→宿主文件工具读取。由官方镜像导出 base checkout，记录一致的 base commit；探针结束后才由控制器在候选目录应用公开已知 patch，导出预测并交给新的官方 run_id 判分。预期验收还包括无网络／密钥／oracle／Docker socket 挂载、超时撤销容器、失败清理、路径逃逸拒绝和镜像 digest；CI 实测通过之前不能标记完成。
 
 候选代码、脚本与手动 CI 步骤已写，本地 `pnpm check` syntax 184 files、`pnpm test` 489/459/0/30、`pnpm lint` 204 files／0 diagnostics；新增路径／env／超时定向契约 2/2。固定镜像上的候选容器与独立预测判分已由顶部 2026-10-20 条目验收。候选脚本结束前不把公开 gold patch 输入 Agent。
 
@@ -32,11 +44,11 @@
 
 验收：Windows 含空格路径安装后 `--version`=0.1.0、`--help`、`--show-config`、`inspect` 样例与 `demo fix`（PASS）均通过；tarball 内容仅 `dist/`、`plugins.config.js`、README/LICENSE/package.json。本地完整 `pnpm test` 485 tests／455 pass／0 fail／30 skipped、`pnpm check` syntax 181 files、`pnpm lint` 201 files／0 diagnostics。`30ec880` 的 [CI 39382540216](https://github.com/BeforeLanding/mini-DSH/actions/runs/39382540216) 六 job 全绿，其中 `package-install` 在 Ubuntu 完成同一套 tarball 安装与零 key 命令验证。R11 在工作分支验收完成；未发布 npm、未打 tag/Release、未部署 ECS，这些仍需明确授权。
 
-### R10 外部子集与上下文消融（2026-10-20，离线适配完成，运行阻塞）
+### R10 外部子集与上下文消融（2026-10-20，执行器零付费准备完成，付费运行阻塞）
 
 新增 `scripts/swebench/protocol.ts` 与 `scripts/swebench/preregister.ts`、`test/swebench-protocol.test.ts`、`docs/EVALUATION-SWEBENCH.md`。离线适配包括：按 repository 分层、固定 seed 的确定性子集选择（不使用事后自造难度）；配置上限预算（题数 × 臂数 × 每题 cap + 开发批次 + 计算储备，明确不是预期花费）；官方 predictions 三字段校验（空 patch 允许）；宿主候选目录→容器 `/testbed` 的显式映射与越界拒绝；episode 汇总保留基础设施失败在主分母、未知成本单列。预注册 CLI 需要真实 dataset revision 与官方 harness commit，写入 arms、scoring、镜像 digest 待补项与 `paidRequests: 0`。
 
-验收：协议测试 5/5；用 60 条合成元数据跑 CLI，得到 50 题、3 个 repository、4 臂、上限 $109.50、`paidRequests: 0`。真实数据集 revision、官方 harness commit、单题镜像 digest 与无模型判分/候选 PoC 已由顶部 2026-10-20 条目执行并验收。**仍未执行**：5 题开发批次、正式 50 题或任何付费模型调用；50 题选择文件、同模型基线与价格快照仍需在付费授权前冻结。不预填“50 题约 $2”。
+验收：协议测试 5/5；用 60 条合成元数据跑 CLI，得到 50 题、3 个 repository、4 臂、上限 $109.50、`paidRequests: 0`。真实数据集 revision、官方 harness commit、单题镜像 digest 与无模型判分/候选 PoC 已由顶部 2026-10-20 条目执行并验收。后续 `430234e` 补齐开发/正式批次冻结、执行器、独立判分与报告；其零付费端到端验收见顶部「R10 正式评测执行器零付费准备」。**仍未执行**：5 题开发批次、正式 50 题或任何付费模型调用；同模型基线适配器、50 题选择文件与镜像 digest、价格快照仍需在付费授权前冻结。不预填“50 题约 $2”。
 
 ### R09 公开合成证据包与离线复算（2026-10-20，工作分支验收完成）
 
@@ -54,7 +66,7 @@
 
 删除内置 context7 条目，`plugins.config.ts` 默认为空；MCP 只从用户目录级 `~/.mini-dsh/mcp.json`、`MINI_DSH_MCP_CONFIG` 或显式 `--mcp-config <path>` 读取，工作区本地文件不自动加载，`MINI_DSH_MCP=0` 可关闭。新增 `src/app/mcp-config.ts`：严格校验 serverName/transport/字段，stdio `env` 与 HTTP `headers` 只接受完整 `${ENV_NAME}` 引用，缺变量时启动失败并点名，`--show-config` 只展示变量名与缺失项、不连接 server。MCP 装配移入 `createHarness` 的可选 `mcpServers`，评测/离线入口不传即禁用；重复 serverName 拒绝，连接失败固定 `failOnStartupError=false`。第三方工具经 ToolRuntime 中央授权按 unknown 默认询问，`autoApprove` 不自动授权；dispose 释放注册项与子进程。
 
-残差（2026-10-20 核查）：stdio 子进程最终由 MCP SDK 启动，使用 `@deepseek-ai/dsh-subprocess` 的共享清洗（只丢弃名称含 `KEY`/`PASSWORD`/`SECRET`/`TOKEN` 的变量与 `DSH_*`，再合并显式引用），**没有**复用 Bash 的 `childEnvironment` 严格允许列表；代理、SSH agent、`NODE_OPTIONS` 与真实 HOME 仍可能被继承。把它改成包装器会改变子进程拓扑并带来 Windows 孤儿进程风险，本次未做；该边界已写入 README「已知限制」。显式配置 MCP server 属于用户主动授权。
+残差（2026-10-20 核查，**已由 `6113bc7` 解决**）：当时 stdio 子进程最终由 MCP SDK 启动，使用 `@deepseek-ai/dsh-subprocess` 的共享清洗（只丢弃名称含 `KEY`/`PASSWORD`/`SECRET`/`TOKEN` 的变量与 `DSH_*`，再合并显式引用），**没有**复用 Bash 的 `childEnvironment` 严格允许列表；代理、SSH agent、`NODE_OPTIONS` 与真实 HOME 仍可能被继承。该历史边界不再成立；当前实现见顶部「R07 后续」条目与 README「已知限制」。显式配置 MCP server 属于用户主动授权。
 
 验收：默认无配置时无 MCP 工具、不加载插件；用户级/显式配置可加载本地 stdio mock server 的 list/call；超时与调用中退出返回错误而非挂住；拒绝审批时 mock 计数器不增加；重复 serverName、字面 secret、缺失变量、非法 transport/url/未知字段均拒绝；show-config 不展开 secret 且不连接；dispose 后工具不可解析。新增 `test/mcp-config.test.ts` 6 条与 `test/fixtures/mcp/mock-server.mjs`；本地 `pnpm check` syntax 172 files、`pnpm test` 474 tests／444 pass／0 fail／30 skipped、`pnpm lint` 186 files／0 diagnostics。`f413f44` 的 Node 20.18.1 两组因 MCP SDK 的 `Promise.withResolvers` 红灯；最低版本已提高到 Node 22，CI matrix 改为 22/24，配置 MCP 时低版本显式失败，未删除或跳过测试。`642f693` 的 [CI 39381000750](https://github.com/BeforeLanding/mini-DSH/actions/runs/39381000750) 五个 job 全部通过，R07 在工作分支验收完成。真实 provider 请求 0。
 
