@@ -52,11 +52,18 @@ try {
   const imageHead = command('git', ['rev-parse', 'HEAD'], { cwd: candidate })
   const baseObject = spawnSync('git', ['cat-file', '-t', official.baseCommit], { cwd: candidate,
     encoding: 'utf8', timeout: 30_000 })
-  if (path.resolve(checkoutRoot) !== path.resolve(candidate) || imageHead !== official.baseCommit) {
+  const imageTree = command('git', ['rev-parse', 'HEAD^{tree}'], { cwd: candidate })
+  const baseTree = baseObject.status === 0 ? command('git', ['rev-parse', `${official.baseCommit}^{tree}`], { cwd: candidate }) : 'absent'
+  if (path.resolve(checkoutRoot) !== path.resolve(candidate) || baseObject.status !== 0 || imageTree !== baseTree) {
     throw new Error(`official image checkout mismatch: root=${checkoutRoot}; imageHead=${imageHead}; ` +
       `datasetBase=${official.baseCommit}; baseObject=${baseObject.status === 0 ? baseObject.stdout.trim() : 'absent'}; ` +
+      `imageTree=${imageTree}; baseTree=${baseTree}; ` +
       `imageHeadSubject=${command('git', ['show', '-s', '--format=%s', 'HEAD'], { cwd: candidate })}`)
   }
+  // Official images may add a metadata-only SWE-bench commit. Accept it only
+  // when the entire source tree is byte-identical to the pinned dataset base.
+  if (imageHead !== official.baseCommit) command('git', ['reset', '--hard', official.baseCommit], { cwd: candidate })
+  assert.equal(command('git', ['rev-parse', 'HEAD'], { cwd: candidate }), official.baseCommit)
   assert.equal(command('git', ['status', '--porcelain'], { cwd: candidate }), '')
   assert.equal(mapHostToContainer(candidate, path.join(candidate, 'sympy')), '/testbed/sympy')
   assert.throws(() => mapHostToContainer(candidate, directory), /escapes its workspace/)

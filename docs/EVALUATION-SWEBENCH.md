@@ -37,6 +37,8 @@ The next manual run also executes `scripts/swebench/poc-candidate.ts`. It export
 
 The first candidate attempt, [CI 39388591825](https://github.com/BeforeLanding/mini-DSH/actions/runs/39388591825), stopped before Agent startup: the exported official image reported checkout HEAD `5efaed257c694e4452b4c8361aae1cd9cdefd6d1`, while the fixed dataset row declares base commit `cffd4e0f86fefd4802349a9f9b19ed70934ea354`. This is a real environment-equivalence failure until the exported Git root and base object are checked. The guard remains mandatory; the earlier gold reports alone do not establish a matching candidate checkout.
 
+[Diagnostic CI 39389384812](https://github.com/BeforeLanding/mini-DSH/actions/runs/39389384812) confirmed the exported Git root is correct and the pinned base commit exists in the image. The extra HEAD commit is titled `SWE-bench`. The next probe compares the entire HEAD and base Git trees; it proceeds only if they are identical, then checks out the declared base. If the trees differ, the image remains unsuitable and the PoC fails.
+
 ## Commands
 
 ```sh

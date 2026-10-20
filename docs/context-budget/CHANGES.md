@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### R10 镜像 HEAD 与源码树分离核验（2026-10-20，本地检查通过，CI 待复跑）
+
+[诊断 run 39389384812](https://github.com/BeforeLanding/mini-DSH/actions/runs/39389384812) 确认导出 Git 根就是候选目录，数据集的 `cffd4e0…` 对象在镜像内存在且类型为 commit；镜像 HEAD `5efaed…` 标题为 `SWE-bench`。因此不能仅以 HEAD 不同断言文件内容不同，也不能忽略差异。新增 HEAD/base 整棵 Git tree 哈希比较：只在完全相同且 base 对象存在时将候选 HEAD 重置到声明的 base；树不同则继续红灯并记录两棵树哈希。无付费请求，实际树是否相同待下一次手动 CI。
+
 ### R10 首次候选实测红灯诊断（2026-10-20，待复跑）
 
 手动 [CI 39388591825](https://github.com/BeforeLanding/mini-DSH/actions/runs/39388591825) 的固定数据／官方 gold 判分、Node 构建均通过；候选脚本从发布镜像导出的 checkout HEAD `5efaed257c694e4452b4c8361aae1cd9cdefd6d1` 与数据集声明的 base `cffd4e0f86fefd4802349a9f9b19ed70934ea354` 不同，按预设守卫在 Agent 启动前失败。补充导出 Git 根、base 对象有无和 HEAD 标题诊断，下一次 CI 用证据确认是路径误指还是官方镜像与固定 revision 不兼容。此前两次 gold 判分只证实官方评分通道执行，尚不证明候选 base 匹配；不改为跳过该检查。

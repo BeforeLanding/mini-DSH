@@ -4,6 +4,8 @@
 
 ## 当前状态
 
+- **R10 镜像已确认含数据集 base 对象，源码树待核对（2026-10-20）**：[诊断 CI 39389384812](https://github.com/BeforeLanding/mini-DSH/actions/runs/39389384812) 确认导出 Git 根正确、`cffd4e0…` 为镜像内 commit，镜像额外 HEAD `5efaed…` 标题为 `SWE-bench`。下一次手动 CI 将比较整棵 tree；只有完全同树才重置候选 HEAD 并继续文件/Bash/官方判分，树不同必须重新准备环境。
+
 - **R10 候选实测发现固定镜像 checkout 与数据集 base 不一致（2026-10-20）**：[CI 39388591825](https://github.com/BeforeLanding/mini-DSH/actions/runs/39388591825) 在候选步骤红灯，镜像导出 HEAD `5efaed…`，数据集要求 `cffd4e…`；Agent 尚未运行。已增加 Git 根／对象诊断，待复跑决定是否必须重建镜像。此前 gold 判分是评分通道证据，不能视作环境等价证明。
 
 - **R10 候选适配本地通过、远端容器实测待运行（2026-10-20）**：Docker exec runner 限定候选目录 `/testbed`，脚本化 harness 准备双向文件/Bash 可见性、容器隔离与独立候选 patch 判分。定向 2/2，完整 `pnpm test` 489/459/0/30，check/lint 通过。前序官方 gold 判分已通过；本步骤必须再次手动触发 `swebench_poc` 并检查 candidate evidence，才能验收 R10 无模型 PoC。
