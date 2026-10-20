@@ -9,6 +9,8 @@ import { CLI_BUDGET } from '../../src/core/budget.js'
 import type { ToolCall } from '../../src/core/contracts.js'
 import { createDockerCandidateRunner } from './docker-candidate.js'
 import { mapHostToContainer } from './protocol.js'
+import { compareSourceTrees, describeSourceMismatch, parseRawDiff, parseTreeListing,
+  summarizeRawDiff } from './source-consistency.js'
 
 const root = process.env.RUNNER_TEMP ?? os.tmpdir()
 const runId = process.env.GITHUB_RUN_ID
@@ -26,8 +28,11 @@ const row = JSON.parse(await fs.readFile(path.join(evidenceDirectory, 'one-insta
 assert.equal(row.instance_id, official.instanceId)
 
 function command(executable: string, args: string[], options: { cwd?: string; timeout?: number } = {}) {
+  return commandRaw(executable, args, options).trim()
+}
+function commandRaw(executable: string, args: string[], options: { cwd?: string; timeout?: number } = {}) {
   return execFileSync(executable, args, { cwd: options.cwd, timeout: options.timeout ?? 30_000,
-    encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 }).trim()
+    encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
 }
 function docker(...args: string[]) { return command('docker', args) }
 function removeOwned(name: string) {
@@ -54,16 +59,34 @@ try {
     encoding: 'utf8', timeout: 30_000 })
   const imageTree = command('git', ['rev-parse', 'HEAD^{tree}'], { cwd: candidate })
   const baseTree = baseObject.status === 0 ? command('git', ['rev-parse', `${official.baseCommit}^{tree}`], { cwd: candidate }) : 'absent'
-  if (path.resolve(checkoutRoot) !== path.resolve(candidate) || baseObject.status !== 0 || imageTree !== baseTree) {
-    const changedPaths = baseObject.status === 0 ? command('git', ['diff', '--name-status', official.baseCommit, 'HEAD'], { cwd: candidate }).slice(0, 1600) : 'unavailable'
-    throw new Error(`official image checkout mismatch: root=${checkoutRoot}; imageHead=${imageHead}; ` +
+  if (path.resolve(checkoutRoot) !== path.resolve(candidate) || baseObject.status !== 0) {
+    throw new Error(`official image checkout invalid: root=${checkoutRoot}; imageHead=${imageHead}; ` +
       `datasetBase=${official.baseCommit}; baseObject=${baseObject.status === 0 ? baseObject.stdout.trim() : 'absent'}; ` +
-      `imageTree=${imageTree}; baseTree=${baseTree}; changedPaths=${JSON.stringify(changedPaths)}; ` +
       `imageHeadSubject=${command('git', ['show', '-s', '--format=%s', 'HEAD'], { cwd: candidate })}`)
   }
-  // Official images may add a metadata-only SWE-bench commit. Accept it only
-  // when the entire source tree is byte-identical to the pinned dataset base.
+  // Official images commit an environment step on top of the dataset base.
+  // Compare every path's object id, not the tree hash: image setup may rewrite
+  // modes (e.g. chmod -R 777) while leaving every blob byte-identical. Content
+  // differences reject the checkout; mode-only differences are recorded.
+  const comparison = compareSourceTrees(
+    parseTreeListing(commandRaw('git', ['ls-tree', '-r', '-z', '--full-tree', official.baseCommit], { cwd: candidate })),
+    parseTreeListing(commandRaw('git', ['ls-tree', '-r', '-z', '--full-tree', 'HEAD'], { cwd: candidate })))
+  const raw = summarizeRawDiff(parseRawDiff(commandRaw('git', ['diff-tree', '-r', '--raw',
+    '--no-commit-id', official.baseCommit, 'HEAD'], { cwd: candidate })))
+  if (!comparison.contentEqual || raw.contentChanges !== 0) {
+    throw new Error(`official image content differs from dataset base: ` +
+      describeSourceMismatch({ imageHead, datasetBase: official.baseCommit, comparison, raw }) +
+      `; imageTree=${imageTree}; baseTree=${baseTree}`)
+  }
+  // Content is identical, so it is safe to normalise HEAD and worktree modes to
+  // the pinned base before the Agent starts. The evidence below preserves what
+  // the image actually shipped.
   if (imageHead !== official.baseCommit) command('git', ['reset', '--hard', official.baseCommit], { cwd: candidate })
+  const sourceConsistency = { imageHead, datasetBaseCommit: official.baseCommit, imageTree, baseTree,
+    treeIdentical: imageTree === baseTree, contentEqual: true, entries: comparison.imageEntries,
+    modeDifferenceCount: comparison.modeDifferences.length, modeTransitions: comparison.modeTransitions,
+    rawDiffEntries: raw.entries, rawContentChanges: raw.contentChanges, rawStatuses: raw.statuses,
+    comparison: 'recursive git ls-tree object ids ignoring mode; cross-checked with git diff-tree --raw' }
   assert.equal(command('git', ['rev-parse', 'HEAD'], { cwd: candidate }), official.baseCommit)
   assert.equal(command('git', ['status', '--porcelain'], { cwd: candidate }), '')
   assert.equal(mapHostToContainer(candidate, path.join(candidate, 'sympy')), '/testbed/sympy')
@@ -141,7 +164,8 @@ try {
     baseCommit: official.baseCommit, imageDigest: image, providerRequests: 0, toolCalls: calls.map(call => call.name),
     hostWriteVisibleInContainer: true, containerWriteVisibleOnHost: true, network: 'none',
     mounts: ['/testbed'], privileged: false, readonlyRoot: true, pathEscapeRejected: true,
-    scoreRunId: scoreRun, candidatePatchSha256: createHash('sha256').update(patch + '\n').digest('hex'),
+    sourceConsistency, scoreRunId: scoreRun,
+    candidatePatchSha256: createHash('sha256').update(patch + '\n').digest('hex'),
     resolvedIds: report.resolved_ids, errorInstances: report.error_instances }
   await fs.writeFile(path.join(evidenceDirectory, 'candidate-evidence.json'), JSON.stringify(evidence, null, 2) + '\n')
   console.log(JSON.stringify(evidence))
