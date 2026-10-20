@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- **R10 官方判分通道材料已固定，执行待验证（2026-10-20）**：Verified 500 行数据 revision `c104f840…` 与 SHA-256、官方兼容 harness v3.0.17 commit `3f01bd6…`、单题 `sympy__sympy-20590` 本地预检通过。新增手动 CI 的无模型金标准判分两次运行器，尚未宣称通过；本机 Docker Desktop Service 停止且当前账户无启动权限。候选目录文件/Bash 同树与隔离 PoC、五题开发批次和正式子集仍未完成；付费调用与新增付费资源需单独授权。
+- **R10 官方无模型判分通道通过，候选适配待验（2026-10-20）**：Verified 500 行数据 revision `c104f840…`、官方兼容 harness v3.0.17 commit `3f01bd6…`、单题 `sympy__sympy-20590` 已固定。`1007c68` 的手动 [CI 39387381791](https://github.com/BeforeLanding/mini-DSH/actions/runs/39387381791) 七 job 全绿，两次独立 gold 判分都 resolved／0 error、无残留容器，镜像 digest 已记录；真实 provider 请求 0。这只验收判分通道。候选目录文件/Bash 同树与隔离 PoC、五题开发批次和正式子集仍未完成；付费调用与新增付费资源需单独授权。
 
 - **R06 可选运行时校准工作分支验收完成（2026-10-20）**：`d4dc476` 默认关闭；开启后只按已确认、同模型／schema 的 provider 主请求样本提高投影估算，原始估算和校准参数随事件记录。定向 7/7，完整 `pnpm test` 487/457/0/30，check/lint 通过，[CI 39385717730](https://github.com/BeforeLanding/mini-DSH/actions/runs/39385717730) 六 job 全绿；摘要请求仍仅观测。R10 离线协议完成，官方无模型 PoC 仍未运行；本机 Docker Desktop CLI 可见但 Linux engine 尚未连接。下一步固定 PoC 材料并核查本地容器条件。
 

@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### R10 官方无模型判分通道实测（2026-10-20，通过，候选适配待验）
+
+提交 `1007c68` 的手动 [CI 39387381791](https://github.com/BeforeLanding/mini-DSH/actions/runs/39387381791) 七 job 全绿。官方 v3.0.17 判分器以固定 Verified 单题 `sympy__sympy-20590` 的公开 gold patch，使用 `mini-dsh-39387381791-gold-1` 与 `-gold-2` 两个 run_id 独立判分；两份官方报告均 resolved／0 error，runner 无该运行的残留容器。镜像 digest 为 `swebench/sweb.eval.x86_64.sympy_1776_sympy-20590@sha256:3a282752833ce34730ee0621e22033501c993f45742775ca57f04c9ff27178a0`；manifest 与日志已下载到独立输出目录 `D:\Agent\outputs\mini-dsh-swebench-poc\ci-39387381791`。provider 请求 0。此结果仅验收官方判分通道，不代表 mini-DSH 能解决该题；候选工作区与工具路径适配还需验证。
+
 ### R10 官方无模型判分通道准备（2026-10-20，本地预检通过，官方 Docker 判分待运行）
 
 公开 Verified parquet 固定 revision `c104f840cc67f8b6eec6f759ebc8b2693d585d4a`、SHA-256 `a45b1fe4e2f0c8390b2b2938ac83e92ed5979000856808f3679c07812e9e6dcd`，官方兼容 harness v3.0.17 固定 `3f01bd622c0a22c00406139f69a234ef08225f22`。`scripts/swebench/poc_official.py` 在独立输出目录检查 500 行与固定 `sympy__sympy-20590` base commit；`--execute` 调官方判分两次且使用不同 run_id，只有两次 resolved、零 error、无残留容器与可记录镜像 RepoDigest 才通过。金标准 patch 仅限无模型评分通道，不注入候选 Agent。CI 新增手动 `swebench_poc` 输入，普通 PR CI 不运行该资源较重 job；证据 artifact 不上传 gold patch 或完整数据。Windows 本地固定数据预检及脚本语法、YAML 解析通过。本机 Docker Desktop Service 停止，当前账户不能启动，官方 Docker 判分尚未运行；候选文件/Bash 同树与安全边界仍待独立验证。
