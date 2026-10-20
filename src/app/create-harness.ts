@@ -13,8 +13,10 @@ import * as projectContext from '../plugins/project-context.js'
 import * as sandbox from '../plugins/sandbox.js'
 import * as toolResults from '../plugins/tool-results.js'
 import * as readHistory from '../plugins/read-history.js'
+import * as externalPlugins from '../plugins/external-plugins.js'
 import * as files from '../tools/files.js'
 import * as bash from '../tools/bash.js'
+import type { McpServerEntry } from './mcp-config.js'
 
 export interface HarnessAdapter { provider: string; model: string; chat: Adapter['chat']; capabilities?: Adapter['capabilities'] }
 export interface HarnessConfig {
@@ -32,6 +34,8 @@ export interface HarnessConfig {
   toolOutput?: boolean
   // Only the explicitly named pre-v2 path may omit this production capability.
   legacyNoReadHistory?: boolean
+  // 默认不装任何 MCP server。条目只来自用户目录级配置或显式路径；createHarness 不会自行扫描工作区。
+  mcpServers?: McpServerEntry[]
 }
 
 export async function createHarness(config: HarnessConfig) {
@@ -46,12 +50,15 @@ export async function createHarness(config: HarnessConfig) {
     if (config.projectContext !== false && config.profile === 'coding') await root.plugin(projectContext, { directory: config.projectDirectory, ...(config.contextLayout ? { layout: config.contextLayout } : {}) })
     await root.plugin(files, { workspace: config.workspace })
     await root.plugin(bash, { workspace: config.workspace, ...(config.commandRunner ? { commandRunner: config.commandRunner } : {}) })
+    // MCP 工具经 ToolRuntime 中央授权：插件不声明 effect/origin，因此按 unknown 默认询问；
+    // failOnStartupError 固定为 false，连接失败只丢该 server 的工具，不阻断主循环。
+    if (config.mcpServers?.length) await root.plugin(externalPlugins, { entries: config.mcpServers })
     if (config.adapter) root.llm.register(config.adapter.provider, { models: [config.adapter.model], ...(config.adapter.capabilities ? { capabilities: config.adapter.capabilities } : {}), chat: config.adapter.chat })
     const schemas = root.tools.schemas()
     const capabilityManifest = {
       tools: schemas.map(schema => schema.function.name).sort(),
       toolSchemaSha256: createHash('sha256').update(JSON.stringify(schemas.slice().sort((a, b) => a.function.name.localeCompare(b.function.name)))).digest('hex'),
-      policy: { profile: config.profile, contextLayout: config.contextLayout ?? 'live', runtimeClockMode, projectContext: config.projectContext !== false && config.profile === 'coding', toolOutput: config.toolOutput !== false, toolOutputMaxPreviewBytes: config.toolOutputMaxPreviewBytes ?? null, legacyNoReadHistory: config.legacyNoReadHistory === true, autoApprove: config.autoApprove ?? false, isolatedCommandRunner: config.commandRunner !== undefined },
+      policy: { profile: config.profile, contextLayout: config.contextLayout ?? 'live', runtimeClockMode, projectContext: config.projectContext !== false && config.profile === 'coding', toolOutput: config.toolOutput !== false, toolOutputMaxPreviewBytes: config.toolOutputMaxPreviewBytes ?? null, legacyNoReadHistory: config.legacyNoReadHistory === true, autoApprove: config.autoApprove ?? false, isolatedCommandRunner: config.commandRunner !== undefined, mcpServers: config.mcpServers?.map(entry => entry.config.serverName) ?? [] },
     }
     return { root, capabilityManifest, dispose: () => root.fiber.dispose() }
   } catch (error) {

@@ -1,10 +1,16 @@
 # 任务清单
 
+### R07 MCP 成为可控插件能力（2026-10-20，进行中）
+
+删除内置 context7 条目，`plugins.config.ts` 默认为空；MCP 只从用户目录级 `~/.mini-dsh/mcp.json`、`MINI_DSH_MCP_CONFIG` 或显式 `--mcp-config <path>` 读取，工作区本地文件不自动加载，`MINI_DSH_MCP=0` 可关闭。新增 `src/app/mcp-config.ts`：严格校验 serverName/transport/字段，stdio `env` 与 HTTP `headers` 只接受完整 `${ENV_NAME}` 引用，缺变量时启动失败并点名，`--show-config` 只展示变量名与缺失项、不连接 server。MCP 装配移入 `createHarness` 的可选 `mcpServers`，评测/离线入口不传即禁用；重复 serverName 拒绝，连接失败固定 `failOnStartupError=false`。第三方工具经 ToolRuntime 中央授权按 unknown 默认询问，`autoApprove` 不自动授权；dispose 释放注册项与子进程。
+
+验收：默认无配置时无 MCP 工具、不加载插件；用户级/显式配置可加载本地 stdio mock server 的 list/call；超时与调用中退出返回错误而非挂住；拒绝审批时 mock 计数器不增加；重复 serverName、字面 secret、缺失变量、非法 transport/url/未知字段均拒绝；show-config 不展开 secret 且不连接；dispose 后工具不可解析。新增 `test/mcp-config.test.ts` 6 条与 `test/fixtures/mcp/mock-server.mjs`；本地 `pnpm check` syntax 172 files、`pnpm test` 474 tests／444 pass／0 fail／30 skipped、`pnpm lint` 186 files／0 diagnostics；真实 provider 请求 0。当前提交 CI 待验证。
+
 ### R06 token 估算在线观测与受控校准（2026-10-20，进行中）
 
 新增 `src/core/token-calibration.ts` 与 `scripts/report-token-error.ts`，并以可选字段 `model`、`schemaDigest` 扩展 `model/start`（旧日志缺字段时归 unknown，读取兼容）。阶段 A 默认只读：`inspect` 文本/JSON 与 `pnpm token:error <events.jsonl>` 都只用 `usage.source=provider` 的已配对请求，报告 `(estimated−actual)/actual`、低估率、绝对相对误差 p50/p95，按 main/summary、model、schema digest 和估算器版本分层；缺 usage、estimated usage、实际为零、孤立 usage、被拒绝与重复 usage 单列且不参与统计。阶段 B 校准是默认关闭的纯函数：rolling `actual/estimated` 保守分位乘安全边际，样本不足回退 1，乘数下限 1、上限可配置；确定性可由同一事件序列重建。保留 `token-estimator.ts` 原文件与 NX-08c 语料/估算器哈希，不删也不放宽历史测量。
 
-验收：合成 provider usage 可逐条复算误差；摘要重试归入摘要组；缺 usage/估算 usage 等不进样本；`inspect` 与 JSONL 重放得到相同摘要；校准关闭时乘数为 1，样本不足回退，异常巨大比率被上限夹紧且 `applyTokenCalibration` 不会降低原估算；历史 40 条语料测试保持通过。本地新增 5 条测试，完整 `pnpm test` 468 tests／438 pass／0 fail／30 skipped，`pnpm check` syntax 170 files，`pnpm lint` 184 files／0 diagnostics；真实 provider 请求 0。当前提交 CI 待验证。运行时默认不应用校准，阶段 B 接入需观测收益与独立验收。
+验收：合成 provider usage 可逐条复算误差；摘要重试归入摘要组；缺 usage/估算 usage 等不进样本；`inspect` 与 JSONL 重放得到相同摘要；校准关闭时乘数为 1，样本不足回退，异常巨大比率被上限夹紧且 `applyTokenCalibration` 不会降低原估算；历史 40 条语料测试保持通过。本地新增 5 条测试，完整 `pnpm test` 468 tests／438 pass／0 fail／30 skipped，`pnpm check` syntax 170 files，`pnpm lint` 184 files／0 diagnostics；提交 `051f962`：[CI 39378725489](https://github.com/BeforeLanding/mini-DSH/actions/runs/39378725489) 六组通过。R06 在工作分支验收完成。运行时默认不应用校准，阶段 B 接入需观测收益与独立验收。真实 provider 请求 0。
 
 ### R05 稳定前缀与压缩策略（2026-10-20，工作分支验收完成）
 

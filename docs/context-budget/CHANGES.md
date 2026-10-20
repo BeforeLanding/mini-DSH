@@ -1,5 +1,15 @@
 # 改动与验收证据
 
+### R06 当前提交 CI 验收（2026-10-20）
+
+`051f96239307927924c1e580d8a4602425cd9a4c` 的 [CI 39378725489](https://github.com/BeforeLanding/mini-DSH/actions/runs/39378725489) Ubuntu/Windows × Node 20.18.1/22/24 六组全部通过；R06 在工作分支验收完成，main 未合并。阶段 B 校准仍未接入运行时。
+
+### R07 MCP 默认关闭与可控装配（2026-10-20，本地通过，待 CI）
+
+`plugins.config.ts` 的内置 context7 条目已删除并改为空数组；启动、`--help`、`--show-config`、inspect 与离线 demo 不再连接 MCP。新增 `src/app/mcp-config.ts`：只读取 `~/.mini-dsh/mcp.json`、`MINI_DSH_MCP_CONFIG` 或 `--mcp-config <path>`，不读取工作区文件；严格校验 serverName（`[A-Za-z0-9_-]{1,32}`，重复即拒绝）、transport、字段白名单、URL 与超时；stdio `env` 与 HTTP `headers` 只接受完整 `${ENV_NAME}`，字面 secret 拒绝，缺变量启动失败并点名，`--show-config` 仅输出变量名与缺失项且不连接 server。MCP 装配移入 `createHarness` 的 `mcpServers` 可选参数；评测/离线入口不传即禁用；连接失败固定 `failOnStartupError=false`。插件工具名 `mcp__<server>__<raw>`，不声明 effect/origin，经 ToolRuntime 中央授权按 unknown 询问，`autoApprove` 不自动授权。
+
+新增 `test/mcp-config.test.ts` 6 条与无依赖 stdio mock server：默认/工作区文件不加载；用户配置解析且 show-config 不泄露值；字面 secret、缺变量、重复名、未知字段、非法 transport/url 拒绝；`MINI_DSH_MCP=0` 关闭；list/call、超时、调用中退出、dispose 释放注册项；拒绝审批时 mock 计数器保持 0，批准后才增加。`--show-config` 实测无 `[plugin] loaded`、无 secret 输出。本地 `pnpm check` syntax 172 files、`pnpm test` 474 tests / 444 pass / 0 fail / 30 skipped、`pnpm lint` 186 files / 0 diagnostics。真实 provider 请求 0；未连接任何真实 MCP server，当前提交 CI 待验证。
+
 ### R06 token 估算在线观测与受控校准（2026-10-20，本地通过，待 CI）
 
 `model/start` 新增可选 `model` 与 `schemaDigest`（64 位十六进制，运行时校验；旧日志缺字段兼容）。新增 `src/core/token-calibration.ts`：按 `requestId` 配对 `model/start.estimatedInputTokens` 与 `model/usage`，只采信 `usage.source=provider`；摘要请求按 `context/summary-start`→`end` 的 run 窗口归组，重试 attempt 不被误记为主请求。报告 `(estimated−actual)/actual` 中位数、低估率、绝对相对误差 p50/p95，并按 kind/model/schema/estimatorVersion 分层；缺 usage、estimated usage、实际为零、孤立 usage、被拒绝、重复 usage 与缺估算值分别计数且不进入样本。`inspect` 默认输出该摘要，`pnpm token:error <events.jsonl> [--json] [--apply-calibration]` 提供独立只读入口。阶段 B 的 `calibrateTokenEstimate` 默认关闭，使用 rolling `actual/estimated` 保守分位 × 安全边际，样本不足回退 1，乘数夹紧在 `[1, maxMultiplier]`，异常比率不会产生 Infinity/NaN；`applyTokenCalibration` 不会降低原估算。运行时尚未应用校准。

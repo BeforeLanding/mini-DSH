@@ -278,6 +278,14 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 
 **本决策不产生新数字**，它约束的是后续 fixture 的设计与报告的写法：报告不得把「结局饱和」写成能力结论（R-21 的强制约束继续适用），也不得把「工作区里少了一份 oracle」写成天花板已被打破——NX-08h 的结论逐字仍是「这一次没有失败」。验收见 REQUIREMENTS 的 R-23。
 
+### MCP 插件边界（R07）
+
+**默认零 server、零出网。** 原内置 context7 条目已删除；启动、`--help`、`--show-config`、inspect 与离线 demo 都不连接 MCP。配置只来自用户目录级 `~/.mini-dsh/mcp.json`、`MINI_DSH_MCP_CONFIG` 或显式 `--mcp-config <path>`；工作区里出现的 `mcp.json` 不会自动成为可信服务器。`MINI_DSH_MCP=0` 可整体关闭。
+
+**secret 只接受完整的 `${ENV_NAME}` 引用。** stdio `env` 与 HTTP `headers` 的字面值一律拒绝；缺变量时交互启动失败并点名变量，`--show-config` 只列出变量名与缺失项，不展开值。stdio 由现有 `@deepseek-ai/dsh-mcp-client` 启动，复用其脱敏父环境；本轮不另写适配器。
+
+**装配与授权。** MCP server 经 `createHarness` 的可选 `mcpServers` 参数装配，不在 CLI 路径单独挂载；评测与离线入口不传该参数即明确禁用。工具名由插件命名为 `mcp__<server>__<raw>`，重复 `serverName` 在配置层拒绝。插件不声明 effect/origin，因此经 ToolRuntime 中央授权按 unknown 默认询问；`autoApprove` 不会替第三方工具自动授权。连接、调用超时与传输断开只使该 server 的工具失败或消失，不阻断主循环；dispose 释放子进程、连接与注册项。
+
 ## 默认参数与行为
 
 ### 请求规模与估算
