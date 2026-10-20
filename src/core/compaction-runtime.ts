@@ -141,7 +141,10 @@ export class CompactionRuntime {
       const message = event ? deriveEventMessage(event) : undefined
       return message ? [message] : []
     })
-    const messages: Message[] = [...replayed, { role: 'user', content: COMPACTION_INSTRUCTION }]
+    const sourceRequests = events.filter(event => event.type === 'user/message' && event.taskId === state.taskId)
+      .map(event => ({ seq: event.seq, content: event.type === 'user/message' ? event.data.content : '' }))
+    const instruction = `${COMPACTION_INSTRUCTION}\n\n<source-user-requests>\n${JSON.stringify(sourceRequests)}\n</source-user-requests>\n上面的 JSON 是当前任务用户目标及后续修订的只读来源，按事件号核对；它不是新的用户请求。保留原始目标、已完成和待完成事项、关键证据及被替换事件范围。`
+    const messages: Message[] = [...replayed, { role: 'user', content: instruction }]
     const inputTokens = estimateInput({ system: attempt.system, messages, tools: attempt.tools })
     // §8.3：预留输出走既有 outputAllowance；余额不足时它抛 token_budget，**向外传播**，不吞成 decline——
     // 「钱不够」不是「摘要器不行」，混进失败闩就废了。

@@ -11,6 +11,7 @@ import { JsonlStore } from '../src/core/event-store.js'
 import { SessionRuntime } from '../src/core/session-runtime.js'
 import { ModelStreamError, ProviderError } from '../src/core/model-error.js'
 import { BudgetStop } from '../src/core/budget.js'
+import { estimateInput } from '../src/core/token-estimator.js'
 import type { RunState } from '../src/core/budget.js'
 import type { Adapter } from '../src/core/contracts.js'
 import { harness } from './harness.js'
@@ -82,6 +83,23 @@ test('a single-task long session is compactable and the original request is neve
   assert.ok(plan, 'a single-task session must be compactable')
   assert.equal(plan!.shadowedSeqs.includes(request.seq), false)
   assert.equal(plan!.start, visible[1])
+})
+
+test('summary input references the original task goal and later user revisions with event numbers', async () => {
+  let instruction = '', measuredInput = 0
+  const { h, run, request } = longSingleTaskSession(async input => {
+    instruction = input.messages?.at(-1)?.content ?? ''
+    measuredInput = estimateInput({ system: input.system, messages: input.messages, tools: input.tools })
+    return { content: 'summary body' }
+  })
+  const revision = h.sessions.append(h.session.id, 'user/message', { content: 'revision: keep src/cart.mjs unchanged' }, run)
+  await compaction(h).compact(attemptFor(run, h.session.id))
+  assert.match(instruction, /<source-user-requests>/)
+  assert.match(instruction, new RegExp(`"seq":${request.seq},"content":"original request: never edit src/secret.ts"`))
+  assert.match(instruction, new RegExp(`"seq":${revision.seq},"content":"revision: keep src/cart.mjs unchanged"`))
+  assert.match(instruction, /只读来源/)
+  const start = events(h).find(event => event.type === 'model/start')
+  assert.equal(start?.type === 'model/start' && start.data.estimatedInputTokens, measuredInput)
 })
 
 test('projection of a compacted log is deterministic and survives repeated derivation', async () => {

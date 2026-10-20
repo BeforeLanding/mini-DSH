@@ -1,5 +1,13 @@
 # 改动与验收证据
 
+### R05c 摘要输入包含当前任务目标及修订（2026-10-20，本地通过，待 CI）
+
+摘要规划仍保护首条 `user/message` 不被遮蔽；请求构造新增 `<source-user-requests>`，按事件号列出当前 task 的首条目标及后续修订，明确它们是只读来源而非新请求。原文随摘要请求进入既有 `estimateInput`、输出预留和预算门禁；`model/start.estimatedInputTokens` 与实际请求重新估算一致。测试证明两条用户消息均在来源中且事件号正确，既有压缩投影与重试不变。`pnpm check` syntax 166 files、`pnpm test` 461 tests / 431 pass / 0 fail / 30 skipped、`pnpm lint` 180 files / 0 diagnostics。当前提交 CI 待验证；结构校验随后单独处理。真实 provider 请求 0。
+
+### R05b 当前提交 CI 验收（2026-10-20）
+
+规则版本事件提交 `da7d7288c33481ac2dadbb99e6152de88bb0a3d9` 的 [CI 39350675148](https://github.com/BeforeLanding/mini-DSH/actions/runs/39350675148) Ubuntu/Windows × Node 20.18.1/22/24 六组全部通过；本地读数见下节，main 未合并。
+
 ### R05b 项目规则版本变化提示（2026-10-20，本地通过，待 CI）
 
 系统提示装配时仅对作用范围内规则求 SHA-256，首次和变化时追加 `context/project-version`（新会话/重启后可恢复；只含摘要，不含规则正文）。实时布局在规则变化时显示 `Context version changed` 并给出当前规则；显式冻结布局仍返回原 `context/snapshot`，附上版本变化提示，要求 `/reset` 或新会话刷新。提示明确它是环境元数据，不是用户请求。事件验证和只读 inspect 接受新事件类型，旧日志无版本事件时正常读入。定向 25/25；完整 `pnpm test` 460 tests / 430 pass / 0 fail / 30 skipped、`pnpm check` syntax 166 files、`pnpm lint` 180 files / 0 diagnostics；增加快照前缀断言后定向 12/12 再通过。当前提交 CI 待验证，真实 provider 请求 0。
