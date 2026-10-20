@@ -1,7 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import path from 'node:path'
-import { estimateBudget, mapHostToContainer, selectInstances, summarizeEpisodes, validatePrediction } from '../scripts/swebench/protocol.js'
+import {
+  assertSanitizedInstances, buildSchedule, estimateBudget, mapHostToContainer, mcnemarExact, pairedFourCell,
+  sanitizeInstanceRow, selectInstances, summarizeEpisodes, tokenCapFromUsd, usageCost, validatePrediction, validateRunManifest,
+  wilsonInterval,
+} from '../scripts/swebench/protocol.js'
 import type { SwebenchInstance } from '../scripts/swebench/protocol.js'
 
 const dataset: SwebenchInstance[] = [
@@ -62,4 +66,70 @@ test('episode summaries keep infrastructure failures in the denominator and unkn
   assert.equal(summary.knownCostUsd, 0.5)
   assert.equal(summary.unknownCostEpisodes, 2)
   assert.match(summary.denominator, /all planned episodes/)
+})
+
+test('raw dataset rows are sanitized and gold fields cannot reach the runner', () => {
+  const clean = sanitizeInstanceRow({ instance_id: 'alpha__one-1', repo: 'alpha/one', base_commit: 'a1', problem_statement: 'Fix it', patch: 'gold', test_patch: 'hidden' })
+  assert.deepEqual(clean, { instance_id: 'alpha__one-1', repo: 'alpha/one', base_commit: 'a1', problem_statement: 'Fix it' })
+  assert.throws(() => assertSanitizedInstances([{ ...clean, patch: 'gold' }]), /gold\/hidden field patch/)
+  assert.throws(() => assertSanitizedInstances([{ ...clean, test_patch: 'hidden' }]), /gold\/hidden field test_patch/)
+})
+
+test('schedule is deterministic, interleaves arms, and covers each pair exactly once', () => {
+  const instances = dataset.slice(0, 3)
+  const first = buildSchedule(instances, ['a', 'b', 'c'], 7)
+  assert.deepEqual(first, buildSchedule(instances, ['a', 'b', 'c'], 7))
+  assert.equal(first.length, 9)
+  assert.equal(new Set(first.map(episode => `${episode.instanceId}/${episode.armId}`)).size, 9)
+  for (const instance of instances) assert.deepEqual(first.filter(episode => episode.instanceId === instance.instance_id).map(episode => episode.armId).sort(), ['a', 'b', 'c'])
+  assert.notDeepEqual(first.map(episode => episode.armId), buildSchedule(instances, ['a', 'b', 'c'], 8).map(episode => episode.armId))
+})
+
+test('Wilson intervals, exact McNemar, and paired four-cell counts are reproducible', () => {
+  const interval = wilsonInterval(5, 10)
+  assert.ok(Math.abs(interval.low - 0.236593) < 1e-5)
+  assert.ok(Math.abs(interval.high - 0.763407) < 1e-5)
+  assert.deepEqual(wilsonInterval(0, 0), { low: 0, high: 1 })
+  assert.ok(Math.abs(mcnemarExact(1, 9) - 0.021484375) < 1e-9)
+  assert.equal(mcnemarExact(0, 0), 1)
+  const a = new Map([['x', true], ['y', true], ['z', false]])
+  const b = new Map([['x', true], ['y', false], ['z', false]])
+  const paired = pairedFourCell(a, b)
+  assert.equal(paired.bothResolved, 1)
+  assert.equal(paired.onlyA, 1)
+  assert.equal(paired.onlyB, 0)
+  assert.equal(paired.neither, 1)
+  assert.equal(paired.mcnemarExactP, 1)
+  assert.throws(() => pairedFourCell(a, new Map([['x', true]])), /same instances/)
+})
+
+test('cost uses provider usage only and the derived token cap is conservative', () => {
+  const prices = { currency: 'USD' as const, inputUsdPerMillion: 1, cachedInputUsdPerMillion: 0.5, outputUsdPerMillion: 2, capturedAt: '2026-10-20', source: 'test' }
+  const known = usageCost([{ inputTokens: 1_000, outputTokens: 500, totalTokens: 1_500, source: 'provider', uncertain: false, cacheReadTokens: 200 }], prices)
+  assert.equal(known.unknown, false)
+  assert.equal(known.costUsd, 0.0019)
+  assert.equal(usageCost([{ inputTokens: 10, outputTokens: 5, totalTokens: 15, source: 'estimated', uncertain: true }], prices).unknown, true)
+  assert.equal(usageCost([], prices).unknown, true)
+  assert.equal(tokenCapFromUsd(1, prices), 500_000)
+})
+
+test('run manifest validation rejects draft-incompatible schemas and inconsistent schedules', () => {
+  const instance = { instance_id: 'alpha__one-1', repo: 'alpha/one', base_commit: 'a1', problem_statement: 'Fix it' }
+  const arms = [
+    { id: 'candidate', system: 'mini-dsh', role: 'c', model: { provider: 'p', name: 'm', contextWindowTokens: 1_000_000 }, budget: { inputTargetTokens: 65_536 } },
+    { id: 'baseline', system: 'external', role: 'b', model: { provider: 'p', name: 'm', contextWindowTokens: 1_000_000 }, external: { commit: 'abc1234', command: ['x'] }, budget: {} },
+  ]
+  const batch = { tasks: 1, seed: 1, exclusions: [], instances: [instance], arms: ['candidate', 'baseline'], schedule: buildSchedule([instance], ['candidate', 'baseline'], 1) }
+  const manifest = {
+    schemaVersion: 2, kind: 'swebench-run-manifest', freezeStatus: 'frozen', dataset: { name: 'Verified', revision: 'r1' }, harnessCommit: 'abc1234',
+    selection: {}, development: batch, formal: batch, arms, promptTemplate: 'Issue: {problem_statement}',
+    caps: { perTask: { maxCostUsd: 1, maxModelRequests: 10, maxToolCalls: 10, wallClockMs: 1000, maxOutputTokens: 100 },
+      developmentPerTask: { maxCostUsd: 1, maxModelRequests: 10, maxToolCalls: 10, wallClockMs: 1000, maxOutputTokens: 100 },
+      batch: { maxCostUsd: 10, maxEpisodes: 10 } },
+    prices: null, scoring: {}, environment: { imageDigests: null }, authorization: 'none', missing: [], createdAt: '2026-10-20', paidRequests: 0,
+  }
+  assert.equal(validateRunManifest(manifest).freezeStatus, 'frozen')
+  assert.throws(() => validateRunManifest({ ...manifest, schemaVersion: 1 }), /unsupported/)
+  assert.throws(() => validateRunManifest({ ...manifest, formal: { ...batch, schedule: batch.schedule.slice(0, 1) } }), /cover every instance and arm/)
+  assert.throws(() => validateRunManifest({ ...manifest, promptTemplate: 'no placeholder' }), /problem_statement/)
 })

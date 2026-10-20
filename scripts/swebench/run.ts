@@ -1,0 +1,324 @@
+import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
+import { pathToFileURL } from 'node:url'
+import { createHarness } from '../../src/app/create-harness.js'
+import type { HarnessAdapter } from '../../src/app/create-harness.js'
+import { BudgetStop } from '../../src/core/budget.js'
+import type { BudgetPolicy } from '../../src/core/budget.js'
+import { JsonlStore } from '../../src/core/event-store.js'
+import { createDeepSeekAdapter } from '../../src/models/deepseek.js'
+import { createDockerCandidateRunner } from './docker-candidate.js'
+import {
+  assertSanitizedInstances, classifyRunStatus, tokenCapFromUsd, usageCost, validatePrediction, validateRunManifest,
+} from './protocol.js'
+import type { EpisodeStatus, SwebenchArm, SwebenchInstance, SwebenchPrediction, SwebenchRunManifest } from './protocol.js'
+import { buildReport, writeReport } from './report.js'
+import type { SwebenchEpisodeResult, SwebenchScoreResult, SwebenchScores } from './report.js'
+import { exportPatch, prepareDockerWorkspace, prepareFixtureWorkspace, removeContainerIfPresent } from './workspace.js'
+
+// R10 执行器：复用 createHarness、官方预测格式与独立判分通道。它不替用户决定模型、价格或授权；
+// 冻结文件里缺任何一项就拒绝执行。正式批次与开发批次共用同一实现，但题号、顺序与上限分别冻结。
+export interface RunBatchOptions {
+  manifest: SwebenchRunManifest
+  manifestPath: string
+  datasetPath: string
+  evidenceRoot: string
+  split: 'development' | 'formal'
+  backend: 'fixture' | 'docker'
+  scoring: 'mock' | 'official'
+  batchId: string
+  fixtureRoot?: string
+  adapterFor?: (arm: SwebenchArm, instance: SwebenchInstance) => HarnessAdapter | Promise<HarnessAdapter>
+  scoreMock?: (instance: SwebenchInstance, workspace: string) => boolean | Promise<boolean>
+  now?: () => number
+  // 批次级恢复：跳过已经落盘终态的 episode，继续剩余计划；中断的 episode 保留为 infrastructure，
+  // 不自动重跑（重跑会变成同一题 arm 的第二次正式 attempt）。
+  resume?: boolean
+}
+
+function sanitizeName(value: string) { return value.replace(/[^A-Za-z0-9_.-]/g, '-') }
+
+function adapterFromArm(arm: SwebenchArm): HarnessAdapter {
+  if (!arm.model.name) throw new Error(`arm ${arm.id}: model name is required for execution`)
+  const adapter = createDeepSeekAdapter({ models: [arm.model.name] })
+  return { provider: arm.model.provider, model: arm.model.name, chat: adapter.chat.bind(adapter),
+    capabilities: { [arm.model.name]: { contextWindowTokens: arm.model.contextWindowTokens } } }
+}
+
+async function trace(prediction: SwebenchPrediction, fixture: string, target: string, score: (instance: SwebenchInstance, workspace: string) => boolean | Promise<boolean>, instance: SwebenchInstance) {
+  await fs.mkdir(path.dirname(target), { recursive: true })
+  await fs.cp(fixture, target, { recursive: true, errorOnExist: true })
+  if (!prediction.model_patch.trim()) return { resolved: false, classification: 'empty' as const }
+  const applied = spawnSync('git', ['apply', '--whitespace=nowarn', '-'], { cwd: target, input: prediction.model_patch, encoding: 'utf8', timeout: 60_000 })
+  if (applied.status !== 0) throw new Error(`mock scorer could not apply patch for ${instance.instance_id}: ${applied.stderr.slice(0, 1000)}`)
+  return { resolved: Boolean(await score(instance, target)), classification: 'scored' as const }
+}
+
+async function officialScores(options: RunBatchOptions, arm: SwebenchArm, predictions: SwebenchPrediction[], entries: readonly SwebenchInstance[], runId: string) {
+  const predictionsPath = path.join(options.evidenceRoot, `predictions.${sanitizeName(arm.id)}.jsonl`)
+  await fs.writeFile(predictionsPath, predictions.map(value => JSON.stringify(validatePrediction(value)) + '\n').join(''))
+  const datasetFile = path.join(options.evidenceRoot, 'scoring-dataset.json')
+  const rows = entries.map(instance => ({ instance_id: instance.instance_id, repo: instance.repo, base_commit: instance.base_commit,
+    ...(instance.version ? { version: instance.version } : {}), ...(instance.environment_setup_commit ? { environment_setup_commit: instance.environment_setup_commit } : {}) }))
+  await fs.writeFile(datasetFile, JSON.stringify(rows, null, 2) + '\n')
+  const modelName = `mini-dsh-${sanitizeName(arm.id)}`
+  const logPath = path.join(options.evidenceRoot, `score.${sanitizeName(arm.id)}.log`)
+  const result = spawnSync('python', ['-m', 'swebench.harness.run_evaluation', '--dataset_name', datasetFile,
+    '--predictions_path', predictionsPath, '--max_workers', '1', '--timeout', '1800', '--cache_level', 'instance',
+    '--clean', 'false', '--namespace', 'swebench', '--run_id', runId], { cwd: options.evidenceRoot, encoding: 'utf8', timeout: 24 * 60 * 60 * 1000, maxBuffer: 16 * 1024 * 1024 })
+  await fs.writeFile(logPath, `${result.stdout ?? ''}\n${result.stderr ?? ''}`)
+  if (result.status !== 0) throw new Error(`official scoring failed for ${arm.id}: ${(result.stderr ?? '').slice(-2000)}`)
+  const reportPath = path.join(options.evidenceRoot, `${modelName}.${runId}.json`)
+  const report = JSON.parse(await fs.readFile(reportPath, 'utf8')) as Record<string, unknown>
+  const list = (key: string) => new Set(Array.isArray(report[key]) ? report[key] as string[] : [])
+  const resolved = list('resolved_ids'), unresolved = list('unresolved_ids'), empty = list('empty_patch_ids'), errors = list('error_ids')
+  return predictions.map(prediction => {
+    const classification: SwebenchScoreResult['classification'] =
+      errors.has(prediction.instance_id) ? 'error' : resolved.has(prediction.instance_id) ? 'resolved'
+        : empty.has(prediction.instance_id) ? 'empty' : unresolved.has(prediction.instance_id) ? 'unresolved' : 'error'
+    return { armId: arm.id, instanceId: prediction.instance_id, resolved: classification === 'resolved', classification,
+      scoreRunId: runId, rawPath: path.relative(options.evidenceRoot, reportPath) }
+  })
+}
+
+export async function runSwebenchBatch(options: RunBatchOptions) {
+  const manifest = options.manifest
+  if (manifest.freezeStatus !== 'frozen') throw new Error('refusing to execute a draft manifest; finalize the protocol first')
+  if (manifest.paidRequests !== 0) throw new Error('manifest must start with paidRequests: 0')
+  if (options.scoring === 'official' && !manifest.prices) throw new Error('official scoring requires a frozen price snapshot for cost accounting')
+  if (options.scoring === 'mock' && !options.scoreMock && !options.fixtureRoot) throw new Error('mock scoring requires a score function or a fixture root')
+  const rawRows = JSON.parse(await fs.readFile(options.datasetPath, 'utf8')) as unknown
+  if (!Array.isArray(rawRows)) throw new Error('dataset must be a JSON array')
+  assertSanitizedInstances(rawRows)
+  const dataset = new Map((rawRows as SwebenchInstance[]).map(instance => [instance.instance_id, instance]))
+  const batchManifest = manifest[options.split]
+  const arms = new Map(manifest.arms.map(arm => [arm.id, arm]))
+  const instances = new Map(batchManifest.instances.map(instance => [instance.instance_id, instance]))
+  for (const entry of batchManifest.schedule) if (!dataset.has(entry.instanceId)) throw new Error(`dataset is missing scheduled instance ${entry.instanceId}`)
+  if (options.backend === 'docker') {
+    const digests = manifest.environment.imageDigests
+    if (!digests) throw new Error('docker backend requires frozen per-instance image digests')
+    for (const entry of batchManifest.schedule) if (!digests[entry.instanceId]) throw new Error(`missing image digest for ${entry.instanceId}`)
+  }
+  if (options.backend === 'fixture' && !options.fixtureRoot) throw new Error('fixture backend requires --fixtures <directory>')
+  const now = options.now ?? (() => Date.now())
+  let startedAt = new Date().toISOString()
+  const records: SwebenchEpisodeResult[] = []
+  if (options.resume) {
+    const savedManifest = JSON.parse(await fs.readFile(path.join(options.evidenceRoot, 'manifest.json'), 'utf8')) as unknown
+    if (!isDeepStrictEqual(savedManifest, manifest)) throw new Error('resume manifest does not match the evidence directory')
+    const savedDataset = JSON.parse(await fs.readFile(path.join(options.evidenceRoot, 'dataset.json'), 'utf8')) as unknown
+    if (!isDeepStrictEqual(savedDataset, batchManifest.instances)) throw new Error('resume dataset does not match the evidence directory')
+    for (const line of (await fs.readFile(path.join(options.evidenceRoot, 'runs.jsonl'), 'utf8')).split('\n').filter(Boolean)) records.push(JSON.parse(line) as SwebenchEpisodeResult)
+    const planned = new Set(batchManifest.schedule.map(entry => `${entry.instanceId}/${entry.armId}`))
+    if (new Set(records.map(record => `${record.instanceId}/${record.armId}`)).size !== records.length) throw new Error('resume evidence contains duplicate episodes')
+    if (records.some(record => !planned.has(`${record.instanceId}/${record.armId}`))) throw new Error('resume evidence contains an episode outside the frozen schedule')
+    const previous = JSON.parse(await fs.readFile(path.join(options.evidenceRoot, 'batch.json'), 'utf8').catch(() => '{}')) as { startedAt?: string }
+    if (previous.startedAt) startedAt = previous.startedAt
+  } else {
+    await fs.mkdir(path.dirname(options.evidenceRoot), { recursive: true })
+    await fs.mkdir(options.evidenceRoot, { recursive: false })
+    await fs.writeFile(path.join(options.evidenceRoot, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
+    await fs.writeFile(path.join(options.evidenceRoot, 'dataset.json'), JSON.stringify(batchManifest.instances, null, 2) + '\n')
+  }
+  let stopReason: string | undefined
+  let spentUsd = records.reduce((sum, record) => sum + (record.costUsd ?? 0), 0)
+  let unknownCostEpisodes = records.filter(record => record.usageUnknown).length
+  const runHandle = await fs.open(path.join(options.evidenceRoot, 'runs.jsonl'), 'a')
+  try {
+    for (const [index, entry] of batchManifest.schedule.entries()) {
+      if (records.some(record => record.instanceId === entry.instanceId && record.armId === entry.armId)) continue
+      if (records.length >= manifest.caps.batch.maxEpisodes) { stopReason = 'batch_episode_cap'; break }
+      const perTask = options.split === 'development' ? manifest.caps.developmentPerTask : manifest.caps.perTask
+      if (manifest.prices && spentUsd + perTask.maxCostUsd > manifest.caps.batch.maxCostUsd) { stopReason = 'batch_cost_cap_before_next_episode'; break }
+      const arm = arms.get(entry.armId)
+      const instance = instances.get(entry.instanceId)
+      if (!arm || !instance) throw new Error(`schedule references unknown arm/instance: ${entry.armId}/${entry.instanceId}`)
+      const episodeDirectory = path.join(options.evidenceRoot, 'episodes', sanitizeName(entry.instanceId), sanitizeName(arm.id))
+      await fs.mkdir(episodeDirectory, { recursive: true })
+      const patchPath = path.join(episodeDirectory, 'patch.diff')
+      let eventsPath: string | undefined, sessionId: string | undefined
+      let status: EpisodeStatus = 'infrastructure', error: string | undefined
+      let costUsd: number | undefined, usageUnknown = true
+      let counters = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, modelRequests: 0, toolCalls: 0, activeDurationMs: 0 }
+      let patch = ''
+      let dockerWorkspace: Awaited<ReturnType<typeof prepareDockerWorkspace>> | undefined
+      const began = now()
+      try {
+        if (!options.adapterFor && arm.system === 'external') {
+          throw new Error(`external arm ${arm.id} is configured but this runner does not execute external baselines; provide the same-model baseline command and a dedicated adapter before the formal batch`)
+        }
+        const workspace = path.join(episodeDirectory, 'workspace')
+        if (options.backend === 'docker') {
+          // 中断恢复时只清理本批次命名规则下的残留；不执行中断 episode，保留其 infrastructure 记录。
+          removeContainerIfPresent(`mini-dsh-run-${sanitizeName(options.batchId)}-${index}`)
+          removeContainerIfPresent(`mini-dsh-export-${sanitizeName(options.batchId)}-${index}`)
+        }
+        let baseCommit: string
+        if (options.backend === 'fixture') {
+          baseCommit = await prepareFixtureWorkspace(path.join(options.fixtureRoot!, entry.instanceId), workspace)
+        } else {
+          dockerWorkspace = await prepareDockerWorkspace({ image: manifest.environment.imageDigests![entry.instanceId]!, baseCommit: instance.base_commit,
+            target: workspace, exportName: `mini-dsh-export-${sanitizeName(options.batchId)}-${index}`, containerName: `mini-dsh-run-${sanitizeName(options.batchId)}-${index}` })
+          baseCommit = instance.base_commit
+        }
+        const adapter = options.adapterFor ? await options.adapterFor(arm, instance) : adapterFromArm(arm)
+        const prices = manifest.prices
+        const budget: BudgetPolicy = {
+          ...arm.budget as BudgetPolicy,
+          maxModelRequests: perTask.maxModelRequests, maxToolCalls: perTask.maxToolCalls,
+          maxActiveDurationMs: perTask.wallClockMs, maxOutputTokens: perTask.maxOutputTokens,
+          ...(prices ? { maxTotalTokens: tokenCapFromUsd(perTask.maxCostUsd, prices) } : {}),
+        }
+        const harness = await createHarness({ workspace, profile: 'coding', autoApprove: true, projectContext: false,
+          contextLayout: 'frozen', runtimeClockMode: 'frozen', toolOutput: true, adapter,
+          ...(dockerWorkspace ? { commandRunner: createDockerCandidateRunner(workspace, dockerWorkspace.containerName) } : {}) })
+        try {
+          const session = harness.root.sessions.create({ source: `swebench-${options.split}`, workspace })
+          sessionId = session.id
+          const store = await JsonlStore.open(path.join(episodeDirectory, 'session'), session.id)
+          harness.root.sessions.attachStore(session.id, store)
+          eventsPath = path.relative(options.evidenceRoot, path.join(episodeDirectory, 'session', session.id, 'events.jsonl'))
+          const agent = harness.root.agents.create({ name: arm.id, sessionId: session.id, model: `${adapter.provider}/${adapter.model}`, loop: harness.root.agentLoop, budget })
+          let thrown: unknown
+          try { await agent.send(manifest.promptTemplate.replaceAll('{problem_statement}', instance.problem_statement ?? '')) } catch (cause) { thrown = cause }
+          const state = harness.root.sessions.latestRun(session.id)
+          const stop = state?.status ?? (thrown instanceof BudgetStop ? thrown.reason : 'error')
+          status = classifyRunStatus(String(stop))
+          if (thrown !== undefined && !(thrown instanceof BudgetStop)) status = 'infrastructure'
+          if (thrown !== undefined) error = thrown instanceof Error ? thrown.message : String(thrown)
+          if (state) {
+            counters = { inputTokens: state.counters.inputTokens, outputTokens: state.counters.outputTokens, cacheReadTokens: state.counters.cacheReadTokens,
+              modelRequests: state.counters.modelRequests, toolCalls: state.counters.toolCalls, activeDurationMs: state.counters.activeDurationMs }
+            const usage = prices ? usageCost(state.usage, prices) : { unknown: true, reason: 'no price snapshot' }
+            costUsd = usage.costUsd
+            usageUnknown = usage.unknown
+            if (usage.unknown && usage.reason) error = error ?? `usage unknown: ${usage.reason}`
+          }
+          patch = exportPatch(workspace, baseCommit)
+          await fs.writeFile(patchPath, patch)
+          await harness.root.sessions.flush(session.id)
+        } finally {
+          await harness.root.sessions.close().catch(cause => { status = 'infrastructure'; error = error ?? `session store close failed: ${String(cause)}` })
+          await harness.dispose()
+        }
+      } catch (cause) {
+        status = 'infrastructure'
+        error = cause instanceof Error ? cause.message : String(cause)
+        await fs.writeFile(patchPath, patch).catch(() => {})
+      } finally {
+        dockerWorkspace?.cleanup()
+      }
+      const record: SwebenchEpisodeResult = { instanceId: entry.instanceId, armId: arm.id, status, resolved: false, emptyPatch: patch.trim().length === 0,
+        ...(costUsd === undefined ? {} : { costUsd }), usageUnknown, inputTokens: counters.inputTokens, outputTokens: counters.outputTokens,
+        cacheReadTokens: counters.cacheReadTokens, durationMs: Math.max(0, now() - began), modelRequests: counters.modelRequests, toolCalls: counters.toolCalls,
+        ...(sessionId ? { sessionId } : {}), ...(eventsPath ? { eventsPath } : {}), patchPath: path.relative(options.evidenceRoot, patchPath), ...(error ? { error } : {}) }
+      await fs.writeFile(path.join(episodeDirectory, 'episode.json'), JSON.stringify({ ...record, workspace: path.relative(options.evidenceRoot, path.join(episodeDirectory, 'workspace')),
+        ...(dockerWorkspace ? { container: dockerWorkspace.evidence } : {}) }, null, 2) + '\n')
+      await runHandle.write(JSON.stringify(record) + '\n')
+      records.push(record)
+      if (status === 'infrastructure') { stopReason = 'infrastructure_failure'; break }
+      if (costUsd !== undefined) spentUsd += costUsd
+      if (usageUnknown && manifest.prices) { unknownCostEpisodes++; stopReason = 'usage_unknown'; break }
+      if (manifest.prices && spentUsd > manifest.caps.batch.maxCostUsd) { stopReason = 'batch_cost_cap_exceeded'; break }
+    }
+  } finally { await runHandle.close() }
+
+  // 独立判分只读取已保存的预测，不接触 Agent 的会话或容器；每批使用新的 run_id。
+  const scores: SwebenchScores = { runIds: {}, results: [] }
+  for (const arm of manifest.arms.filter(candidate => batchManifest.arms.includes(candidate.id))) {
+    if (!records.some(record => record.armId === arm.id)) continue
+    const runId = `${sanitizeName(options.batchId)}-${sanitizeName(arm.id)}`
+    scores.runIds[arm.id] = runId
+    const predictions: SwebenchPrediction[] = await Promise.all(records.filter(record => record.armId === arm.id).map(async record => ({
+      instance_id: record.instanceId, model_name_or_path: `mini-dsh-${sanitizeName(arm.id)}`,
+      model_patch: await fs.readFile(path.join(options.evidenceRoot, record.patchPath), 'utf8') })))
+    try {
+      if (options.scoring === 'official') {
+        const scoredInstances = batchManifest.instances.filter(instance => predictions.some(prediction => prediction.instance_id === instance.instance_id))
+        scores.results.push(...await officialScores(options, arm, predictions, scoredInstances, runId))
+      } else {
+        const score = options.scoreMock ?? await fixtureScorer(options.fixtureRoot!)
+        for (const prediction of predictions) {
+          const instance = instances.get(prediction.instance_id)!
+          const target = path.join(options.evidenceRoot, 'scored', sanitizeName(arm.id), sanitizeName(instance.instance_id))
+          const result = await trace(prediction, path.join(options.fixtureRoot!, instance.instance_id), target, score, instance)
+          scores.results.push({ armId: arm.id, instanceId: instance.instance_id, resolved: result.resolved,
+            classification: result.classification === 'empty' ? 'empty' : result.resolved ? 'resolved' : 'unresolved', scoreRunId: runId })
+        }
+      }
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause)
+      stopReason = stopReason ?? 'scoring_failed'
+      for (const prediction of predictions) {
+        if (scores.results.some(result => result.armId === arm.id && result.instanceId === prediction.instance_id)) continue
+        scores.results.push({ armId: arm.id, instanceId: prediction.instance_id, resolved: false, classification: 'error', scoreRunId: runId, rawPath: message.slice(0, 500) })
+      }
+    }
+  }
+  for (const record of records) record.resolved = scores.results.some(result => result.armId === record.armId && result.instanceId === record.instanceId && result.resolved)
+  // 判分完成后重写 runs.jsonl，让 resolved 与原始证据同处一份记录；前面的追加只用于中断时保留现场。
+  await fs.writeFile(path.join(options.evidenceRoot, 'runs.jsonl'), records.map(record => JSON.stringify(record) + '\n').join(''))
+  await fs.writeFile(path.join(options.evidenceRoot, 'scores.json'), JSON.stringify(scores, null, 2) + '\n')
+  const finishedAt = new Date().toISOString()
+  const batch = { split: options.split, ...(stopReason ? { stopReason } : {}), spentUsdEstimate: Number(spentUsd.toFixed(9)), unknownCostEpisodes, startedAt, finishedAt }
+  await fs.writeFile(path.join(options.evidenceRoot, 'batch.json'), JSON.stringify(batch, null, 2) + '\n')
+  const report = buildReport(manifest, options.split, records, scores, batch)
+  await writeReport(options.evidenceRoot, report)
+  await writeChecksums(options.evidenceRoot)
+  return report
+}
+
+async function fixtureScorer(root: string) {
+  const scorerPath = path.join(root, 'score.mjs')
+  const module = await import(pathToFileURL(scorerPath).href) as { default?: (workspace: string) => boolean | Promise<boolean> }
+  if (typeof module.default !== 'function') throw new Error(`mock scorer ${scorerPath} must default-export a function`)
+  return (_instance: SwebenchInstance, workspace: string) => module.default!(workspace)
+}
+
+async function writeChecksums(root: string) {
+  const names = ['manifest.json', 'dataset.json', 'runs.jsonl', 'scores.json', 'batch.json', 'report.json']
+  const lines: string[] = []
+  for (const name of names) {
+    const bytes = await fs.readFile(path.join(root, name))
+    lines.push(`${createHash('sha256').update(bytes).digest('hex')}  ${name}`)
+  }
+  await fs.writeFile(path.join(root, 'SHA256SUMS'), lines.join('\n') + '\n')
+}
+
+function argument(name: string) {
+  const index = process.argv.indexOf(name)
+  const value = index >= 0 ? process.argv[index + 1] : undefined
+  if (!value || value.startsWith('--')) throw new Error(`missing ${name}`)
+  return value
+}
+
+function optionalArgument(name: string) {
+  const index = process.argv.indexOf(name)
+  if (index < 0) return undefined
+  return argument(name)
+}
+
+async function cli() {
+  const execute = process.argv.includes('--execute')
+  if (!execute) throw new Error('run requires --execute; a dry run would still be a paid operation in the official backend')
+  const manifestPath = path.resolve(argument('--manifest'))
+  const manifest = validateRunManifest(JSON.parse(await fs.readFile(manifestPath, 'utf8')))
+  const split = argument('--split')
+  if (split !== 'development' && split !== 'formal') throw new Error('--split must be development or formal')
+  const backend = argument('--backend')
+  if (backend !== 'fixture' && backend !== 'docker') throw new Error('--backend must be fixture or docker')
+  const scoring = argument('--scoring')
+  if (scoring !== 'mock' && scoring !== 'official') throw new Error('--scoring must be mock or official')
+  const report = await runSwebenchBatch({ manifest, manifestPath, datasetPath: path.resolve(argument('--dataset')),
+    evidenceRoot: path.resolve(argument('--evidence-root')), split, backend, scoring,
+    batchId: argument('--batch-id'), ...(optionalArgument('--fixtures') ? { fixtureRoot: path.resolve(argument('--fixtures')) } : {}),
+    ...(process.argv.includes('--resume') ? { resume: true } : {}) })
+  console.log(JSON.stringify({ split, executed: report.executedEpisodes, planned: report.plannedEpisodes,
+    stopReason: report.batch.stopReason ?? null, perArm: report.perArm.map(arm => ({ armId: arm.armId, resolved: arm.resolved, planned: arm.planned, executed: arm.executed })) }))
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) void cli().catch(error => { console.error(error instanceof Error ? error.message : error); process.exitCode = 1 })
