@@ -93,21 +93,29 @@ try {
   assert.throws(() => mapHostToContainer(candidate, directory), /escapes its workspace/)
 
   assert.equal(docker('ps', '-aq', '--filter', `name=^/${candidateName}$`), '')
+  const uid = process.getuid?.()
+  const gid = process.getgid?.()
+  if (uid === undefined || gid === undefined) throw new Error('candidate PoC requires a POSIX uid/gid')
   started = true
+  // Run the candidate as the host runner: the bind-mounted tree is owned by
+  // that user, and the dropped capabilities deliberately prevent root from
+  // bypassing file modes. Host file tools and container Bash must be able to
+  // edit the same files. Official scoring still runs in its own container.
   docker('run', '-d', '--name', candidateName, '--network', 'none', '--cap-drop', 'ALL',
     '--security-opt', 'no-new-privileges', '--read-only', '--tmpfs', '/tmp:rw,nosuid,nodev',
+    '--user', `${uid}:${gid}`, '--env', 'HOME=/tmp/mini-dsh-poc',
     // The official evaluation script runs `git config --global --add
-    // safe.directory /testbed` before grading. The bind mount is owned by the
-    // host runner, so git inside the container needs the same trust entry.
-    // Passing it through git's environment config avoids writing to the
-    // read-only container root and does not relax any other check.
+    // safe.directory /testbed` before grading. Pass the same trust entry
+    // through git's environment config without writing to the read-only root.
     '--mount', `type=bind,src=${candidate},dst=/testbed`, '--workdir', '/testbed',
     '--env', 'GIT_CONFIG_COUNT=1', '--env', 'GIT_CONFIG_KEY_0=safe.directory',
-    '--env', 'GIT_CONFIG_VALUE_0=/testbed', image, 'sh', '-lc', 'sleep 900')
+    '--env', 'GIT_CONFIG_VALUE_0=/testbed', image, 'sh', '-lc',
+    'mkdir -p /tmp/mini-dsh-poc && sleep 900')
   const container = JSON.parse(docker('inspect', candidateName))[0]
   assert.equal(container.HostConfig.NetworkMode, 'none')
   assert.equal(container.HostConfig.Privileged, false)
   assert.equal(container.HostConfig.ReadonlyRootfs, true)
+  assert.equal(container.Config.User, `${uid}:${gid}`)
   assert.deepEqual(container.Mounts.map((mount: { Destination: string }) => mount.Destination), ['/testbed'])
   assert.equal(path.resolve(container.Mounts[0].Source), path.resolve(candidate))
   assert.equal(container.Mounts[0].RW, true)
@@ -171,7 +179,8 @@ try {
   const evidence = { status: 'candidate-path-and-score-passed', instanceId: official.instanceId,
     baseCommit: official.baseCommit, imageDigest: image, providerRequests: 0, toolCalls: calls.map(call => call.name),
     hostWriteVisibleInContainer: true, containerWriteVisibleOnHost: true, network: 'none',
-    mounts: ['/testbed'], privileged: false, readonlyRoot: true, pathEscapeRejected: true,
+    mounts: ['/testbed'], privileged: false, readonlyRoot: true, containerUser: `${uid}:${gid}`,
+    pathEscapeRejected: true,
     sourceConsistency, scoreRunId: scoreRun,
     candidatePatchSha256: createHash('sha256').update(patch + '\n').digest('hex'),
     resolvedIds: report.resolved_ids, errorInstances: report.error_instances }
