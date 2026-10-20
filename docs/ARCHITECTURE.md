@@ -33,6 +33,7 @@ mini-DSH is a TypeScript ESM coding-agent harness built on Cordis plugins. The c
 
 - MCP is opt-in and empty by default (`src/app/mcp-config.ts`). It loads only a user-level config or an explicit path, accepts secrets only as `${ENV_NAME}` references, and never auto-loads a workspace config.
 - MCP tools are namespaced by `serverName`, treated as unknown-effect tools, and registered through the same `ToolRuntime`. Connection failures, timeouts, and disconnects stay local to that server.
+- Stdio servers are launched by the MCP SDK with its shared credential-name scrub (names containing `KEY`/`PASSWORD`/`SECRET`/`TOKEN`, and `DSH_*`), not Bash's strict allowlist; proxies, SSH agent variables, `NODE_OPTIONS`, and the real HOME can still be inherited. Configuring a server is an explicit trust decision.
 
 ## Isolation and evidence
 

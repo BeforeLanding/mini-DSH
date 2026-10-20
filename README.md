@@ -58,7 +58,7 @@ $log = Join-Path $env:USERPROFILE '.mini-dsh\sessions\<session-id>\events.jsonl'
 
 文本默认只列会话和最近一次 run 的状态、主请求/摘要请求/派发前拒绝、工具结果、provider token 与缓存、缺 usage、摘要及 `read_history` 次数、frozen 快照来源。`--trace` 只附带最近 40 条所选事件的序号、类型、工具名或终止原因；不显示提示正文和工具输出。`--json` 返回版本为 `1` 的结构化数据，含 `integrity.complete`、`integrity.warnings`，与 `--trace` 可组合。退出码：`0` 表示读到的 JSONL 全部通过校验，`2` 表示只能确认损坏/截断前的部分证据，`1` 表示参数或文件读取失败。`0` 不表示任务成功：没有 `run/finish` 时最近 run 为 `unrecorded_end`，生产日志没有独立产物验收。派发后缺 usage 计入未知请求数，不按零 token 补算；provider 输入 token 已包含缓存命中，不再重复相加，也不估算历史费用。会话结束时间没有独立事件时显示未记录，最近事件时间另列。旧日志反映当时的模型和代码，不代表当前配置。
 
-要处理自己的项目时，先切换到**该项目目录**，再运行 `& $miniDsh` 启动交互；需要先在环境变量或该目录的 `.env` 设置 `DEEPSEEK_API_KEY`，实际对话可能产生费用。默认工作区是启动命令时的当前目录（可用 `MINI_DSH_WORKSPACE` 覆盖），`.env` 也只从当前目录读取，已有环境变量优先；安装包内不带 `.env`。会话默认存于用户主目录的 `.mini-dsh/sessions`（可用 `MINI_DSH_SESSION_DIR` 覆盖），超长工具结果存于工作区的 `.mini-dsh/tool-results`；这些用户数据不写入安装包目录。`/exit` 会释放会话写入锁。当前本地安装验收只覆盖 Windows，未据此声称其他平台的安装验证通过。
+要处理自己的项目时，先切换到**该项目目录**，再运行 `& $miniDsh` 启动交互；需要先在环境变量或该目录的 `.env` 设置 `DEEPSEEK_API_KEY`，实际对话可能产生费用。默认工作区是启动命令时的当前目录（可用 `MINI_DSH_WORKSPACE` 覆盖），`.env` 也只从当前目录读取，已有环境变量优先；安装包内不带 `.env`。会话默认存于用户主目录的 `.mini-dsh/sessions`（可用 `MINI_DSH_SESSION_DIR` 覆盖），超长工具结果存于工作区的 `.mini-dsh/tool-results`；这些用户数据不写入安装包目录。`/exit` 会释放会话写入锁。本地安装验收已覆盖 Windows 含空格路径；CI 的 `package-install` job（ubuntu-latest、Node 22）也在仓库外路径完成同一套 `--help`/`--version`/`--show-config`/`demo`/`inspect` 检查。macOS 安装仍未验证。
 
 接入真实模型需先在 `.env` 填写 `DEEPSEEK_API_KEY`，再运行 `pnpm start`；**后续 CLI 对话可能产生模型费用**。不要覆盖已有 `.env`：
 
@@ -91,6 +91,15 @@ pnpm start
 **frozen 会话与恢复：** `Time:` 和初始项目规则在该会话首次组装系统提示时取样，写入会话 JSONL；同一会话的后续轮次以及重启后用 `MINI_DSH_SESSION_ID` 恢复时复用原快照。同进程创建新的 sessionId 会重新取样；CLI 的 `/reset` 会清除可见历史，并在下次组装时重新取样。旧会话若没有保存快照、但已有模型请求，恢复时会明确提示：原始时间与规则无法还原，缺失部分按**当前**环境取样并标记为 `legacy-current`，不代表恢复了原快照。会话日志因此可能包含规则正文，应按工作区数据保护。
 
 会话内 `AGENTS.md` 或项目配置变化不会自动修改 frozen 系统提示；`project_context` 工具读的是**当前磁盘内容**，可能与**本会话提示快照**不同。要让新规则进入系统提示，使用 `/reset`（丢弃可见历史）或启动新会话；仅恢复同一会话不会刷新。默认 live 在下一次组装时读取当前内容。没有全局热更新。新版本 frozen 日志增加两条快照事件，后续事件序号会变化；旧实验记录与严格回放规则未改，跨版本逐事件比较可能分歧。
+
+## 已知限制
+
+- 路径/命令闸门是应用层策略，不是操作系统隔离；Bash 仍能访问当前用户可读写的文件。
+- MCP 默认不加载。stdio server 由 MCP SDK 启动，使用其共享清洗（丢弃名称含 `KEY`/`PASSWORD`/`SECRET`/`TOKEN` 的变量与 `DSH_*`，再合并显式引用），**不是** Bash 的严格允许列表；代理、SSH agent、`NODE_OPTIONS` 与真实 HOME 仍可能被继承。显式配置 server 即表示信任该进程。
+- 工具调用在会话内串行执行，只读并发尚未实现。
+- token 校准默认关闭；开启需要真实 provider usage 证据，固定 40 条语料的历史误差不代表完整请求分布。
+- `docs/samples/` 的合成轨迹只验证机制，不是模型能力分数；SWE-bench 单题无模型 PoC 只验证候选路径与评分通道，5 题开发批次与正式 50 题未运行。
+- 未发布 npm、未打 tag/Release、未部署 ECS；安装验证覆盖 Windows 含空格路径与 Ubuntu CI，macOS 未验证。
 
 ## 实现入口
 

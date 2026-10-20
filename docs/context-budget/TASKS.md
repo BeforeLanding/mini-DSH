@@ -18,11 +18,11 @@
 
 候选适配作为下一独立提交：把 Docker exec runner 接入 `createHarness`，只映射候选目录到 `/testbed`，用脚本化零模型请求验证宿主文件工具写入→容器 Bash 读取、容器 Bash 写入→宿主文件工具读取。由官方镜像导出 base checkout，记录一致的 base commit；探针结束后才由控制器在候选目录应用公开已知 patch，导出预测并交给新的官方 run_id 判分。预期验收还包括无网络／密钥／oracle／Docker socket 挂载、超时撤销容器、失败清理、路径逃逸拒绝和镜像 digest；CI 实测通过之前不能标记完成。
 
-候选代码、脚本与手动 CI 步骤已写，本地 `pnpm check` syntax 184 files、`pnpm test` 489/459/0/30、`pnpm lint` 204 files／0 diagnostics；新增路径／env／超时定向契约 2/2。固定镜像上的候选容器与独立预测判分仍待手动 CI 实跑。候选脚本结束前不把公开 gold patch 输入 Agent。
+候选代码、脚本与手动 CI 步骤已写，本地 `pnpm check` syntax 184 files、`pnpm test` 489/459/0/30、`pnpm lint` 204 files／0 diagnostics；新增路径／env／超时定向契约 2/2。固定镜像上的候选容器与独立预测判分已由顶部 2026-10-20 条目验收。候选脚本结束前不把公开 gold patch 输入 Agent。
 
 首次候选实测 [CI 39388591825](https://github.com/BeforeLanding/mini-DSH/actions/runs/39388591825) **红灯**：官方 gold 判分及构建通过，候选目录从官方发布镜像导出后 `git rev-parse HEAD` 为 `5efaed257c694e4452b4c8361aae1cd9cdefd6d1`，固定数据集的 `base_commit` 为 `cffd4e0f86fefd4802349a9f9b19ed70934ea354`。程序在运行 Agent 前拒绝该不一致。需核查导出目录的 Git 根与 base 对象是否存在，再决定重建镜像或修正导出路径；不能跳过校验，也不能把两次 gold resolved 当作环境匹配证据。
 
-[诊断 run 39389384812](https://github.com/BeforeLanding/mini-DSH/actions/runs/39389384812) 确认 Git 根正确、base 对象存在（commit）、HEAD 标题为 `SWE-bench`。已把下一道门槛改为比较 HEAD 与 base 的整棵 Git tree 哈希；只有字节树完全相同时才能把候选 HEAD 重置到 base 后继续。若 tree 不同仍需重建镜像，不能仅靠 `git reset` 掩盖环境差异。CI 待复跑。
+[诊断 run 39389384812](https://github.com/BeforeLanding/mini-DSH/actions/runs/39389384812) 确认 Git 根正确、base 对象存在（commit）、HEAD 标题为 `SWE-bench`。已把下一道门槛改为比较 HEAD 与 base 的整棵 Git tree 哈希；只有字节树完全相同时才能把候选 HEAD 重置到 base 后继续。若 tree 不同仍需重建镜像，不能仅靠 `git reset` 掩盖环境差异。后续 `5b296d3` 的逐路径 OID 比较与 `f52699c` 的手动 CI 已完成该差异的界定与验收（见顶部条目）。
 
 [tree run 39389944509](https://github.com/BeforeLanding/mini-DSH/actions/runs/39389944509) 证实镜像 tree `67df329450c30a6d53661f9c01ce3d486df750ba` 与数据集 base tree `7d23c0279ecd62722b2c0d71d6596bbd9eabdd32` 不同，继续红灯。后续 `5b296d3` 的逐路径 OID 比较证明这是 **1758 个 `100644→100755` 的纯 mode 差异**，内容零差异；最终结果见顶部条目。原始发布镜像的两次 gold 成绩仍只是其自身评分通道证据。
 
@@ -36,7 +36,7 @@
 
 新增 `scripts/swebench/protocol.ts` 与 `scripts/swebench/preregister.ts`、`test/swebench-protocol.test.ts`、`docs/EVALUATION-SWEBENCH.md`。离线适配包括：按 repository 分层、固定 seed 的确定性子集选择（不使用事后自造难度）；配置上限预算（题数 × 臂数 × 每题 cap + 开发批次 + 计算储备，明确不是预期花费）；官方 predictions 三字段校验（空 patch 允许）；宿主候选目录→容器 `/testbed` 的显式映射与越界拒绝；episode 汇总保留基础设施失败在主分母、未知成本单列。预注册 CLI 需要真实 dataset revision 与官方 harness commit，写入 arms、scoring、镜像 digest 待补项与 `paidRequests: 0`。
 
-验收：协议测试 5/5；用 60 条合成元数据跑 CLI，得到 50 题、3 个 repository、4 臂、上限 $109.50、`paidRequests: 0`。**未执行**：真实 SWE-bench 数据集下载、任务镜像 pull、无模型判分 PoC、5 题开发批次、正式 50 题或任何付费模型调用。阻塞于数据集 revision/官方 harness commit、镜像 digest、同模型基线与付费授权；不预填“50 题约 $2”。
+验收：协议测试 5/5；用 60 条合成元数据跑 CLI，得到 50 题、3 个 repository、4 臂、上限 $109.50、`paidRequests: 0`。真实数据集 revision、官方 harness commit、单题镜像 digest 与无模型判分/候选 PoC 已由顶部 2026-10-20 条目执行并验收。**仍未执行**：5 题开发批次、正式 50 题或任何付费模型调用；50 题选择文件、同模型基线与价格快照仍需在付费授权前冻结。不预填“50 题约 $2”。
 
 ### R09 公开合成证据包与离线复算（2026-10-20，工作分支验收完成）
 
@@ -53,6 +53,8 @@
 ### R07 MCP 成为可控插件能力（2026-10-20，工作分支验收完成）
 
 删除内置 context7 条目，`plugins.config.ts` 默认为空；MCP 只从用户目录级 `~/.mini-dsh/mcp.json`、`MINI_DSH_MCP_CONFIG` 或显式 `--mcp-config <path>` 读取，工作区本地文件不自动加载，`MINI_DSH_MCP=0` 可关闭。新增 `src/app/mcp-config.ts`：严格校验 serverName/transport/字段，stdio `env` 与 HTTP `headers` 只接受完整 `${ENV_NAME}` 引用，缺变量时启动失败并点名，`--show-config` 只展示变量名与缺失项、不连接 server。MCP 装配移入 `createHarness` 的可选 `mcpServers`，评测/离线入口不传即禁用；重复 serverName 拒绝，连接失败固定 `failOnStartupError=false`。第三方工具经 ToolRuntime 中央授权按 unknown 默认询问，`autoApprove` 不自动授权；dispose 释放注册项与子进程。
+
+残差（2026-10-20 核查）：stdio 子进程最终由 MCP SDK 启动，使用 `@deepseek-ai/dsh-subprocess` 的共享清洗（只丢弃名称含 `KEY`/`PASSWORD`/`SECRET`/`TOKEN` 的变量与 `DSH_*`，再合并显式引用），**没有**复用 Bash 的 `childEnvironment` 严格允许列表；代理、SSH agent、`NODE_OPTIONS` 与真实 HOME 仍可能被继承。把它改成包装器会改变子进程拓扑并带来 Windows 孤儿进程风险，本次未做；该边界已写入 README「已知限制」。显式配置 MCP server 属于用户主动授权。
 
 验收：默认无配置时无 MCP 工具、不加载插件；用户级/显式配置可加载本地 stdio mock server 的 list/call；超时与调用中退出返回错误而非挂住；拒绝审批时 mock 计数器不增加；重复 serverName、字面 secret、缺失变量、非法 transport/url/未知字段均拒绝；show-config 不展开 secret 且不连接；dispose 后工具不可解析。新增 `test/mcp-config.test.ts` 6 条与 `test/fixtures/mcp/mock-server.mjs`；本地 `pnpm check` syntax 172 files、`pnpm test` 474 tests／444 pass／0 fail／30 skipped、`pnpm lint` 186 files／0 diagnostics。`f413f44` 的 Node 20.18.1 两组因 MCP SDK 的 `Promise.withResolvers` 红灯；最低版本已提高到 Node 22，CI matrix 改为 22/24，配置 MCP 时低版本显式失败，未删除或跳过测试。`642f693` 的 [CI 39381000750](https://github.com/BeforeLanding/mini-DSH/actions/runs/39381000750) 五个 job 全部通过，R07 在工作分支验收完成。真实 provider 请求 0。
 
