@@ -2,7 +2,7 @@
 
 ### R05 稳定前缀与压缩策略（2026-10-20，进行中）
 
-R04 `0e19c0c` 的 [CI 39349743566](https://github.com/BeforeLanding/mini-DSH/actions/runs/39349743566) 六组通过。① 时间与规则选择分离：生产默认会话时钟 frozen、项目规则 live；旧 `MINI_DSH_CONTEXT_LAYOUT` 显式选择继续同时映射两项，新增 `MINI_DSH_RUNTIME_TIME_MODE` 可单独覆盖时钟。定向及本地完整 430 通过／30 跳过、check/lint 通过，待本项独立提交及 CI。② 规则版本变化提示和快照语义；③ 摘要原目标引用及结构校验；④ 阈值、滞回与重复摘要抑制，均待实施和验证。真实 provider 请求 0。
+R04 `0e19c0c` 的 [CI 39349743566](https://github.com/BeforeLanding/mini-DSH/actions/runs/39349743566) 六组通过。① 时间与规则选择分离提交 `740a453`：[CI 39350164894](https://github.com/BeforeLanding/mini-DSH/actions/runs/39350164894) 六组通过；生产默认会话时钟 frozen、项目规则 live；旧 `MINI_DSH_CONTEXT_LAYOUT` 显式选择继续同时映射两项，新增 `MINI_DSH_RUNTIME_TIME_MODE` 可单独覆盖时钟。② 规则 hash 变化提示和快照语义：日志持久记录初始/变化 digest，实时布局显示新规则，冻结布局保留旧快照并提示刷新；本地完整 430 通过／30 跳过、check/lint 通过，待独立提交及 CI。③ 摘要原目标引用及结构校验；④ 阈值、滞回与重复摘要抑制，均待实施和验证。真实 provider 请求 0。
 
 ### R04 保留真实命令尾部（2026-10-20，工作分支验收完成）
 

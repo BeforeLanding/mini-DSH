@@ -74,6 +74,8 @@ pnpm start
 
 - `MINI_DSH_CONTEXT_LAYOUT=live|frozen` 是旧版兼容入口；显式设置时同时控制运行时钟和项目上下文在系统提示里的文本是否固定。未设置时，项目上下文 `live`、运行时钟 `frozen`。它**不是**完整 Full 配置。
 - `MINI_DSH_RUNTIME_TIME_MODE=live|frozen` 只控制运行时钟，优先于旧版布局对时钟的设置；默认 `frozen`。新会话有效值及来源可用 `--show-config` 核对。
+
+项目规则以 SHA-256 版本跟踪。同会话规则变化时提示 `Context version changed`，事件只记录摘要和前一版本摘要，不把规则正文或变化伪装成用户请求。实时规则布局显示当前版本；显式冻结布局仍用保存的规则快照，并提示用 `/reset` 或新会话刷新。
 - `MINI_DSH_TOOL_PREVIEW_BYTES` 控制有界工具结果进入模型历史的预览大小，默认 16,384 字节；超长结果可用 `read_tool_result` 回读。必须是正安全整数。
 - `MINI_DSH_BUDGET` 沿用 CLI 的 JSON 预算配置，可调整输入目标、主动压缩、调用/工具/token/时间上限；`/budget` 查看当前会话的有效预算。溢出兜底与主动压缩是两条路径，关闭或推迟主动压缩不会自动关闭兜底。
 - `MINI_DSH_PROFILE`、`MINI_DSH_WORKSPACE`、`MINI_DSH_PROJECT_DIRECTORY` 沿用既有配置；项目目录只决定初始规则上下文，不更改文件/Bash 工作区。

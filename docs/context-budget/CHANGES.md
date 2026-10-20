@@ -1,5 +1,13 @@
 # 改动与验收证据
 
+### R05b 项目规则版本变化提示（2026-10-20，本地通过，待 CI）
+
+系统提示装配时仅对作用范围内规则求 SHA-256，首次和变化时追加 `context/project-version`（新会话/重启后可恢复；只含摘要，不含规则正文）。实时布局在规则变化时显示 `Context version changed` 并给出当前规则；显式冻结布局仍返回原 `context/snapshot`，附上版本变化提示，要求 `/reset` 或新会话刷新。提示明确它是环境元数据，不是用户请求。事件验证和只读 inspect 接受新事件类型，旧日志无版本事件时正常读入。定向 25/25；完整 `pnpm test` 460 tests / 430 pass / 0 fail / 30 skipped、`pnpm check` syntax 166 files、`pnpm lint` 180 files / 0 diagnostics；增加快照前缀断言后定向 12/12 再通过。当前提交 CI 待验证，真实 provider 请求 0。
+
+### R05a 当前提交 CI 验收（2026-10-20）
+
+时钟与规则配置分离提交 `740a4533472f3f929e4f4cb24e520b5505ff1c60` 的 [CI 39350164894](https://github.com/BeforeLanding/mini-DSH/actions/runs/39350164894) Ubuntu/Windows × Node 20.18.1/22/24 六组全部通过；本地读数见下节，main 未合并。
+
 ### R05a 会话时钟与规则模式分离（2026-10-20，本地通过，待 CI）
 
 生产入口默认冻结会话时间，同时保留项目规则每轮实时读取；新增 `MINI_DSH_RUNTIME_TIME_MODE=live|frozen`，显式设置优先于兼容的 `MINI_DSH_CONTEXT_LAYOUT`，旧布局显式选择仍同时控制两项。直接 Harness 配置与历史评测中显式传入的 live/frozen 行为保持不变。有效时钟模式写入 capability manifest 和无密钥 `--show-config`，标示环境、`.env` 或默认来源；CLI 提示单独冻结时间的语义。默认同会话改规则、时钟不变及旧 live/frozen 映射定向测试通过。

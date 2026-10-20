@@ -71,6 +71,7 @@ export interface EventData {
   'session/config': { model: string; budget: BudgetPolicy }
   'session/reset': { epoch: number }
   'context/snapshot': { name: 'runtime:environment' | 'project:context'; text: string; source: 'new-session' | 'legacy-current' }
+  'context/project-version': { digest: string; previousDigest?: string }
   'run/start': { state: RunState }
   'run/error': { errorId: string; stage: 'model' | 'summary' | 'tool' | 'runtime'; errorKind: ProviderErrorKind; safeMessage: string; requestId?: string; toolCallId?: string; httpStatus?: number; retryable?: boolean; providerRequestId?: string }
   'run/finish': { state: RunState }
