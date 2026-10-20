@@ -8,6 +8,10 @@
 
 固定官方 Verified 数据集 revision `c104f840cc67f8b6eec6f759ebc8b2693d585d4a`，parquet SHA-256 `a45b1fe4e2f0c8390b2b2938ac83e92ed5979000856808f3679c07812e9e6dcd`；官方兼容 harness v3.0.17 commit `3f01bd622c0a22c00406139f69a234ef08225f22`。固定 `sympy__sympy-20590`（base `cffd4e0f…`），本地 500 行数据与 commit/hash/instance 预检通过。提交 `1007c68` 的手动 [CI 39387381791](https://github.com/BeforeLanding/mini-DSH/actions/runs/39387381791) 七 job 全绿；金标准 patch 仅用于无模型判分通道，两个不同 run_id 都为 resolved／0 error／无残留容器。镜像 digest `swebench/sweb.eval.x86_64.sympy_1776_sympy-20590@sha256:3a282752833ce34730ee0621e22033501c993f45742775ca57f04c9ff27178a0`。本机 Docker Desktop Service 停止，当前账户无法启动，但云端既有 CI runner 已完成判分。随后验证候选目录中文件工具与 Bash 同树、无密钥／oracle 挂载、失败清理与路径边界，不能把判分通道通过当完整候选适配。五题及正式付费运行需另行授权。
 
+候选适配作为下一独立提交：把 Docker exec runner 接入 `createHarness`，只映射候选目录到 `/testbed`，用脚本化零模型请求验证宿主文件工具写入→容器 Bash 读取、容器 Bash 写入→宿主文件工具读取。由官方镜像导出 base checkout，记录一致的 base commit；探针结束后才由控制器在候选目录应用公开已知 patch，导出预测并交给新的官方 run_id 判分。预期验收还包括无网络／密钥／oracle／Docker socket 挂载、超时撤销容器、失败清理、路径逃逸拒绝和镜像 digest；CI 实测通过之前不能标记完成。
+
+候选代码、脚本与手动 CI 步骤已写，本地 `pnpm check` syntax 184 files、`pnpm test` 489/459/0/30、`pnpm lint` 204 files／0 diagnostics；新增路径／env／超时定向契约 2/2。固定镜像上的候选容器与独立预测判分仍待手动 CI 实跑。候选脚本结束前不把公开 gold patch 输入 Agent。
+
 ### R11 可安装、可展示、可解释（2026-10-20，工作分支验收完成）
 
 新增 `LICENSE` 与 `NOTICE`：教程基线 `huangjunsen0406/mini-dsh`（MIT，止于 `c5fc9c4`）的版权声明保留，自有扩展写 Jeffery JIA；`unknown`/`CodexSandboxOffline` 不映射为个人，不做 `.mailmap` 或历史改写。包名改为有效的 `@beforelanding/mini-dsh`，版本 `0.1.0`，保留 `private: true` 防误发；`npm view` 确认两个名称当前均未注册。新增打包内的 `mini-dsh demo [fix]`：在临时项目里脚本化完成失败测试→读文件→修复→通过，零网络、零 key、不依赖 `test/fixtures`。新增 `docs/CASES.md`、`docs/ARCHITECTURE.md`、`docs/README.md`；README 首屏加入证据入口与 `demo fix`，本地 tarball 安装命令改为通配实际文件名。CI 新增 `package-install` job：在仓库外含空格路径安装 tarball，运行版本/帮助/show-config/demo/inspect，并拒绝包含 test/docs/samples/.env 的包。

@@ -33,6 +33,8 @@ This document describes the **protocol and offline adapters**, not a result. No 
 
 The existing CI workflow has an explicit `workflow_dispatch` input `swebench_poc`; ordinary PR CI leaves this resource-heavy job off. The local preflight passed with the pinned dataset and official checkout. The manually triggered [CI run 39387381791](https://github.com/BeforeLanding/mini-DSH/actions/runs/39387381791) scored the fixed gold patch twice with distinct run IDs: both official reports resolved the instance with zero errors and no leftover containers. The pulled image digest is `swebench/sweb.eval.x86_64.sympy_1776_sympy-20590@sha256:3a282752833ce34730ee0621e22033501c993f45742775ca57f04c9ff27178a0`. Local Docker Desktop remains unavailable to this account; the candidate workspace and file/Bash consistency portion remains a separate acceptance step.
 
+The next manual run also executes `scripts/swebench/poc-candidate.ts`. It exports the pinned base checkout to a candidate directory, checks that host file tools and Docker Bash share `/testbed`, verifies the single mount and disabled network, then stops that candidate container. Only after the scripted Agent ends does the controller apply the known public patch to the candidate and submit its exported diff to an independent official scoring run. The adapter's path and timeout contracts pass offline; the actual container and candidate prediction are **pending CI**.
+
 ## Commands
 
 ```sh

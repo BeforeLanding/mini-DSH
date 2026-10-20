@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### R10 候选路径与容器适配（2026-10-20，本地契约通过，手动 CI 待实测）
+
+新增 `scripts/swebench/docker-candidate.ts`：`createHarness` 的 Bash runner 将候选宿主 cwd 显式映射到容器 `/testbed`，不透传宿主 env；越界路径在 Docker 派发前拒绝，Docker exec 超时／取消后移除拥有的候选容器并禁止再次派发。`scripts/swebench/poc-candidate.ts` 从固定 digest 官方镜像导出 base checkout，核对 base commit 与干净 Git 状态；以 `--network none`、只读根、无权限提升、仅 `/testbed` 候选目录挂载运行脚本化零模型 harness。宿主 `write_file`→容器 Bash `cat`、容器 Bash 写入→宿主 `read_file` 双向验证后销毁候选容器；只有此后才把公开已知 patch 应用于候选目录，导出预测并用新 run_id 交官方判分器。独立测试 `test/swebench-candidate.test.ts` 2/2 覆盖路径逃逸、env 不传播与超时清理；`pnpm check` syntax 184 files、`pnpm test` 489/459/0/30、`pnpm lint` 204 files／0 diagnostics。Docker 实测尚未通过，不提前宣称候选 PoC 完成。
+
 ### R10 官方无模型判分通道实测（2026-10-20，通过，候选适配待验）
 
 提交 `1007c68` 的手动 [CI 39387381791](https://github.com/BeforeLanding/mini-DSH/actions/runs/39387381791) 七 job 全绿。官方 v3.0.17 判分器以固定 Verified 单题 `sympy__sympy-20590` 的公开 gold patch，使用 `mini-dsh-39387381791-gold-1` 与 `-gold-2` 两个 run_id 独立判分；两份官方报告均 resolved／0 error，runner 无该运行的残留容器。镜像 digest 为 `swebench/sweb.eval.x86_64.sympy_1776_sympy-20590@sha256:3a282752833ce34730ee0621e22033501c993f45742775ca57f04c9ff27178a0`；manifest 与日志已下载到独立输出目录 `D:\Agent\outputs\mini-dsh-swebench-poc\ci-39387381791`。provider 请求 0。此结果仅验收官方判分通道，不代表 mini-DSH 能解决该题；候选工作区与工具路径适配还需验证。
