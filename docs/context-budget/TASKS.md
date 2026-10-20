@@ -1,10 +1,10 @@
 # 任务清单
 
-### R11 可安装、可展示、可解释（2026-10-20，本地 Windows 安装通过，Ubuntu CI 待验证）
+### R11 可安装、可展示、可解释（2026-10-20，工作分支验收完成）
 
 新增 `LICENSE` 与 `NOTICE`：教程基线 `huangjunsen0406/mini-dsh`（MIT，止于 `c5fc9c4`）的版权声明保留，自有扩展写 Jeffery JIA；`unknown`/`CodexSandboxOffline` 不映射为个人，不做 `.mailmap` 或历史改写。包名改为有效的 `@beforelanding/mini-dsh`，版本 `0.1.0`，保留 `private: true` 防误发；`npm view` 确认两个名称当前均未注册。新增打包内的 `mini-dsh demo [fix]`：在临时项目里脚本化完成失败测试→读文件→修复→通过，零网络、零 key、不依赖 `test/fixtures`。新增 `docs/CASES.md`、`docs/ARCHITECTURE.md`、`docs/README.md`；README 首屏加入证据入口与 `demo fix`，本地 tarball 安装命令改为通配实际文件名。CI 新增 `package-install` job：在仓库外含空格路径安装 tarball，运行版本/帮助/show-config/demo/inspect，并拒绝包含 test/docs/samples/.env 的包。
 
-验收：Windows 含空格路径安装后 `--version`=0.1.0、`--help`、`--show-config`、`inspect` 样例与 `demo fix`（PASS）均通过；tarball 内容仅 `dist/`、`plugins.config.js`、README/LICENSE/package.json。本地完整 `pnpm test` 485 tests／455 pass／0 fail／30 skipped、`pnpm check` syntax 181 files、`pnpm lint` 201 files／0 diagnostics。Ubuntu 安装由新增 CI job 验证，待当前提交 CI。未发布 npm、未打 tag/Release、未部署 ECS；这些仍需明确授权。
+验收：Windows 含空格路径安装后 `--version`=0.1.0、`--help`、`--show-config`、`inspect` 样例与 `demo fix`（PASS）均通过；tarball 内容仅 `dist/`、`plugins.config.js`、README/LICENSE/package.json。本地完整 `pnpm test` 485 tests／455 pass／0 fail／30 skipped、`pnpm check` syntax 181 files、`pnpm lint` 201 files／0 diagnostics。`30ec880` 的 [CI 39382540216](https://github.com/BeforeLanding/mini-DSH/actions/runs/39382540216) 六 job 全绿，其中 `package-install` 在 Ubuntu 完成同一套 tarball 安装与零 key 命令验证。R11 在工作分支验收完成；未发布 npm、未打 tag/Release、未部署 ECS，这些仍需明确授权。
 
 ### R10 外部子集与上下文消融（2026-10-20，离线适配完成，运行阻塞）
 
@@ -12,11 +12,11 @@
 
 验收：协议测试 5/5；用 60 条合成元数据跑 CLI，得到 50 题、3 个 repository、4 臂、上限 $109.50、`paidRequests: 0`。**未执行**：真实 SWE-bench 数据集下载、任务镜像 pull、无模型判分 PoC、5 题开发批次、正式 50 题或任何付费模型调用。阻塞于数据集 revision/官方 harness commit、镜像 digest、同模型基线与付费授权；不预填“50 题约 $2”。
 
-### R09 公开合成证据包与离线复算（2026-10-20，进行中）
+### R09 公开合成证据包与离线复算（2026-10-20，工作分支验收完成）
 
 新增 `scripts/export-public-evidence.ts`：用脚本化 `repair` fixture 生成两条专门合成的完整轨迹——`normal-fix`（正常修复）与 `provider-recovery`（首次 429 后重试成功）。每条包含 `events.jsonl`、`patch.diff`、`verification.json`、`manifest.json`（schemaVersion、source commit/dirty、模型标签、预算、任务集与 seed、工具 schema digest、策略版本、环境、价格快照、缺失计数）、`report.json` 与 `SHA256SUMS`。事件在写入前把临时工作区/主目录替换为 `<tmp>`/`<home>`，不包含密钥、真实用户提示或私有工具输出。新增 `docs/EVALUATION.md` 与 `docs/RESULTS.md`，明确合成轨迹不是能力证据、历史 NX-45 原始日志保持私有。新增 `scripts/recompute-report.ts`：离线校验 checksum、从事件复算 report、用 `inspect` 确认完整可读，并重建/比对 RESULTS，不需要 API key 或网络。成本按 `(input−cacheRead)×inputPrice + cacheRead×cacheReadPrice + output×outputPrice` 计算；estimated 尝试单列不进成本，不用零填补。
 
-验收：新目录只需 `events.jsonl` 与已提交文件即可复算；`node dist/scripts/recompute-report.js docs/samples --check` 输出完全匹配；`test/public-evidence.test.ts` 在 CI 中执行同一校验，并断言 provider-recovery 至少有一次 retry；两条样例均通过 fixture 验收。真实 provider 请求 0；当前提交 CI 待验证。
+验收：新目录只需 `events.jsonl` 与已提交文件即可复算；`node dist/scripts/recompute-report.js docs/samples --check` 输出完全匹配；`test/public-evidence.test.ts` 在 CI 中执行同一校验，并断言 provider-recovery 至少有一次 retry；两条样例均通过 fixture 验收。样例提交 `f334b3e`，checksum 行尾修复 `acd193e`；`30ec880` 的 [CI 39382540216](https://github.com/BeforeLanding/mini-DSH/actions/runs/39382540216) 六组通过，R09 在工作分支验收完成。真实 provider 请求 0。
 
 ### R08 隔离测试进入 required CI（2026-10-20，工作分支验收完成）
 

@@ -1,5 +1,15 @@
 # 改动与验收证据
 
+### R09/R11 当前提交 CI 验收（2026-10-20）
+
+`30ec880a438bc74d9f2cc494cc85545d5372c761` 的 [CI 39382540216](https://github.com/BeforeLanding/mini-DSH/actions/runs/39382540216) 六个 job 全部通过：
+
+- Ubuntu/Windows × Node 22/24 四组均 **485 tests / 455 pass / 0 fail / 30 skipped**（30 条为需要 `MINI_DSH_V2_RUNTIME` 的隔离用例）。
+- `Isolation (ubuntu-latest, Node 22)`：**38 tests / 38 pass / 0 fail / 0 skipped**，包含真实 bwrap preflight 与 V2 fixture。
+- `Package install (ubuntu-latest, Node 22)`：从 tarball 在仓库外含空格路径安装，`--version`/`--help`/`--show-config`/`demo fix`/`inspect` 通过，包内无 test/docs/samples/.env。
+
+R09 的 `public-evidence` 测试在 CI 中验证 checksum、report 复算、inspect 完整性与 RESULTS 一致；R11 的 Ubuntu 安装验收完成。main 未合并；npm 发布、tag/Release 与 ECS 部署未执行。
+
 ### R11 许可证、离线 demo 与可安装包（2026-10-20，Windows 本地通过，Ubuntu CI 待验证）
 
 `LICENSE` 由 MIT 文本加两行版权组成：Jeffery JIA 与教程基线 huangjunsen（`huangjunsen0406/mini-dsh`，MIT，README 记录止于 `c5fc9c4`）；`NOTICE` 说明基线边界、不把 `unknown`/`CodexSandboxOffline` 映射为个人、不重写历史，以及直接依赖许可证（cordis MIT、dsh-mcp-client MIT、dotenv BSD-2-Clause）。`package.json` 改为 `@beforelanding/mini-dsh@0.1.0`，保留 `private: true`；`npm view` 确认 `@beforelanding/mini-dsh` 与 `mini-dsh` 当前均 404（未注册）。
