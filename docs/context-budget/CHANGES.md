@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### R05d CI 红灯定位与 Bash 验证测试隔离（2026-10-20，本地通过，待修复 CI）
+
+`e7b2985` 的 [CI 39351872653](https://github.com/BeforeLanding/mini-DSH/actions/runs/39351872653) 五组通过，Windows Node 20.18.1 为 430 pass / 1 fail / 30 skipped。失败在既有 `timeout and cancellation record real command outcomes while failed result persistence remains unknown`：`fs.access(.../executed)` 报 ENOENT。该用例用 800 ms Bash 超时同时驱动前半段“故意超时”与后半段“验证结果持久化失败”，后半段 `touch executed` 本应执行后才失败；在慢 runner 上短超时可能先杀掉 Bash。修复把两种行为拆成独立测试，后者使用正常 30 秒命令上限并在缺标记时带出工具实际错误；未跳过、降级或改变生产命令超时。定向 5/5、完整 462 tests / 432 pass / 0 fail / 30 skipped、check syntax 167 files、lint 181 files / 0 diagnostics。只有修复提交六组 CI 通过后 R05d 才算验收。
+
 ### R05d 摘要结构校验与拒绝语义（2026-10-20，本地通过，待 CI）
 
 摘要指令要求按顺序给出 `Primary Request`、`Completed Work`、`Pending Work`、`Key Evidence` 四节且各有正文。纯结构检查只判断章节与非空，不声称能验证模型写出的事实真伪；原始事件、带 seq 的来源和代码生成的 frame 范围仍可回读核对。无章节或空章节的完整摘要写 `context/summary-end` 的 `summary-invalid`，不写 `context/summary`，旧投影保持，自动失败闩计入它。输出未完成仍走 `summary-failed`，空串仍走 `summary-empty`，过长仍走 `summary-not-smaller`。合成模型夹具、CLI、预检、smoke 与零付费演示按新契约更新，NX-38 只在模型摘要是否保留判据那一行不同的对照仍成立。

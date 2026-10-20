@@ -2,7 +2,7 @@
 
 ### R05 稳定前缀与压缩策略（2026-10-20，进行中）
 
-R04 `0e19c0c` 的 [CI 39349743566](https://github.com/BeforeLanding/mini-DSH/actions/runs/39349743566) 六组通过。① 时间与规则选择分离提交 `740a453`：[CI 39350164894](https://github.com/BeforeLanding/mini-DSH/actions/runs/39350164894) 六组通过；生产默认时钟 frozen、规则 live，旧显式布局兼容。② 规则版本提交 `da7d728`：[CI 39350675148](https://github.com/BeforeLanding/mini-DSH/actions/runs/39350675148) 六组通过。③ 摘要目标及修订引用提交 `23e036c`：[CI 39351116486](https://github.com/BeforeLanding/mini-DSH/actions/runs/39351116486) 六组通过。④ 摘要结构校验：必须有目标、已完成、待完成、关键证据四节且各非空；无效摘要写 `summary-invalid` 并保留旧投影，仍记失败闩。合成夹具按新契约更新，完整 431 通过／30 跳过，零付费演示全部判定通过，check/lint 通过；待独立提交及 CI。⑤ 阈值、滞回与重复摘要抑制待实施。真实 provider 请求 0。
+R04 `0e19c0c` 的 [CI 39349743566](https://github.com/BeforeLanding/mini-DSH/actions/runs/39349743566) 六组通过。① 时间与规则选择分离提交 `740a453`：[CI 39350164894](https://github.com/BeforeLanding/mini-DSH/actions/runs/39350164894) 六组通过。② 规则版本提交 `da7d728`：[CI 39350675148](https://github.com/BeforeLanding/mini-DSH/actions/runs/39350675148) 六组通过。③ 摘要目标及修订引用提交 `23e036c`：[CI 39351116486](https://github.com/BeforeLanding/mini-DSH/actions/runs/39351116486) 六组通过。④ 摘要结构校验提交 `e7b2985`：本地 431 通过／30 跳过、演示通过，但 [CI 39351872653](https://github.com/BeforeLanding/mini-DSH/actions/runs/39351872653) 仅五组绿；Windows Node 20 的既有 Bash 验证组合用例在 800 ms 超时下误使随后的落盘失败探针未执行。已把超时/取消与落盘失败拆成独立测试，后者使用正常命令超时，并在缺标记时打印实际错误；本地完整 432 通过／30 跳过、check/lint 通过，待修复提交 CI。⑤ 阈值、滞回与重复摘要抑制待实施。真实 provider 请求 0。
 
 ### R04 保留真实命令尾部（2026-10-20，工作分支验收完成）
 

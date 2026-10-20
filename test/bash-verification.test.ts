@@ -65,7 +65,7 @@ test('verification rejects invalid scopes, limits and approval and cannot execut
   } finally { await root.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
 })
 
-test('timeout and cancellation record real command outcomes while failed result persistence remains unknown', async () => {
+test('timeout and cancellation record real command outcomes', async () => {
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'bash-verification-cancel-'))
   const { root, exec, report } = await boot(workspace, { timeoutMs: 800 })
   try {
@@ -77,12 +77,22 @@ test('timeout and cancellation record real command outcomes while failed result 
     setTimeout(() => controller.abort(), 350)
     assert.equal((await pending).isError, true)
     assert.equal((await report()).records[1].commandResult?.status, 'cancelled')
+  } finally { await root.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
+})
+
+test('failed result persistence remains unknown after the command ran', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'bash-verification-persist-'))
+  // The persistence check uses the ordinary command timeout. It does not depend on
+  // the 800 ms bound used to exercise the preceding timeout branch on slow CI hosts.
+  const { root } = await boot(workspace)
+  try {
     const persisted: SessionEvent[] = []
     const store: EventStore = { async append(event) { if (event.type === 'verification/result') throw new Error('result write failure'); persisted.push(event) }, async read() { return persisted }, async close() {} }
-    // Attach to a fresh session so earlier result events can be persisted normally.
+    // Attach to a fresh session so its intent and failed result write are isolated.
     const next = root.sessions.create({ workspace }); root.sessions.beginRun(next.id, {}, 'mock'); root.sessions.attachStore(next.id, store)
     const failure = await root.tools.execute('bash', { command: 'touch executed', verification: { files: ['a'] } }, { sessionId: next.id })
-    assert.equal(failure.isError, true); await fs.access(path.join(workspace, 'executed'))
+    assert.equal(failure.isError, true)
+    await fs.access(path.join(workspace, 'executed')).catch(cause => { throw new Error(`command did not run: ${root.tools.renderResult(failure)}`, { cause }) })
     assert.equal((await taskVerifications(root.sessions, next.id, file => root.sandbox.resolvePath(file), 1024, new AbortController().signal)).records[0].status, 'unknown')
   } finally { await root.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
 })

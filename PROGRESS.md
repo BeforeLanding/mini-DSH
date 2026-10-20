@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- **R05 稳定前缀与压缩策略进行中（2026-10-20）**：R05a `740a453` [CI 39350164894](https://github.com/BeforeLanding/mini-DSH/actions/runs/39350164894)、R05b `da7d728` [CI 39350675148](https://github.com/BeforeLanding/mini-DSH/actions/runs/39350675148)、R05c `23e036c` [CI 39351116486](https://github.com/BeforeLanding/mini-DSH/actions/runs/39351116486) 各六组通过。R05d 四节摘要结构校验与失败闩本地完整 431 通过／30 跳过、check/lint 通过，零付费压缩演示 9 项判定全部通过，待独立提交及 CI。滞回仍待实施，真实 provider 请求 0。
+- **R05 稳定前缀与压缩策略进行中（2026-10-20）**：R05a `740a453`、R05b `da7d728`、R05c `23e036c` 各六组 CI 通过。R05d `e7b2985` 本地 431 通过／30 跳过，但 [CI 39351872653](https://github.com/BeforeLanding/mini-DSH/actions/runs/39351872653) Windows Node 20 的既有 Bash 验证用例红灯，其他五组通过；800 ms 取消测试与后续落盘失败验证共用命令超时。已拆分隔离，后者正常超时并增强诊断；本地完整 432 通过／30 跳过、check/lint 通过，待当前修复提交 CI。滞回仍待实施，真实 provider 请求 0。
 
 - **R02 环境与中央授权工作分支验收完成（2026-10-19）**：R02a `70d4048` 的 [CI 39259211634](https://github.com/BeforeLanding/mini-DSH/actions/runs/39259211634)、R02b `7519753` 的 [CI 39261106135](https://github.com/BeforeLanding/mini-DSH/actions/runs/39261106135) 均六组通过。未知/第三方工具默认需人工批准，内置写/Bash 保留已有一次审批与复核。当前 MCP 仅 HTTP，无 stdio 启动点；后续增加 stdio 必须复用安全 env。env 边界不提供文件系统隔离。
 
