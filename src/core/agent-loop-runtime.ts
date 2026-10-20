@@ -6,7 +6,7 @@ import { CompactionRuntime } from './compaction-runtime.js'
 import type { CompactionTrigger, DeclineReason } from './compaction-runtime.js'
 import { estimateUsage } from './token-estimator.js'
 import { StreamJournal } from './stream-journal.js'
-import { requestModelLabel, toolSchemaDigest } from './token-calibration.js'
+import { TokenObservationCollector, applyTokenCalibration, calibrateTokenEstimate, requestModelLabel, toolSchemaDigest } from './token-calibration.js'
 import { ModelStreamError, ProviderError, runErrorData } from './model-error.js'
 import { retryDelay, waitForRetry } from './retry-policy.js'
 import { systemClock } from './run-budget-runtime.js'
@@ -85,8 +85,18 @@ export class AgentLoopRuntime {
             const schemas = this.tools.schemas()
             const schemaDigest = toolSchemaDigest(schemas)
             const modelLabel = requestModelLabel(agent.model)
+            // 只从已确认日志中的同模型、同工具 schema 主请求取样；model/start 保留原始估算，
+            // 防止把已放大的值反过来训练校准器。每条投影也记录本轮决策，供恢复与审计。
+            const calibration = policy.tokenCalibration ? (() => {
+                const collector = new TokenObservationCollector()
+                for (const event of this.sessions.confirmedEvents(sessionId)) collector.observe(event)
+                return calibrateTokenEstimate(collector.observations().filter(observation =>
+                    observation.kind === 'main' && observation.model === modelLabel && observation.schemaDigest === schemaDigest),
+                    { enabled: true, maxMultiplier: policy.tokenCalibrationMaxMultiplier })
+            })() : undefined
             const project = () => new ContextBudgetRuntime().project(this.sessions.visibleEvents(sessionId), state.taskId,
-                { system, tools: schemas, maxOutputTokens: policy.maxOutputTokens }, policy, events => this.sessions.deriveMessages(sessionId, events), inputTokens => control.outputAllowance(inputTokens))
+                { system, tools: schemas, maxOutputTokens: policy.maxOutputTokens }, policy, events => this.sessions.deriveMessages(sessionId, events),
+                inputTokens => control.outputAllowance(inputTokens), calibration ? raw => applyTokenCalibration(raw, calibration) : undefined)
             let projection = project()
             const absorb = () => { state.removedTaskIds = [...new Set([...state.removedTaskIds, ...projection.removedTaskIds])] }
             absorb()
@@ -100,7 +110,9 @@ export class AgentLoopRuntime {
             const recordProjection = () => {
                 maxOutputTokens = control.outputAllowance(projection.estimatedInputTokens) ?? 0
                 append(sessionId, 'context/projection', {
-                    requestId, estimatedInputTokens: projection.estimatedInputTokens, reservedOutputTokens: maxOutputTokens,
+                    requestId, estimatedInputTokens: projection.estimatedInputTokens,
+                    ...(calibration ? { rawEstimatedInputTokens: projection.rawEstimatedInputTokens, calibration } : {}),
+                    reservedOutputTokens: maxOutputTokens,
                     safetyMarginTokens: projection.safetyMarginTokens, removedTaskIds: projection.removedTaskIds,
                     // NX-39 因子 2 的读数：本轮装配出的系统提示的摘要。投影是「这一轮要发出去的东西」的记录，
                     // 系统提示正是其中一部分，记在这里就不必为了量前缀稳定性再多一条事件类型。
@@ -164,7 +176,8 @@ export class AgentLoopRuntime {
             let response: Awaited<ReturnType<LlmRuntime['chat']>>
             let attemptRequestId = requestId
             for (let attemptIndex = 0; ; attemptIndex++) {
-                append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId: attemptRequestId, estimatedInputTokens, model: modelLabel, schemaDigest })
+                append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId: attemptRequestId,
+                    estimatedInputTokens: projection.rawEstimatedInputTokens, model: modelLabel, schemaDigest })
                 await control.wait(() => this.sessions.flush(sessionId))
                 control.check()
                 state.counters.modelRequests++
@@ -187,7 +200,7 @@ export class AgentLoopRuntime {
                         throw error
                     }
                     const partial = error instanceof ModelStreamError ? error.partial : { content: journal.content, reasoningContent: journal.reasoningContent, usage: undefined }
-                    settle(attemptRequestId, partial.usage ?? estimateUsage(estimatedInputTokens, partial))
+                    settle(attemptRequestId, partial.usage ?? estimateUsage(projection.rawEstimatedInputTokens, partial))
                     append(sessionId, 'model/end', { requestId: attemptRequestId, complete: false })
                     const remaining = policy.maxActiveDurationMs === undefined ? Number.POSITIVE_INFINITY : policy.maxActiveDurationMs - control.activeDurationMs
                     const delay = !journal.content && !journal.reasoningContent &&
@@ -208,7 +221,7 @@ export class AgentLoopRuntime {
                     throw error
                 }
                 journal.close()
-                settle(attemptRequestId, response.usage ?? estimateUsage(estimatedInputTokens, response))
+                settle(attemptRequestId, response.usage ?? estimateUsage(projection.rawEstimatedInputTokens, response))
                 append(sessionId, 'model/end', { requestId: attemptRequestId, complete: response.complete !== false, finishReason: response.finishReason })
                 break
             }

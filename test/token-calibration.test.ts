@@ -8,7 +8,8 @@ import { parseLog } from '../src/core/event-store.js'
 import { formatInspect, inspectSession } from '../src/core/session-inspect.js'
 import type { SessionEvent } from '../src/core/contracts.js'
 import type { Usage } from '../src/core/budget.js'
-import { TokenObservationCollector, applyTokenCalibration, calibrateTokenEstimate, collectTokenErrors } from '../src/core/token-calibration.js'
+import { TokenObservationCollector, applyTokenCalibration, calibrateTokenEstimate, collectTokenErrors, toolSchemaDigest } from '../src/core/token-calibration.js'
+import { harness } from './harness.js'
 
 const usage = (inputTokens: number, source: Usage['source'] = 'provider'): Usage =>
   ({ inputTokens, outputTokens: 1, totalTokens: inputTokens + 1, source, uncertain: source === 'estimated' })
@@ -134,4 +135,59 @@ test('the collector is usable incrementally and its summary is stable', () => {
   assert.deepEqual(first, second)
   assert.equal(collector.observations().length, 1)
   assert.equal(first.medianRelativeError, 0)
+})
+
+function seedProviderObservations(runtime: SessionRuntime, sessionId: string) {
+  const state = runtime.beginRun(sessionId, {}, 'mock/test')
+  const scope = { taskId: state.taskId, runId: state.runId }
+  for (let index = 0; index < 20; index++) {
+    const requestId = `seed-${index}`
+    runtime.append(sessionId, 'model/start', { ...scope, requestId, estimatedInputTokens: 100, model: 'mock/test', schemaDigest: toolSchemaDigest([]) }, state)
+    runtime.append(sessionId, 'model/usage', { ...scope, requestId, usage: usage(120) }, state)
+    runtime.append(sessionId, 'model/end', { requestId, complete: true }, state)
+  }
+  runtime.finishRun(state, 'completed')
+}
+
+test('runtime calibration uses only prior provider samples, records raw estimates, and can stop a request before dispatch', async () => {
+  let calls = 0
+  const make = () => {
+    const h = harness(async () => { calls++; return { content: 'done', usage: usage(120) } })
+    seedProviderObservations(h.sessions, h.session.id)
+    return h
+  }
+  const first = make()
+  await first.agent.send('hello', { budget: { tokenCalibration: true, tokenCalibrationMaxMultiplier: 2 } })
+  const projection = first.session.events.filter(event => event.type === 'context/projection').at(-1)!
+  assert.equal(projection.data.calibration?.reason, 'applied')
+  assert.equal(projection.data.calibration?.samples, 20)
+  assert.equal(projection.data.calibration?.multiplier, 1.32)
+  const raw = projection.data.rawEstimatedInputTokens!
+  assert.equal(projection.data.estimatedInputTokens, Math.ceil(raw * 1.32))
+  const start = first.session.events.filter(event => event.type === 'model/start').at(-1)!
+  assert.equal(start.data.estimatedInputTokens, raw)
+  const replay = new TokenObservationCollector()
+  for (const event of parseLog(first.session.events.map(event => JSON.stringify(event) + '\n').join(''), first.session.id)) replay.observe(event)
+  assert.deepEqual(calibrateTokenEstimate(replay.observations().filter(item => item.requestId.startsWith('seed-')), { enabled: true, maxMultiplier: 2 }), projection.data.calibration)
+
+  const second = make()
+  const before = calls
+  await assert.rejects(second.agent.send('hello', { budget: {
+    tokenCalibration: true, tokenCalibrationMaxMultiplier: 2, inputTargetTokens: raw + 1,
+    contextWindowTokens: 8192, maxOutputTokens: 256, minimumOutputTokens: 1,
+  } }), /context_overflow/)
+  assert.equal(calls, before)
+  assert.equal(second.session.events.filter(event => event.type === 'model/start').length, 20)
+  const blocked = second.session.events.filter(event => event.type === 'context/projection').at(-1)!
+  assert.ok(blocked.data.estimatedInputTokens > blocked.data.rawEstimatedInputTokens!)
+})
+
+test('invalid calibration policy is rejected and default runtime projections remain uncalibrated', async () => {
+  const h = harness(async () => ({ content: 'done' }))
+  seedProviderObservations(h.sessions, h.session.id)
+  await assert.rejects(h.agent.send('hello', { budget: { tokenCalibrationMaxMultiplier: Number.NaN } }), /invalid budget tokenCalibrationMaxMultiplier/)
+  await h.agent.send('hello')
+  const projection = h.session.events.filter(event => event.type === 'context/projection').at(-1)!
+  assert.equal(projection.data.calibration, undefined)
+  assert.equal(projection.data.rawEstimatedInputTokens, undefined)
 })

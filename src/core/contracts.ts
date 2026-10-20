@@ -86,7 +86,7 @@ export interface EventData {
   // 由评估侧现算：付费跑留下的只有这份日志，而「第 2 轮起系统提示与前一轮逐字相同」这条预注册要求报的量
   // 除了这里没有第二个来源。**摘要而不是原文**：系统提示含工作区内容，整段入库会让证据体积随轮次膨胀，
   // 而判据只问「两轮是不是同一串」。
-  'context/projection': { requestId?: string; estimatedInputTokens: number; reservedOutputTokens: number; safetyMarginTokens: number; removedTaskIds: string[]; systemPromptDigest?: string }
+  'context/projection': { requestId?: string; estimatedInputTokens: number; rawEstimatedInputTokens?: number; calibration?: import('./token-calibration.js').CalibrationState; reservedOutputTokens: number; safetyMarginTokens: number; removedTaskIds: string[]; systemPromptDigest?: string }
   'context/summary-start': { trigger: 'pressure' | 'context-overflow' | 'explicit'; budgetTokens: number; projectedTokens: number; plannedStart: number; plannedEnd: number; plannedNodes: number }
   'context/summary-end': { startSeq: number; outcome: { kind: 'applied' } | { kind: 'declined'; reason: 'summary-failed' | 'summary-empty' | 'summary-invalid' | 'summary-not-smaller' | 'turn-started' | 'plan-stale' | 'agent-gone' | 'cancelled' | 'unclosed' } }
   'context/pressure-suppressed': { reason: 'above-target' | 'insufficient-reduction'; beforeTokens: number; afterTokens: number; targetTokens: number }

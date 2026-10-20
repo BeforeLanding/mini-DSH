@@ -1,5 +1,13 @@
 # 任务清单
 
+### R06 后续：运行时可选校准（2026-10-20，本地验收完成，待 CI）
+
+独立验收步骤：运行策略新增默认关闭的 `tokenCalibration` 与有界 `tokenCalibrationMaxMultiplier`。主请求只从当前会话已确认的 provider usage 重建同模型／同工具 schema 样本；投影与硬输入约束使用不小于原估算的值，`model/start` 保留原始估算以免反馈污染。投影事件记录校准版本、参数、样本数及原始／有效估算；同一日志可复算。摘要请求仍只观测，未启用运行时校准。定向 7/7、完整 487 tests／457 pass／0 fail／30 platform skip、check syntax 181 files、lint 201 files／0 diagnostics。当前提交 CI 待验证；默认开启须另有真实观测收益证据。
+
+### R10 后续：官方无模型判分 PoC（2026-10-20，待 R06 验收）
+
+先固定官方数据集／harness／任务镜像版本，建立候选目录与容器路径的一致性适配，并用一条公开已知 patch 在独立判分容器实测。验证文件和 Bash 同树、无密钥／oracle 挂载、失败清理与重复判分；记录镜像 digest、命令、结果和环境限制。五题及正式付费运行需另行授权。
+
 ### R11 可安装、可展示、可解释（2026-10-20，工作分支验收完成）
 
 新增 `LICENSE` 与 `NOTICE`：教程基线 `huangjunsen0406/mini-dsh`（MIT，止于 `c5fc9c4`）的版权声明保留，自有扩展写 Jeffery JIA；`unknown`/`CodexSandboxOffline` 不映射为个人，不做 `.mailmap` 或历史改写。包名改为有效的 `@beforelanding/mini-dsh`，版本 `0.1.0`，保留 `private: true` 防误发；`npm view` 确认两个名称当前均未注册。新增打包内的 `mini-dsh demo [fix]`：在临时项目里脚本化完成失败测试→读文件→修复→通过，零网络、零 key、不依赖 `test/fixtures`。新增 `docs/CASES.md`、`docs/ARCHITECTURE.md`、`docs/README.md`；README 首屏加入证据入口与 `demo fix`，本地 tarball 安装命令改为通配实际文件名。CI 新增 `package-install` job：在仓库外含空格路径安装 tarball，运行版本/帮助/show-config/demo/inspect，并拒绝包含 test/docs/samples/.env 的包。

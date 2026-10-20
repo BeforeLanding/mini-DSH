@@ -20,6 +20,8 @@ export interface BudgetPolicy {
   compactionMaxTokens?: number
   maxSummaryFailures?: number
   maxOverflowRetries?: number
+  tokenCalibration?: boolean
+  tokenCalibrationMaxMultiplier?: number
   auto?: boolean
 }
 export const CLI_BUDGET: Readonly<BudgetPolicy> = Object.freeze({
@@ -35,8 +37,8 @@ const positive = new Set(['maxOutputTokens', 'minimumOutputTokens', 'contextWind
 // 比率与开关不是安全整数，单独放行——但只放行这两个集合里的键，其余仍走整数判定。
 // 压缩比率落在 0 < v ≤ 1：0 会让阈值恒为真，超过 1 则永远触发不了，两者都不是比率。
 const fractions = new Set(['compactionRatio', 'retainRatio', 'postCompactionTargetRatio'])
-const booleans = new Set(['auto'])
-const keys = new Set(Object.keys(CLI_BUDGET).concat('contextWindowTokens', 'compactionBudgetTokens', 'postCompactionTargetRatio'))
+const booleans = new Set(['auto', 'tokenCalibration'])
+const keys = new Set(Object.keys(CLI_BUDGET).concat('contextWindowTokens', 'compactionBudgetTokens', 'postCompactionTargetRatio', 'tokenCalibration', 'tokenCalibrationMaxMultiplier'))
 export function resolveBudget(...layers: (BudgetPolicy | undefined)[]): Readonly<BudgetPolicy> {
   const result: BudgetPolicy = {}
   for (const layer of layers) {
@@ -48,6 +50,8 @@ export function resolveBudget(...layers: (BudgetPolicy | undefined)[]): Readonly
         if (typeof value !== 'boolean') throw new Error(`invalid budget ${key}: expected a boolean`)
       } else if (fractions.has(key)) {
         if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value > 1) throw new Error(`invalid budget ${key}: expected a fraction in (0, 1]`)
+      } else if (key === 'tokenCalibrationMaxMultiplier') {
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < 1 || value > 10) throw new Error(`invalid budget ${key}: expected a finite number in [1, 10]`)
       } else if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < (positive.has(key) ? 1 : 0)) {
         throw new Error(`invalid budget ${key}: expected ${positive.has(key) ? 'positive' : 'nonnegative'} safe integer`)
       }
