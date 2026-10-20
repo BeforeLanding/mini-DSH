@@ -4,6 +4,8 @@
 
 ## 当前状态
 
+- **R10 发布镜像与 pinned base 的源码树不一致（2026-10-20）**：[CI 39389944509](https://github.com/BeforeLanding/mini-DSH/actions/runs/39389944509) 实测两棵 tree 分别为 `67df329…`／`7d23c02…`，候选预检保持红灯。下一步看受限变更路径，准备来源可追溯的正确 base 镜像后再跑候选与官方判分；此前 gold 成绩不能用作环境等价结论。
+
 - **R10 镜像已确认含数据集 base 对象，源码树待核对（2026-10-20）**：[诊断 CI 39389384812](https://github.com/BeforeLanding/mini-DSH/actions/runs/39389384812) 确认导出 Git 根正确、`cffd4e0…` 为镜像内 commit，镜像额外 HEAD `5efaed…` 标题为 `SWE-bench`。下一次手动 CI 将比较整棵 tree；只有完全同树才重置候选 HEAD 并继续文件/Bash/官方判分，树不同必须重新准备环境。
 
 - **R10 候选实测发现固定镜像 checkout 与数据集 base 不一致（2026-10-20）**：[CI 39388591825](https://github.com/BeforeLanding/mini-DSH/actions/runs/39388591825) 在候选步骤红灯，镜像导出 HEAD `5efaed…`，数据集要求 `cffd4e…`；Agent 尚未运行。已增加 Git 根／对象诊断，待复跑决定是否必须重建镜像。此前 gold 判分是评分通道证据，不能视作环境等价证明。

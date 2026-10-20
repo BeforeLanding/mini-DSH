@@ -16,6 +16,8 @@
 
 [诊断 run 39389384812](https://github.com/BeforeLanding/mini-DSH/actions/runs/39389384812) 确认 Git 根正确、base 对象存在（commit）、HEAD 标题为 `SWE-bench`。已把下一道门槛改为比较 HEAD 与 base 的整棵 Git tree 哈希；只有字节树完全相同时才能把候选 HEAD 重置到 base 后继续。若 tree 不同仍需重建镜像，不能仅靠 `git reset` 掩盖环境差异。CI 待复跑。
 
+[tree run 39389944509](https://github.com/BeforeLanding/mini-DSH/actions/runs/39389944509) 证实镜像 tree `67df329450c30a6d53661f9c01ce3d486df750ba` 与数据集 base tree `7d23c0279ecd62722b2c0d71d6596bbd9eabdd32` 不同，继续红灯。下一次只输出受限的变更路径列表，确定额外文件来源；根据差异准备与 pinned base 匹配的镜像，再重跑候选与官方判分。原始发布镜像的两次 gold 成绩仍只是其自身评分通道证据。
+
 ### R11 可安装、可展示、可解释（2026-10-20，工作分支验收完成）
 
 新增 `LICENSE` 与 `NOTICE`：教程基线 `huangjunsen0406/mini-dsh`（MIT，止于 `c5fc9c4`）的版权声明保留，自有扩展写 Jeffery JIA；`unknown`/`CodexSandboxOffline` 不映射为个人，不做 `.mailmap` 或历史改写。包名改为有效的 `@beforelanding/mini-dsh`，版本 `0.1.0`，保留 `private: true` 防误发；`npm view` 确认两个名称当前均未注册。新增打包内的 `mini-dsh demo [fix]`：在临时项目里脚本化完成失败测试→读文件→修复→通过，零网络、零 key、不依赖 `test/fixtures`。新增 `docs/CASES.md`、`docs/ARCHITECTURE.md`、`docs/README.md`；README 首屏加入证据入口与 `demo fix`，本地 tarball 安装命令改为通配实际文件名。CI 新增 `package-install` job：在仓库外含空格路径安装 tarball，运行版本/帮助/show-config/demo/inspect，并拒绝包含 test/docs/samples/.env 的包。

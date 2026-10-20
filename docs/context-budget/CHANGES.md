@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### R10 发布镜像与数据集源码树确实不同（2026-10-20，拒绝候选，待差异归因）
+
+[CI 39389944509](https://github.com/BeforeLanding/mini-DSH/actions/runs/39389944509) 的两次 gold 判分仍通过，但候选预检确认发布镜像 HEAD tree `67df329450c30a6d53661f9c01ce3d486df750ba`，数据集 base tree `7d23c0279ecd62722b2c0d71d6596bbd9eabdd32`，并非只差提交元数据。程序仍在 Agent 启动前失败，不能用 `git reset` 掩盖差异。已加受限的变更路径诊断（不输出源码或 patch），下一次实测用于判断镜像内有哪些额外文件；若来源不适配，要另建固定 base 的镜像并标明派生环境，不能称其为原发布镜像。
+
 ### R10 镜像 HEAD 与源码树分离核验（2026-10-20，本地检查通过，CI 待复跑）
 
 [诊断 run 39389384812](https://github.com/BeforeLanding/mini-DSH/actions/runs/39389384812) 确认导出 Git 根就是候选目录，数据集的 `cffd4e0…` 对象在镜像内存在且类型为 commit；镜像 HEAD `5efaed…` 标题为 `SWE-bench`。因此不能仅以 HEAD 不同断言文件内容不同，也不能忽略差异。新增 HEAD/base 整棵 Git tree 哈希比较：只在完全相同且 base 对象存在时将候选 HEAD 重置到声明的 base；树不同则继续红灯并记录两棵树哈希。无付费请求，实际树是否相同待下一次手动 CI。

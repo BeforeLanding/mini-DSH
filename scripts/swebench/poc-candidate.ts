@@ -55,9 +55,10 @@ try {
   const imageTree = command('git', ['rev-parse', 'HEAD^{tree}'], { cwd: candidate })
   const baseTree = baseObject.status === 0 ? command('git', ['rev-parse', `${official.baseCommit}^{tree}`], { cwd: candidate }) : 'absent'
   if (path.resolve(checkoutRoot) !== path.resolve(candidate) || baseObject.status !== 0 || imageTree !== baseTree) {
+    const changedPaths = baseObject.status === 0 ? command('git', ['diff', '--name-status', official.baseCommit, 'HEAD'], { cwd: candidate }).slice(0, 1600) : 'unavailable'
     throw new Error(`official image checkout mismatch: root=${checkoutRoot}; imageHead=${imageHead}; ` +
       `datasetBase=${official.baseCommit}; baseObject=${baseObject.status === 0 ? baseObject.stdout.trim() : 'absent'}; ` +
-      `imageTree=${imageTree}; baseTree=${baseTree}; ` +
+      `imageTree=${imageTree}; baseTree=${baseTree}; changedPaths=${JSON.stringify(changedPaths)}; ` +
       `imageHeadSubject=${command('git', ['show', '-s', '--format=%s', 'HEAD'], { cwd: candidate })}`)
   }
   // Official images may add a metadata-only SWE-bench commit. Accept it only
