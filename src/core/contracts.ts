@@ -88,6 +88,7 @@ export interface EventData {
   'context/projection': { requestId?: string; estimatedInputTokens: number; reservedOutputTokens: number; safetyMarginTokens: number; removedTaskIds: string[]; systemPromptDigest?: string }
   'context/summary-start': { trigger: 'pressure' | 'context-overflow' | 'explicit'; budgetTokens: number; projectedTokens: number; plannedStart: number; plannedEnd: number; plannedNodes: number }
   'context/summary-end': { startSeq: number; outcome: { kind: 'applied' } | { kind: 'declined'; reason: 'summary-failed' | 'summary-empty' | 'summary-invalid' | 'summary-not-smaller' | 'turn-started' | 'plan-stale' | 'agent-gone' | 'cancelled' | 'unclosed' } }
+  'context/pressure-suppressed': { reason: 'above-target' | 'insufficient-reduction'; beforeTokens: number; afterTokens: number; targetTokens: number }
   'context/summary': { startSeq: number; trigger: 'pressure' | 'context-overflow' | 'explicit'; budgetTokens: number; projectedTokens: number; shadowedSeqs: number[]; shadowedTokens: number; summaryTokens: number; retainedNodes: number; summary: string; frame: string }
   'model/fragment': { requestId: string; content: string; reasoningContent: string }
   'model/end': { requestId: string; complete: boolean; finishReason?: string }

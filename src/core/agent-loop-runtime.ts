@@ -106,7 +106,8 @@ export class AgentLoopRuntime {
             recordProjection()
 
             // NX-34 §4：压缩插在裁剪之后、抛错之前。免费的先做完，贵的才出手。
-            const overflowing = () => (policy.inputTargetTokens !== undefined && projection.estimatedInputTokens > policy.inputTargetTokens) ||
+            const hardInputCapTokens = policy.inputTargetTokens
+            const overflowing = () => (hardInputCapTokens !== undefined && projection.estimatedInputTokens > hardInputCapTokens) ||
                 (policy.contextWindowTokens !== undefined && projection.estimatedInputTokens + maxOutputTokens + projection.safetyMarginTokens > policy.contextWindowTokens)
             const compactionBudget = policy.compactionBudgetTokens ?? policy.inputTargetTokens
             const attempt = async (trigger: CompactionTrigger) => {
@@ -126,9 +127,19 @@ export class AgentLoopRuntime {
             }
             // pressure 是主路径：装得下但已逼近阈值。它只该做一次——压完还在带内说明这次压缩没解决问题，
             // 再压一遍只是重复花钱。context-overflow 是兜底，按 maxOverflowRetries 限次，防止一步内无限重试。
-            const pressureLine = compactionBudget === undefined ? undefined : compactionBudget * (policy.compactionRatio ?? 0.8)
-            if (!pressureSuppressed && !overflowing() && pressureLine !== undefined && projection.estimatedInputTokens > pressureLine) {
-                if (await attempt('pressure') && projection.estimatedInputTokens > pressureLine) pressureSuppressed = true
+            const pressureTriggerTokens = compactionBudget === undefined ? undefined : Math.floor(compactionBudget * (policy.compactionRatio ?? 0.8))
+            const postCompactionTargetTokens = compactionBudget === undefined ? undefined : Math.floor(compactionBudget * (policy.postCompactionTargetRatio ?? 0.65))
+            if (!pressureSuppressed && !overflowing() && pressureTriggerTokens !== undefined && projection.estimatedInputTokens > pressureTriggerTokens) {
+                const beforeTokens = projection.estimatedInputTokens
+                if (await attempt('pressure')) {
+                    const afterTokens = projection.estimatedInputTokens
+                    const insufficientReduction = beforeTokens - afterTokens < Math.max(64, Math.ceil(beforeTokens * 0.05))
+                    if (insufficientReduction || (postCompactionTargetTokens !== undefined && afterTokens > postCompactionTargetTokens)) {
+                        pressureSuppressed = true
+                        append(sessionId, 'context/pressure-suppressed', { reason: insufficientReduction ? 'insufficient-reduction' : 'above-target',
+                            beforeTokens, afterTokens, targetTokens: postCompactionTargetTokens! })
+                    }
+                }
             }
             for (let retries = 0; overflowing() && retries < (policy.maxOverflowRetries ?? 1); retries++) {
                 if (!await attempt('context-overflow')) break
@@ -330,7 +341,7 @@ export class AgentLoopRuntime {
     }
 
     // §8.4：失败闩从**日志折叠**得出，不是内存计数器——这样事后可解释。作用域是当前 run：新 run
-    // （含 /continue）重获机会。只有前三个原因是「这个摘要器不行」，它们计数；applied 归零；其余原因
+    // （含 /continue）重获机会。只有四个摘要内容/调用原因计数；applied 归零；其余原因
     // 说的是「环境变了」，既不计入也不清零。
     #summaryFailures(sessionId: string, state: RunState) {
         const counting = new Set<DeclineReason>(['summary-failed', 'summary-empty', 'summary-invalid', 'summary-not-smaller'])

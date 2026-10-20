@@ -19,7 +19,7 @@ export interface InspectReport {
 }
 
 type Request = { kind: 'main' | 'summary'; rejected: boolean; usage: boolean; estimated: boolean }
-const knownTypes = new Set(['verification/start', 'verification/result', 'file/baseline', 'file/observed', 'file/change', 'file/change-result', 'session/start', 'session/config', 'session/reset', 'context/snapshot', 'context/project-version', 'user/message', 'assistant/message', 'assistant/tool_calls', 'tool/result', 'run/start', 'run/error', 'run/finish', 'model/start', 'model/retry', 'model/rejected', 'context/projection', 'context/summary-start', 'context/summary-end', 'context/summary', 'model/fragment', 'model/end', 'model/usage', 'tool/start'])
+const knownTypes = new Set(['verification/start', 'verification/result', 'file/baseline', 'file/observed', 'file/change', 'file/change-result', 'session/start', 'session/config', 'session/reset', 'context/snapshot', 'context/project-version', 'user/message', 'assistant/message', 'assistant/tool_calls', 'tool/result', 'run/start', 'run/error', 'run/finish', 'model/start', 'model/retry', 'model/rejected', 'context/projection', 'context/summary-start', 'context/summary-end', 'context/pressure-suppressed', 'context/summary', 'model/fragment', 'model/end', 'model/usage', 'tool/start'])
 const safeToolName = (name: string | undefined) => name && /^[\w.:-]{1,80}$/.test(name) ? name : undefined
 
 function warning(error: unknown, line: number, byteOffset: number): InspectWarning {
@@ -69,6 +69,7 @@ export async function inspectSession(file: string, options: { trace?: boolean } 
       else if (event.type === 'context/snapshot') detail = `${event.data.name}: ${event.data.source}`
       else if (event.type === 'context/project-version') detail = event.data.previousDigest ? 'changed' : 'initial'
       else if (event.type === 'context/summary-end') detail = event.data.outcome.kind
+      else if (event.type === 'context/pressure-suppressed') detail = event.data.reason
       report.trace.events.push({ seq: event.seq, type: event.type, ...(detail ? { detail } : {}) })
       if (report.trace.events.length > 40) { report.trace.events.shift(); report.trace.truncated = true }
     }

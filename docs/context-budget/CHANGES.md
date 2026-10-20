@@ -1,5 +1,17 @@
 # 改动与验收证据
 
+### R05e 阈值分名与压缩滞回（2026-10-20，本地通过，待 CI）
+
+新增 `postCompactionTargetRatio`（默认 0.65，0 < v ≤ 1，随 `resolveBudget` 校验）并与现有 `inputTargetTokens`、`compactionRatio` 分名：硬输入上限、压力触发线（`compactionBudgetTokens × 0.8`）、压缩后目标线（`compactionBudgetTokens × 0.65`）。一次压力压缩应用后重新投影，若仍高于目标线或减少量小于 `max(64, 5%)`，本 run 将 `pressureSuppressed` 置真并追加 `context/pressure-suppressed`，含 `above-target`／`insufficient-reduction`、压缩前后与目标 token；新事件同步进入 contracts、JSONL 运行时校验、inspect 已知类型与轨迹详情，旧日志读取不受影响。溢出兜底仍按 `maxOverflowRetries` 出现，显式 `/compact` 不受抑制；抑制只持续当前 run。
+
+测试更新既有“压缩后仍在压力线以上”用例并新增 52k–65k 不可压缩前缀用例：同一 run 内只发起 1 次压力摘要、记录 1 条抑制事件、目标线取 `floor(65,536 × 0.65)`。同时修正 DECISIONS 中因插入代码而漂移的 `agent-loop-runtime.ts` 锚点（314→325），不放宽 `decisions-doc` 护栏。
+
+本地 `pnpm check` syntax 167 files、`pnpm test` 463 tests / 433 pass / 0 fail / 30 skipped、`pnpm lint` 181 files / 0 diagnostics。真实 provider 请求 0；当前提交 CI 待验证。
+
+### R05d 修复提交 CI 验收（2026-10-20）
+
+`fd0277a535aa696cf9d0837d59a987979dc5dbba` 的 [CI 39352323711](https://github.com/BeforeLanding/mini-DSH/actions/runs/39352323711) Ubuntu/Windows × Node 20.18.1/22/24 六组全部通过；R05d 验收完成，main 未合并。
+
 ### R05d CI 红灯定位与 Bash 验证测试隔离（2026-10-20，本地通过，待修复 CI）
 
 `e7b2985` 的 [CI 39351872653](https://github.com/BeforeLanding/mini-DSH/actions/runs/39351872653) 五组通过，Windows Node 20.18.1 为 430 pass / 1 fail / 30 skipped。失败在既有 `timeout and cancellation record real command outcomes while failed result persistence remains unknown`：`fs.access(.../executed)` 报 ENOENT。该用例用 800 ms Bash 超时同时驱动前半段“故意超时”与后半段“验证结果持久化失败”，后半段 `touch executed` 本应执行后才失败；在慢 runner 上短超时可能先杀掉 Bash。修复把两种行为拆成独立测试，后者使用正常 30 秒命令上限并在缺标记时带出工具实际错误；未跳过、降级或改变生产命令超时。定向 5/5、完整 462 tests / 432 pass / 0 fail / 30 skipped、check syntax 167 files、lint 181 files / 0 diagnostics。只有修复提交六组 CI 通过后 R05d 才算验收。

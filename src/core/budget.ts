@@ -15,6 +15,7 @@ export interface BudgetPolicy {
   // 写死成 65,536 会让调整输入目标时压缩阈值不再跟着走。
   compactionBudgetTokens?: number
   compactionRatio?: number
+  postCompactionTargetRatio?: number
   retainRatio?: number
   compactionMaxTokens?: number
   maxSummaryFailures?: number
@@ -33,9 +34,9 @@ export const CLI_BUDGET: Readonly<BudgetPolicy> = Object.freeze({
 const positive = new Set(['maxOutputTokens', 'minimumOutputTokens', 'contextWindowTokens', 'inputTargetTokens', 'requestTimeoutMs', 'approvalTimeoutMs', 'finalizationTimeoutMs', 'compactionBudgetTokens', 'compactionMaxTokens'])
 // 比率与开关不是安全整数，单独放行——但只放行这两个集合里的键，其余仍走整数判定。
 // 压缩比率落在 0 < v ≤ 1：0 会让阈值恒为真，超过 1 则永远触发不了，两者都不是比率。
-const fractions = new Set(['compactionRatio', 'retainRatio'])
+const fractions = new Set(['compactionRatio', 'retainRatio', 'postCompactionTargetRatio'])
 const booleans = new Set(['auto'])
-const keys = new Set(Object.keys(CLI_BUDGET).concat('contextWindowTokens', 'compactionBudgetTokens'))
+const keys = new Set(Object.keys(CLI_BUDGET).concat('contextWindowTokens', 'compactionBudgetTokens', 'postCompactionTargetRatio'))
 export function resolveBudget(...layers: (BudgetPolicy | undefined)[]): Readonly<BudgetPolicy> {
   const result: BudgetPolicy = {}
   for (const layer of layers) {

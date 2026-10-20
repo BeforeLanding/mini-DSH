@@ -62,13 +62,15 @@ function seedPriorTask(h: H, policy: BudgetPolicy) {
 }
 
 test('budget policy carries compaction knobs and rejects values outside their domain', () => {
-  const policy = resolveBudget({ compactionRatio: 0.8, retainRatio: 0.16, auto: true, compactionBudgetTokens: 1000, maxOverflowRetries: 0 })
+  const policy = resolveBudget({ compactionRatio: 0.8, retainRatio: 0.16, postCompactionTargetRatio: 0.65, auto: true, compactionBudgetTokens: 1000, maxOverflowRetries: 0 })
   assert.equal(policy.compactionRatio, 0.8)
   assert.equal(policy.retainRatio, 0.16)
+  assert.equal(policy.postCompactionTargetRatio, 0.65)
   assert.equal(policy.auto, true)
   assert.equal(policy.maxOverflowRetries, 0)
   for (const value of [0, -0.5, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) assert.throws(() => resolveBudget({ compactionRatio: value }), /fraction/)
   for (const value of [0, 2]) assert.throws(() => resolveBudget({ retainRatio: value }), /fraction/)
+  for (const value of [0, 2]) assert.throws(() => resolveBudget({ postCompactionTargetRatio: value }), /fraction/)
   assert.throws(() => resolveBudget({ auto: 1 as unknown as boolean }), /boolean/)
   assert.throws(() => resolveBudget({ compactionBudgetTokens: 0 }), /positive/)
 })
@@ -127,6 +129,9 @@ test('pressure does not repeatedly summarize a prefix that stays above the press
   const projected = projections(h)
   const afterPressure = projected.find((event, index) => index > 0 && event.data.requestId === projected[index - 1]!.data.requestId)
   assert.ok(afterPressure && afterPressure.data.estimatedInputTokens > 3000 * 0.8, 'summary cannot shrink the retained earlier task')
+  const suppressed = events(h).filter(event => event.type === 'context/pressure-suppressed')
+  assert.equal(suppressed.length, 1)
+  assert.equal(suppressed[0]?.type === 'context/pressure-suppressed' && suppressed[0].data.targetTokens, 1950)
   assert.equal(h.sessions.latestRun(h.session.id)?.status, 'completed')
 })
 
@@ -140,6 +145,27 @@ test('pressure can run again after an effective summary and new history growth',
 
   assert.equal(await h.agent.continue({ budget: policy }), 'done')
   assert.ok(scriptedRun.state.summaries >= 2, 'effective compaction must not disable later pressure checks')
+  assert.equal(events(h).filter(event => event.type === 'context/pressure-suppressed').length, 0)
+  assert.equal(h.sessions.latestRun(h.session.id)?.status, 'completed')
+})
+
+test('a 52k–65k irreducible prefix records hysteresis and does not resummarize each turn', async () => {
+  const scriptedRun = scripted([1, 2, 3].map(index => ({ id: `wide-${index}`, name: 'tick', arguments: {} })))
+  const h = harness(scriptedRun.chat)
+  h.tools.register({ name: 'tick', execute: () => 'small result' })
+  const policy = base({ inputTargetTokens: 65_536, compactionBudgetTokens: 65_536, maxModelRequests: 10 })
+  const old = h.sessions.beginRun(h.session.id, policy, 'mock/test')
+  h.sessions.append(h.session.id, 'user/message', { content: 'older finished task' }, old)
+  h.sessions.append(h.session.id, 'assistant/tool_calls', { toolCalls: [{ id: 'old-wide', name: 'read_file', arguments: {} }] }, old)
+  h.sessions.append(h.session.id, 'tool/result', { toolCallId: 'old-wide', name: 'read_file', content: 'x'.repeat(180_000) }, old)
+  h.sessions.finishRun(old, 'completed')
+
+  assert.equal(await h.agent.send('new task', { budget: policy }), 'done')
+  const suppressed = events(h).filter(event => event.type === 'context/pressure-suppressed')
+  assert.equal(starts(h).length, 1)
+  assert.equal(suppressed.length, 1)
+  assert.equal(suppressed[0]?.type === 'context/pressure-suppressed' && suppressed[0].data.targetTokens, Math.floor(65_536 * 0.65))
+  assert.equal(scriptedRun.state.summaries, 1)
   assert.equal(h.sessions.latestRun(h.session.id)?.status, 'completed')
 })
 
