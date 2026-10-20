@@ -96,8 +96,11 @@ try {
   started = true
   docker('run', '-d', '--name', candidateName, '--network', 'none', '--cap-drop', 'ALL',
     '--security-opt', 'no-new-privileges', '--read-only', '--tmpfs', '/tmp:rw,nosuid,nodev',
+    // Keep the image's own HOME. Its /root/.gitconfig carries the
+    // safe.directory entry that the official evaluation container relies on;
+    // overriding HOME makes git reject the bind-mounted checkout.
     '--mount', `type=bind,src=${candidate},dst=/testbed`, '--workdir', '/testbed',
-    '--env', 'HOME=/tmp/mini-dsh-poc', image, 'sh', '-lc', 'sleep 900')
+    image, 'sh', '-lc', 'sleep 900')
   const container = JSON.parse(docker('inspect', candidateName))[0]
   assert.equal(container.HostConfig.NetworkMode, 'none')
   assert.equal(container.HostConfig.Privileged, false)
