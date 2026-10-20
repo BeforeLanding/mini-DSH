@@ -1,6 +1,8 @@
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { createLogRecordParser, isRecord } from './event-store.js'
+import { TokenObservationCollector } from './token-calibration.js'
+import type { TokenErrorSummary } from './token-calibration.js'
 import type { SessionEvent } from './contracts.js'
 
 export interface InspectWarning { code: 'truncated_tail' | 'corrupt_json' | 'unknown_event_type' | 'invalid_record' | 'invalid_utf8' | 'changed_during_read' | 'read_error' | 'missing_session_start'; line: number; byteOffset: number; message: string }
@@ -15,6 +17,8 @@ export interface InspectReport {
   providerUsage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheReadFieldMissing: number }
   mechanisms: { compactionAttempts: number; compactionApplied: number; compactionDeclined: number; historyReads: number; previewTruncations: number }
   frozenSnapshots: { currentEpoch: { runtime: string | null; project: string | null }; legacyCurrentRecorded: number }
+  // R06 阶段 A：只读观测。只用 provider usage 配对 model/start；缺失、估算或零实际值单列，不进误差统计。
+  tokenError: TokenErrorSummary
   trace?: { events: { seq: number; type: string; detail?: string }[]; truncated: boolean }
 }
 
@@ -42,6 +46,7 @@ export async function inspectSession(file: string, options: { trace?: boolean } 
     providerUsage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheReadFieldMissing: 0 },
     mechanisms: { compactionAttempts: 0, compactionApplied: 0, compactionDeclined: 0, historyReads: 0, previewTruncations: 0 },
     frozenSnapshots: { currentEpoch: { runtime: null, project: null }, legacyCurrentRecorded: 0 },
+    tokenError: new TokenObservationCollector().summary(),
     ...(options.trace ? { trace: { events: [], truncated: false } } : {}),
   }
   const requests = new Map<string, Request>()
@@ -57,7 +62,9 @@ export async function inspectSession(file: string, options: { trace?: boolean } 
     report.integrity.complete = false
     report.integrity.warnings.push({ code, line, byteOffset, message })
   }
+  const tokenCollector = new TokenObservationCollector()
   function accept(event: SessionEvent) {
+    tokenCollector.observe(event)
     report.integrity.confirmedEvents++
     report.session.lastRecordedAt = event.at
     if (report.trace && !['model/fragment', 'user/message', 'assistant/message', 'assistant/tool_calls'].includes(event.type)) {
@@ -210,11 +217,13 @@ export async function inspectSession(file: string, options: { trace?: boolean } 
     projections.delete(requestId)
   }
   for (const [requestId, runId] of projections) if (!requests.has(requestId) && finishedRuns.has(runId)) report.requests.preparedUnsent++
+  report.tokenError = tokenCollector.summary()
   return report
 }
 
 export function formatInspect(report: InspectReport) {
-  const { session, latestRun, errors, requests, tools, providerUsage, mechanisms, frozenSnapshots, integrity } = report
+  const { session, latestRun, errors, requests, tools, providerUsage, mechanisms, frozenSnapshots, tokenError, integrity } = report
+  const percent = (value: number) => `${(value * 100).toFixed(2)}%`
   return [
     `Session ${session.id ?? 'unknown'} — ${integrity.complete ? 'complete JSONL' : 'PARTIAL EVIDENCE'} (${integrity.confirmedEvents} events)`,
     `Started: ${session.startedAt ?? 'unknown'}; session end: not recorded; last event: ${session.lastRecordedAt ?? 'none'}`,
@@ -225,6 +234,7 @@ export function formatInspect(report: InspectReport) {
     `Provider usage: input ${providerUsage.inputTokens}, output ${providerUsage.outputTokens}, cache read ${providerUsage.cacheReadTokens} (${providerUsage.cacheReadFieldMissing} provider records omit cache field)`,
     `Mechanisms: compaction attempts ${mechanisms.compactionAttempts}, applied ${mechanisms.compactionApplied}, declined ${mechanisms.compactionDeclined}; read_history ${mechanisms.historyReads}; preview truncations ${mechanisms.previewTruncations}`,
     `Frozen snapshot source (current epoch): runtime ${frozenSnapshots.currentEpoch.runtime ?? 'none'}, project ${frozenSnapshots.currentEpoch.project ?? 'none'}; legacy-current records ${frozenSnapshots.legacyCurrentRecorded}`,
+    `Token error (provider usage only): ${tokenError.samples} samples in ${tokenError.groups.length} groups; median ${percent(tokenError.medianRelativeError)}, underestimate ${percent(tokenError.underestimateRate)}, |error| p50 ${percent(tokenError.p50AbsRelativeError)} / p95 ${percent(tokenError.p95AbsRelativeError)}; excluded missing usage ${tokenError.excluded.missingUsage}, estimated usage ${tokenError.excluded.estimatedUsage}, zero actual ${tokenError.excluded.actualZero}, orphan usage ${tokenError.excluded.orphanUsage}, rejected ${tokenError.excluded.rejected}`,
     ...integrity.warnings.map(item => `WARNING ${item.code} at line ${item.line}, byte ${item.byteOffset}: ${item.message}`),
     ...(report.trace ? ['Trace (last 40 selected metadata events):', ...report.trace.events.map(event => `  #${event.seq} ${event.type}${event.detail ? ` ${event.detail}` : ''}`), ...(report.trace.truncated ? ['  ... earlier selected events omitted'] : [])] : []),
   ].join('\n')

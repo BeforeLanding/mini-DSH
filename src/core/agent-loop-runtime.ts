@@ -6,6 +6,7 @@ import { CompactionRuntime } from './compaction-runtime.js'
 import type { CompactionTrigger, DeclineReason } from './compaction-runtime.js'
 import { estimateUsage } from './token-estimator.js'
 import { StreamJournal } from './stream-journal.js'
+import { requestModelLabel, toolSchemaDigest } from './token-calibration.js'
 import { ModelStreamError, ProviderError, runErrorData } from './model-error.js'
 import { retryDelay, waitForRetry } from './retry-policy.js'
 import { systemClock } from './run-budget-runtime.js'
@@ -82,6 +83,8 @@ export class AgentLoopRuntime {
 
             control.check()
             const schemas = this.tools.schemas()
+            const schemaDigest = toolSchemaDigest(schemas)
+            const modelLabel = requestModelLabel(agent.model)
             const project = () => new ContextBudgetRuntime().project(this.sessions.visibleEvents(sessionId), state.taskId,
                 { system, tools: schemas, maxOutputTokens: policy.maxOutputTokens }, policy, events => this.sessions.deriveMessages(sessionId, events), inputTokens => control.outputAllowance(inputTokens))
             let projection = project()
@@ -161,7 +164,7 @@ export class AgentLoopRuntime {
             let response: Awaited<ReturnType<LlmRuntime['chat']>>
             let attemptRequestId = requestId
             for (let attemptIndex = 0; ; attemptIndex++) {
-                append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId: attemptRequestId, estimatedInputTokens })
+                append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId: attemptRequestId, estimatedInputTokens, model: modelLabel, schemaDigest })
                 await control.wait(() => this.sessions.flush(sessionId))
                 control.check()
                 state.counters.modelRequests++

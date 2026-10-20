@@ -75,7 +75,8 @@ export interface EventData {
   'run/start': { state: RunState }
   'run/error': { errorId: string; stage: 'model' | 'summary' | 'tool' | 'runtime'; errorKind: ProviderErrorKind; safeMessage: string; requestId?: string; toolCallId?: string; httpStatus?: number; retryable?: boolean; providerRequestId?: string }
   'run/finish': { state: RunState }
-  'model/start': { taskId: string; runId: string; requestId: string; estimatedInputTokens?: number }
+  // model/schemaDigest 只用于 R06 的分层观测：旧日志没有这两个字段时按 unknown 归组。
+  'model/start': { taskId: string; runId: string; requestId: string; estimatedInputTokens?: number; model?: string; schemaDigest?: string }
   'model/retry': { rootRequestId: string; failedRequestId: string; nextRequestId: string; attempt: number; delayMs: number; errorKind: import('./model-error.js').ProviderErrorKind }
   'model/rejected': { requestId: string; reason: 'request_limit' | 'amount_limit' | 'usage_unknown' | 'other_limit' }
   // requestId 可缺省以兼容旧日志；存在时它与随后的 model/start 相同，使投影归属成为日志中可读的事实，

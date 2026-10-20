@@ -1,5 +1,13 @@
 # 改动与验收证据
 
+### R06 token 估算在线观测与受控校准（2026-10-20，本地通过，待 CI）
+
+`model/start` 新增可选 `model` 与 `schemaDigest`（64 位十六进制，运行时校验；旧日志缺字段兼容）。新增 `src/core/token-calibration.ts`：按 `requestId` 配对 `model/start.estimatedInputTokens` 与 `model/usage`，只采信 `usage.source=provider`；摘要请求按 `context/summary-start`→`end` 的 run 窗口归组，重试 attempt 不被误记为主请求。报告 `(estimated−actual)/actual` 中位数、低估率、绝对相对误差 p50/p95，并按 kind/model/schema/estimatorVersion 分层；缺 usage、estimated usage、实际为零、孤立 usage、被拒绝、重复 usage 与缺估算值分别计数且不进入样本。`inspect` 默认输出该摘要，`pnpm token:error <events.jsonl> [--json] [--apply-calibration]` 提供独立只读入口。阶段 B 的 `calibrateTokenEstimate` 默认关闭，使用 rolling `actual/estimated` 保守分位 × 安全边际，样本不足回退 1，乘数夹紧在 `[1, maxMultiplier]`，异常比率不会产生 Infinity/NaN；`applyTokenCalibration` 不会降低原估算。运行时尚未应用校准。
+
+`token-estimator.ts` 与 NX-08c 语料/估算器哈希未改动，历史 40 条测量测试保持通过。新增 `test/token-calibration.test.ts` 5 条：摘要重试分组与误差复算、各类排除计数、校准确定性与上限、inspect 与 JSONL 重放一致、增量收集稳定。`pnpm demo:compact` 真实运行 9 项判定通过，脚本化日志的 estimated usage 被正确排除（0 samples / 1 estimated）；另用含 provider usage 的合成日志验证报告输出 `median -16.67% / p50 16.67%`。
+
+本地 `pnpm check` syntax 170 files、`pnpm test` 468 tests / 438 pass / 0 fail / 30 skipped、`pnpm lint` 184 files / 0 diagnostics。真实 provider 请求 0；当前提交 CI 待验证。
+
 ### R05e 当前提交 CI 验收（2026-10-20）
 
 `85215474b02ddaa1e24e3d4b4c6d1b8524052451` 的 [CI 39378211275](https://github.com/BeforeLanding/mini-DSH/actions/runs/39378211275) Ubuntu/Windows × Node 20.18.1/22/24 六组全部通过；R05 在工作分支验收完成，main 未合并。

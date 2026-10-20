@@ -1,6 +1,12 @@
 # 任务清单
 
-### R05 稳定前缀与压缩策略（2026-10-20，进行中）
+### R06 token 估算在线观测与受控校准（2026-10-20，进行中）
+
+新增 `src/core/token-calibration.ts` 与 `scripts/report-token-error.ts`，并以可选字段 `model`、`schemaDigest` 扩展 `model/start`（旧日志缺字段时归 unknown，读取兼容）。阶段 A 默认只读：`inspect` 文本/JSON 与 `pnpm token:error <events.jsonl>` 都只用 `usage.source=provider` 的已配对请求，报告 `(estimated−actual)/actual`、低估率、绝对相对误差 p50/p95，按 main/summary、model、schema digest 和估算器版本分层；缺 usage、estimated usage、实际为零、孤立 usage、被拒绝与重复 usage 单列且不参与统计。阶段 B 校准是默认关闭的纯函数：rolling `actual/estimated` 保守分位乘安全边际，样本不足回退 1，乘数下限 1、上限可配置；确定性可由同一事件序列重建。保留 `token-estimator.ts` 原文件与 NX-08c 语料/估算器哈希，不删也不放宽历史测量。
+
+验收：合成 provider usage 可逐条复算误差；摘要重试归入摘要组；缺 usage/估算 usage 等不进样本；`inspect` 与 JSONL 重放得到相同摘要；校准关闭时乘数为 1，样本不足回退，异常巨大比率被上限夹紧且 `applyTokenCalibration` 不会降低原估算；历史 40 条语料测试保持通过。本地新增 5 条测试，完整 `pnpm test` 468 tests／438 pass／0 fail／30 skipped，`pnpm check` syntax 170 files，`pnpm lint` 184 files／0 diagnostics；真实 provider 请求 0。当前提交 CI 待验证。运行时默认不应用校准，阶段 B 接入需观测收益与独立验收。
+
+### R05 稳定前缀与压缩策略（2026-10-20，工作分支验收完成）
 
 R04 `0e19c0c` 的 [CI 39349743566](https://github.com/BeforeLanding/mini-DSH/actions/runs/39349743566) 六组通过。① 时间与规则选择分离提交 `740a453`：[CI 39350164894](https://github.com/BeforeLanding/mini-DSH/actions/runs/39350164894) 六组通过。② 规则版本提交 `da7d728`：[CI 39350675148](https://github.com/BeforeLanding/mini-DSH/actions/runs/39350675148) 六组通过。③ 摘要目标及修订引用提交 `23e036c`：[CI 39351116486](https://github.com/BeforeLanding/mini-DSH/actions/runs/39351116486) 六组通过。④ 摘要结构校验提交 `e7b2985`：[CI 39351872653](https://github.com/BeforeLanding/mini-DSH/actions/runs/39351872653) 仅五组绿，Windows Node 20 的既有 Bash 验证组合用例在 800 ms 超时下误使落盘失败探针未执行。修复把超时/取消与落盘失败拆成独立测试，后者用正常命令超时并在缺标记时带出实际错误，提交 `fd0277a`：[CI 39352323711](https://github.com/BeforeLanding/mini-DSH/actions/runs/39352323711) 六组通过，R05d 验收完成。⑤ 阈值分名、压缩后目标线与滞回抑制已实现：硬输入上限、压力触发线（预算 × 0.8）与压缩后目标线（预算 × 0.65）分名；应用压力压缩后仍高于目标线或减少不足 `max(64, 5%)` 时，本 run 抑制重复压力压缩并记录 `context/pressure-suppressed`；溢出兜底与显式 `/compact` 保留。既有 52k–65k 反复压缩用例改为断言只压缩 1 次并记录原因。提交 `8521547`：[CI 39378211275](https://github.com/BeforeLanding/mini-DSH/actions/runs/39378211275) 六组通过；本地 `pnpm check` syntax 167 files、`pnpm test` 463 tests／433 pass／0 fail／30 skipped、`pnpm lint` 181 files／0 diagnostics。R05 在工作分支验收完成，main 未合并。真实 provider 请求 0。
 

@@ -288,6 +288,7 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 - 先移除最旧已结束完整任务/轮次；不截短当前 task 过程。当前集合无法容纳时 context_overflow；/continue 不自动扩大输入目标。
 - 输出触及 length 时标 output_limit，不执行残缺调用；usage 结算后记录估算偏差。
 - 估算偏差已实测（NX-08c，核验日期 2026-09-30，估算器 SHA-256 见 [CHANGES](CHANGES.md#nx-08c-输入估算误差实验)）：中文 +28%、英文 +40% 一致高估；代码与 JSON 不是一致安全，40 个样本中 4 个低估、最深 −22.5%，**超过容量余量的 10%**。因此输入目标 65,536 与容量余量都只按估算器口径成立，按真实 token 计会更宽松；反向地，单个请求仍可能超出估算判断。参数按估算器口径固定，不因本结论在真实调用开始前调整。
+- **R06 在线观测（2026-10-20）**：`model/start` 记录当次请求的 `model` 与 `schemaDigest`；只读观测把 `model/start.estimatedInputTokens` 与同 `requestId` 的 `model/usage` 配对，且只采信 `usage.source=provider`。误差口径为 `(estimated−actual)/actual`，报低估率与绝对相对误差 p50/p95；主请求与摘要请求按 `context/summary-start`/`end` 的 run 窗口分组，摘要重试仍留在摘要组。缺 usage、estimated usage、实际值为零、孤立 usage、被拒绝请求与重复 usage 单列，不进入样本。入口是 `inspect`（默认只读）与 `pnpm token:error <events.jsonl>`。阶段 B 的校准是纯函数：rolling `actual/estimated` 保守分位 × 安全边际，样本不足回退 1；乘数下限恒为 1、上限可配置，因此只能让估算更保守，不会放宽硬上限。默认关闭，只有观测显示收益且回归无退化后才考虑接入运行时；本轮未启用。
 
 ### 每段执行与续跑
 - 模型请求 64 次，工具调用 128 次，主动时间 600,000ms，累计输入加输出 2,000,000 token。

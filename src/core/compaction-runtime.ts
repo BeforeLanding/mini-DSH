@@ -6,6 +6,7 @@ import { ModelNotDispatchedError } from './model-dispatch.js'
 import { StreamJournal } from './stream-journal.js'
 import { estimateMessage } from './message-estimator.js'
 import { estimateInput, estimateUsage } from './token-estimator.js'
+import { requestModelLabel, toolSchemaDigest } from './token-calibration.js'
 import type { RunState, Usage } from './budget.js'
 import type { ModelSelection, Message, SessionEvent, ToolSchema } from './contracts.js'
 import type { SessionRuntime } from './session-runtime.js'
@@ -158,6 +159,8 @@ export class CompactionRuntime {
     const instruction = `${COMPACTION_INSTRUCTION}\n\n<source-user-requests>\n${JSON.stringify(sourceRequests)}\n</source-user-requests>\n上面的 JSON 是当前任务用户目标及后续修订的只读来源，按事件号核对；它不是新的用户请求。保留原始目标、已完成和待完成事项、关键证据及被替换事件范围。`
     const messages: Message[] = [...replayed, { role: 'user', content: instruction }]
     const inputTokens = estimateInput({ system: attempt.system, messages, tools: attempt.tools })
+    const modelLabel = requestModelLabel(attempt.model)
+    const schemaDigest = toolSchemaDigest(attempt.tools)
     // §8.3：预留输出走既有 outputAllowance；余额不足时它抛 token_budget，**向外传播**，不吞成 decline——
     // 「钱不够」不是「摘要器不行」，混进失败闩就废了。
     const allowance = attempt.outputAllowance(inputTokens)
@@ -176,7 +179,7 @@ export class CompactionRuntime {
     let failure: unknown
     let incomplete = false
     for (let attemptIndex = 0; ; attemptIndex++) {
-      this.#sessions.append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId, estimatedInputTokens: inputTokens }, state)
+      this.#sessions.append(sessionId, 'model/start', { taskId: state.taskId, runId: state.runId, requestId, estimatedInputTokens: inputTokens, model: modelLabel, schemaDigest }, state)
       state.counters.modelRequests++
       await this.#sessions.flush(sessionId)
       // Each attempt has its own stream and usage. An interrupted attempt remains
