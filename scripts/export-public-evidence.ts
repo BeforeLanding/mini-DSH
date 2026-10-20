@@ -192,7 +192,8 @@ async function main() {
     if (!normal.outcome.accepted || !recovery.outcome.accepted) throw new Error('synthetic scenarios must pass acceptance')
     if (recovery.report.requests.retries < 1) throw new Error('provider-recovery scenario did not record a retry')
     const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
-    const dirty = execFileSync('git', ['status', '--porcelain', '--', ':!docs/samples'], { encoding: 'utf8' }).trim().length > 0
+    // 生成物本身不算源码脏；否则每写一次样例都会把 dirty 钉成 true。
+    const dirty = execFileSync('git', ['status', '--porcelain', '--', ':!docs/samples', ':!docs/RESULTS.md'], { encoding: 'utf8' }).trim().length > 0
     await fs.rm(target, { recursive: true, force: true })
     await fs.mkdir(target, { recursive: true })
     const normalReport = await writeEpisode(target, normal, { commit, dirty })
