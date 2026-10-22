@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { compareSourceTrees, describeSourceMismatch, parseRawDiff, parseTreeListing,
+import { classifyEnvironmentCommit, compareSourceTrees, describeSourceMismatch, parseRawDiff, parseTreeListing,
   summarizeRawDiff } from '../scripts/swebench/source-consistency.js'
 
 const oid = (character: string) => character.repeat(40)
@@ -57,4 +57,26 @@ test('mismatch description names bounded content differences without truncating 
   assert.match(description, /contentDifferences=2/)
   assert.match(description, /\["content:a"\]/)
   assert.ok(!description.includes('content:b'))
+})
+
+test('a build-metadata environment commit is the only accepted content difference', () => {
+  const base = parseTreeListing(listing(['100644', 'blob', oid('a'), 'pyproject.toml'],
+    ['100644', 'blob', oid('b'), 'src/repo/core.py']))
+  const pinned = compareSourceTrees(base, parseTreeListing(listing(['100644', 'blob', oid('c'), 'pyproject.toml'],
+    ['100644', 'blob', oid('b'), 'src/repo/core.py'])))
+  assert.deepEqual(classifyEnvironmentCommit(pinned), { allowed: true, paths: ['pyproject.toml'] })
+
+  const sourceChange = compareSourceTrees(base, parseTreeListing(listing(['100644', 'blob', oid('a'), 'pyproject.toml'],
+    ['100644', 'blob', oid('d'), 'src/repo/core.py'])))
+  assert.equal(classifyEnvironmentCommit(sourceChange).allowed, false)
+  assert.match(classifyEnvironmentCommit(sourceChange).reason ?? '', /core\.py is not build metadata/)
+
+  const added = compareSourceTrees(base, parseTreeListing(listing(['100644', 'blob', oid('a'), 'pyproject.toml'],
+    ['100644', 'blob', oid('b'), 'src/repo/core.py'], ['100644', 'blob', oid('e'), 'requirements-dev.txt'])))
+  assert.equal(classifyEnvironmentCommit(added).allowed, false)
+  assert.match(classifyEnvironmentCommit(added).reason ?? '', /added path .* is not build metadata/)
+
+  const equal = compareSourceTrees(base, base)
+  assert.equal(classifyEnvironmentCommit(equal).allowed, false)
+  assert.match(classifyEnvironmentCommit(equal).reason ?? '', /already equal/)
 })

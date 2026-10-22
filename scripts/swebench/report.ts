@@ -11,6 +11,7 @@ export interface SwebenchEpisodeResult extends EpisodeRecord {
   sessionId?: string
   eventsPath?: string
   patchPath: string
+  external?: Record<string, unknown>
   error?: string
 }
 
@@ -49,8 +50,11 @@ export function buildReport(manifest: SwebenchRunManifest, split: 'development' 
     const withScores = executed.map(record => ({ ...record, resolved: scored.get(record.instanceId)?.resolved ?? false }))
     const summary = summarizeEpisodes(withScores)
     const plannedResolved = planned.filter(instanceId => scored.get(instanceId)?.resolved === true).length
+    const definition = manifest.arms.find(arm => arm.id === armId)
     return {
       armId,
+      system: definition?.system ?? 'mini-dsh',
+      ...(definition?.system === 'external' && definition.external ? { external: definition.external } : {}),
       planned: planned.length,
       executed: executed.length,
       unexecuted: planned.length - executed.length,
@@ -74,11 +78,13 @@ export function buildReport(manifest: SwebenchRunManifest, split: 'development' 
   const failureTraces = [
     (() => {
       const first = records.find(record => record.status === 'infrastructure')
-      return first ? { kind: 'provider-or-infrastructure', armId: first.armId, instanceId: first.instanceId, events: first.eventsPath, patch: first.patchPath, error: first.error } : { kind: 'provider-or-infrastructure', absent: true }
+      return first ? { kind: 'provider-or-infrastructure', armId: first.armId, instanceId: first.instanceId, events: first.eventsPath,
+        patch: first.patchPath, ...(first.external ? { external: first.external } : {}), error: first.error } : { kind: 'provider-or-infrastructure', absent: true }
     })(),
     (() => {
       const first = records.find(record => record.status === 'budget' || record.status === 'timeout')
-      return first ? { kind: 'budget-stop', armId: first.armId, instanceId: first.instanceId, events: first.eventsPath, patch: first.patchPath } : { kind: 'budget-stop', absent: true }
+      return first ? { kind: 'budget-stop', armId: first.armId, instanceId: first.instanceId, events: first.eventsPath,
+        patch: first.patchPath, ...(first.external ? { external: first.external } : {}) } : { kind: 'budget-stop', absent: true }
     })(),
     (() => {
       const first = records.find(record => record.status === 'completed' && !record.emptyPatch && scoreByArm.get(record.armId)?.get(record.instanceId)?.resolved !== true)
@@ -109,8 +115,11 @@ export function buildReport(manifest: SwebenchRunManifest, split: 'development' 
     paired,
     failureTraces,
     evidence: records.map(record => ({ armId: record.armId, instanceId: record.instanceId, status: record.status,
-      events: record.eventsPath, patch: record.patchPath, sessionId: record.sessionId, costUsd: record.costUsd, usageUnknown: record.usageUnknown })),
-    caveat: 'Synthetic or mock runs in this file are mechanism evidence only, not a model capability score.',
+      events: record.eventsPath, patch: record.patchPath, sessionId: record.sessionId, costUsd: record.costUsd, usageUnknown: record.usageUnknown,
+      ...(record.external ? { external: record.external } : {}) })),
+    caveat: armIds.some(armId => manifest.arms.find(arm => arm.id === armId)?.system === 'external')
+      ? 'The external arm is the unmodified mini-SWE-agent (native prompt, single bash tool, linear context). This is a system-level comparison, not an isolated prompt or context factor; synthetic or mock runs are mechanism evidence only.'
+      : 'Synthetic or mock runs in this file are mechanism evidence only, not a model capability score.',
   }
 }
 

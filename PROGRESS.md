@@ -1,8 +1,12 @@
 # 开发进度
 
-更新：2026-10-20。历史逐步记录已整体迁入 [2026-09-28 至 2026-09-30 归档](docs/history/PROGRESS-2026-09-28--2026-09-30.md)；本文件只维护当前状态、阻塞和下一步。
+更新：2026-10-21。历史逐步记录已整体迁入 [2026-09-28 至 2026-09-30 归档](docs/history/PROGRESS-2026-09-28--2026-09-30.md)；本文件只维护当前状态、阻塞和下一步。
 
 ## 当前状态
+
+- **mini-SWE-agent 同模型外部基线已接入，4 臂开发批次已执行（2026-10-21，实际估算 $0.471）**：新增 `scripts/swebench/{external-contract,external,external-run,external-fingerprint,external-probe}.ts`，schema 升到 3；external 臂使用**未修改的 mini-SWE-agent v2.4.6**（commit `a83fcae8…`），candidate 同构沙箱（network none、只读根、宿主 uid/gid、单 `/testbed` 挂载）；provider key 只在宿主进程，容器按 label 清理；patch 只取 `preds.json`；usage/成本由 provider usage 与冻结价格快照重算。真实 CLI + Docker 探针（空 patch 与非空 `README.rst` patch）通过；4 臂 development 20/20 episode 完成，0 infrastructure/scoring/unknown usage：**candidate 2/5、baseline 3/5、context-reference 2/5、context-proposed 2/5**；配对 candidate/baseline only-baseline 1（django）、p=1；context 两臂五题相同。**n=5，不是能力结论**。**预算不同构（已决策并实现）**：mini-DSH 臂撞 $0.50 反推的 416,667 token 上限 3–4 次，baseline 的 $0.50 cost_limit 允许约 1.1M input tokens/episode（多为 cache hit），5/5 正常完成；用户 2026-10-21 选择**共享 token 上限**，external watchdog 与事后检查现使用与 candidate 相同的 `tokenCapFromUsd`，证据记录 `maxTotalTokens`。**上面的 4 臂观察是旧口径**；正式前需在新口径下重跑一次 4 臂开发批次（另行授权）。首次尝试因 venv 缺 `mcp` 中止（仅 1 个 candidate episode，$0.0175，无 baseline 请求），已装 `mcp==2.3.0` 后重跑。证据 `D:\Agent\outputs\mini-dsh-swebench-4arm-dev-20261021b`（17MB，无 workspace；完整 3.0GB 在 WSL）。`pnpm test` 519／489 pass／0 fail／30 skipped，Biome 220 files／0 diagnostics。**正式 50 题仍需共享口径下的开发观测与单独金额授权。**
+
+- **SWE-bench 5 题开发批次已执行（2026-10-21，用户单独授权 $2.5；实际估算 $0.0918）**：冻结清单 `D:\Agent\outputs\mini-dsh-swebench-development-20261021\manifest-development.json`（开发 5、正式 50、candidate 单臂、`deepseek-flash`、峰值价格快照、55 张镜像 digest、批次上限 $2.5）。12:54–13:02 UTC 执行，**5/5 episode 完成**，0 infrastructure、0 timeout、0 未知 usage、0 判分错误；4 次单题 token 上限停止＋1 次正常完成。官方判分 **2 resolved**（astropy-14539、flask-5014）、2 unresolved、1 empty（matplotlib-23299）；token 输入 1,565,239／输出 41,522／缓存命中 1,454,464；Wilson 95% 11.8%–76.9%。**单臂 n=5 的开发诊断，不是能力结论**；4/5 撞 $0.50/题上限，正式批次前须按实测重估预算。证据 `D:\Agent\outputs\mini-dsh-swebench-dev-20261021`（SHA256SUMS 校验通过；`score.*.log` 与隐藏判分行不公开）。预检同时修复两处执行器缺口：astropy 构建 pin 的窄口放行、官方判分缺 `test_patch` 的 `--scoring-dataset` 修复；细节见 CHANGES 的 R10 后续条目。
 
 - **工作分支已合并到 main（2026-10-20）**：草稿 [PR #3](https://github.com/BeforeLanding/mini-DSH/pull/3) 以保留提交历史的 merge commit `a58ab5d441185479f4bc83aca30f4b6f63f3f902` 合并；`origin/main` 已从 `32e2598` 前进到 `a58ab5d`。main 的 [CI 39428240871](https://github.com/BeforeLanding/mini-DSH/actions/runs/39428240871) 六个 job 全绿（Ubuntu/Windows × Node 22/24、isolation、package-install）；`Official SWE-bench no-model PoC` 按普通 PR 配置 skipped。历史红灯 run 39133594202 保留作证据，不代表当前 main。工作分支保留，未删除。
 
@@ -176,9 +180,11 @@
 ## 下一步
 
 1. **合并后**：main 的 required CI 已在 `a58ab5d` 上通过；后续改动若再合并，须重新核对对应 main 提交的 CI，不能用旧 run 替代。
-2. **R10 付费前**：提供并审核 5 题开发批次配置——模型 id、官方价格快照（来源与日期）、同模型 mini-SWE-agent 的固定 commit 与适配器、50 题选择文件及逐题镜像 digest、批次金额上限。先跑开发批次，按实测使用量重估正式批次，再单独申请正式 50 题授权。
-3. **发布前**：确认作者归属与个人负责范围；npm 发布、tag/Release 与 ECS 部署分别取得明确授权；`Deploy ECS` 保持手动派发。
-4. **不在现有授权内自动执行**：任何付费模型调用、新增付费云资源、npm 发布、tag/Release、ECS 部署。
+2. **R10 candidate 开发批次已完成**：5/5 执行、2/5 resolved、实际估算 $0.0918；4/5 撞单题 $0.50 上限，说明正式批次前必须按实测重估单题预算，不能直接沿用 $0.50。
+3. **R10 4 臂开发批次已完成**：20/20 执行、candidate 2/5、baseline 3/5、context 两臂各 2/5，$0.471；首次尝试因缺 `mcp` 中止（$0.0175，无 baseline 请求），已修复后重跑。证据见上。
+4. **R10 共享 token 口径已实现，待开发复跑**：external watchdog/事后检查与 candidate 使用同一 `tokenCapFromUsd`；旧 4 臂观察不覆盖新口径，正式前需在共享口径下重跑 4 臂开发批次（20 episodes，单独授权），再准备 50 张镜像（preflight 要求本地存在）、50 题隐藏判分行，并单独申请正式 50 题金额授权。
+5. **发布前**：确认作者归属与个人负责范围；npm 发布、tag/Release 与 ECS 部署分别取得明确授权；`Deploy ECS` 保持手动派发。
+6. **不在现有授权内自动执行**：任何付费模型调用、新增付费云资源、npm 发布、tag/Release、ECS 部署。
 
 ## 更新规则
 
