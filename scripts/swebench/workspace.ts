@@ -22,6 +22,20 @@ function removeContainer(name: string) {
   if (docker('ps', '-aq', '--filter', `name=^/${name}$`)) throw new Error(`container remained after cleanup: ${name}`)
 }
 
+// One pinned Requests image contains an untracked setuptools build tree. Keep
+// those files visible, as they are in the official scorer image, but do not
+// mistake them for an Agent patch. No other image or dirty path is exempted.
+const requestsBuildImage = 'sha256:b2733e57feb4cfaeac24ab5ec496d4cb89a37db53bd0ca72eaededdb2ce19d1c'
+export async function ignorePinnedImageBuildArtifact(image: string, target: string): Promise<boolean> {
+  if (image !== requestsBuildImage || command('git', ['status', '--porcelain'], target) !== '?? build/') return false
+  const build = path.resolve(target, 'build')
+  if (path.dirname(build) !== path.resolve(target)) throw new Error('build artifact escaped candidate workspace')
+  const stat = await fs.lstat(build)
+  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('pinned image build artifact is not a directory')
+  await fs.appendFile(path.join(target, '.git', 'info', 'exclude'), '\n/build/\n')
+  return true
+}
+
 // 批次恢复只清理本执行器命名规则下的容器；不会删除名字不匹配的任何资源。
 export function removeContainerIfPresent(name: string) {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(name)) throw new Error('invalid container name')
@@ -96,10 +110,12 @@ export async function exportDockerWorkspace(options: { image: string; baseCommit
     } else if (imageHead !== baseCommit) {
       command('git', ['reset', '--hard', baseCommit], target)
     }
+    const ignoredImageBuildArtifact = await ignorePinnedImageBuildArtifact(image, target)
     if (command('git', ['status', '--porcelain'], target)) throw new Error('candidate workspace is not clean before the Agent starts')
     return { imageHead, patchBase, environmentCommit,
       evidence: { image, imageHead, baseCommit, patchBase, environmentCommit,
-        modeDifferences: comparison.modeDifferences.length, rawContentChanges: diff.contentChanges } }
+        modeDifferences: comparison.modeDifferences.length, rawContentChanges: diff.contentChanges,
+        ignoredImageBuildArtifact } }
   } finally {
     if (exported) removeContainer(exportName)
   }
