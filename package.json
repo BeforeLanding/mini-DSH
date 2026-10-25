@@ -39,6 +39,7 @@
     "eval:v2-freeze": "pnpm build && node dist/scripts/eval-v2-freeze.js",
     "eval:v2-report": "pnpm build && node dist/scripts/eval-v2-report.js",
     "eval:v2-run": "pnpm build && node dist/scripts/eval-v2-run.js",
+    "eval:v2-compare": "pnpm build && node dist/scripts/eval-v2-compare.js",
     "smoke:freeze": "pnpm build && node dist/scripts/smoke-freeze.js",
     "smoke:run": "pnpm build && node dist/scripts/smoke-run.js",
     "eval:ledger-target": "pnpm build && node dist/scripts/eval-ledger-target.js",
