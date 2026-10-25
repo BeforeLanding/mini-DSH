@@ -1,7 +1,8 @@
 import { pendingTools } from './pending-tools.js'
 import { RunBudgetRuntime } from './run-budget-runtime.js'
 import type { Clock } from './run-budget-runtime.js'
-import { ContextBudgetRuntime } from './context-runtime.js'
+import { ContextBudgetRuntime, prunedTaskIds } from './context-runtime.js'
+import type { ProjectionOptions } from './context-runtime.js'
 import { CompactionRuntime } from './compaction-runtime.js'
 import type { CompactionTrigger, DeclineReason } from './compaction-runtime.js'
 import { estimateUsage } from './token-estimator.js'
@@ -94,9 +95,9 @@ export class AgentLoopRuntime {
                     observation.kind === 'main' && observation.model === modelLabel && observation.schemaDigest === schemaDigest),
                     { enabled: true, maxMultiplier: policy.tokenCalibrationMaxMultiplier })
             })() : undefined
-            const project = () => new ContextBudgetRuntime().project(this.sessions.visibleEvents(sessionId), state.taskId,
+            const project = (options?: ProjectionOptions) => new ContextBudgetRuntime().project(this.sessions.visibleEvents(sessionId), state.taskId,
                 { system, tools: schemas, maxOutputTokens: policy.maxOutputTokens }, policy, events => this.sessions.deriveMessages(sessionId, events),
-                inputTokens => control.outputAllowance(inputTokens), calibration ? raw => applyTokenCalibration(raw, calibration) : undefined)
+                inputTokens => control.outputAllowance(inputTokens), calibration ? raw => applyTokenCalibration(raw, calibration) : undefined, options)
             let projection = project()
             const absorb = () => { state.removedTaskIds = [...new Set([...state.removedTaskIds, ...projection.removedTaskIds])] }
             absorb()
@@ -125,7 +126,30 @@ export class AgentLoopRuntime {
             const overflowing = () => (hardInputCapTokens !== undefined && projection.estimatedInputTokens > hardInputCapTokens) ||
                 (policy.contextWindowTokens !== undefined && projection.estimatedInputTokens + maxOutputTokens + projection.safetyMarginTokens > policy.contextWindowTokens)
             const compactionBudget = policy.compactionBudgetTokens ?? policy.inputTargetTokens
-            const attempt = async (trigger: CompactionTrigger) => {
+            const pressureTriggerTokens = compactionBudget === undefined ? undefined : Math.floor(compactionBudget * (policy.compactionRatio ?? 0.8))
+            const postCompactionTargetTokens = compactionBudget === undefined ? undefined : Math.floor(compactionBudget * (policy.postCompactionTargetRatio ?? 0.65))
+            // NX-51：摘要只压当前 task，而「已结束且非当前」的旧任务要到硬输入上限才会被裁剪。
+            // 一次有效的压力摘要刚把上下文降到压力线下，旧任务仍占着几万 token，几次主请求后又越线，
+            // 同一段 run 里再付一次摘要。摘要之后先按压缩后目标线免费裁旧任务：摘要仍有时间发生，
+            // 但旧任务不再为后续轮次制造重复摘要。裁剪决定写进日志，后续轮次、/continue 与重启恢复
+            // 都按它排除任务；原始事件一条不删。
+            const pruneAfterPressureSummary = () => {
+                const pruneTarget = postCompactionTargetTokens ?? pressureTriggerTokens
+                if (pruneTarget === undefined) return
+                const cleaned = project({ pruneTargetTokens: pruneTarget })
+                const events = this.sessions.visibleEvents(sessionId)
+                const persisted = new Set(prunedTaskIds(events))
+                const newlyPruned = cleaned.removedTaskIds.filter(taskId => !persisted.has(taskId))
+                if (newlyPruned.length === 0) return
+                const summarySeq = [...events].reverse().find(event => event.type === 'context/summary' && event.runId === state.runId)?.seq
+                append(sessionId, 'context/prune', { trigger: 'pressure', ...(summarySeq === undefined ? {} : { summarySeq }),
+                    targetTokens: pruneTarget, removedTaskIds: newlyPruned })
+                projection = cleaned
+                absorb()
+                control.check()
+                recordProjection()
+            }
+            const attempt = async (trigger: CompactionTrigger, afterApplied?: () => void) => {
                 failureStage = 'summary'
                 const applied = await this.#compact(sessionId, state, policy, control, agent, { system, tools: schemas }, trigger, projection)
                 failureStage = 'runtime'
@@ -136,17 +160,18 @@ export class AgentLoopRuntime {
                 // §11：压缩后再记一条投影，让「裁了哪些任务 + 压了哪些 seq」都可追溯。两条共用同一个
                 // requestId——它们准备的是同一个请求。
                 recordProjection()
+                // 裁剪决定先于预算检查落盘：即使这次摘要正好用掉最后一次请求额度，后续 run
+                // （/continue 或重启恢复）也必须继承「这些旧任务不再进入投影」。
+                afterApplied?.()
                 // 摘要调用也是一次模型请求，同样计入该项预算：它用掉最后一次额度，就不该再调度主请求。
                 if (policy.maxModelRequests !== undefined && state.counters.modelRequests >= policy.maxModelRequests) throw new BudgetStop('max_steps', state)
                 return true
             }
             // pressure 是主路径：装得下但已逼近阈值。它只该做一次——压完还在带内说明这次压缩没解决问题，
             // 再压一遍只是重复花钱。context-overflow 是兜底，按 maxOverflowRetries 限次，防止一步内无限重试。
-            const pressureTriggerTokens = compactionBudget === undefined ? undefined : Math.floor(compactionBudget * (policy.compactionRatio ?? 0.8))
-            const postCompactionTargetTokens = compactionBudget === undefined ? undefined : Math.floor(compactionBudget * (policy.postCompactionTargetRatio ?? 0.65))
             if (!pressureSuppressed && !overflowing() && pressureTriggerTokens !== undefined && projection.estimatedInputTokens > pressureTriggerTokens) {
                 const beforeTokens = projection.estimatedInputTokens
-                if (await attempt('pressure')) {
+                if (await attempt('pressure', pruneAfterPressureSummary)) {
                     const afterTokens = projection.estimatedInputTokens
                     const insufficientReduction = beforeTokens - afterTokens < Math.max(64, Math.ceil(beforeTokens * 0.05))
                     if (insufficientReduction || (postCompactionTargetTokens !== undefined && afterTokens > postCompactionTargetTokens)) {
