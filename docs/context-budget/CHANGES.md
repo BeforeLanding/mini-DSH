@@ -1,5 +1,17 @@
 # 改动与验收证据
 
+### OPT-4 冻结对照门禁与最终交付（2026-10-25）
+
+新增 `pnpm bench:components`、`test/component-benchmark.test.ts`、最终 `components-optimized.json` 与 `docs/COMPONENT-OPTIMIZATION.md`。基线 `74f8e89`、候选生产源码 `14a0d1c6e8eb1519cd27e8cc61ce0011927536cd`；两版协议 SHA-256 为 `34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28`，冻结脚本未改。基线文件 SHA-256 与协议钉版并进入完整测试，另验证将已通过的工具探针当基线时不能报告空改进。`.gitattributes` 固定协议脚本 LF，避免 Windows checkout 改变字节指纹。
+
+结果：工具尾标记 3/12→12/12，正文额度 9/12→12/12，全文回读两版均 12/12；最大历史事件属性读取下降 98.82%，报告文件打开次数下降 97.01%，两类选定证据输出哈希相同。未测其他组件、真实模型成功率或泛化，不追溯修改 NX-45。独立功能提交为 `00c8e32`、`cd17cbc`、`fda47d0`，新增边界 `14a0d1c`；基线提交 `c2ee97b`。原计划五步因复核发现独立失败边界增加 OPT-1b，六个步骤均可单独回退，没有 squash/amend/rebase。
+
+最终实际检查：正常用户权限 `pnpm test` → 517 tests / 487 pass / 0 fail / 30 skipped；`pnpm check` → syntax 195 files；`pnpm lint` → 219 files / 0 diagnostics；`pnpm bench:components` → 三 gate 通过；`node dist/scripts/check-coding-fixtures.js` exit 0；`node dist/scripts/eval-offline.js` → 12 planned / 12 executed / 12 completed / 12 accepted；`node dist/scripts/eval-estimate.js` → exit 0（估算器/语料哈希保持）；`node dist/scripts/recompute-report.js docs/samples --check` → 两条报告和 RESULTS 均一致。原始本地输出在 `D:\Agent\outputs\mini-dsh-components-20261025`，公开合成测量随仓库提交。30 项隔离测试由 Linux CI 实测，本机不计为通过。无真实 provider 请求、新模型费用、npm 发布或部署。
+
+### OPT-1b 极小命令额度的失败边界（2026-10-25）
+
+独立提交 `14a0d1c`。最终复核发现：即使裁剪 helper 返回空尾部，展开原始 `stream` 仍可能保留采集的 tail；同时两流各 `max(1, floor(limit/2))` 在总额度为 1 时会分配 2 字节。现明确覆盖原 tail（无完整字符时 undefined），并按 stdout ceil/stderr floor 分配。新增 1/2 字节双流、中文字符放不下和 sparse ref 全文回读用例；18 个冻结对照探针未改。含待提交 OPT-4 门禁的完整工作区回归 517 tests / 487 pass / 0 fail / 30 skipped；lint 无诊断，语法 195 files。OPT-4 的门禁/最终证据另提交；没有合并或改写已有提交。
+
 ### OPT-3 报告查询内复用文件版本（2026-10-25）
 
 `fileVersionQuery` 只缓存本次查询的 hash/location 或读取失败；`taskReport` 的变更、检查与覆盖视图共享读取器，独立查询/分页各自重新读盘。文件正文不进入缓存，取消命中前仍检查；Bash 验证前后的读取不共享。PLAN 明确报告不是文件系统原子快照，`acceptance: not_asserted` 与失败/过期/未知、声明覆盖边界不变。

@@ -2,3 +2,5 @@
 # for these files on Windows; the generator writes LF and SHA256SUMS is over LF.
 docs/samples/** -text
 docs/RESULTS.md -text
+# The frozen component protocol hashes this script's checked-out bytes.
+scripts/benchmark-components.mjs text eol=lf
