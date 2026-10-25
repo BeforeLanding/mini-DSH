@@ -4,6 +4,8 @@
 
 ## 当前状态
 
+- **OPT 组件优化进行中（2026-10-25）**：在干净 `74f8e89` 的独立优化目录工作，已复跑 509 tests / 479 pass / 0 fail / 30 skipped、check 193 files。冻结 18 个离线生产组件探针，发现工具预览尾部边界缺失、摘要投影重复扫描和报告重复读盘。按 OPT-0/1/2/3/4 分别验收与提交；不改变历史 NX-45 结果，不把机制资源改进宣称为模型成功率。下一步 OPT-1 预览头尾共享额度。
+
 - **工作分支已合并到 main（2026-10-20）**：草稿 [PR #3](https://github.com/BeforeLanding/mini-DSH/pull/3) 以保留提交历史的 merge commit `a58ab5d441185479f4bc83aca30f4b6f63f3f902` 合并；`origin/main` 已从 `32e2598` 前进到 `a58ab5d`。main 的 [CI 39428240871](https://github.com/BeforeLanding/mini-DSH/actions/runs/39428240871) 六个 job 全绿（Ubuntu/Windows × Node 22/24、isolation、package-install）；`Official SWE-bench no-model PoC` 按普通 PR 配置 skipped。历史红灯 run 39133594202 保留作证据，不代表当前 main。工作分支保留，未删除。
 
 - **R10 正式评测执行器零付费准备完成（2026-10-20）**：`430234e` 新增 `scripts/swebench/{run,report,workspace}.ts`，并扩展 `protocol.ts`/`preregister.ts`：开发批次与正式批次分开冻结、gold 字段机械拒绝、确定性 arm 交错顺序、每任务金额/请求/工具/时间/输出上限、批次硬上限、基础设施失败与未知 usage 停批、空 patch 保存、批次级 `--resume`（不重跑已完成/中断 episode）、独立官方评分与每批新 run_id、Wilson/McNemar/配对四格报告与原始证据关联。脚本化零模型端到端测试覆盖正常、基础设施停止、未知 usage、恢复、draft/gold 拒绝。基线：`pnpm test` 508 tests／478 pass／0 fail／30 skipped，`pnpm check` syntax 192 files，`pnpm lint` 213 files／0 diagnostics；定向 swebench 17/17。**仍未执行** 5 题开发批次、正式 50 题或任何付费模型调用；外部 mini-SWE-agent 基线适配器、50 题镜像 digest、价格快照、开发批次观测与付费授权仍需补齐，manifest 保持 draft。

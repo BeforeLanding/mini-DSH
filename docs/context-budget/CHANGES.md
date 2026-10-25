@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### OPT-0 组件对照基线（2026-10-25）
+
+基于远端 main `74f8e89721820ef514e26df71cbb05e0c69683c7`，冻结 `scripts/benchmark-components.mjs` 与 `docs/samples/components-baseline.json`。12 个工具输出边界/Unicode/长输出探针、3 个嵌套摘要历史（64/256/1024 工具组）、3 个重复检查报告（1/8/32 条检查、2 个文件）。脚本使用实际生产组件、真实临时文件与结果存储；不装配 provider、不运行模型或 Bash。机制断言与原文回读均成功，工具预览的问题作为测量结果保留：9/12 丢失尾标记，3/12 头尾合计超正文额度；最大历史投影事件属性读取 2,133,569 次，32 检查报告打开文件 67 次。
+
+验证：`pnpm check` → 193 files；正常权限 `pnpm test` → 509 tests / 479 pass / 0 fail / 30 skipped；`node scripts/benchmark-components.mjs --root .eval-evidence/components-baseline --out docs/samples/components-baseline.json` → exit 0；`pnpm lint` → 无诊断。基线编译产物副本位于忽略目录 `.eval-evidence/components-baseline`；JSON 记录源提交、脚本和模块哈希，不依赖本机目录发布原始日志。改动前已列明独立提交边界。后续不得重写本基线或为获得分数修改脚本/题目。
+
 ### R00—R11 本轮收尾核验（2026-10-20，工作分支 tip）
 
 - 代码 tip `bece051`（其后仅文档提交）。本轮新增提交：`6113bc7`（MCP stdio 显式 env）、`430234e`（SWE-bench 执行器）、`d11fb80`（发布/部署拆分）、`0568c6d`（Windows MCP 进程树终止）及对应文档回填。

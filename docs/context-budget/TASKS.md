@@ -1,5 +1,19 @@
 # 任务清单
 
+### OPT-20261025 组件优化（进行中）
+
+基线：远端 main `74f8e89721820ef514e26df71cbb05e0c69683c7`，本机 Node 24.16.0 / pnpm 11.22.0；509 tests / 479 pass / 0 fail / 30 skipped，check 193 files。沙箱 Bash 环境失败后已在正常用户权限下复跑。保留其他 checkout 的未提交工作。
+
+按可独立回退的行为分四次提交，不修改历史模型实验或隐藏验收：
+
+- OPT-0：冻结同源离线组件测试集和基线。验收：工具边界/UTF-8/完整回读、长历史摘要投影、重复检查的交付报告均产生可复算 JSON，记录脚本及模块哈希。只测机制和资源量，不冒充模型成功率。
+- OPT-1：工具预览的头尾共享字节额度，截断边界保留尾部。验收：边界尾标记、UTF-8、双流、稀疏存储与完整回读；预览正文不超额度，现有回归通过。
+- OPT-2：摘要可见性投影使用索引，避免反复扫描事件及无用消息序列化。验收：与旧实现差分一致、嵌套/非法/unknown/原始请求保护不变，事件属性读取量下降。
+- OPT-3：报告查询共享本次查询的文件快照，避免按检查条目重复读取。验收：passed/failed/stale/unknown/分页/续跑语义不变，下一次查询重新读盘，文件打开次数下降。
+- OPT-4：最终前后对照和复现文档。验收：三组件量化门槛、完整 test/check/lint、fixtures/离线评测/公开证据复算；分组件记录提交与限制。
+
+OPT-0 与 OPT-4 属于各自独立的验收结论；OPT-1/2/3 分别独立提交，全部完成后核对实际提交。真实模型泛化与供应商缓存收益须另行冻结并取得具体预算授权，当前不发模型请求。
+
 ### R10 正式评测执行器零付费准备（2026-10-20，工作分支验收完成）
 
 独立提交 `430234e`：新增 `scripts/swebench/{run,report,workspace}.ts`，并扩展 `protocol.ts`/`preregister.ts`/`docs/EVALUATION-SWEBENCH.md`。行为边界：① 冻结文件同时包含开发批次（默认 5 题）与正式批次（50 题），开发题先选并从正式批排除，排除规则与确定性 arm 交错顺序写入 manifest；② 原始数据集只保留 `instance_id/repo/base_commit/version/environment_setup_commit/problem_statement/image`，gold/hidden 字段在预注册时剥离，执行器再拒绝仍带 `patch`/`test_patch`/`FAIL_TO_PASS` 的输入；③ `preregister` 缺模型、价格、基线命令、镜像 digest 或批次上限时保持 `draft`，只有齐备且 `--finalize` 才成为 `frozen`；④ 执行器复用 `createHarness`，每任务应用请求/工具/时间/输出/token 上限（金额上限按最大单价反推保守 token 上限），保存 session JSONL、终态、usage、空/非空 patch，基础设施失败与未知 usage 停批，批次金额与 episode 数量有硬上限，`--resume` 跳过已完成/中断 episode 而不重跑；⑤ 独立判分只读已保存 prediction，每批每臂使用新 run_id，官方判分失败保留为 error 分类并留在主分母；⑥ 报告给出 planned/executed 分母、每臂 Wilson 区间、预先声明的 candidate/baseline 与 context 两臂配对四格、精确 McNemar、失败分类与三条预声明失败轨迹，并关联 events/patch/session 路径。
