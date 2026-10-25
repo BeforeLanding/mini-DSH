@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- **OPT 组件优化进行中（2026-10-25）**：基线 `74f8e89` 的 18 个离线组件探针已冻结并推送（OPT-0 `c2ee97b`）。OPT-1 `00c8e32` 的 12/12 预览探针通过。OPT-2 最大摘要投影事件属性读取下降 98.82%，输出哈希与基线一致、960 次差分通过；完整 513 tests / 483 pass / 0 fail / 30 skipped。按 OPT-0/1/2/3/4 分别验收与提交；不改变历史 NX-45 结果，不把机制资源改进宣称为模型成功率。下一步 OPT-3 查询内共享文件版本。
+- **OPT 组件优化进行中（2026-10-25）**：基线 `74f8e89` 的 18 个离线组件探针已冻结（OPT-0 `c2ee97b`）。OPT-1 `00c8e32` 的 12/12 预览探针通过；OPT-2 `cd17cbc` 最大摘要投影事件读取下降 98.82%；OPT-3 报告打开文件从 67 降至 2（-97.01%），两类证据输出哈希均不变。完整 513 tests / 483 pass / 0 fail / 30 skipped。按 OPT-0/1/2/3/4 分别验收与提交，不改变历史 NX-45 结果。下一步 OPT-4 最终对照、复现门禁与交付文档。
 
 - **工作分支已合并到 main（2026-10-20）**：草稿 [PR #3](https://github.com/BeforeLanding/mini-DSH/pull/3) 以保留提交历史的 merge commit `a58ab5d441185479f4bc83aca30f4b6f63f3f902` 合并；`origin/main` 已从 `32e2598` 前进到 `a58ab5d`。main 的 [CI 39428240871](https://github.com/BeforeLanding/mini-DSH/actions/runs/39428240871) 六个 job 全绿（Ubuntu/Windows × Node 22/24、isolation、package-install）；`Official SWE-bench no-model PoC` 按普通 PR 配置 skipped。历史红灯 run 39133594202 保留作证据，不代表当前 main。工作分支保留，未删除。
 

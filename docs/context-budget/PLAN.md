@@ -6,6 +6,10 @@
 
 压缩压力探针改为同时填满 stdout/stderr，使共享 16 KiB 额度真实受压；阈值、预算和断言不变，独立 fixture 与冻结组件对照集不变。该探针只验收触发机制，不进入能力分数。
 
+## OPT-3 报告查询的版本读取（2026-10-25）
+
+`taskReport` 内的变更、检查与覆盖视图共用一次查询的文件版本读取，按已解析路径缓存 hash/location 与失败，不保留源文件正文。独立 `taskChanges` / `taskVerifications` 查询各自创建读取器；下一次查询/下一页必定重新读盘，不跨查询或恢复缓存。取消在命中缓存前仍检查。验证命令执行前后的 `verificationFiles` 分别创建读取器，不能复用命令执行前的版本证明执行后稳定。报告是按需读取的一组观测，不是整个文件系统的原子快照；passing/coverage 的范围与 `acceptance: not_asserted` 不变。
+
 ## R01 错误诊断设计（2026-10-19）
 
 先在模型适配器边界给 HTTP／传输失败构造 `ProviderError`，只保留分类、可选状态码、限长 provider request ID 与重试性；响应正文仅用于有界分类判断，不进入错误消息。重试性是供后续 R03 使用的元数据，本项不自动重试。再在现有事件 version 1 中增加 `run/error`，只保存阶段、分类和固定安全消息，运行时 payload 校验及 JSONL 读取器同步更新，重放不再调用模型或工具。主请求与摘要请求各按 requestId 归因，工具异常按 toolCallId 归因；`run/finish` 仍唯一终态。inspect 的 JSON 字段与文字摘要均以已记录错误为准，旧日志未记录死因时写 unknown 而不猜测。
