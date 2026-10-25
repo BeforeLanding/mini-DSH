@@ -1,5 +1,13 @@
 # 改动与验收证据
 
+### OPT-2 摘要投影索引（2026-10-25）
+
+`surfaceSeqs` 建立事件 seq 和可见位置索引，不再对每个 shadowed seq 扫描全事件；只按事件类型选初始可见集，不在选择阶段序列化所有未被遮蔽工具的参数。摘要替换顺序、协议闭合、unknown 与原始用户请求保护规则不变，没有缓存跨请求或改写日志。
+
+固定对照脚本的 compaction gate 通过，三个输出 SHA-256 与基线完全一致。64/256/1024 工具组的事件 `seq/type` 读取为 10,529→1,610、140,225→6,302、2,133,569→25,070，最大案例下降 98.82%；该指标不等同于时间复杂度或模型 token。5 次计时中位数仅作环境相关观测，不作 CI 门槛。新增冻结旧实现 oracle，80 个 seed 各 12 次比较嵌套、缺失、不连续、协议不闭合、unknown/用户请求保护，并确认不修改事件；另测选择阶段不序列化未遮蔽参数。
+
+验收：定向 surface/context/compaction-plan/compaction-runtime 37/37；完整 `pnpm test` 513 tests / 483 pass / 0 fail / 30 skipped；build 严格类型通过，`node scripts/check-syntax.js` 194 files，`pnpm lint` 无诊断。构建清理 dist 与第一次语法检查并发造成文件暂缺，该检查已在构建结束后重跑通过；后续避免并发构建与 dist 读取。真实 provider 请求 0。
+
 ### OPT-1 预览头尾共享额度（2026-10-25）
 
 `previewWindow` 从同一正文额度分配头尾，保留阈值边界的尾部信息与中段游标；普通结果推荐从中段偏移回读。Bash 两流各分一半；合法的采集头尾重叠先去重再存储，避免 quota/integrity 误报。PLAN/REQUIREMENTS 显式修订 D-20；历史 JSONL 与 NX-45 结论未改。
