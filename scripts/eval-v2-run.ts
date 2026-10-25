@@ -17,6 +17,7 @@ import { createIsolationBackend } from './eval-v2-isolation.js'
 import { reportV2, verifyV2FrozenFiles } from './eval-v2-report.js'
 import type { V2Manifest, V2Observation } from './eval-v2-report.js'
 
+const repository = fileURLToPath(new URL('../../', import.meta.url))
 const args = process.argv.slice(2)
 const validateOnly = args.length === 3 && args[0] === '--manifest' && args[2] === '--validate-only'
 if (!validateOnly && (args.length !== 7 || args[0] !== '--manifest' || args[2] !== '--evidence-root' || args[4] !== '--max-usd' || args[6] !== '--execute')) {
@@ -35,7 +36,6 @@ if (!manifest.model.startsWith('deepseek/')) throw new Error('only a frozen deep
 if (manifest.split !== 'calibration' && manifest.split !== 'formal' && manifest.split !== 'development' && manifest.split !== 'component') throw new Error('invalid V2 split')
 const strictSplit = manifest.split === 'development' || manifest.split === 'component'
 if (strictSplit) {
-  const repository = fileURLToPath(new URL('../../', import.meta.url))
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' }).trim()
   const dirty = execFileSync('git', ['status', '--porcelain'], { cwd: repository, encoding: 'utf8' }).trim()
   if (head !== manifest.gitCommit || dirty) throw new Error(`${manifest.split} run requires the clean frozen HEAD`)
@@ -99,6 +99,9 @@ const startedAt = new Date().toISOString()
 
 await fs.mkdir(evidenceRoot)
 await fs.writeFile(path.join(evidenceRoot, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
+// Keep the package manifest with the evidence: the old/new comparison checks
+// that the only package difference is the known benchmark script.
+await fs.copyFile(path.join(repository, 'package.json'), path.join(evidenceRoot, 'package.json'))
 const runLog = path.join(evidenceRoot, 'runs.jsonl')
 await fs.writeFile(runLog, '', { flag: 'wx' })
 const observations: V2Observation[] = []

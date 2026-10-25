@@ -44,7 +44,7 @@ const sourcePaths = [
   'scripts/eval-v2-isolation.ts', 'scripts/eval-fixture.ts', 'scripts/eval-runner.ts',
   'scripts/eval-v2-report.ts', 'scripts/eval-v2-freeze.ts', 'scripts/eval-v2.ts', 'scripts/eval-v2-runtime.sha256',
   'scripts/eval-capabilities.mjs',
-  'scripts/eval-v2-observation.ts', 'scripts/eval-v2-run.ts',
+  'scripts/eval-v2-observation.ts', 'scripts/eval-v2-run.ts', 'scripts/eval-v2-compare.ts',
   'scripts/eval-v2-prepare-runtime.sh', 'scripts/coding-fixtures.ts', 'scripts/eval-provenance.ts',
   'test/fixtures/harness-v2/_shared/probe.mjs',
 ]
