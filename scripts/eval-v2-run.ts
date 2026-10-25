@@ -11,12 +11,13 @@ import type { SessionEvent } from '../src/core/contracts.js'
 import { runFixtureTask } from './eval-fixture.js'
 import type { RunOutcome } from './eval-runner.js'
 import { deriveV2Observation, developmentBatchStopReason, diagnoseV2Error, recoverV2UnverifiedEvents } from './eval-v2-observation.js'
-import { developmentReserveUsd } from './eval-v2-plan.js'
+import { blockSizeForV2Split, developmentReserveUsd, protocolForV2Split } from './eval-v2-plan.js'
 import { createSmokeAmountGuard } from './smoke-cost.js'
 import { createIsolationBackend } from './eval-v2-isolation.js'
 import { reportV2, verifyV2FrozenFiles } from './eval-v2-report.js'
 import type { V2Manifest, V2Observation } from './eval-v2-report.js'
 
+const repository = fileURLToPath(new URL('../../', import.meta.url))
 const args = process.argv.slice(2)
 const validateOnly = args.length === 3 && args[0] === '--manifest' && args[2] === '--validate-only'
 if (!validateOnly && (args.length !== 7 || args[0] !== '--manifest' || args[2] !== '--evidence-root' || args[4] !== '--max-usd' || args[6] !== '--execute')) {
@@ -24,7 +25,7 @@ if (!validateOnly && (args.length !== 7 || args[0] !== '--manifest' || args[2] !
 }
 const manifest = JSON.parse(await fs.readFile(args[1]!, 'utf8')) as V2Manifest
 if (manifest.protocol === 'NX-42-eval-v2') throw new Error('historical V2 manifest cannot run with the changed tool composition; freeze a new v2.1 manifest')
-if (manifest.protocol !== (manifest.split === 'development' ? 'NX-45-dev-2arm-v1' : 'NX-42-eval-v2.1')) throw new Error('V2 manifest protocol/split mismatch; freeze a current manifest')
+if (manifest.protocol !== protocolForV2Split(manifest.split)) throw new Error('V2 manifest protocol/split mismatch; freeze a current manifest')
 const evidenceRoot = path.resolve(args[3] ?? os.tmpdir())
 const maxUsd = validateOnly ? 0 : Number(args[5])
 if (!validateOnly && (!Number.isFinite(maxUsd) || maxUsd <= 0)) throw new Error('--max-usd must be a positive finite amount')
@@ -32,13 +33,21 @@ if (manifest.priceSnapshot.currency !== 'USD') throw new Error('this runner requ
 if (![manifest.priceSnapshot.inputPerMillion, manifest.priceSnapshot.outputPerMillion, manifest.priceSnapshot.cacheReadPerMillion].every(value => Number.isFinite(value) && value >= 0) ||
   manifest.priceSnapshot.inputPerMillion === 0 || manifest.priceSnapshot.outputPerMillion === 0) throw new Error('invalid frozen price snapshot')
 if (!manifest.model.startsWith('deepseek/')) throw new Error('only a frozen deepseek model is supported')
-if (manifest.split !== 'calibration' && manifest.split !== 'formal' && manifest.split !== 'development') throw new Error('invalid V2 split')
-if (manifest.split === 'development') {
-  const repository = fileURLToPath(new URL('../../', import.meta.url))
+if (manifest.split !== 'calibration' && manifest.split !== 'formal' && manifest.split !== 'development' && manifest.split !== 'component') throw new Error('invalid V2 split')
+const strictSplit = manifest.split === 'development' || manifest.split === 'component'
+if (strictSplit) {
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' }).trim()
   const dirty = execFileSync('git', ['status', '--porcelain'], { cwd: repository, encoding: 'utf8' }).trim()
-  if (head !== manifest.gitCommit || dirty) throw new Error('development run requires the clean frozen HEAD')
-  if (manifest.priceSnapshot.source !== 'https://api-docs.deepseek.com/quick_start/pricing/' || !manifest.modelVersion) throw new Error('development price or model version snapshot missing')
+  if (head !== manifest.gitCommit || dirty) throw new Error(`${manifest.split} run requires the clean frozen HEAD`)
+  if (manifest.priceSnapshot.source !== 'https://api-docs.deepseek.com/quick_start/pricing/' || !manifest.modelVersion) throw new Error(`${manifest.split} price or model version snapshot missing`)
+  if (manifest.split === 'component') {
+    if (!manifest.sourceBaseCommit || !/^[0-9a-f]{40}$/.test(manifest.sourceBaseCommit) || manifest.sourceBaseCommit === head) throw new Error('component run requires a distinct frozen sourceBaseCommit')
+    try {
+      execFileSync('git', ['merge-base', '--is-ancestor', manifest.sourceBaseCommit, head], { cwd: repository, stdio: 'ignore' })
+    } catch {
+      throw new Error('component sourceBaseCommit must be an ancestor of the frozen HEAD')
+    }
+  }
 }
 reportV2(manifest, []) // Validate the entire fixed task, arm and episode schedule before side effects.
 await verifyV2FrozenFiles(manifest)
@@ -46,12 +55,14 @@ if (!validateOnly && await fs.stat(evidenceRoot).catch(() => undefined)) throw n
 const runtimeRoot = process.env.MINI_DSH_V2_RUNTIME
 if (!runtimeRoot || !(await fs.stat(runtimeRoot).catch(() => undefined))?.isDirectory()) throw new Error('MINI_DSH_V2_RUNTIME must point to the pinned extracted Linux runtime')
 const preflight = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-v2-preflight-'))
+let isolationKind = ''
 try {
   const sentinel = path.join(path.dirname(preflight), `${path.basename(preflight)}-hidden.txt`)
   await fs.writeFile(sentinel, 'host-only', { flag: 'wx' })
   try {
     const backend = createIsolationBackend({ workspace: preflight, runtimeRoot })
     const capabilities = await backend.preflight()
+    isolationKind = capabilities.kind
     const result = await backend.run({
       executable: 'ignored', args: [], command: `node --version && test ! -r '${backend.visibleHostPath(sentinel)}'`, cwd: preflight,
       signal: new AbortController().signal, timeoutMs: 10_000,
@@ -62,7 +73,8 @@ try {
   if (path.dirname(preflight) === path.resolve(os.tmpdir()) && path.basename(preflight).startsWith('mini-dsh-v2-preflight-')) await fs.rm(preflight, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
 }
 if (validateOnly) {
-  console.log(JSON.stringify({ manifestDigest: manifest.digest, tasks: manifest.tasks.length, episodes: manifest.episodes.length, isolation: 'passed', paidRequests: 0 }))
+  console.log(JSON.stringify({ manifestDigest: manifest.digest, sourceBaseCommit: manifest.sourceBaseCommit ?? null, evaluationCommit: manifest.gitCommit,
+    tasks: manifest.tasks.length, episodes: manifest.episodes.length, isolation: isolationKind, paidRequests: 0 }))
   process.exit(0)
 }
 dotenv.config({ quiet: true })
@@ -71,19 +83,25 @@ const modelId = manifest.model.slice('deepseek/'.length)
 const adapter = createDeepSeekAdapter({ baseUrl: manifest.baseUrl, models: [modelId], thinking: manifest.thinking, contextWindowTokens: manifest.window })
 const armByName = new Map(manifest.arms.map(arm => [arm.name, arm]))
 const maxUnit = Math.max(manifest.priceSnapshot.inputPerMillion, manifest.priceSnapshot.outputPerMillion, manifest.priceSnapshot.cacheReadPerMillion)
-const developmentReserve = manifest.split === 'development' ? developmentReserveUsd(manifest.priceSnapshot) : undefined
-const perEpisodeReserve = developmentReserve?.perEpisodeUsd ?? (manifest.tier === '2m' ? 2_000_000 : 1_000_000) * maxUnit / 1_000_000 * 1.1
-const blockSize = manifest.split === 'formal' ? 4 : 2
-const probeReserve = developmentReserve?.probeUsd ?? 16_384 * maxUnit / 1_000_000
+const strictReserve = strictSplit ? developmentReserveUsd(manifest.priceSnapshot, {
+  arm: manifest.arms[0]!.name, episodes: manifest.episodes.length, tier: manifest.tier, window: manifest.window,
+}) : undefined
+const perEpisodeReserve = strictReserve?.perEpisodeUsd ?? (manifest.tier === '2m' ? 2_000_000 : 1_000_000) * maxUnit / 1_000_000 * 1.1
+const blockSize = blockSizeForV2Split(manifest.split)
+const probeReserve = strictReserve?.probeUsd ?? 16_384 * maxUnit / 1_000_000
 if (maxUsd < probeReserve + perEpisodeReserve * blockSize) throw new Error(`amount cap cannot reserve protocol probes and one complete block; need at least $${(probeReserve + perEpisodeReserve * blockSize).toFixed(2)}`)
-const developmentAmountGuard = manifest.split === 'development' ? createSmokeAmountGuard(adapter.chat, {
+const strictAmountGuard = strictSplit ? createSmokeAmountGuard(adapter.chat, {
   source: manifest.priceSnapshot.source, capturedAt: manifest.priceSnapshot.capturedAt, currency: 'USD',
   peakInputPerMillion: manifest.priceSnapshot.inputPerMillion, peakOutputPerMillion: manifest.priceSnapshot.outputPerMillion,
   peakCacheReadPerMillion: manifest.priceSnapshot.cacheReadPerMillion,
 }, maxUsd - probeReserve) : undefined
+const startedAt = new Date().toISOString()
 
 await fs.mkdir(evidenceRoot)
 await fs.writeFile(path.join(evidenceRoot, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
+// Keep the package manifest with the evidence: the old/new comparison checks
+// that the only package difference is the known benchmark script.
+await fs.copyFile(path.join(repository, 'package.json'), path.join(evidenceRoot, 'package.json'))
 const runLog = path.join(evidenceRoot, 'runs.jsonl')
 await fs.writeFile(runLog, '', { flag: 'wx' })
 const observations: V2Observation[] = []
@@ -101,13 +119,15 @@ try {
   const direct = await response.json() as { model?: string; usage?: unknown; choices?: { finish_reason?: string }[] }
   if (direct.model !== manifest.echoedModel || !direct.usage) throw new Error(`model probe mismatch: expected ${manifest.echoedModel}, observed ${String(direct.model)}`)
   const streamed = await adapter.chat({ model: modelId, maxOutputTokens: 1024, messages: [{ role: 'user', content: 'reply with the single word: ok' }] })
-  if (!streamed.usage || streamed.complete === false || (manifest.split === 'development' && streamed.usage.source !== 'provider')) throw new Error('streaming model probe returned no complete provider usage')
+  if (!streamed.usage || streamed.complete === false || (strictSplit && streamed.usage.source !== 'provider')) throw new Error('streaming model probe returned no complete provider usage')
   await fs.writeFile(path.join(evidenceRoot, 'probe.json'), `${JSON.stringify({ requestedModel: modelId, echoedModel: direct.model, directUsage: direct.usage, directFinishReason: direct.choices?.[0]?.finish_reason, streamedUsage: streamed.usage, streamedFinishReason: streamed.finishReason, reservedUsd: probeReserve }, null, 2)}\n`, { flag: 'wx' })
   // Reserve the full probe allowance in the amount ceiling; actual provider prices may be lower.
   spentUsd = probeReserve
 } catch (error) {
   await fs.writeFile(path.join(evidenceRoot, 'probe-error.json'), `${JSON.stringify({ error: error instanceof Error ? error.message : String(error), reserveUsd: probeReserve })}\n`, { flag: 'wx' })
-  await fs.writeFile(path.join(evidenceRoot, 'report.json'), `${JSON.stringify({ ...reportV2(manifest, []), stopped: true, stopReason: 'protocol_probe_failed', spentUsdEstimate: probeReserve, maxUsd }, null, 2)}\n`, { flag: 'wx' })
+  await fs.writeFile(path.join(evidenceRoot, 'report.json'), `${JSON.stringify({ ...reportV2(manifest, []), stopped: true, stopReason: 'protocol_probe_failed', spentUsdEstimate: probeReserve, maxUsd,
+    startedAt, finishedAt: new Date().toISOString(), sourceBaseCommit: manifest.sourceBaseCommit ?? null, evaluationCommit: manifest.gitCommit,
+    environment: { node: process.version, platform: process.platform, release: os.release(), isolation: isolationKind } }, null, 2)}\n`, { flag: 'wx' })
   throw error
 }
 
@@ -149,7 +169,7 @@ for (let index = 0; index < manifest.episodes.length; index += blockSize) {
     let evidenceComplete = false
     try {
       const result = await runFixtureTask(episode.taskId as Parameters<typeof runFixtureTask>[0],
-        () => ({ provider: 'deepseek', model: modelId, capabilities: adapter.capabilities, chat: developmentAmountGuard?.chat ?? adapter.chat }),
+        () => ({ provider: 'deepseek', model: modelId, capabilities: adapter.capabilities, chat: strictAmountGuard?.chat ?? adapter.chat }),
         arm.budget, sessionDirectory, arm.toolOutput, arm.promptLayout, path.join(episodeDirectory, 'snapshots'), { runtimeRoot })
       outcome = result
       events = await readDurableEvents(sessionDirectory)
@@ -169,7 +189,7 @@ for (let index = 0; index < manifest.episodes.length; index += blockSize) {
       stopReason = 'infrastructure_or_evidence_error'
     }
     const observation = deriveV2Observation(episode, outcome, events, evidenceComplete)
-    const developmentStop = manifest.split === 'development' ? developmentBatchStopReason(observation, events) : null
+    const developmentStop = strictSplit ? developmentBatchStopReason(observation, events) : null
     if (observation.failureReason === 'infrastructure' || observation.status === 'error') {
       if (!stopped) {
         await fs.writeFile(path.join(episodeDirectory, 'error.json'), `${JSON.stringify(diagnoseV2Error(outcome.error ?? outcome.status, events))}\n`, { flag: 'wx' })
@@ -182,7 +202,7 @@ for (let index = 0; index < manifest.episodes.length; index += blockSize) {
     await fs.appendFile(runLog, `${JSON.stringify(observation)}\n`)
     const tokens = observation.metrics
     const nonCacheInput = Math.max(0, tokens.inputTokens - tokens.cacheReadTokens)
-    spentUsd = developmentAmountGuard ? probeReserve + developmentAmountGuard.spentUsd : spentUsd +
+    spentUsd = strictAmountGuard ? probeReserve + strictAmountGuard.spentUsd : spentUsd +
       (nonCacheInput * manifest.priceSnapshot.inputPerMillion + tokens.cacheReadTokens * manifest.priceSnapshot.cacheReadPerMillion + tokens.outputTokens * manifest.priceSnapshot.outputPerMillion) / 1_000_000
     if (spentUsd > maxUsd) { stopped = true; stopReason = 'amount_cap_exceeded_after_provider_usage' }
     console.log(`${episode.taskId}/${episode.repeat}/${episode.arm}: ${observation.status}, accepted=${observation.accepted}, spent≈$${spentUsd.toFixed(4)}`)
@@ -192,8 +212,11 @@ for (let index = 0; index < manifest.episodes.length; index += blockSize) {
 }
 
 const report = reportV2(manifest, observations)
+const finishedAt = new Date().toISOString()
 await fs.writeFile(path.join(evidenceRoot, 'report.json'), `${JSON.stringify({ ...report, spentUsdEstimate: spentUsd, maxUsd, stopped, stopReason,
-  ...(manifest.split === 'development' ? { costLedgerMethod: 'known episode provider usage plus full protocol probe reserve; not a provider invoice',
-    probeReserveUsd: probeReserve, costUnknown: developmentAmountGuard?.usageUnknown || stopReason === 'usage_unknown' || stopReason.startsWith('infrastructure') } : {}) }, null, 2)}\n`, { flag: 'wx' })
+  startedAt, finishedAt, sourceBaseCommit: manifest.sourceBaseCommit ?? null, evaluationCommit: manifest.gitCommit,
+  environment: { node: process.version, platform: process.platform, release: os.release(), isolation: isolationKind },
+  ...(strictSplit ? { costLedgerMethod: 'known episode provider usage plus full protocol probe reserve; not a provider invoice',
+    probeReserveUsd: probeReserve, costUnknown: strictAmountGuard?.usageUnknown || stopReason === 'usage_unknown' || stopReason.startsWith('infrastructure') } : {}) }, null, 2)}\n`, { flag: 'wx' })
 console.log(JSON.stringify({ evidenceRoot, executed: observations.length, planned: manifest.episodes.length, incomplete: report.incomplete, spentUsdEstimate: spentUsd, stopReason }))
 if (report.incomplete || stopped) process.exitCode = 1

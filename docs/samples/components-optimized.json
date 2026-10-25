@@ -1,0 +1,183 @@
+{
+  "protocol": "mini-dsh-components-v1",
+  "evidenceKind": "offline-mechanism",
+  "sourceCommit": "14a0d1c6e8eb1519cd27e8cc61ce0011927536cd",
+  "node": "v24.16.0",
+  "platform": "win32",
+  "suiteSha256": "34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28",
+  "moduleSha256": {
+    "src/plugins/tool-results.js": "18b58453a26364d3e0519bd7f733ba81adb903d3ccffdf1a6c968a47a43c95c2",
+    "src/core/tool-result-store.js": "3d75fe100af635ca6c4167a497a560195691bddaf5f088303b1eb39551737bd4",
+    "src/core/compaction-plan.js": "b5c2db0bc140e69680ae4310df0f0a14b3deb69d1751145baf125d6424343381",
+    "src/core/task-verification.js": "b1eabdf4d0645faaab95102ba630ae2baddfebf042a5565bcb76e31b08a3d084",
+    "src/core/task-changes.js": "10107a7cc3388ad80c1fb2ff81dd2e9177ffd02dcf0845c3efbc3497458a0a2a"
+  },
+  "tools": [
+    {
+      "id": "text-one-over",
+      "limit": 64,
+      "originalBytes": 65,
+      "visibleBytes": 64,
+      "withinLimit": true,
+      "tailVisible": true,
+      "fullRecall": true
+    },
+    {
+      "id": "text-near-tail",
+      "limit": 64,
+      "originalBytes": 67,
+      "visibleBytes": 64,
+      "withinLimit": true,
+      "tailVisible": true,
+      "fullRecall": true
+    },
+    {
+      "id": "text-unicode",
+      "limit": 64,
+      "originalBytes": 66,
+      "visibleBytes": 63,
+      "withinLimit": true,
+      "tailVisible": true,
+      "fullRecall": true
+    },
+    {
+      "id": "text-long",
+      "limit": 64,
+      "originalBytes": 515,
+      "visibleBytes": 64,
+      "withinLimit": true,
+      "tailVisible": true,
+      "fullRecall": true
+    },
+    {
+      "id": "stdout-one-over",
+      "limit": 32,
+      "originalBytes": 33,
+      "visibleBytes": 32,
+      "withinLimit": true,
+      "tailVisible": true,
+      "fullRecall": true
+    },
+    {
+      "id": "stdout-near-tail",
+      "limit": 32,
+      "originalBytes": 35,
+      "visibleBytes": 32,
+      "withinLimit": true,
+      "tailVisible": true,
+      "fullRecall": true
+    },
+    {
+      "id": "stdout-unicode",
+      "limit": 32,
+      "originalBytes": 33,
+      "visibleBytes": 30,
+      "withinLimit": true,
+      "tailVisible": true,
+      "fullRecall": true
+    },
+    {
+      "id": "stdout-long",
+      "limit": 32,
+      "originalBytes": 515,
+      "visibleBytes": 32,
+      "withinLimit": true,
+      "tailVisible": true,
+      "fullRecall": true
+    },
+    {
+      "id": "stderr-one-over",
+      "limit": 32,
+      "originalBytes": 33,
+      "visibleBytes": 32,
+      "withinLimit": true,
+      "tailVisible": true,
+      "fullRecall": true
+    },
+    {
+      "id": "stderr-near-tail",
+      "limit": 32,
+      "originalBytes": 35,
+      "visibleBytes": 32,
+      "withinLimit": true,
+      "tailVisible": true,
+      "fullRecall": true
+    },
+    {
+      "id": "stderr-unicode",
+      "limit": 32,
+      "originalBytes": 33,
+      "visibleBytes": 30,
+      "withinLimit": true,
+      "tailVisible": true,
+      "fullRecall": true
+    },
+    {
+      "id": "stderr-long",
+      "limit": 32,
+      "originalBytes": 515,
+      "visibleBytes": 32,
+      "withinLimit": true,
+      "tailVisible": true,
+      "fullRecall": true
+    }
+  ],
+  "compaction": [
+    {
+      "id": "history-64",
+      "events": 135,
+      "propertyReads": 1610,
+      "outputSha256": "5454a07cb80e66cf234f00cda2b000f6e3a8286546a6f8ee2ed39b8f12a4ad27",
+      "correct": true,
+      "medianMs": 0.12860000000000582
+    },
+    {
+      "id": "history-256",
+      "events": 531,
+      "propertyReads": 6302,
+      "outputSha256": "fe15a40987bf9ce97ac0f48f5625b833010bc6d0357342570308106d6aebc2e3",
+      "correct": true,
+      "medianMs": 0.5863999999999976
+    },
+    {
+      "id": "history-1024",
+      "events": 2115,
+      "propertyReads": 25070,
+      "outputSha256": "7db1a5977d31d4dc324b387669e6fc514475d8aae30e7a25e704686910ac17ce",
+      "correct": true,
+      "medianMs": 4.442700000000002
+    }
+  ],
+  "reports": [
+    {
+      "id": "report-1",
+      "checks": 1,
+      "uniqueFiles": 2,
+      "snapshotOpens": 2,
+      "correct": true,
+      "outputSha256": "5c747590207ac6daf528a4ab8ba04ad8d0154799f554dbf432d962e92c539f6a"
+    },
+    {
+      "id": "report-8",
+      "checks": 8,
+      "uniqueFiles": 2,
+      "snapshotOpens": 2,
+      "correct": true,
+      "outputSha256": "ef674097c70dee379d0272327b904fc858c812c4797c63a40fc9bbc6444a586a"
+    },
+    {
+      "id": "report-32",
+      "checks": 32,
+      "uniqueFiles": 2,
+      "snapshotOpens": 2,
+      "correct": true,
+      "outputSha256": "eb12ef44253b712a45ea5e35d9509837a652ffb993241bcf3418ae6ba6302f37"
+    }
+  ],
+  "providerRequests": 0,
+  "comparisonPassed": [
+    "tools",
+    "compaction",
+    "reports"
+  ]
+}

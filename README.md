@@ -6,6 +6,8 @@ mini-DSH 是一个 TypeScript / Cordis 编写的本地编程 Agent Harness。它
 
 先看 [两条合成轨迹与离线复算](docs/RESULTS.md)、[评测口径](docs/EVALUATION.md) 和 [三个工程案例](docs/CASES.md)。合成轨迹只证明机制，不是模型能力分数。
 
+2026-10-25 的[组件优化与复现](docs/COMPONENT-OPTIMIZATION.md)提供同一套 18 个离线探针的前后对照：预览尾标记可见 3/12→12/12，最大摘要投影事件读取减少 98.82%，重复检查报告打开文件减少 97.01%。运行 `pnpm bench:components` 可复算；这些是信息保留和资源效率结果，不是新的模型成功率。
+
 仓库的教程基线来自[从零手写 mini-dsh](https://github.com/huangjunsen0406/mini-dsh/blob/main/LEARNING.zh-CN.md)，止于 `c5fc9c4`；`43e3829` 起是本项目的独立扩展。许可证与来源边界见 [LICENSE](LICENSE) 和 [NOTICE](NOTICE)。
 
 ![当前架构：入口、Agent Loop、模型、工具、事件与恢复](docs/images/architecture-v1.png)

@@ -1,5 +1,63 @@
 # 改动与验收证据
 
+### NX-50 PR5 组件版本对照：两批执行与门槛结果（2026-10-25）
+
+旧版 manifest `6d50a359…`（被测 `74f8e89`，评测 `c17145a`）与优化版 `9746c90f…`（被测 `0b24b32`，评测 `adabea5`）分别在干净工作树冻结并通过 `--validate-only`；两批各 12/12 执行、无 missing/invalid、provider usage 全覆盖、estimated=0。预注册顺序先优化版（03:52–04:09 UTC）后旧版（05:55–06:10 UTC），中间等待旧版单独授权。
+
+结果：旧/新可靠完成 **12/12 对 12/12**、产物验收 **12/12 对 12/12**；token **4,065,419→3,791,203（-6.75%）**，主动耗时 **898,977→958,913 ms（+6.67%）**，模型请求 206→189、工具调用 357→332、工具错误 23→22、预览截断 19→18、压力压缩 3→5、cache-read 两版均 57,728。比较器 `gate.status=pass`、`mergeEligible=true`、`reasons=[]`，无单题双退步。峰时价 usage 估价旧版 `$1.337245368`、新版 `$1.269039468`，均低于单批 $22 授权上限；这是估价，不是供应商账单。
+
+逐题 token 变化不均：U02 -65.0%、F01 -51.5%、R04 -3.9%，而 B03 +19.5%、F02 +30.9%、T04 +22.2%；主动耗时在 B03/F02/R04/T04 上升，其中 F02/R04/T04 单题升幅超过 15%，但预注册门槛按两批总量判定。完整表、证据路径与解释边界见 [NX-50-RESULT](NX-50-RESULT.md)。两批串行且时间窗不同，cache 可能跨会话共享；不作显著性、泛化或单项组件归因。证据在 `D:\Agent\outputs\nx50-component-ab-20261025\`，原始 prompt/输出未进仓库。main 合并待用户确认。
+
+### NX-50 PR5 组件版本对照的零付费准备（2026-10-25）
+
+新增独立 `component` split 与 `NX-50-component-ab-v1` 协议，固定 `U02`、`B03`、`F01`、`F02`、`R04`、`T04` 六道此前无真实模型曝光的 formal fixture，只跑 `context` 臂，每题两次；每版 12 条 episode，整题预算与 NX-45 相同（1M token / 64 请求 / 128 工具 / 600 秒）。旧版 `74f8e89` 与优化版 `0b24b32` 各自在干净树上冻结，manifest 同时记录被测 `sourceBaseCommit` 与实际评测 `gitCommit`；比较器只允许 `src/**` 与已知 `package.json` 脚本差异。
+
+提交边界：`f3aab1f` 协议/冻结/单臂报告与文档；`5665293` runner 单臂 block、严格守卫与 provenance；`e4dfe4b` 离线比较器与门槛；本条目所在提交只回填状态。`developmentReserveUsd` 由固定 24 条/baseline 参数化为可指定臂与 episode 数，默认值保持历史读数。比较门槛在开跑前固定：新版可靠完成/产物验收各允许 1 条 episode 容差；token 与主动耗时不得超过旧版 1.15 倍；单题两次都退步为 `review-required`，不自动合并。
+
+零付费实测（优化版 checkout）：`pnpm check` → syntax 197 files；`MINI_DSH_V2_RUNTIME='D:\Agent\tmp\nx42-runtime\unpack' pnpm test` → 523 tests / 523 pass / 0 fail / 0 skipped；`pnpm lint` → 221 files / 0 diagnostics；`pnpm fixtures:check`、`pnpm eval:offline`（12/12 completed/accepted）、`pnpm bench:components`（tools/compaction/reports 三 gate）均 exit 0。`eval:v2 --split component --plan-only` 输出 6 题、1 臂、12 episodes、12 blocks，caps 与预留一致；比较器定向 3/3。未读取 API key、未发 provider 请求、未创建付费证据目录、未合并 main。两版 manifest 的冻结、digest 与 `--validate-only` 及后续付费执行结果见上一条。
+
+### OPT-4 冻结对照门禁与最终交付（2026-10-25）
+
+新增 `pnpm bench:components`、`test/component-benchmark.test.ts`、最终 `components-optimized.json` 与 `docs/COMPONENT-OPTIMIZATION.md`。基线 `74f8e89`、候选生产源码 `14a0d1c6e8eb1519cd27e8cc61ce0011927536cd`；两版协议 SHA-256 为 `34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28`，冻结脚本未改。基线文件 SHA-256 与协议钉版并进入完整测试，另验证将已通过的工具探针当基线时不能报告空改进。`.gitattributes` 固定协议脚本 LF，避免 Windows checkout 改变字节指纹。
+
+结果：工具尾标记 3/12→12/12，正文额度 9/12→12/12，全文回读两版均 12/12；最大历史事件属性读取下降 98.82%，报告文件打开次数下降 97.01%，两类选定证据输出哈希相同。未测其他组件、真实模型成功率或泛化，不追溯修改 NX-45。独立功能提交为 `00c8e32`、`cd17cbc`、`fda47d0`，新增边界 `14a0d1c`；基线提交 `c2ee97b`。原计划五步因复核发现独立失败边界增加 OPT-1b，六个步骤均可单独回退，没有 squash/amend/rebase。
+
+最终实际检查：正常用户权限 `pnpm test` → 517 tests / 487 pass / 0 fail / 30 skipped；`pnpm check` → syntax 195 files；`pnpm lint` → 219 files / 0 diagnostics；`pnpm bench:components` → 三 gate 通过；`node dist/scripts/check-coding-fixtures.js` exit 0；`node dist/scripts/eval-offline.js` → 12 planned / 12 executed / 12 completed / 12 accepted；`node dist/scripts/eval-estimate.js` → exit 0（估算器/语料哈希保持）；`node dist/scripts/recompute-report.js docs/samples --check` → 两条报告和 RESULTS 均一致。原始本地输出在 `D:\Agent\outputs\mini-dsh-components-20261025`，公开合成测量随仓库提交。30 项隔离测试由 Linux CI 实测，本机不计为通过。无真实 provider 请求、新模型费用、npm 发布或部署。
+
+### OPT-1b 极小命令额度的失败边界（2026-10-25）
+
+独立提交 `14a0d1c`。最终复核发现：即使裁剪 helper 返回空尾部，展开原始 `stream` 仍可能保留采集的 tail；同时两流各 `max(1, floor(limit/2))` 在总额度为 1 时会分配 2 字节。现明确覆盖原 tail（无完整字符时 undefined），并按 stdout ceil/stderr floor 分配。新增 1/2 字节双流、中文字符放不下和 sparse ref 全文回读用例；18 个冻结对照探针未改。含待提交 OPT-4 门禁的完整工作区回归 517 tests / 487 pass / 0 fail / 30 skipped；lint 无诊断，语法 195 files。OPT-4 的门禁/最终证据另提交；没有合并或改写已有提交。
+
+### OPT-3 报告查询内复用文件版本（2026-10-25）
+
+`fileVersionQuery` 只缓存本次查询的 hash/location 或读取失败；`taskReport` 的变更、检查与覆盖视图共享读取器，独立查询/分页各自重新读盘。文件正文不进入缓存，取消命中前仍检查；Bash 验证前后的读取不共享。PLAN 明确报告不是文件系统原子快照，`acceptance: not_asserted` 与失败/过期/未知、声明覆盖边界不变。
+
+固定报告探针 1/8/32 条检查均输出与基线相同的证据哈希；文件打开次数从 5/19/67 降到 2/2/2，最大案例下降 97.01%。新增真实查询断言：变更文件和配置各读一次，失败检查仍在；修改配置后下一次查询变 stale，已取消查询拒绝。定向 task-report/task-verification/task-changes 8/8。
+
+完整 `pnpm test` 首次仅决策文档源码锚点失败：新增函数插入中间移动了编辑器锚点；现把函数移至文件末尾，保留原行号。复跑 513 tests / 483 pass / 0 fail / 30 skipped；strict build、语法 194 files、lint 无诊断。真实 provider 请求 0。
+
+### OPT-2 摘要投影索引（2026-10-25）
+
+`surfaceSeqs` 建立事件 seq 和可见位置索引，不再对每个 shadowed seq 扫描全事件；只按事件类型选初始可见集，不在选择阶段序列化所有未被遮蔽工具的参数。摘要替换顺序、协议闭合、unknown 与原始用户请求保护规则不变，没有缓存跨请求或改写日志。
+
+固定对照脚本的 compaction gate 通过，三个输出 SHA-256 与基线完全一致。64/256/1024 工具组的事件 `seq/type` 读取为 10,529→1,610、140,225→6,302、2,133,569→25,070，最大案例下降 98.82%；该指标不等同于时间复杂度或模型 token。5 次计时中位数仅作环境相关观测，不作 CI 门槛。新增冻结旧实现 oracle，80 个 seed 各 12 次比较嵌套、缺失、不连续、协议不闭合、unknown/用户请求保护，并确认不修改事件；另测选择阶段不序列化未遮蔽参数。
+
+验收：定向 surface/context/compaction-plan/compaction-runtime 37/37；完整 `pnpm test` 513 tests / 483 pass / 0 fail / 30 skipped；build 严格类型通过，`node scripts/check-syntax.js` 194 files，`pnpm lint` 无诊断。构建清理 dist 与第一次语法检查并发造成文件暂缺，该检查已在构建结束后重跑通过；后续避免并发构建与 dist 读取。真实 provider 请求 0。
+
+### OPT-1 预览头尾共享额度（2026-10-25）
+
+`previewWindow` 从同一正文额度分配头尾，保留阈值边界的尾部信息与中段游标；普通结果推荐从中段偏移回读。Bash 两流各分一半；合法的采集头尾重叠先去重再存储，避免 quota/integrity 误报。PLAN/REQUIREMENTS 显式修订 D-20；历史 JSONL 与 NX-45 结论未改。
+
+固定脚本未改：`node scripts/benchmark-components.mjs --compare docs/samples/components-baseline.json --component tools --out <output>` 通过，12/12 同时满足尾部可见、头尾合计不超正文额度、完整 ref 回读；基线为 0/12 同时满足。两个新增回归覆盖 1～64 字节 ASCII/Unicode 额度及重叠稀疏命令结果；定向 tool-results 13/13。
+
+完整回归首次 511 tests / 480 pass / 1 fail / 30 skipped：旧压力探针只有 stdout，依赖超额尾部达到压缩阈值。现改为同时填满 stdout/stderr，共享原 16 KiB 正文额度，不改阈值、预算和断言、不改 fixture 或冻结对照集；复跑 511 tests / 481 pass / 0 fail / 30 skipped。`pnpm check` 193 files、`pnpm lint` 无诊断。真实 provider 请求 0。新请求指纹与旧录制可能不同，不把本次结果追溯套用旧实验。
+
+### OPT-0 组件对照基线（2026-10-25）
+
+基于远端 main `74f8e89721820ef514e26df71cbb05e0c69683c7`，冻结 `scripts/benchmark-components.mjs` 与 `docs/samples/components-baseline.json`。12 个工具输出边界/Unicode/长输出探针、3 个嵌套摘要历史（64/256/1024 工具组）、3 个重复检查报告（1/8/32 条检查、2 个文件）。脚本使用实际生产组件、真实临时文件与结果存储；不装配 provider、不运行模型或 Bash。机制断言与原文回读均成功，工具预览的问题作为测量结果保留：9/12 丢失尾标记，3/12 头尾合计超正文额度；最大历史投影事件属性读取 2,133,569 次，32 检查报告打开文件 67 次。
+
+验证：`pnpm check` → 193 files；正常权限 `pnpm test` → 509 tests / 479 pass / 0 fail / 30 skipped；`node scripts/benchmark-components.mjs --root .eval-evidence/components-baseline --out docs/samples/components-baseline.json` → exit 0；`pnpm lint` → 无诊断。基线编译产物副本位于忽略目录 `.eval-evidence/components-baseline`；JSON 记录源提交、脚本和模块哈希，不依赖本机目录发布原始日志。改动前已列明独立提交边界。后续不得重写本基线或为获得分数修改脚本/题目。
+
 ### R00—R11 本轮收尾核验（2026-10-20，工作分支 tip）
 
 - 代码 tip `bece051`（其后仅文档提交）。本轮新增提交：`6113bc7`（MCP stdio 显式 env）、`430234e`（SWE-bench 执行器）、`d11fb80`（发布/部署拆分）、`0568c6d`（Windows MCP 进程树终止）及对应文档回填。

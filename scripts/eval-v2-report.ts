@@ -4,8 +4,8 @@ import { createHash } from 'node:crypto'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { createHarness } from '../src/app/create-harness.js'
-import { armsForV2Split, repeatsForV2Split, resolveV2Arms, resolveV2Episodes, seedForV2Split, tasksForV2Split } from './eval-v2-plan.js'
-import type { V2Episode, V2Split, V2Tier } from './eval-v2-plan.js'
+import { armsForV2Split, protocolForV2Split, repeatsForV2Split, resolveV2Arms, resolveV2Episodes, seedForV2Split, tasksForV2Split } from './eval-v2-plan.js'
+import type { V2Episode, V2Protocol, V2Split, V2Tier } from './eval-v2-plan.js'
 import type { AblationPhase } from './eval-runner.js'
 
 export interface V2FreezeInput {
@@ -20,10 +20,13 @@ export interface V2FreezeInput {
   baseUrl: string
   priceSnapshot: { source: string; capturedAt: string; currency: string; inputPerMillion: number; outputPerMillion: number; cacheReadPerMillion: number }
   gitCommit: string
+  // Product-code commit under test. Component batches carry an evaluation
+  // harness commit on top, so gitCommit alone cannot identify what was compared.
+  sourceBaseCommit?: string
 }
 export interface V2FrozenFile { path: string; sha256: string }
 export interface V2Manifest extends V2FreezeInput {
-  protocol: 'NX-42-eval-v2' | 'NX-42-eval-v2.1' | 'NX-45-dev-2arm-v1'
+  protocol: V2Protocol
   scheduleSeed: number
   tasks: readonly { id: string; family: string; shape: string; groups: string[]; files: V2FrozenFile[] }[]
   arms: ReturnType<typeof resolveV2Arms>
@@ -41,11 +44,22 @@ const sourcePaths = [
   'scripts/eval-v2-isolation.ts', 'scripts/eval-fixture.ts', 'scripts/eval-runner.ts',
   'scripts/eval-v2-report.ts', 'scripts/eval-v2-freeze.ts', 'scripts/eval-v2.ts', 'scripts/eval-v2-runtime.sha256',
   'scripts/eval-capabilities.mjs',
-  'scripts/eval-v2-observation.ts', 'scripts/eval-v2-run.ts',
+  'scripts/eval-v2-observation.ts', 'scripts/eval-v2-run.ts', 'scripts/eval-v2-compare.ts',
   'scripts/eval-v2-prepare-runtime.sh', 'scripts/coding-fixtures.ts', 'scripts/eval-provenance.ts',
   'test/fixtures/harness-v2/_shared/probe.mjs',
 ]
-const frozenSourcePaths = (split: V2Split) => split === 'development' ? [...sourcePaths, 'scripts/smoke-cost.ts', 'docs/context-budget/NX-45-DEVELOPMENT.md'] : sourcePaths
+const frozenSourcePaths = (split: V2Split): string[] => {
+  switch (split) {
+    case 'formal':
+    case 'calibration': return sourcePaths
+    case 'development': return [...sourcePaths, 'scripts/smoke-cost.ts', 'docs/context-budget/NX-45-DEVELOPMENT.md']
+    case 'component': return [...sourcePaths, 'scripts/smoke-cost.ts', 'docs/context-budget/NX-50-COMPONENT-AB.md']
+  }
+}
+const strictV2Split = (split: V2Split): boolean => split === 'development' || split === 'component'
+const COMPONENT_MODEL_VERSION = 'DeepSeek-V4.1-Flash-1017'
+const COMPONENT_PRICE = Object.freeze({ inputPerMillion: 0.30, outputPerMillion: 1.20, cacheReadPerMillion: 0.006 })
+const OFFICIAL_PRICE_SOURCE = 'https://api-docs.deepseek.com/quick_start/pricing/'
 const sha = (data: string | Buffer): string => createHash('sha256').update(data).digest('hex')
 const stable = (value: unknown): string => JSON.stringify(value)
 const quantile = (values: readonly number[], q: number): number | null => {
@@ -82,12 +96,20 @@ async function listFiles(root: string, relative = ''): Promise<V2FrozenFile[]> {
 }
 
 export async function freezeV2(input: V2FreezeInput): Promise<V2Manifest> {
-  if (input.split !== 'formal' && input.split !== 'calibration' && input.split !== 'development') throw new Error('invalid V2 split')
+  if (input.split !== 'formal' && input.split !== 'calibration' && input.split !== 'development' && input.split !== 'component') throw new Error('invalid V2 split')
   if (input.tier !== '2m' && input.tier !== '1m') throw new Error('invalid V2 tier')
-  if (input.split === 'development' && input.tier !== '1m') throw new Error('development protocol requires the shared 1m tier')
-  if (input.split === 'development' && (input.window !== 1_000_000 || input.model !== 'deepseek/deepseek-flash' || input.echoedModel !== 'deepseek-flash' ||
-    input.thinking !== 'enabled' || input.sampling !== 'provider-default' || !input.modelVersion)) throw new Error('development model contract mismatch')
-  if (input.split === 'development' && input.priceSnapshot.source !== 'https://api-docs.deepseek.com/quick_start/pricing/') throw new Error('development price snapshot must use the official source')
+  if (strictV2Split(input.split) && input.tier !== '1m') throw new Error(`${input.split} protocol requires the shared 1m tier`)
+  if (strictV2Split(input.split) && (input.window !== 1_000_000 || input.model !== 'deepseek/deepseek-flash' || input.echoedModel !== 'deepseek-flash' ||
+    input.thinking !== 'enabled' || input.sampling !== 'provider-default' || !input.modelVersion)) throw new Error(`${input.split} model contract mismatch`)
+  if (strictV2Split(input.split) && input.priceSnapshot.source !== OFFICIAL_PRICE_SOURCE) throw new Error(`${input.split} price snapshot must use the official source`)
+  if (input.split === 'component' && (input.modelVersion !== COMPONENT_MODEL_VERSION ||
+    input.priceSnapshot.inputPerMillion !== COMPONENT_PRICE.inputPerMillion ||
+    input.priceSnapshot.outputPerMillion !== COMPONENT_PRICE.outputPerMillion ||
+    input.priceSnapshot.cacheReadPerMillion !== COMPONENT_PRICE.cacheReadPerMillion ||
+    input.priceSnapshot.currency !== 'USD')) throw new Error('component model or price snapshot mismatch')
+  if (input.split === 'component' && (!input.sourceBaseCommit || !/^[0-9a-f]{40}$/.test(input.sourceBaseCommit) || input.sourceBaseCommit === input.gitCommit)) {
+    throw new Error('component freeze requires a distinct 40-hex sourceBaseCommit')
+  }
   if (!input.model || !input.echoedModel || !input.baseUrl || !/^[0-9a-f]{40}$/.test(input.gitCommit) ||
     !['enabled', 'disabled'].includes(input.thinking) || input.sampling !== 'provider-default') throw new Error('freeze requires model, echo label, thinking, provider-default sampling, endpoint and clean Git commit')
   const price = input.priceSnapshot
@@ -109,9 +131,9 @@ export async function freezeV2(input: V2FreezeInput): Promise<V2Manifest> {
     ...(await listFiles(path.join(repository, 'src'))).map(file => ({ path: `src/${file.path}`, sha256: file.sha256 })),
   ].sort((a, b) => a.path.localeCompare(b.path, 'en'))
   const arms = resolveV2Arms(input.window, input.tier).filter(arm => armsForV2Split(input.split).includes(arm.name))
-  const fields = { protocol: input.split === 'development' ? 'NX-45-dev-2arm-v1' as const : 'NX-42-eval-v2.1' as const,
+  const fields = { protocol: protocolForV2Split(input.split),
     scheduleSeed: seedForV2Split(input.split), ...input, tasks: frozenTasks, arms, episodes: resolveV2Episodes(input.split), sourceFiles,
-    ...(input.split === 'development' ? { toolSchemaSha256: await currentToolSchemaSha256() } : {}) }
+    ...(strictV2Split(input.split) ? { toolSchemaSha256: await currentToolSchemaSha256() } : {}) }
   return { ...fields, digest: sha(stable(fields)) }
 }
 
@@ -129,7 +151,7 @@ export async function verifyV2FrozenFiles(manifest: V2Manifest): Promise<void> {
     ...(await listFiles(path.join(repository, 'src'))).map(file => ({ path: `src/${file.path}`, sha256: file.sha256 })),
   ].sort((a, b) => a.path.localeCompare(b.path, 'en'))
   if (stable(sources) !== stable(manifest.sourceFiles)) throw new Error('V2 source, prompt, schema or rules changed after freeze')
-  if (manifest.split === 'development' && manifest.toolSchemaSha256 !== await currentToolSchemaSha256()) throw new Error('development tool schema changed after freeze')
+  if (strictV2Split(manifest.split) && manifest.toolSchemaSha256 !== await currentToolSchemaSha256()) throw new Error(`${manifest.split} tool schema changed after freeze`)
 }
 
 export interface V2Observation {
@@ -198,10 +220,18 @@ function bootstrapDelta(manifest: V2Manifest, observations: readonly V2Observati
 export function reportV2(manifest: V2Manifest, observations: readonly V2Observation[]) {
   const { digest, ...fields } = manifest
   const expectedTasks = tasksForV2Split(manifest.split)
-  if (sha(stable(fields)) !== digest || (manifest.split === 'development' ? manifest.protocol !== 'NX-45-dev-2arm-v1' : !['NX-42-eval-v2', 'NX-42-eval-v2.1'].includes(manifest.protocol)) ||
-    manifest.scheduleSeed !== seedForV2Split(manifest.split) || (manifest.split === 'development' && manifest.tier !== '1m') ||
-    (manifest.split === 'development' && (!/^[a-f0-9]{64}$/.test(manifest.toolSchemaSha256 ?? '') || !manifest.modelVersion || manifest.window !== 1_000_000 ||
-      manifest.model !== 'deepseek/deepseek-flash' || manifest.echoedModel !== 'deepseek-flash' || manifest.thinking !== 'enabled' || manifest.sampling !== 'provider-default')) ||
+  const protocolMatches = manifest.split === 'development' ? manifest.protocol === 'NX-45-dev-2arm-v1'
+    : manifest.split === 'component' ? manifest.protocol === 'NX-50-component-ab-v1'
+    : manifest.protocol === 'NX-42-eval-v2' || manifest.protocol === 'NX-42-eval-v2.1'
+  if (sha(stable(fields)) !== digest || !protocolMatches ||
+    manifest.scheduleSeed !== seedForV2Split(manifest.split) || (strictV2Split(manifest.split) && manifest.tier !== '1m') ||
+    (strictV2Split(manifest.split) && (!/^[a-f0-9]{64}$/.test(manifest.toolSchemaSha256 ?? '') || !manifest.modelVersion || manifest.window !== 1_000_000 ||
+      manifest.model !== 'deepseek/deepseek-flash' || manifest.echoedModel !== 'deepseek-flash' || manifest.thinking !== 'enabled' || manifest.sampling !== 'provider-default' ||
+      manifest.priceSnapshot.source !== OFFICIAL_PRICE_SOURCE)) ||
+    (manifest.split === 'component' && (manifest.modelVersion !== COMPONENT_MODEL_VERSION ||
+      manifest.priceSnapshot.inputPerMillion !== COMPONENT_PRICE.inputPerMillion || manifest.priceSnapshot.outputPerMillion !== COMPONENT_PRICE.outputPerMillion ||
+      manifest.priceSnapshot.cacheReadPerMillion !== COMPONENT_PRICE.cacheReadPerMillion || manifest.priceSnapshot.currency !== 'USD' ||
+      !/^[0-9a-f]{40}$/.test(manifest.sourceBaseCommit ?? '') || manifest.sourceBaseCommit === manifest.gitCommit)) ||
     stable(manifest.tasks.map(({ id, family, shape }) => ({ id, family, shape }))) !== stable(expectedTasks) ||
     stable(manifest.episodes) !== stable(resolveV2Episodes(manifest.split)) ||
     stable(manifest.arms) !== stable(resolveV2Arms(manifest.window, manifest.tier).filter(arm => armsForV2Split(manifest.split).includes(arm.name)))) throw new Error('V2 manifest integrity or schedule mismatch')
@@ -233,6 +263,9 @@ export function reportV2(manifest: V2Manifest, observations: readonly V2Observat
       arm: arm.name, planned, executed: rows.length, reliableSuccesses: successes, rateLower: successes / planned,
       rateUpper: (successes + planned - rows.length + rows.filter(row => row.failureReason === 'infrastructure' || row.status === 'error').length) / planned,
       artifactAccepted: rows.filter(row => row.accepted === true).length,
+      artifactAcceptanceRateLower: rows.filter(row => row.accepted === true).length / planned,
+      artifactAcceptanceRateUpper: (rows.filter(row => row.accepted === true).length + planned - rows.length +
+        rows.filter(row => row.failureReason === 'infrastructure' || row.status === 'error').length) / planned,
       failureReasons: reasons,
       modelRounds: { main: stats(numbers('mainRequests')), summary: stats(numbers('summaryRequests')), all: stats(rows.map(row => row.metrics.mainRequests + row.metrics.summaryRequests)) },
       tools: { calls: stats(numbers('toolCalls')), errors: stats(numbers('toolErrors')), policyRejected: rows.some(row => row.metrics.policyRejected !== null) ? stats(numbers('policyRejected')) : null, skipped: stats(numbers('toolSkipped')),
@@ -249,28 +282,33 @@ export function reportV2(manifest: V2Manifest, observations: readonly V2Observat
         prunedEpisodes: rows.filter(row => row.metrics.prunedTaskIds.length > 0).length, stablePromptRuns: rows.reduce((sum, row) => sum + row.metrics.stablePromptRuns, 0), multiRoundRuns: rows.reduce((sum, row) => sum + row.metrics.multiRoundRuns, 0) },
     }
   })
-  const primary = bootstrapDelta(manifest, observations, 'baseline', 'full')
+  const singleArm = manifest.arms.length === 1
+  const primary = singleArm
+    ? { estimate: null, lower95: null, upper95: null, complete: false }
+    : bootstrapDelta(manifest, observations, 'baseline', 'full')
   const exploratory = manifest.split === 'formal' ? {
     contextMinusBaseline: bootstrapDelta(manifest, observations, 'baseline', 'context'),
     fullMinusPrompt: bootstrapDelta(manifest, observations, 'prompt', 'full'),
     promptMinusBaseline: bootstrapDelta(manifest, observations, 'baseline', 'prompt'),
     fullMinusContext: bootstrapDelta(manifest, observations, 'context', 'full'),
   } : null
-  const pairs = manifest.tasks.map(task => ({ id: task.id, family: task.family, arms: Object.fromEntries(arms.map(arm => [arm.arm, observations.filter(record => record.taskId === task.id && record.arm === arm.arm).map(record => ({ repeat: record.repeat, reliableSuccess: reliableSuccess(record), status: record.status, groups: record.acceptanceGroups }))])),
-    baselineFull: Array.from({ length: repeatsForV2Split(manifest.split) }, (_, repeat) => {
+  const hasBaselineFull = manifest.arms.some(arm => arm.name === 'baseline') && manifest.arms.some(arm => arm.name === 'full')
+  const pairs = manifest.tasks.map(task => ({ id: task.id, family: task.family, arms: Object.fromEntries(arms.map(arm => [arm.arm, observations.filter(record => record.taskId === task.id && record.arm === arm.arm).map(record => ({ repeat: record.repeat, reliableSuccess: reliableSuccess(record), accepted: record.accepted, status: record.status, groups: record.acceptanceGroups }))])),
+    baselineFull: hasBaselineFull ? Array.from({ length: repeatsForV2Split(manifest.split) }, (_, repeat) => {
       const baseline = observations.find(record => record.taskId === task.id && record.repeat === repeat && record.arm === 'baseline')
       const full = observations.find(record => record.taskId === task.id && record.repeat === repeat && record.arm === 'full')
       if (!baseline || !full) return 'missing'
       return reliableSuccess(baseline) ? reliableSuccess(full) ? 'both-success' : 'baseline-only' : reliableSuccess(full) ? 'full-only' : 'both-failed'
-    }),
+    }) : [],
   }))
   return { protocol: manifest.protocol, manifestDigest: manifest.digest, observationsDigest: sha(observations.map(record => stable(record)).join('\n')),
-    split: manifest.split, planned: manifest.episodes.length, executed: observations.length, incomplete: missing.length > 0 || invalid.length > 0,
+    split: manifest.split, singleArm, planned: manifest.episodes.length, executed: observations.length, incomplete: missing.length > 0 || invalid.length > 0,
     missing, invalid, arms, primary, exploratory, pairs,
     measurementLimits: ['Policy/parameter rejection has no structured event subtype in the current Harness; null means not measurable, never zero.', 'A failed test command is counted as a tool error but cannot be reliably separated from an unexpected command error without a structured check marker.', 'A provider call interrupted before usage is durable may cost more than the token-derived estimate; the runner stops the batch after an infrastructure or evidence failure.'],
-    interpretation: missing.length || invalid.length ? 'incomplete' : manifest.split === 'development' ? 'development-only' : manifest.split === 'calibration' ? 'calibration-only' : !primary.complete ? 'incomplete' : primary.estimate! >= 0.10 && primary.lower95! > 0 ? 'supported-improvement' : 'no-supported-improvement',
+    interpretation: missing.length || invalid.length ? 'incomplete' : manifest.split === 'development' || manifest.split === 'component' ? 'development-only' : manifest.split === 'calibration' ? 'calibration-only' : !primary.complete ? 'incomplete' : primary.estimate! >= 0.10 && primary.lower95! > 0 ? 'supported-improvement' : 'no-supported-improvement',
     thresholdClaimSupported: manifest.split === 'formal' && primary.complete && primary.lower95! >= 0.10 }
 }
+export type V2Report = ReturnType<typeof reportV2>
 
 async function main() {
   const args = process.argv.slice(2)

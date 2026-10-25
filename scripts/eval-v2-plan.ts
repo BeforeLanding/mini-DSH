@@ -5,10 +5,11 @@ import { ablationPolicy, promptLayoutPolicy, toolOutputPolicy } from './eval-run
 import type { AblationPhase, PromptLayoutMode, ToolOutputMode } from './eval-runner.js'
 import type { BudgetPolicy } from '../src/core/budget.js'
 
-export type V2Split = 'calibration' | 'formal' | 'development'
+export type V2Split = 'calibration' | 'formal' | 'development' | 'component'
 export type V2Tier = '2m' | '1m'
 export type V2Family = 'comprehension' | 'bugfix' | 'feature' | 'refactor' | 'mutation'
 export type V2Shape = 'single' | 'cross-module' | 'information' | 'multi-stage'
+export type V2Protocol = 'NX-42-eval-v2' | 'NX-42-eval-v2.1' | 'NX-45-dev-2arm-v1' | 'NX-50-component-ab-v1'
 export interface V2Task { id: string; family: V2Family; shape: V2Shape }
 export interface V2Options { split: V2Split; tier: V2Tier; window: number; evidenceRoot: string; planOnly: boolean }
 export interface V2Episode { taskId: string; repeat: number; arm: AblationPhase; block: number }
@@ -25,15 +26,73 @@ export const calibrationTasks: readonly V2Task[] = Object.freeze(families.map(([
 // Structural selection only: all five existing calibration roots plus the first
 // single-stage comprehension root. U01 becomes development data once used here.
 export const developmentTasks: readonly V2Task[] = Object.freeze([...calibrationTasks, formalTasks[0]!])
+// Six formal roots that have never appeared in a real-model batch. Once used
+// here they are development data and must not be presented as an untouched
+// formal holdout. The set spans all five families and all four shapes.
+export const componentTasks: readonly V2Task[] = Object.freeze([
+  Object.freeze({ id: 'U02', family: 'comprehension', shape: 'cross-module' }),
+  Object.freeze({ id: 'B03', family: 'bugfix', shape: 'information' }),
+  Object.freeze({ id: 'F01', family: 'feature', shape: 'single' }),
+  Object.freeze({ id: 'F02', family: 'feature', shape: 'cross-module' }),
+  Object.freeze({ id: 'R04', family: 'refactor', shape: 'multi-stage' }),
+  Object.freeze({ id: 'T04', family: 'mutation', shape: 'multi-stage' }),
+])
 
 export const v2Arms = ['baseline', 'context', 'prompt', 'full'] as const
 export const calibrationArms = ['baseline', 'full'] as const
+export const componentArms = ['context'] as const
 export const v2ScheduleSeed = 20261015
 export const developmentScheduleSeed = 20261017
-export const tasksForV2Split = (split: V2Split): readonly V2Task[] => split === 'formal' ? formalTasks : split === 'development' ? developmentTasks : calibrationTasks
-export const armsForV2Split = (split: V2Split): readonly AblationPhase[] => split === 'formal' ? v2Arms : calibrationArms
-export const repeatsForV2Split = (split: V2Split) => split === 'formal' ? 3 : 2
-export const seedForV2Split = (split: V2Split) => split === 'development' ? developmentScheduleSeed : v2ScheduleSeed
+export const componentScheduleSeed = 20261025
+const assertNever = (value: never): never => { throw new Error(`unhandled V2 split: ${String(value)}`) }
+export const tasksForV2Split = (split: V2Split): readonly V2Task[] => {
+  switch (split) {
+    case 'formal': return formalTasks
+    case 'calibration': return calibrationTasks
+    case 'development': return developmentTasks
+    case 'component': return componentTasks
+    default: return assertNever(split)
+  }
+}
+export const armsForV2Split = (split: V2Split): readonly AblationPhase[] => {
+  switch (split) {
+    case 'formal': return v2Arms
+    case 'calibration': return calibrationArms
+    case 'development': return calibrationArms
+    case 'component': return componentArms
+    default: return assertNever(split)
+  }
+}
+export const repeatsForV2Split = (split: V2Split): number => {
+  switch (split) {
+    case 'formal': return 3
+    case 'calibration': return 2
+    case 'development': return 2
+    case 'component': return 2
+    default: return assertNever(split)
+  }
+}
+export const seedForV2Split = (split: V2Split): number => {
+  switch (split) {
+    case 'formal': return v2ScheduleSeed
+    case 'calibration': return v2ScheduleSeed
+    case 'development': return developmentScheduleSeed
+    case 'component': return componentScheduleSeed
+    default: return assertNever(split)
+  }
+}
+export const protocolForV2Split = (split: V2Split): V2Protocol => {
+  switch (split) {
+    case 'formal':
+    case 'calibration': return 'NX-42-eval-v2.1'
+    case 'development': return 'NX-45-dev-2arm-v1'
+    case 'component': return 'NX-50-component-ab-v1'
+    default: return assertNever(split)
+  }
+}
+// A block is the unit that is scheduled together. Formal schedules four arms,
+// calibration/development two, and the component version batches one.
+export const blockSizeForV2Split = (split: V2Split): number => armsForV2Split(split).length
 const fixtureRoot = fileURLToPath(new URL('../../test/fixtures/harness-v2/', import.meta.url))
 
 const positive = (value: string, flag: string): number => {
@@ -61,10 +120,10 @@ export function parseV2Arguments(argv: readonly string[]): V2Options {
     values.set(key, value)
   }
   const split = values.get('split')
-  if (split !== 'calibration' && split !== 'formal' && split !== 'development') throw new Error('--split must be calibration, development or formal')
+  if (split !== 'calibration' && split !== 'formal' && split !== 'development' && split !== 'component') throw new Error('--split must be calibration, component, development or formal')
   const tier = values.get('tier')
   if (tier !== '2m' && tier !== '1m') throw new Error('--tier must be 2m or 1m; choose the formal tier after calibration')
-  if (split === 'development' && tier !== '1m') throw new Error('development protocol requires the shared 1m tier')
+  if ((split === 'development' || split === 'component') && tier !== '1m') throw new Error(`${split} protocol requires the shared 1m tier`)
   const window = positive(values.get('window') ?? '', '--window')
   if (window <= 65_536) throw new Error('--window must exceed the managed input target of 65,536 tokens')
   const evidenceRoot = values.get('evidence-root')
@@ -87,16 +146,25 @@ export function resolveV2Arms(window: number, tier: V2Tier): readonly V2Arm[] {
   }))
 }
 
-export function developmentReserveUsd(price: { inputPerMillion: number; outputPerMillion: number; cacheReadPerMillion: number }) {
+export interface V2ReserveOptions { arm?: AblationPhase; episodes?: number; tier?: V2Tier; window?: number }
+export function developmentReserveUsd(
+  price: { inputPerMillion: number; outputPerMillion: number; cacheReadPerMillion: number },
+  options: V2ReserveOptions = {},
+) {
   if ([price.inputPerMillion, price.outputPerMillion, price.cacheReadPerMillion].some(value => !Number.isFinite(value) || value < 0)) throw new Error('invalid development price')
-  const budget = resolveV2Arms(1_000_000, '1m')[0]!.budget
+  const arm = options.arm ?? 'baseline', episodes = options.episodes ?? 24
+  const tier = options.tier ?? '1m', window = options.window ?? 1_000_000
+  if (!Number.isSafeInteger(episodes) || episodes <= 0) throw new Error('reserve episodes must be a positive safe integer')
+  const selected = resolveV2Arms(window, tier).find(candidate => candidate.name === arm)
+  if (!selected) throw new Error(`reserve arm is not registered: ${arm}`)
+  const budget = selected.budget
   const maxRate = Math.max(price.inputPerMillion, price.outputPerMillion, price.cacheReadPerMillion)
   const tokenBudgetUsd = budget.maxTotalTokens! * maxRate / 1_000_000
   const marginUsd = tokenBudgetUsd * 0.2
   const finalRequestUsd = price.inputPerMillion + budget.maxOutputTokens! * price.outputPerMillion / 1_000_000
   const perEpisodeUsd = tokenBudgetUsd + marginUsd + finalRequestUsd
   const probeUsd = 16_384 * maxRate / 1_000_000
-  return { tokenBudgetUsd, marginUsd, finalRequestUsd, perEpisodeUsd, probeUsd, batchUsd: perEpisodeUsd * 24 + probeUsd }
+  return { arm, episodes, tier, window, tokenBudgetUsd, marginUsd, finalRequestUsd, perEpisodeUsd, probeUsd, batchUsd: perEpisodeUsd * episodes + probeUsd }
 }
 
 export function resolveV2Episodes(split: V2Split): readonly V2Episode[] {
@@ -129,7 +197,7 @@ export function resolveV2Plan(options: V2Options) {
   const arms = resolveV2Arms(options.window, options.tier).filter(arm => armsForV2Split(options.split).includes(arm.name))
   const perEpisode = arms[0]!.budget
   return {
-    protocol: options.split === 'development' ? 'NX-45-dev-2arm-v1' : 'NX-42-eval-v2.1', scheduleSeed: seedForV2Split(options.split), split: options.split, tier: options.tier, evidenceRoot: options.evidenceRoot,
+    protocol: protocolForV2Split(options.split), scheduleSeed: seedForV2Split(options.split), split: options.split, tier: options.tier, evidenceRoot: options.evidenceRoot,
     modelWindowTokens: options.window, tasks, arms, episodes,
     caps: { runs: episodes.length, modelRequests: episodes.length * perEpisode.maxModelRequests!, toolCalls: episodes.length * perEpisode.maxToolCalls!, totalTokens: episodes.length * perEpisode.maxTotalTokens!, activeDurationMs: episodes.length * perEpisode.maxActiveDurationMs! },
     readiness: { fixturesPresent: tasks.filter(task => fs.existsSync(path.join(fixtureRoot, task.id))).length, fixturesPlanned: tasks.length },

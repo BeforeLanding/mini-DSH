@@ -1,5 +1,32 @@
 # 任务清单
 
+### NX-50 PR5 组件版本对照（2026-10-25，零付费准备完成）
+
+协议见 [NX-50-COMPONENT-AB](NX-50-COMPONENT-AB.md)。旧版 `74f8e89`、优化版 `0b24b32`，两边 cherry-pick 同一份评测代码；只跑 `context` 臂，6 题 × 2 次 = 每版 12 条。四个可独立回退的步骤：
+
+- CMP-1（完成，`f3aab1f`）：`component` split、`NX-50-component-ab-v1`、单臂报告与 `sourceBaseCommit` 冻结。验收：plan-only 为 6 题/1 臂/12 episodes、caps 768 请求/1,536 工具/12M token/7.2M ms；component 冻结与单臂报告测试通过；`--split component --tier 2m` 拒绝。
+- CMP-2（完成，`5665293`）：runner 的 1 episode/block、严格 HEAD/金额/usage 守卫、`startedAt`/`finishedAt`/环境 provenance。验收：错误协议在隔离与模型调用前拒绝；单臂 block 与 reserve 测试通过。
+- CMP-3（完成，`e4dfe4b`）：离线比较器 `eval:v2-compare`，检查协议/任务/episode/臂/种子/模型/价格/tool schema，只允许 `src/**` 与 `package.json` 的已知差异，按预注册容差给出 pass/review/fail。验收：比较器定向 3/3；1 条容差、2 条失败、15% token 边界、双题退步 review、incomparable 拒绝。
+- CMP-4（完成，`adabea5`）：本文件、CHANGES、PROGRESS 与 `docs/COMPONENT-OPTIMIZATION.md` 的零付费回填；不改变协议或门槛。
+- CMP-5（完成，2026-10-25）：两批各 12/12 执行，旧/新可靠完成 12/12 对 12/12、产物验收 12/12 对 12/12；token 4,065,419→3,791,203（-6.75%），主动耗时 898,977→958,913 ms（+6.67%），均在预注册 15% 内，`gate=pass`、`mergeEligible=true`。逐题与边界见 [NX-50-RESULT](NX-50-RESULT.md)；main 合并待用户确认，不自动合并。
+
+零付费验证（优化版 checkout）：`pnpm check` 197 files；设置 `MINI_DSH_V2_RUNTIME` 后 `pnpm test` 523/523/0/0（含全部隔离用例）；`pnpm lint` 221 files 0 诊断；`pnpm fixtures:check`、`pnpm eval:offline`、`pnpm bench:components` 均 exit 0。真实模型请求 0，未冻结付费批次、未合并 main。下一步是建 `74f8e89` 工作树、冻结两版 manifest 并做 `--validate-only`；付费执行需单批 $22 的独立授权。
+
+### OPT-20261025 组件优化（进行中）
+
+基线：远端 main `74f8e89721820ef514e26df71cbb05e0c69683c7`，本机 Node 24.16.0 / pnpm 11.22.0；509 tests / 479 pass / 0 fail / 30 skipped，check 193 files。沙箱 Bash 环境失败后已在正常用户权限下复跑。保留其他 checkout 的未提交工作。
+
+按可独立回退的行为分五次提交，不修改历史模型实验或隐藏验收：
+
+- OPT-0（完成，`c2ee97b`）：冻结同源离线组件测试集和基线。验收：工具边界/UTF-8/完整回读、长历史摘要投影、重复检查的交付报告均产生可复算 JSON，记录脚本及模块哈希。只测机制和资源量，不冒充模型成功率。
+- OPT-1（完成，`00c8e32`）：工具预览的头尾共享字节额度，截断边界保留尾部。验收：12/12 固定探针满足尾标记、额度与回读，新增 UTF-8/重叠边界测试；完整 511/481/0/30。压力探针以双流填满原额度，阈值/预算/断言不变。
+- OPT-2（完成，`cd17cbc`）：摘要可见性投影使用索引，避免反复扫描事件及无用消息序列化。验收：80 seed × 12 次差分与旧实现一致，嵌套/非法/unknown/原始请求保护不变；最大历史事件属性读取 2,133,569→25,070（-98.82%）。定向 37/37，完整 513/483/0/30。
+- OPT-3（完成，`fda47d0`）：报告查询共享本次查询的文件版本，避免按检查条目重复读取。验收：1/8/32 检查的文件打开次数 5/19/67→2/2/2，报告证据哈希不变；下一次查询重新读盘、取消/分页/失败检查保留。定向 8/8，完整 513/483/0/30。
+- OPT-1b（复核新增边界，完成，`14a0d1c`）：1～2 字节命令预览必须清空放不下的原采集 tail；奇数字节额度按 stdout ceil/stderr floor 分配。新增双流/UTF-8/ref 回读验收；不修改冻结探针。此修复按独立失败边界单独提交，随后完成 OPT-4。
+- OPT-4（本地完成）：三组件固定量化门槛接入 `pnpm test` 和 `pnpm bench:components`；基线/脚本 SHA-256 钉版，空改进拒绝探针通过。完整 517/487/0/30、check 195 files、lint 无诊断；fixture checker、12/12 离线筛查、估算器核对、两条公开证据复算通过。结果与复现见 `docs/COMPONENT-OPTIMIZATION.md`；跨平台 CI 由 PR checks 提供，不用本机跳过替代隔离验收。
+
+OPT-0 与 OPT-4 属于各自独立的验收结论；OPT-1/2/3 分别独立提交，全部完成后核对实际提交。真实模型泛化与供应商缓存收益须另行冻结并取得具体预算授权，当前不发模型请求。
+
 ### R10 正式评测执行器零付费准备（2026-10-20，工作分支验收完成）
 
 独立提交 `430234e`：新增 `scripts/swebench/{run,report,workspace}.ts`，并扩展 `protocol.ts`/`preregister.ts`/`docs/EVALUATION-SWEBENCH.md`。行为边界：① 冻结文件同时包含开发批次（默认 5 题）与正式批次（50 题），开发题先选并从正式批排除，排除规则与确定性 arm 交错顺序写入 manifest；② 原始数据集只保留 `instance_id/repo/base_commit/version/environment_setup_commit/problem_statement/image`，gold/hidden 字段在预注册时剥离，执行器再拒绝仍带 `patch`/`test_patch`/`FAIL_TO_PASS` 的输入；③ `preregister` 缺模型、价格、基线命令、镜像 digest 或批次上限时保持 `draft`，只有齐备且 `--finalize` 才成为 `frozen`；④ 执行器复用 `createHarness`，每任务应用请求/工具/时间/输出/token 上限（金额上限按最大单价反推保守 token 上限），保存 session JSONL、终态、usage、空/非空 patch，基础设施失败与未知 usage 停批，批次金额与 episode 数量有硬上限，`--resume` 跳过已完成/中断 episode 而不重跑；⑤ 独立判分只读已保存 prediction，每批每臂使用新 run_id，官方判分失败保留为 error 分类并留在主分母；⑥ 报告给出 planned/executed 分母、每臂 Wilson 区间、预先声明的 candidate/baseline 与 context 两臂配对四格、精确 McNemar、失败分类与三条预声明失败轨迹，并关联 events/patch/session 路径。
