@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- **NX-51 摘要后裁剪已持久化（2026-10-25，零付费）**：只读 NX-50 两批轨迹做耗时分解；净增 60.0 s 中摘要占 45.0 s，T04 的重复摘要来自“压力摘要只压当前 task、旧任务仍占 35～41k token”。压力摘要 applied 后按压缩后目标线裁掉已结束旧任务，并把决定写成 `context/prune` 事件；后续轮次、`/continue` 与重启恢复继续排除，原始事件不删、`read_history` 仍可回读。新增两条回归用例，原不可约前缀用例改用当前 task 构造；定向 28/28（covenant 4/4），隔离完整 525/525/0/0，check 197 / lint 223 / fixtures 25 / eval:offline 12/12 / bench:components 全过。提交 `9e30f5c` 与本次文档回填；真实模型请求 0。下一步是按 [逐项消融设计](docs/context-budget/NX-51-COMPONENT-ABLATION.md) 冻结 24 条 `prune-after-summary` 开/关对照，**执行前需单独的金额与批次授权**；48 条逐组件消融放在该验证之后。
+- **NX-51 摘要后裁剪已持久化（2026-10-25，零付费）**：只读 NX-50 两批轨迹做耗时分解；净增 60.0 s 中摘要占 45.0 s，T04 的重复摘要来自“压力摘要只压当前 task、旧任务仍占 35～41k token”。压力摘要 applied 后按压缩后目标线裁掉已结束旧任务，并把决定写成 `context/prune` 事件；后续轮次、`/continue` 与重启恢复继续排除，原始事件不删、`read_history` 仍可回读。新增两条回归用例，原不可约前缀用例改用当前 task 构造；定向 28/28（covenant 4/4），隔离完整 525/525/0/0，check 197 / lint 223 / fixtures 25 / eval:offline 12/12 / bench:components 全过。提交 `9e30f5c` 与本次文档回填；真实模型请求 0。下一步是按 [24 条 prune 开/关协议](docs/context-budget/NX-51-PRUNE-AB.md) 从 `9e30f5c` 与 `cc2b769` 两个干净 HEAD 冻结两臂并 `--validate-only`；单批上限 $22、合计 $44，**`--execute` 前需该批单独的金额与批次授权**。48 条逐组件消融放在该验证之后。
 
 - **NX-50 PR5 组件版本对照已执行，门槛通过（2026-10-25）**：六道未曝光 formal 题（U02/B03/F01/F02/R04/T04）、`context` 臂、每题两次，旧版 `74f8e89` 与优化版 `0b24b32` 分别干净冻结。两批各 12/12 执行；可靠完成与产物验收均 **12/12 对 12/12**，token **4,065,419→3,791,203（-6.75%）**，主动耗时 **898,977→958,913 ms（+6.67%）**，均在 15% 容差内；`gate=pass`、`mergeEligible=true`，无单题双退步。峰时估价旧 $1.337245368、新 $1.269039468。提交 `f3aab1f`/`5665293`/`e4dfe4b`/`adabea5`；证据在 `D:\Agent\outputs\nx50-component-ab-20261025\`，逐题与边界见 [NX-50-RESULT](docs/context-budget/NX-50-RESULT.md)。两批串行、时间窗不同，不作显著性/泛化结论；main 合并待用户确认。
 
