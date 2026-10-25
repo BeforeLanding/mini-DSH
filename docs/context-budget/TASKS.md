@@ -1,5 +1,16 @@
 # 任务清单
 
+### NX-50 PR5 组件版本对照（2026-10-25，零付费准备完成）
+
+协议见 [NX-50-COMPONENT-AB](NX-50-COMPONENT-AB.md)。旧版 `74f8e89`、优化版 `0b24b32`，两边 cherry-pick 同一份评测代码；只跑 `context` 臂，6 题 × 2 次 = 每版 12 条。四个可独立回退的步骤：
+
+- CMP-1（完成，`f3aab1f`）：`component` split、`NX-50-component-ab-v1`、单臂报告与 `sourceBaseCommit` 冻结。验收：plan-only 为 6 题/1 臂/12 episodes、caps 768 请求/1,536 工具/12M token/7.2M ms；component 冻结与单臂报告测试通过；`--split component --tier 2m` 拒绝。
+- CMP-2（完成，`5665293`）：runner 的 1 episode/block、严格 HEAD/金额/usage 守卫、`startedAt`/`finishedAt`/环境 provenance。验收：错误协议在隔离与模型调用前拒绝；单臂 block 与 reserve 测试通过。
+- CMP-3（完成，`e4dfe4b`）：离线比较器 `eval:v2-compare`，检查协议/任务/episode/臂/种子/模型/价格/tool schema，只允许 `src/**` 与 `package.json` 的已知差异，按预注册容差给出 pass/review/fail。验收：比较器定向 3/3；1 条容差、2 条失败、15% token 边界、双题退步 review、incomparable 拒绝。
+- CMP-4（完成）：本文件、CHANGES、PROGRESS 与 `docs/COMPONENT-OPTIMIZATION.md` 的回填；不改变协议或门槛。
+
+零付费验证（优化版 checkout）：`pnpm check` 197 files；设置 `MINI_DSH_V2_RUNTIME` 后 `pnpm test` 523/523/0/0（含全部隔离用例）；`pnpm lint` 221 files 0 诊断；`pnpm fixtures:check`、`pnpm eval:offline`、`pnpm bench:components` 均 exit 0。真实模型请求 0，未冻结付费批次、未合并 main。下一步是建 `74f8e89` 工作树、冻结两版 manifest 并做 `--validate-only`；付费执行需单批 $22 的独立授权。
+
 ### OPT-20261025 组件优化（进行中）
 
 基线：远端 main `74f8e89721820ef514e26df71cbb05e0c69683c7`，本机 Node 24.16.0 / pnpm 11.22.0；509 tests / 479 pass / 0 fail / 30 skipped，check 193 files。沙箱 Bash 环境失败后已在正常用户权限下复跑。保留其他 checkout 的未提交工作。

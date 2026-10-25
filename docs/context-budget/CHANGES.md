@@ -1,5 +1,13 @@
 # 改动与验收证据
 
+### NX-50 PR5 组件版本对照的零付费准备（2026-10-25）
+
+新增独立 `component` split 与 `NX-50-component-ab-v1` 协议，固定 `U02`、`B03`、`F01`、`F02`、`R04`、`T04` 六道此前无真实模型曝光的 formal fixture，只跑 `context` 臂，每题两次；每版 12 条 episode，整题预算与 NX-45 相同（1M token / 64 请求 / 128 工具 / 600 秒）。旧版 `74f8e89` 与优化版 `0b24b32` 各自在干净树上冻结，manifest 同时记录被测 `sourceBaseCommit` 与实际评测 `gitCommit`；比较器只允许 `src/**` 与已知 `package.json` 脚本差异。
+
+提交边界：`f3aab1f` 协议/冻结/单臂报告与文档；`5665293` runner 单臂 block、严格守卫与 provenance；`e4dfe4b` 离线比较器与门槛；本条目所在提交只回填状态。`developmentReserveUsd` 由固定 24 条/baseline 参数化为可指定臂与 episode 数，默认值保持历史读数。比较门槛在开跑前固定：新版可靠完成/产物验收各允许 1 条 episode 容差；token 与主动耗时不得超过旧版 1.15 倍；单题两次都退步为 `review-required`，不自动合并。
+
+零付费实测（优化版 checkout）：`pnpm check` → syntax 197 files；`MINI_DSH_V2_RUNTIME='D:\Agent\tmp\nx42-runtime\unpack' pnpm test` → 523 tests / 523 pass / 0 fail / 0 skipped；`pnpm lint` → 221 files / 0 diagnostics；`pnpm fixtures:check`、`pnpm eval:offline`（12/12 completed/accepted）、`pnpm bench:components`（tools/compaction/reports 三 gate）均 exit 0。`eval:v2 --split component --plan-only` 输出 6 题、1 臂、12 episodes、12 blocks，caps 与预留一致；比较器定向 3/3。未读取 API key、未发 provider 请求、未创建付费证据目录、未合并 main。两版 manifest 的冻结、digest 与 `--validate-only` 在后续交接中记录，需取得单批 $22 授权后才可 `--execute`。
+
 ### OPT-4 冻结对照门禁与最终交付（2026-10-25）
 
 新增 `pnpm bench:components`、`test/component-benchmark.test.ts`、最终 `components-optimized.json` 与 `docs/COMPONENT-OPTIMIZATION.md`。基线 `74f8e89`、候选生产源码 `14a0d1c6e8eb1519cd27e8cc61ce0011927536cd`；两版协议 SHA-256 为 `34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28`，冻结脚本未改。基线文件 SHA-256 与协议钉版并进入完整测试，另验证将已通过的工具探针当基线时不能报告空改进。`.gitattributes` 固定协议脚本 LF，避免 Windows checkout 改变字节指纹。

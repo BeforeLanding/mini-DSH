@@ -4,6 +4,8 @@
 
 ## 当前状态
 
+- **NX-50 PR5 组件版本对照的零付费准备完成（2026-10-25）**：新增 `component` split 与 `NX-50-component-ab-v1`，固定六道未曝光的 formal 题（U02/B03/F01/F02/R04/T04），只跑 `context` 臂，6 题 × 2 次 = 每版 12 条；旧版 `74f8e89` 与优化版 `0b24b32` 需各自干净冻结。比较器只允许 `src/**` 与已知 `package.json` 脚本差异，门槛为质量各 1 条容差、token/耗时 ≤1.15 倍、单题双退步转人工审轨迹。提交 `f3aab1f`/`5665293`/`e4dfe4b`；完整隔离测试 523/523/0/0，check/lint/fixtures/offline/bench 全绿。真实模型请求 0，两版 manifest 尚未冻结；下一步建旧版工作树、冻结并 `--validate-only`，付费执行需单批 $22 独立授权，通过前不合并 main。
+
 - **OPT 三组件优化本地验收完成（2026-10-25）**：在 `74f8e89` 上冻结的 18 个探针保持不变，预览尾标记 3/12→12/12、最大摘要投影事件读取 -98.82%、报告打开文件 67→2（-97.01%），投影/报告选定证据哈希相同。基线 `c2ee97b`，功能 `00c8e32` / `cd17cbc` / `fda47d0`，极小额度边界 `14a0d1c`；最终门禁与证据独立提交。完整 517 tests / 487 pass / 0 fail / 30 skipped，check/lint/fixtures、12/12 离线筛查、估算核对与公开复算均通过。`pnpm bench:components` 和完整 test 都验改进，详见 [结果与复现](docs/COMPONENT-OPTIMIZATION.md)。跨平台与隔离实测看 PR checks；未合并 main，未把这些机制/效率结果宣称为真实模型成功率。后续真实模型对照须另冻清单和授权预算。
 
 - **工作分支已合并到 main（2026-10-20）**：草稿 [PR #3](https://github.com/BeforeLanding/mini-DSH/pull/3) 以保留提交历史的 merge commit `a58ab5d441185479f4bc83aca30f4b6f63f3f902` 合并；`origin/main` 已从 `32e2598` 前进到 `a58ab5d`。main 的 [CI 39428240871](https://github.com/BeforeLanding/mini-DSH/actions/runs/39428240871) 六个 job 全绿（Ubuntu/Windows × Node 22/24、isolation、package-install）；`Official SWE-bench no-model PoC` 按普通 PR 配置 skipped。历史红灯 run 39133594202 保留作证据，不代表当前 main。工作分支保留，未删除。
