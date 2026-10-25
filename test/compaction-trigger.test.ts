@@ -107,6 +107,9 @@ test('budget policy carries compaction knobs and rejects values outside their do
   for (const value of [0, 2]) assert.throws(() => resolveBudget({ retainRatio: value }), /fraction/)
   for (const value of [0, 2]) assert.throws(() => resolveBudget({ postCompactionTargetRatio: value }), /fraction/)
   assert.throws(() => resolveBudget({ auto: 1 as unknown as boolean }), /boolean/)
+  assert.throws(() => resolveBudget({ postCompactionPrune: 1 as unknown as boolean }), /boolean/)
+  assert.equal(resolveBudget({ postCompactionPrune: true }).postCompactionPrune, true)
+  assert.equal(resolveBudget({}).postCompactionPrune, undefined, 'pruning is opt-in and defaults off')
   assert.throws(() => resolveBudget({ compactionBudgetTokens: 0 }), /positive/)
 })
 
@@ -130,7 +133,7 @@ test('a pressure summary prunes completed old tasks from the request that follow
   const scriptedRun = scripted(steps)
   const h = harness(scriptedRun.chat)
   h.tools.register({ name: 'tick', execute: () => 'current task output '.repeat(300) })
-  const policy = base({ maxModelRequests: 10 })
+  const policy = base({ maxModelRequests: 10, postCompactionPrune: true })
   const prior = seedPriorTask(h, policy)
 
   assert.equal(await h.agent.send('new task', { budget: policy }), 'done')
@@ -153,6 +156,22 @@ test('a pressure summary prunes completed old tasks from the request that follow
   assert.equal(finished.status, 'completed')
 })
 
+test('post-summary pruning is opt-in and the default projection keeps old tasks', async () => {
+  const steps: ToolCall[] = [1, 2, 3].map(index => ({ id: `tick-${index}`, name: 'tick', arguments: {} }))
+  const scriptedRun = scripted(steps)
+  const h = harness(scriptedRun.chat)
+  h.tools.register({ name: 'tick', execute: () => 'current task output '.repeat(300) })
+  const policy = base({ maxModelRequests: 10 })
+  seedPriorTask(h, policy)
+
+  assert.equal(await h.agent.send('new task', { budget: policy }), 'done')
+  const afterSummary = mainRequestsAfterSummary(scriptedRun.state.requests)
+  assert.ok(afterSummary.length >= 2)
+  assert.ok(afterSummary.some(request => carriesOldTask(request)), 'without the flag the old task stays in the projection')
+  assert.equal(events(h).filter(event => event.type === 'context/prune').length, 0)
+  assert.equal(h.sessions.latestRun(h.session.id)?.status, 'completed')
+})
+
 test('pruning survives /continue and restart while the raw events stay readable', async () => {
   const steps: ToolCall[] = [1, 2, 3, 4, 5].map(index => ({ id: `tick-${index}`, name: 'tick', arguments: {} }))
   const scriptedRun = scripted(steps)
@@ -160,7 +179,7 @@ test('pruning survives /continue and restart while the raw events stay readable'
   h.tools.register({ name: 'tick', execute: () => 'current task output '.repeat(300) })
   // 3 次请求：两条摘要前主请求 + 摘要本身用掉最后一次额度，run 在裁剪决定落盘后停止。
   // 这覆盖最容易退化的续跑边界：摘要之后没有同 run 的下一轮，/continue 仍必须继承裁剪。
-  const policy = base({ maxModelRequests: 3 })
+  const policy = base({ maxModelRequests: 3, postCompactionPrune: true })
   seedPriorTask(h, policy)
   const oldTaskEnd = h.session.events.at(-1)!.seq
   const oldResultSeq = h.session.events.find(event => event.type === 'tool/result' && event.data.content.includes(OLD_TASK_MARK))!.seq

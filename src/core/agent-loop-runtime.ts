@@ -171,7 +171,7 @@ export class AgentLoopRuntime {
             // 再压一遍只是重复花钱。context-overflow 是兜底，按 maxOverflowRetries 限次，防止一步内无限重试。
             if (!pressureSuppressed && !overflowing() && pressureTriggerTokens !== undefined && projection.estimatedInputTokens > pressureTriggerTokens) {
                 const beforeTokens = projection.estimatedInputTokens
-                if (await attempt('pressure', pruneAfterPressureSummary)) {
+                if (await attempt('pressure', policy.postCompactionPrune === true ? pruneAfterPressureSummary : undefined)) {
                     const afterTokens = projection.estimatedInputTokens
                     const insufficientReduction = beforeTokens - afterTokens < Math.max(64, Math.ceil(beforeTokens * 0.05))
                     if (insufficientReduction || (postCompactionTargetTokens !== undefined && afterTokens > postCompactionTargetTokens)) {
