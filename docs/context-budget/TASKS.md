@@ -1,5 +1,12 @@
 # 任务清单
 
+### NX-51 变慢任务诊断、摘要后裁剪与持久化（2026-10-25，零付费完成）
+
+只读复用 NX-50 两批轨迹做耗时分解，诊断与逐题读数见 [NX-51-TIMING-DIAGNOSIS](NX-51-TIMING-DIAGNOSIS.md)。两个可独立验证的步骤：
+
+- NX-51-1（完成，`9e30f5c`）：补两条回归测试并修复。第一条钉住目标案例确实裁掉“已结束且非当前”的旧任务，且摘要后的后续轮次不再带回；第二条钉住 `/continue`、重启恢复与“摘要用掉最后一次请求额度”的边界，同时用 `read_history` 验证原始事件仍可回读。实现为 `ContextBudgetRuntime.project()` 的 `pruneTargetTokens`／`prunedTaskIds`、`context/prune` 事件与主循环 `afterApplied` 钩子；原“不可约前缀”与“溢出兜底”用例改用当前 task 自身构造，语义不变。验收：定向 `budget`／`context`／`compaction-recovery`／`nx38-covenant` 28/28（covenant 4/4）；设置 `MINI_DSH_V2_RUNTIME` 后完整 `pnpm test` **525/525，0 fail，0 skipped**；`pnpm check` 197 files、`pnpm lint` 223 files 0 诊断、`pnpm fixtures:check` 25 项 `expected=true`、`pnpm eval:offline` 12/12 completed/accepted、`pnpm bench:components` 三项比较全过，均 exit 0。真实模型请求 0。
+- NX-51-2（完成，本条目所在提交）：回填诊断证据（`scripts/analyze-eval-timing.mjs`、`docs/samples/nx51-timing.json`）、PLAN／REQUIREMENTS／DECISIONS 的规范条目，以及下一批 [逐项消融设计](NX-51-COMPONENT-ABLATION.md)。未冻结、未执行、未授权任何付费批次。
+
 ### NX-50 PR5 组件版本对照（2026-10-25，零付费准备完成）
 
 协议见 [NX-50-COMPONENT-AB](NX-50-COMPONENT-AB.md)。旧版 `74f8e89`、优化版 `0b24b32`，两边 cherry-pick 同一份评测代码；只跑 `context` 臂，6 题 × 2 次 = 每版 12 条。四个可独立回退的步骤：

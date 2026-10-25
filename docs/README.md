@@ -9,3 +9,5 @@
 - [context-budget/PLAN](context-budget/PLAN.md) — normative design decisions and parameters.
 - [context-budget/TASKS](context-budget/TASKS.md) — current tasks and acceptance evidence.
 - [context-budget/CHANGES](context-budget/CHANGES.md) — per-change commands and results.
+- [context-budget/NX-51-TIMING-DIAGNOSIS](context-budget/NX-51-TIMING-DIAGNOSIS.md) — offline timing decomposition of NX-50 and the post-summary pruning fix.
+- [context-budget/NX-51-COMPONENT-ABLATION](context-budget/NX-51-COMPONENT-ABLATION.md) — planned leave-one-out component ablation; not executed or authorized.
