@@ -3,7 +3,22 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { ToolResultStore } from '../src/core/tool-result-store.js'
+import { ToolResultStore, previewWindow } from '../src/core/tool-result-store.js'
+
+test('preview payload budgets include both windows without cutting UTF-8 or duplicating bytes', () => {
+  for (const source of ['x'.repeat(80) + 'END', '中文🙂'.repeat(20)]) {
+    const bytes = Buffer.from(source)
+    for (let limit = 1; limit <= 64; limit++) {
+      const window = previewWindow(bytes, bytes, bytes.length, limit, Math.max(1, Math.floor(limit / 8)))
+      assert.ok(window.head.length + window.tail.length <= limit)
+      assert.ok(window.omittedBytes >= 0)
+      const decoder = new TextDecoder('utf8', { fatal: true })
+      decoder.decode(window.head); decoder.decode(window.tail)
+      const middle = bytes.subarray(window.resumeOffset, window.resumeOffset + window.omittedBytes)
+      assert.equal(Buffer.concat([window.head, middle, window.tail]).toString('utf8'), source)
+    }
+  }
+})
 
 test('result store survives restart, pages Unicode bytes and isolates sessions', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'tool-results-'))
@@ -75,6 +90,36 @@ async function bootResults(workspace: string) {
   return root
 }
 
+test('overlapping command capture windows retain the true tail and remain fully readable', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'result-overlap-'))
+  const root = await bootResults(workspace)
+  try {
+    await root.plugin(toolResults, { maxPreviewBytes: 64 })
+    const original = 'x'.repeat(128) + 'Z'
+    root.tools.register({ name: 'bash', origin: 'builtin', effect: 'exec', execute: () => ({
+      type: 'command', version: 1, command: 'synthetic', cwd: workspace, status: 'exited', exitCode: 0,
+      signal: null, durationMs: 0, timedOut: false, cancelled: false,
+      stdout: { text: original.slice(0, 128), tail: original.slice(-128), bytes: 129, truncated: true },
+      stderr: { text: '', bytes: 0, truncated: false },
+    }) })
+    const result = await root.tools.execute('bash', {}, { sessionId: 'overlap' })
+    assert.equal(result.isError, false)
+    const stream = (result.value as CommandResult).stdout
+    assert.ok(stream.tail?.endsWith('Z'))
+    assert.ok(Buffer.byteLength(stream.text) + Buffer.byteLength(stream.tail!) <= 32)
+    assert.equal(stream.omittedBytes, 129 - Buffer.byteLength(stream.text) - Buffer.byteLength(stream.tail!))
+    let offset = 0, recalled = ''
+    while (offset < 129) {
+      const result = await root.tools.execute('read_tool_result', { ref: stream.ref, offset }, { sessionId: 'overlap' })
+      assert.equal(result.isError, false)
+      const page = result.value as { content: string; nextOffset: number }
+      assert.ok(page.nextOffset > offset)
+      recalled += page.content; offset = page.nextOffset
+    }
+    assert.equal(recalled, original)
+  } finally { await root.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
+})
+
 test('truncated tool results keep a tail window whose middle is recoverable through the ref', async () => {
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'result-tail-'))
   const root = await bootResults(workspace)
@@ -133,13 +178,13 @@ test('tail windows stay inside UTF-8 boundaries and never appear without truncat
     assert.equal((small.value as { previewTruncated?: boolean } | null)?.previewTruncated, undefined)
     output += 'y'
     const boundary = await root.tools.execute('utf8-text', {}, { sessionId: 's' })
-    assert.equal((boundary.value as { tail?: string }).tail, undefined)
+    assert.equal((boundary.value as { tail?: string }).tail, 'xxxy')
     assert.ok((boundary.value as { ref?: string }).ref)
     const smallStream = await root.tools.execute('bash', { command: `node -e 'process.stdout.write("x".repeat(16))'` }, { sessionId: 's' })
     assert.equal((smallStream.value as CommandResult).stdout.tail, undefined)
     assert.equal((smallStream.value as CommandResult).stdout.ref, undefined)
     const edgeStream = await root.tools.execute('bash', { command: `node -e 'process.stdout.write("x".repeat(17))'` }, { sessionId: 's' })
-    assert.equal((edgeStream.value as CommandResult).stdout.tail, undefined)
+    assert.equal((edgeStream.value as CommandResult).stdout.tail, 'xxxx')
     const tiny = await bootResults(workspace)
     try {
       await tiny.plugin(toolResults, { maxPreviewBytes: 8 })

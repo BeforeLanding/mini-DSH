@@ -1,5 +1,13 @@
 # 改动与验收证据
 
+### OPT-1 预览头尾共享额度（2026-10-25）
+
+`previewWindow` 从同一正文额度分配头尾，保留阈值边界的尾部信息与中段游标；普通结果推荐从中段偏移回读。Bash 两流各分一半；合法的采集头尾重叠先去重再存储，避免 quota/integrity 误报。PLAN/REQUIREMENTS 显式修订 D-20；历史 JSONL 与 NX-45 结论未改。
+
+固定脚本未改：`node scripts/benchmark-components.mjs --compare docs/samples/components-baseline.json --component tools --out <output>` 通过，12/12 同时满足尾部可见、头尾合计不超正文额度、完整 ref 回读；基线为 0/12 同时满足。两个新增回归覆盖 1～64 字节 ASCII/Unicode 额度及重叠稀疏命令结果；定向 tool-results 13/13。
+
+完整回归首次 511 tests / 480 pass / 1 fail / 30 skipped：旧压力探针只有 stdout，依赖超额尾部达到压缩阈值。现改为同时填满 stdout/stderr，共享原 16 KiB 正文额度，不改阈值、预算和断言、不改 fixture 或冻结对照集；复跑 511 tests / 481 pass / 0 fail / 30 skipped。`pnpm check` 193 files、`pnpm lint` 无诊断。真实 provider 请求 0。新请求指纹与旧录制可能不同，不把本次结果追溯套用旧实验。
+
 ### OPT-0 组件对照基线（2026-10-25）
 
 基于远端 main `74f8e89721820ef514e26df71cbb05e0c69683c7`，冻结 `scripts/benchmark-components.mjs` 与 `docs/samples/components-baseline.json`。12 个工具输出边界/Unicode/长输出探针、3 个嵌套摘要历史（64/256/1024 工具组）、3 个重复检查报告（1/8/32 条检查、2 个文件）。脚本使用实际生产组件、真实临时文件与结果存储；不装配 provider、不运行模型或 Bash。机制断言与原文回读均成功，工具预览的问题作为测量结果保留：9/12 丢失尾标记，3/12 头尾合计超正文额度；最大历史投影事件属性读取 2,133,569 次，32 检查报告打开文件 67 次。
