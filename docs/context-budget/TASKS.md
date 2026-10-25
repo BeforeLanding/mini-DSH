@@ -7,7 +7,8 @@
 - CMP-1（完成，`f3aab1f`）：`component` split、`NX-50-component-ab-v1`、单臂报告与 `sourceBaseCommit` 冻结。验收：plan-only 为 6 题/1 臂/12 episodes、caps 768 请求/1,536 工具/12M token/7.2M ms；component 冻结与单臂报告测试通过；`--split component --tier 2m` 拒绝。
 - CMP-2（完成，`5665293`）：runner 的 1 episode/block、严格 HEAD/金额/usage 守卫、`startedAt`/`finishedAt`/环境 provenance。验收：错误协议在隔离与模型调用前拒绝；单臂 block 与 reserve 测试通过。
 - CMP-3（完成，`e4dfe4b`）：离线比较器 `eval:v2-compare`，检查协议/任务/episode/臂/种子/模型/价格/tool schema，只允许 `src/**` 与 `package.json` 的已知差异，按预注册容差给出 pass/review/fail。验收：比较器定向 3/3；1 条容差、2 条失败、15% token 边界、双题退步 review、incomparable 拒绝。
-- CMP-4（完成）：本文件、CHANGES、PROGRESS 与 `docs/COMPONENT-OPTIMIZATION.md` 的回填；不改变协议或门槛。
+- CMP-4（完成，`adabea5`）：本文件、CHANGES、PROGRESS 与 `docs/COMPONENT-OPTIMIZATION.md` 的零付费回填；不改变协议或门槛。
+- CMP-5（完成，2026-10-25）：两批各 12/12 执行，旧/新可靠完成 12/12 对 12/12、产物验收 12/12 对 12/12；token 4,065,419→3,791,203（-6.75%），主动耗时 898,977→958,913 ms（+6.67%），均在预注册 15% 内，`gate=pass`、`mergeEligible=true`。逐题与边界见 [NX-50-RESULT](NX-50-RESULT.md)；main 合并待用户确认，不自动合并。
 
 零付费验证（优化版 checkout）：`pnpm check` 197 files；设置 `MINI_DSH_V2_RUNTIME` 后 `pnpm test` 523/523/0/0（含全部隔离用例）；`pnpm lint` 221 files 0 诊断；`pnpm fixtures:check`、`pnpm eval:offline`、`pnpm bench:components` 均 exit 0。真实模型请求 0，未冻结付费批次、未合并 main。下一步是建 `74f8e89` 工作树、冻结两版 manifest 并做 `--validate-only`；付费执行需单批 $22 的独立授权。
 

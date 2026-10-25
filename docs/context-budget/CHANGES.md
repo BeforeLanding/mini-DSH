@@ -1,12 +1,20 @@
 # 改动与验收证据
 
+### NX-50 PR5 组件版本对照：两批执行与门槛结果（2026-10-25）
+
+旧版 manifest `6d50a359…`（被测 `74f8e89`，评测 `c17145a`）与优化版 `9746c90f…`（被测 `0b24b32`，评测 `adabea5`）分别在干净工作树冻结并通过 `--validate-only`；两批各 12/12 执行、无 missing/invalid、provider usage 全覆盖、estimated=0。预注册顺序先优化版（03:52–04:09 UTC）后旧版（05:55–06:10 UTC），中间等待旧版单独授权。
+
+结果：旧/新可靠完成 **12/12 对 12/12**、产物验收 **12/12 对 12/12**；token **4,065,419→3,791,203（-6.75%）**，主动耗时 **898,977→958,913 ms（+6.67%）**，模型请求 206→189、工具调用 357→332、工具错误 23→22、预览截断 19→18、压力压缩 3→5、cache-read 两版均 57,728。比较器 `gate.status=pass`、`mergeEligible=true`、`reasons=[]`，无单题双退步。峰时价 usage 估价旧版 `$1.337245368`、新版 `$1.269039468`，均低于单批 $22 授权上限；这是估价，不是供应商账单。
+
+逐题 token 变化不均：U02 -65.0%、F01 -51.5%、R04 -3.9%，而 B03 +19.5%、F02 +30.9%、T04 +22.2%；主动耗时在 B03/F02/R04/T04 上升，其中 F02/R04/T04 单题升幅超过 15%，但预注册门槛按两批总量判定。完整表、证据路径与解释边界见 [NX-50-RESULT](NX-50-RESULT.md)。两批串行且时间窗不同，cache 可能跨会话共享；不作显著性、泛化或单项组件归因。证据在 `D:\Agent\outputs\nx50-component-ab-20261025\`，原始 prompt/输出未进仓库。main 合并待用户确认。
+
 ### NX-50 PR5 组件版本对照的零付费准备（2026-10-25）
 
 新增独立 `component` split 与 `NX-50-component-ab-v1` 协议，固定 `U02`、`B03`、`F01`、`F02`、`R04`、`T04` 六道此前无真实模型曝光的 formal fixture，只跑 `context` 臂，每题两次；每版 12 条 episode，整题预算与 NX-45 相同（1M token / 64 请求 / 128 工具 / 600 秒）。旧版 `74f8e89` 与优化版 `0b24b32` 各自在干净树上冻结，manifest 同时记录被测 `sourceBaseCommit` 与实际评测 `gitCommit`；比较器只允许 `src/**` 与已知 `package.json` 脚本差异。
 
 提交边界：`f3aab1f` 协议/冻结/单臂报告与文档；`5665293` runner 单臂 block、严格守卫与 provenance；`e4dfe4b` 离线比较器与门槛；本条目所在提交只回填状态。`developmentReserveUsd` 由固定 24 条/baseline 参数化为可指定臂与 episode 数，默认值保持历史读数。比较门槛在开跑前固定：新版可靠完成/产物验收各允许 1 条 episode 容差；token 与主动耗时不得超过旧版 1.15 倍；单题两次都退步为 `review-required`，不自动合并。
 
-零付费实测（优化版 checkout）：`pnpm check` → syntax 197 files；`MINI_DSH_V2_RUNTIME='D:\Agent\tmp\nx42-runtime\unpack' pnpm test` → 523 tests / 523 pass / 0 fail / 0 skipped；`pnpm lint` → 221 files / 0 diagnostics；`pnpm fixtures:check`、`pnpm eval:offline`（12/12 completed/accepted）、`pnpm bench:components`（tools/compaction/reports 三 gate）均 exit 0。`eval:v2 --split component --plan-only` 输出 6 题、1 臂、12 episodes、12 blocks，caps 与预留一致；比较器定向 3/3。未读取 API key、未发 provider 请求、未创建付费证据目录、未合并 main。两版 manifest 的冻结、digest 与 `--validate-only` 在后续交接中记录，需取得单批 $22 授权后才可 `--execute`。
+零付费实测（优化版 checkout）：`pnpm check` → syntax 197 files；`MINI_DSH_V2_RUNTIME='D:\Agent\tmp\nx42-runtime\unpack' pnpm test` → 523 tests / 523 pass / 0 fail / 0 skipped；`pnpm lint` → 221 files / 0 diagnostics；`pnpm fixtures:check`、`pnpm eval:offline`（12/12 completed/accepted）、`pnpm bench:components`（tools/compaction/reports 三 gate）均 exit 0。`eval:v2 --split component --plan-only` 输出 6 题、1 臂、12 episodes、12 blocks，caps 与预留一致；比较器定向 3/3。未读取 API key、未发 provider 请求、未创建付费证据目录、未合并 main。两版 manifest 的冻结、digest 与 `--validate-only` 及后续付费执行结果见上一条。
 
 ### OPT-4 冻结对照门禁与最终交付（2026-10-25）
 
