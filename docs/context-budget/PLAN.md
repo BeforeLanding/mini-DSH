@@ -6,6 +6,8 @@
 
 压缩压力探针改为同时填满 stdout/stderr，使共享 16 KiB 额度真实受压；阈值、预算和断言不变，独立 fixture 与冻结组件对照集不变。该探针只验收触发机制，不进入能力分数。
 
+极小/奇数额度补充（OPT-1b）：stdout 向上取整、stderr 向下取整分配，额度为 1 时 stderr 正文可为零。原命令采集的 tail 必须显式被裁剪结果覆盖，放不下完整 UTF-8 字符时清空并依赖 ref，不能从原 stream 展开中漏出。
+
 ## OPT-3 报告查询的版本读取（2026-10-25）
 
 `taskReport` 内的变更、检查与覆盖视图共用一次查询的文件版本读取，按已解析路径缓存 hash/location 与失败，不保留源文件正文。独立 `taskChanges` / `taskVerifications` 查询各自创建读取器；下一次查询/下一页必定重新读盘，不跨查询或恢复缓存。取消在命中缓存前仍检查。验证命令执行前后的 `verificationFiles` 分别创建读取器，不能复用命令执行前的版本证明执行后稳定。报告是按需读取的一组观测，不是整个文件系统的原子快照；passing/coverage 的范围与 `acceptance: not_asserted` 不变。

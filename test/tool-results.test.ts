@@ -120,6 +120,39 @@ test('overlapping command capture windows retain the true tail and remain fully 
   } finally { await root.fiber.dispose(); await fs.rm(workspace, { recursive: true, force: true }) }
 })
 
+test('tiny command budgets clear unrepresentable capture tails and share a single byte across streams', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'result-tiny-command-'))
+  try {
+    for (const [maxPreviewBytes, head, tail] of [[2, '中', '文'], [1, 'x', 'z']] as const) {
+      const root = await bootResults(workspace)
+      try {
+        await root.plugin(toolResults, { maxPreviewBytes })
+        const stream = { text: head, tail, bytes: Buffer.byteLength(head + tail), truncated: true }
+        root.tools.register({ name: 'bash', origin: 'builtin', effect: 'exec', execute: () => ({
+          type: 'command', version: 1, command: 'synthetic', cwd: workspace, status: 'exited', exitCode: 0,
+          signal: null, durationMs: 0, timedOut: false, cancelled: false, stdout: stream, stderr: stream,
+        }) })
+        const result = await root.tools.execute('bash', {}, { sessionId: `tiny-${maxPreviewBytes}` })
+        assert.equal(result.isError, false)
+        const { stdout, stderr } = result.value as CommandResult
+        const size = (item: typeof stdout) => Buffer.byteLength(item.text) + Buffer.byteLength(item.tail ?? '')
+        assert.ok(size(stdout) + size(stderr) <= maxPreviewBytes)
+        if (maxPreviewBytes === 2) { assert.equal(stdout.tail, undefined); assert.equal(stderr.tail, undefined) }
+        for (const item of [stdout, stderr]) {
+          let offset = 0, text = ''
+          while (offset < stream.bytes) {
+            const page = await root.tools.execute('read_tool_result', { ref: item.ref, offset }, { sessionId: `tiny-${maxPreviewBytes}` })
+            assert.equal(page.isError, false)
+            const value = page.value as { content: string; nextOffset: number }
+            assert.ok(value.nextOffset > offset); text += value.content; offset = value.nextOffset
+          }
+          assert.equal(text, head + tail)
+        }
+      } finally { await root.fiber.dispose() }
+    }
+  } finally { await fs.rm(workspace, { recursive: true, force: true }) }
+})
+
 test('truncated tool results keep a tail window whose middle is recoverable through the ref', async () => {
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'result-tail-'))
   const root = await bootResults(workspace)

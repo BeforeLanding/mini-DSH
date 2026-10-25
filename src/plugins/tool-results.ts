@@ -18,14 +18,14 @@ export function apply(ctx: Context, config: ToolResultsConfig = {}) {
     // 结果存储只会把「按 seq 分页」变成「按 ref 分页」。
     if (tool === 'read_tool_result' || tool === 'read_history' || !execution.sessionId) return result
     if (tool === 'bash' && (result.value as CommandResult | null)?.type === 'command') {
-      const limit = Math.max(1, Math.floor(maxPreviewBytes / 2))
-      const project = async (stream: CommandStream): Promise<CommandStream> => {
+      const project = async (stream: CommandStream, limit: number): Promise<CommandStream> => {
         const bytes = Buffer.from(stream.text)
         if (bytes.length <= limit && !stream.truncated) return stream
         const tailSource = stream.truncated ? Buffer.from(stream.tail ?? '') : bytes
         const { head, tail, omittedBytes, resumeOffset } = previewWindow(bytes, tailSource, stream.bytes, limit, tailLimit)
         const preview = head.toString('utf8')
-        const window = { ...(tail.length ? { tail: tail.toString('utf8') } : {}), omittedBytes, resumeOffset }
+        // Explicitly replace a capture tail even when no full character fits.
+        const window = { tail: tail.length ? tail.toString('utf8') : undefined, omittedBytes, resumeOffset }
         try {
           ctx.sandbox.resolvePath(directory)
           const saved = stream.truncated
@@ -41,7 +41,8 @@ export function apply(ctx: Context, config: ToolResultsConfig = {}) {
         }
       }
       const value = result.value as CommandResult
-      const stdout = await project(value.stdout), stderr = await project(value.stderr)
+      const stdout = await project(value.stdout, Math.ceil(maxPreviewBytes / 2))
+      const stderr = await project(value.stderr, Math.floor(maxPreviewBytes / 2))
       const projected = { ...value, stdout, stderr }
       // NX-39：把「这一份被换成了预览」提到 ToolResult 上，让运行时有可数的信号。只认流自己的
       // previewTruncated，不认 storageTruncated——后者是存盘时的上限，与进历史的那份是不是预览无关。
