@@ -10,5 +10,6 @@
 - [context-budget/TASKS](context-budget/TASKS.md) — current tasks and acceptance evidence.
 - [context-budget/CHANGES](context-budget/CHANGES.md) — per-change commands and results.
 - [context-budget/NX-51-TIMING-DIAGNOSIS](context-budget/NX-51-TIMING-DIAGNOSIS.md) — offline timing decomposition of NX-50 and the post-summary pruning fix.
-- [context-budget/NX-51-PRUNE-AB](context-budget/NX-51-PRUNE-AB.md) — 24-episode prune-on/off protocol; frozen design, not executed or authorized.
+- [context-budget/NX-51-PRUNE-AB](context-budget/NX-51-PRUNE-AB.md) — 24-episode prune-on/off protocol and pre-registered readings.
+- [context-budget/NX-51-PRUNE-RESULT](context-budget/NX-51-PRUNE-RESULT.md) — executed 24/24; the summary-reduction hypothesis was not supported.
 - [context-budget/NX-51-COMPONENT-ABLATION](context-budget/NX-51-COMPONENT-ABLATION.md) — planned leave-one-out component ablation; not executed or authorized.

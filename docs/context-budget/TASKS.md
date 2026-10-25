@@ -6,7 +6,8 @@
 
 - NX-51-1（完成，`9e30f5c`）：补两条回归测试并修复。第一条钉住目标案例确实裁掉“已结束且非当前”的旧任务，且摘要后的后续轮次不再带回；第二条钉住 `/continue`、重启恢复与“摘要用掉最后一次请求额度”的边界，同时用 `read_history` 验证原始事件仍可回读。实现为 `ContextBudgetRuntime.project()` 的 `pruneTargetTokens`／`prunedTaskIds`、`context/prune` 事件与主循环 `afterApplied` 钩子；原“不可约前缀”与“溢出兜底”用例改用当前 task 自身构造，语义不变。验收：定向 `budget`／`context`／`compaction-recovery`／`nx38-covenant` 28/28（covenant 4/4）；设置 `MINI_DSH_V2_RUNTIME` 后完整 `pnpm test` **525/525，0 fail，0 skipped**；`pnpm check` 197 files、`pnpm lint` 223 files 0 诊断、`pnpm fixtures:check` 25 项 `expected=true`、`pnpm eval:offline` 12/12 completed/accepted、`pnpm bench:components` 三项比较全过，均 exit 0。真实模型请求 0。
 - NX-51-2（完成，本条目所在提交）：回填诊断证据（`scripts/analyze-eval-timing.mjs`、`docs/samples/nx51-timing.json`）、PLAN／REQUIREMENTS／DECISIONS 的规范条目，以及 [24 条 prune 开/关协议](NX-51-PRUNE-AB.md) 与 [48 条逐项消融设计](NX-51-COMPONENT-ABLATION.md)。24 条协议尚未生成 manifest、未执行、未授权；48 条放在它之后。
-- NX-51-3（待授权）：从 `9e30f5c` 与 `cc2b769` 两个干净 HEAD 各冻结一臂 12 条，`--validate-only` 后先跑 `prune-on` 再跑 `prune-off`；单批上限 $22，合计 $44。执行前需该批单独授权；读数按 [NX-51-PRUNE-AB](NX-51-PRUNE-AB.md) 的预注册口径报告。
+- NX-51-3（完成，2026-10-25）：从 `9e30f5c` 与 `cc2b769` 两个干净 HEAD 各冻结一臂 12 条，`--validate-only` 后先跑 `prune-on` 再跑 `prune-off`；实际 usage 估价 `$3.087115`，低于 $44 上限。结果：摘要 3→7、摘要耗时 43,249→105,394 ms、主动耗时 +37.7%、输出 token +48.4%，可靠完成 11→10、产物验收 12→12。结论为**摘要下降假设未获支持**，不把该行为作为默认推广；完整读数见 [NX-51-PRUNE-RESULT](NX-51-PRUNE-RESULT.md)。
+- NX-51-4（待决策）：保留默认开启、改为显式策略开关并默认关闭，或关闭该行为；决定前不把 48 条三项组件消融叠加到未定的共同背景上。任何复跑或新批次需重新授权。
 
 ### NX-50 PR5 组件版本对照（2026-10-25，零付费准备完成）
 
