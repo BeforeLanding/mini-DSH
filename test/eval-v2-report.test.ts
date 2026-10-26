@@ -153,3 +153,33 @@ test('component batches freeze one context arm and report without a cross-arm de
   assert.throws(() => reportV2({ ...manifest, protocol: 'NX-45-dev-2arm-v1' }, rows), /integrity/)
   assert.throws(() => reportV2({ ...manifest, sourceBaseCommit: manifest.gitCommit }, rows), /integrity/)
 })
+
+test('component-loo freezes one context arm plus a source variant and keeps the NX-51 doc in the source list', async () => {
+  const looConfig = { ...config, split: 'component-loo' as const, tier: '1m' as const, window: 1_000_000,
+    model: 'deepseek/deepseek-flash', echoedModel: 'deepseek-flash', modelVersion: 'DeepSeek-V4.1-Flash-1017',
+    baseUrl: 'https://api.deepseek.com', sourceBaseCommit: 'c'.repeat(40), variant: 'no-preview' as const,
+    priceSnapshot: { source: 'https://api-docs.deepseek.com/quick_start/pricing/', capturedAt: '2026-10-26T00:00:00Z', currency: 'USD', inputPerMillion: 0.3, outputPerMillion: 1.2, cacheReadPerMillion: 0.006 } }
+  const manifest = await freezeV2(looConfig)
+  assert.equal(manifest.protocol, 'NX-51-component-loo-v1')
+  assert.equal(manifest.variant, 'no-preview')
+  assert.equal(manifest.tasks.length, 6)
+  assert.equal(manifest.episodes.length, 12)
+  assert.deepEqual(manifest.arms.map(arm => arm.name), ['context'])
+  assert.ok(manifest.sourceFiles.some(file => file.path === 'docs/context-budget/NX-51-COMPONENT-ABLATION.md'))
+  assert.ok(manifest.sourceFiles.some(file => file.path === 'scripts/benchmark-components.mjs'))
+  await verifyV2FrozenFiles(manifest)
+  const rows = manifest.episodes.map(episode => ({ ...observation(episode.taskId, episode.repeat, episode.arm, true),
+    acceptanceGroups: manifest.tasks.find(task => task.id === episode.taskId)!.groups.map(name => ({ name, passed: true })) }))
+  const report = reportV2(manifest, rows)
+  assert.equal(report.incomplete, false)
+  assert.equal(report.singleArm, true)
+  assert.equal(report.interpretation, 'development-only')
+  assert.equal(report.thresholdClaimSupported, false)
+  assert.equal(report.arms[0]!.planned, 12)
+  await assert.rejects(freezeV2({ ...looConfig, variant: undefined }), /requires a registered variant/)
+  await assert.rejects(freezeV2({ ...looConfig, variant: 'other' as never }), /requires a registered variant/)
+  await assert.rejects(freezeV2({ ...looConfig, split: 'component', variant: 'full' }), /only valid for component-loo/)
+  assert.throws(() => reportV2({ ...manifest, protocol: 'NX-50-component-ab-v1' }, rows), /integrity/)
+  assert.throws(() => reportV2({ ...manifest, variant: 'no-report' }, rows), /integrity/)
+  assert.throws(() => reportV2({ ...manifest, variant: undefined }, rows), /integrity/)
+})
