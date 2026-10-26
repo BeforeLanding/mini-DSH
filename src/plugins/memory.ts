@@ -10,6 +10,10 @@ import type { MemoryRecall } from '../core/memory-retriever.js'
 export const name = 'mini-memory'
 export const inject = ['tools', 'sessions', 'systemPrompt']
 export interface MemoryPluginConfig { controller: MemoryController; mode: 'recall' | 'assist'; ownsStore?: boolean }
+function proposalOpId(sessionId: string, taskId: string, runId: string, toolCallId: string, toolSequence?: number) {
+  if (toolSequence !== undefined && (!Number.isSafeInteger(toolSequence) || toolSequence < 1)) throw new Error('invalid memory tool batch sequence')
+  return memoryHash(JSON.stringify([sessionId, taskId, runId, toolCallId, ...(toolSequence === undefined ? [] : [toolSequence])]))
+}
 export class MemoryController {
   #sessions?: Pick<SessionRuntime, keyof SessionRuntime>
   #views = new Map<string, { taskId: string; view: MemoryView }>()
@@ -37,10 +41,10 @@ export class MemoryController {
     }
     return result
   }
-  async propose(sessionId: string, toolCallId: string, input: MemoryProposal) {
+  async propose(sessionId: string, toolCallId: string, input: MemoryProposal, toolSequence?: number) {
     const state = this.#sessions!.latestRun(sessionId)!
     if (state?.status !== 'running' || !toolCallId) throw new Error('memory proposal requires a scoped active tool call')
-    const opId = memoryHash(JSON.stringify([sessionId, state.taskId, state.runId, toolCallId]))
+    const opId = proposalOpId(sessionId, state.taskId, state.runId, toolCallId, toolSequence)
     const proposal = structuredClone(input)
     if (!Array.isArray(proposal.sources)) throw new Error('memory proposal sources must be an array')
     proposal.sources = proposal.sources.map(source => {
@@ -105,11 +109,12 @@ export function apply(ctx: Context, { controller, mode, ownsStore = true }: Memo
     parameters: { type: 'object', properties: { kind: { enum: ['project_fact', 'procedure', 'episode'] }, key: { type: 'string' }, title: { type: 'string' }, content: { type: 'string', maxLength: 2048 }, tags: { type: 'array', items: { type: 'string' }, maxItems: 16 }, sources: { type: 'array', minItems: 1, maxItems: 16, items: { type: 'object', properties: { sessionId: { type: 'string' }, taskId: { type: 'string' }, eventId: { type: 'string' }, seq: { type: 'integer', minimum: 1 } }, required: ['seq'], additionalProperties: false } }, anchors: { type: 'array', maxItems: 16, items: { type: 'object', properties: { path: { type: 'string' }, contentSha256: { type: 'string' } }, required: ['path', 'contentSha256'], additionalProperties: false } }, expiresAt: { type: 'string' }, supersedes: { type: 'object', properties: { id: { type: 'string' }, revision: { type: 'integer', minimum: 1 } }, required: ['id', 'revision'] } }, required: ['kind', 'key', 'title', 'content', 'sources', 'anchors'], additionalProperties: false },
     async execute(args, execution) {
       if (!execution.sessionId || !execution.toolCallId || !recordObject(args)) throw new Error('memory proposal requires a tool call')
-      const state = ctx.sessions.latestRun(execution.sessionId)!
-      const count = ctx.sessions.get(execution.sessionId).events.filter(event => event.type === 'memory/proposal-receipt' && event.runId === state?.runId).length
-      const opId = memoryHash(JSON.stringify([execution.sessionId, state?.taskId, state?.runId, execution.toolCallId]))
+      const state = ctx.sessions.latestRun(execution.sessionId)
+      if (state?.status !== 'running') throw new Error('memory proposal requires an active run')
+      const count = ctx.sessions.get(execution.sessionId).events.filter(event => event.type === 'memory/proposal-receipt' && event.runId === state.runId).length
+      const opId = proposalOpId(execution.sessionId, state.taskId, state.runId, execution.toolCallId, execution.toolSequence)
       if (count >= 3 && !await controller.runtime.store.receipt(opId)) throw new Error('memory proposal per-run limit reached')
-      return controller.propose(execution.sessionId, execution.toolCallId, args as unknown as MemoryProposal)
+      return controller.propose(execution.sessionId, execution.toolCallId, args as unknown as MemoryProposal, execution.toolSequence)
     },
   }), 'register memory_propose')
 }

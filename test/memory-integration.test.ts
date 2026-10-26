@@ -13,6 +13,35 @@ import { inspectSession } from '../src/core/session-inspect.js'
 import type { MemoryRecord } from '../src/core/memory-contracts.js'
 import * as cli from '../src/plugins/cli.js'
 
+test('memory proposals distinguish repeated tool ids in different batches while replay remains idempotent and bounded', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'memory-call-identity-'))
+  const h = await createHarness({ workspace: directory, profile: 'general', memory: { mode: 'assist', directory: path.join(directory, 'memory') } })
+  t.after(async () => { await h.dispose(); await fs.rm(directory, { recursive: true, force: true }) })
+  const session = h.root.sessions.create({ workspace: directory }), state = h.root.sessions.beginRun(session.id, {}, 'scripted/test')
+  const source = h.root.sessions.append(session.id, 'user/message', { content: 'Reusable source.' }, state)
+  const base = { kind: 'episode', key: 'first', title: 'Lesson', content: 'Recheck current files.', sources: [{ seq: source.seq }], anchors: [] }
+  const invoke = async (key: string) => {
+    const args = { ...base, key }
+    const batch = h.root.sessions.append(session.id, 'assistant/tool_calls', { toolCalls: [{ id: 'reused', name: 'memory_propose', arguments: args }] }, state)
+    const execution = { sessionId: session.id, toolCallId: 'reused', toolSequence: batch.seq }
+    const result = await h.root.tools.execute('memory_propose', args, execution)
+    h.root.sessions.append(session.id, 'tool/result', { toolCallId: 'reused', name: 'memory_propose', content: h.root.tools.renderResult(result), isError: result.isError, status: 'completed' }, state)
+    return { result, execution, args }
+  }
+  const first = await invoke('first'), second = await invoke('second')
+  assert.equal(first.result.isError, false); assert.equal(second.result.isError, false, h.root.tools.renderResult(second.result))
+  const third = await invoke('third'); assert.equal(third.result.isError, false)
+  assert.equal((await invoke('fourth')).result.isError, true, 'reusing an id must not evade the per-run cap')
+  const replay = await h.root.tools.execute('memory_propose', first.args, first.execution)
+  assert.deepEqual(replay.value, first.result.value)
+  const records = await h.memory!.runtime.store.records()
+  assert.deepEqual(records.map(record => record.key), ['first', 'second', 'third'])
+  assert.ok(records.every(record => record.state === 'candidate'))
+  assert.equal(h.root.sessions.get(session.id).events.filter(event => event.type === 'memory/proposal-receipt').length, 3)
+  h.root.sessions.finishRun(state, 'completed')
+  parseLog(h.root.sessions.get(session.id).events.map(event => JSON.stringify(event) + '\n').join(''), session.id)
+})
+
 test('shared Harness supports proposal, human review, new-task recall and durable frozen view recovery', async t => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'memory-harness-')), workspace = path.join(directory, 'project')
   await fs.mkdir(workspace); await fs.writeFile(path.join(workspace, 'entry.ts'), 'entry')

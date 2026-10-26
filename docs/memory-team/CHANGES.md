@@ -1,5 +1,11 @@
 # 项目记忆与只读协作变更证据
 
+## REV-03：提案幂等身份包含工具批次
+
+- P2：provider 的 toolCallId 仅在单次响应内唯一，旧身份只含 session/task/run/toolCallId，跨响应复用 ID 的新提案会被当作旧调用或直接拒绝；失败回归已复现。
+- 提案和额度入口共用批次绑定的 opId；无 toolSequence 的宿主直调用保留原身份。三个不同批次复用同一 ID 可创建不同候选，第四条仍拒绝，原批次重放不重复创建；批准仍只能经人工命令。
+- build、memory store/recall/集成/委派 15/15、定向 Biome 与 diff 检查通过；无 provider 请求。
+
 ## REV-02：worker 失败后的兄弟任务清理
 
 - P1：注入首次子结果发布失败，原 `Promise.all` 立即返回并移除批次控制器，其它 worker 继续执行、甚至启动排队任务；失败回归已复现。
