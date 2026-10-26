@@ -24,6 +24,8 @@ test('development protocol rejects mismatched budgets, forged/stale provenance, 
   await assert.rejects(validateMemoryTeamManifests([manifests[0], manifests[0], manifests[2], manifests[3]]), /four independent/)
   const formal = manifests.map(manifest => seal({ ...manifest, phase: 'formal' as 'development' }))
   await assert.rejects(validateMemoryTeamManifests(formal), /invalid, stale or paid/)
+  const invalidBudget = manifests.map(manifest => seal({ ...manifest, runBudget: { ...manifest.runBudget, maxTotalTokens: -1 } }))
+  await assert.rejects(validateMemoryTeamManifests(invalidBudget), /invalid budget/)
 })
 test('memory/team evaluation executable refuses a live run rather than treating development validation as paid authorization', () => {
   const result = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/eval-memory-team.js', import.meta.url)), '--run', 'anything'], { encoding: 'utf8', windowsHide: true })

@@ -86,3 +86,7 @@
 - 新建独立 memory-team-development-v1、四条件、4 个公开开发蓝图及所有组共同可读的经验包；postCompactionPrune 四份清单均显式 false。没有编辑 NX-50/NX-51 四臂或比较器。
 - eval-memory-team 支持干净 HEAD 冻结四份 manifest 与 validate-only：检查共同模型/预算/准备数据、源码及数据 SHA-256、四种实际 Harness 工具装配，拒绝缺臂、重复臂、不同额度、过期来源、付费或正式标记。正文按 LF 规范化，原始数据文件另有精确字节摘要。
 - build、定向 eval 3/3、全库 Biome 248 文件无诊断；零模型验证。独立目标验收器和准备/目标两阶段真实执行器尚未实施，价格与金额未冻结，付费调用 0；因此仅标 prepared，不把 16 个拟议开发 episode 或正式 128 个目标 episode 当成已执行。
+
+### EV-02b 配置语义校验
+
+- 四臂除共同预算相等之外，另复用 resolveBudget 拒绝负额度/非法策略，并限制为当前已注册的生产模型 id。定向 eval 3/3 与 Biome 2 文件无诊断，未调用模型。

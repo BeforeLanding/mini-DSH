@@ -7,7 +7,7 @@ import { createHarness } from '../src/app/create-harness.js'
 import { memoryHash, recordObject, sha256 } from '../src/core/memory-contracts.js'
 import { groupPolicy } from '../src/core/task-group-budget.js'
 import type { TaskGroupPolicy } from '../src/core/task-group-budget.js'
-import { CLI_BUDGET } from '../src/core/budget.js'
+import { CLI_BUDGET, resolveBudget } from '../src/core/budget.js'
 import type { BudgetPolicy } from '../src/core/budget.js'
 
 const repository = fileURLToPath(new URL('../../', import.meta.url))
@@ -59,6 +59,8 @@ export async function validateMemoryTeamManifests(manifests: MemoryTeamManifest[
     for (const manifest of manifests) {
       if (manifest.version !== 1 || manifest.protocol !== 'memory-team-development-v1' || manifest.phase !== 'development' || manifest.digest !== manifestDigest(manifest) || !sha256(manifest.source.codeDigest) || !/^[a-f0-9]{40}$/.test(manifest.source.commit) || manifest.source.codeDigest !== currentCodeDigest || manifest.memory !== manifest.arm.endsWith('memory-on') || manifest.team !== manifest.arm.startsWith('team-') || manifest.postCompactionPrune !== false || manifest.paidExecutionAuthorized !== false || manifest.amountCapUsd !== null || manifest.preparationAccessibleToAll !== true || manifest.experienceDigest !== shared.experienceDigest || manifest.workflowDigest !== shared.workflowDigest || JSON.stringify(manifest.workflowIds) !== JSON.stringify(shared.workflowIds)) throw new Error(`invalid, stale or paid manifest: ${manifest.arm}`)
       groupPolicy(manifest.taskGroupPolicy)
+      resolveBudget(manifest.runBudget)
+      if (!['deepseek/deepseek-v4-flash', 'deepseek/deepseek-v4-pro'].includes(manifest.model)) throw new Error('development model must match the registered production adapter')
       const harness = await createHarness({ workspace: temporary, profile: 'coding', runtimeClockMode: 'frozen', contextLayout: 'live', taskGroupPolicy: manifest.taskGroupPolicy,
         ...(manifest.memory ? { memory: { mode: 'recall', directory: path.join(temporary, 'memory'), readOnly: true } as const } : {}),
         ...(manifest.team ? { delegation: { mode: 'read-only', directory: path.join(temporary, 'teams') } as const } : {}),
