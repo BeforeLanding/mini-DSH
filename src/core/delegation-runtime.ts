@@ -43,15 +43,18 @@ export class DelegationRuntime {
     return anchors
   }
   run(value: unknown, execution: Execution): Promise<DelegationBatch> {
+    const state = execution.sessionId ? this.deps.sessions.latestRun(execution.sessionId) : undefined
+    if (state?.status !== 'running' || this.#active.has(state.taskId)) return Promise.reject(new Error('delegation requires one active parent batch'))
+    this.#active.add(state.taskId)
     const operation = this.#run(value, execution); this.#pending.add(operation)
-    void operation.finally(() => this.#pending.delete(operation)).catch(() => {})
+    void operation.finally(() => { this.#pending.delete(operation); this.#active.delete(state.taskId) }).catch(() => {})
     return operation
   }
   async #run(value: unknown, execution: Execution): Promise<DelegationBatch> {
     const { sessionId, toolCallId, toolSequence, agent } = execution
     if (!sessionId || !toolCallId || !toolSequence || !agent) throw new Error('delegation requires a scoped parent tool call')
     const state = this.deps.sessions.latestRun(sessionId)
-    if (state?.status !== 'running' || this.#active.has(state.taskId)) throw new Error('delegation requires one active parent batch')
+    if (state?.status !== 'running') throw new Error('delegation requires one active parent batch')
     const tasks = delegateInputs(value), prior = this.deps.sessions.get(sessionId).events.filter(event => event.type === 'delegation/start' && event.taskId === state.taskId)
     if (prior.reduce((sum, event) => sum + (event.type === 'delegation/start' ? event.data.children.length : 0), 0) + tasks.length > this.limits.maxChildrenPerTask) throw new Error('cumulative child limit reached')
     if (prior.some(event => event.type === 'delegation/start' && event.data.toolCallId === toolCallId && event.data.toolSequence === toolSequence)) throw new Error('delegation already started; recover its recorded result instead of rerunning')
@@ -61,7 +64,6 @@ export class DelegationRuntime {
     const start: DelegationStart = { batchId: randomUUID(), groupId: group.start.groupId, toolCallId, toolSequence, anchors, limits: { ...this.limits }, children: tasks.map(task => ({ delegationId: randomUUID(), task })) }
     const append = async <K extends 'delegation/start' | 'delegation/child-created' | 'delegation/child-finish' | 'delegation/finish'>(type: K, data: import('./contracts.js').EventData[K]) => { this.deps.sessions.append(sessionId, type, data, state); await this.deps.sessions.flush(sessionId) }
     await append('delegation/start', start)
-    this.#active.add(state.taskId)
     const controller = new AbortController(), signal = AbortSignal.any([execution.signal, controller.signal]); this.#controllers.add(controller)
     const results: DelegationResult[] = new Array(tasks.length)
     let next = 0
@@ -76,7 +78,7 @@ export class DelegationRuntime {
       const batch = boundDelegationBatch({ batchId: start.batchId, results, truncated: false }, this.limits)
       await append('delegation/finish', { batchId: start.batchId, toolCallId, toolSequence, result: JSON.stringify(batch) })
       return batch
-    } finally { this.#controllers.delete(controller); this.#active.delete(state.taskId) }
+    } finally { this.#controllers.delete(controller) }
   }
   async #child(planned: PlannedChild, execution: Execution, start: DelegationStart, group: TaskGroupBudgetCoordinator, memory: MemoryViewSnapshot | undefined,
     append: <K extends 'delegation/start' | 'delegation/child-created' | 'delegation/child-finish' | 'delegation/finish'>(type: K, data: import('./contracts.js').EventData[K]) => Promise<void>) {

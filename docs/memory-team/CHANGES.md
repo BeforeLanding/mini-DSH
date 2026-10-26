@@ -67,3 +67,9 @@
 - reviewer 复用只读机制，输入带有候选路径/哈希/digest 和最多 8 KiB 的 task 基线至当前候选 diff；完整 diff 过大时明确要求拆分。候选信息作为子会话 user/message 保存，审查不生成验证通过或写入批准。
 - 返回前复核所有候选锚点（包括没有发现问题的审查），外部变化标 stale；结果保存 candidate digest 和锚点。新增只读 `review_status` 有界查询当前任务审查的版本有效性，主 Agent 后续编辑后旧 review 显示 stale。它是原提案单一委派工具之外的读取入口，不创建子 Agent。
 - build 与 reviewer/委派/恢复 9/9；完整 suite 552 tests / 522 pass / 0 fail / 30 平台 skipped，58.1 秒；syntax 219 文件、Biome 243 文件无诊断。验证固定 diff、根再次编辑失效、外部变化与空 findings 失效、review 不能替代检查。provider 请求 0。
+
+## MA-03b 输入与准入边界（2026-10-26）
+
+- 子结果只允许 findings/unresolved 及约定的证据字段，模型不能通过额外字段覆盖宿主生成的 delegationId/status/ref。子任务输入同样拒绝未声明字段。
+- 在第一个 await 之前取得逻辑任务分工租约，拒绝同时提交的第二批；结果额度不能高于持久化协议的 16 KiB 包装上限。第一版并发/累计上限可收窄，扩大需另修协议。
+- build、协作/恢复/reviewer 9/9、全库 Biome 243 文件无诊断。测试增加伪造结果字段、越界配置和同时第二批准入拒绝，模型请求仍为脚本化调用。

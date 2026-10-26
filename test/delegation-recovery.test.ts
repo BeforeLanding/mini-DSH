@@ -64,7 +64,9 @@ test('parent cancellation reaches running children, leaves queued children unsta
   t.after(async () => { await h.dispose(); await fs.rm(directory, { recursive: true, force: true }) })
   const session = h.root.sessions.create({ workspace }), agent = h.root.agents.create({ sessionId: session.id, model: 'scripted/test', loop: h.root.agentLoop }), controller = new AbortController()
   const running = agent.send('Investigate.', { signal: controller.signal }); void running.catch(() => {})
-  await started; controller.abort(); await assert.rejects(running)
+  await started
+  await assert.rejects(h.delegation!.run([], { sessionId: session.id, toolCallId: 'concurrent', toolSequence: 999, agent, signal: new AbortController().signal }), /one active parent batch/)
+  controller.abort(); await assert.rejects(running)
   await h.delegation!.close()
   assert.equal(children, 2)
   const events = h.root.sessions.get(session.id).events

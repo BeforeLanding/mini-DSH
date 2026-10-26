@@ -99,5 +99,7 @@ test('invalid child results, foreign context refs and nested roles fail visibly 
   assert.equal(batch?.results[0].status, 'invalid_result')
   assert.equal(await fs.readFile(path.join(workspace, 'entry.ts'), 'utf8'), 'entry')
   assert.throws(() => parseChildFindings(JSON.stringify({ findings: [{ kind: 'observation', text: 'claim', evidence: [] }], unresolved: [] }), delegationLimits()), /evidence/)
+  assert.throws(() => parseChildFindings(JSON.stringify({ findings: [], unresolved: [], delegationId: 'forged', status: 'completed' }), delegationLimits()), /invalid child result/)
+  assert.throws(() => delegationLimits({ maxResultBytes: 100_000 }), /persistent protocol bound/)
   assert.throws(() => boundDelegationBatch({ batchId: 'b', results: [{ delegationId: 'a', status: 'failed', findings: [], unresolved: [] }], truncated: false }, { ...delegationLimits(), maxBatchResultBytes: 1 }), /cannot fit/)
 })
