@@ -2,6 +2,7 @@ import { resolveBudget } from './budget.js'
 import { fingerprint } from './file-edit.js'
 import { safeRunMessages } from './model-error.js'
 import { memoryId, sha256 } from './memory-contracts.js'
+import { delegateInputs, delegationLimits } from './delegation-contracts.js'
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const string = (v: unknown) => typeof v === 'string'
 const integer = (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0
@@ -35,6 +36,17 @@ export function validUsage(v: unknown): boolean {
 export function validatePayload(type: string, data: Record<string, unknown>) {
   let valid = false
   switch (type) {
+    case 'delegation/start': {
+      try {
+        if (!Array.isArray(data.children) || !data.children.every(child => record(child) && memoryId(child.delegationId)) || !record(data.limits)) break
+        delegateInputs(data.children.map(child => child.task)); delegationLimits(data.limits)
+        valid = memoryId(data.batchId) && memoryId(data.groupId) && memoryId(data.toolCallId) && integer(data.toolSequence) && Number(data.toolSequence) > 0 && Array.isArray(data.anchors) && data.anchors.length <= 64 && data.anchors.every(anchor => record(anchor) && filePath(anchor.path) && sha256(anchor.contentSha256))
+      } catch { valid = false }
+      break
+    }
+    case 'delegation/child-created': valid = memoryId(data.batchId) && memoryId(data.delegationId) && memoryId(data.childSessionId) && ['analyst', 'test_designer'].includes(String(data.role)) && sha256(data.capabilityDigest); break
+    case 'delegation/child-finish': valid = memoryId(data.batchId) && memoryId(data.delegationId) && (data.childSessionId === undefined || memoryId(data.childSessionId)) && ['completed', 'failed', 'cancelled', 'interrupted', 'invalid_result', 'skipped'].includes(String(data.status)) && memoryId(data.resultRef) && sha256(data.resultSha256); break
+    case 'delegation/finish': valid = memoryId(data.batchId) && memoryId(data.toolCallId) && integer(data.toolSequence) && typeof data.result === 'string' && Buffer.byteLength(data.result) <= 16384; break
     case 'group/start': {
       const policy = data.policy
       valid = memoryId(data.groupId) && integer(data.deadline) && record(policy) && ['maxModelRequests', 'maxToolCalls', 'maxTotalTokens', 'rootTokenFloor', 'rootRequestFloor', 'maxWallDurationMs'].every(key => integer(policy[key])) && Number(policy.rootTokenFloor) <= Number(policy.maxTotalTokens) && Number(policy.rootRequestFloor) <= Number(policy.maxModelRequests) && Number(policy.maxWallDurationMs) > 0

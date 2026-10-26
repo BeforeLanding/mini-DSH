@@ -6,11 +6,12 @@ import type { AvailableRange } from '../core/tool-result-store.js'
 
 export const name = 'mini-tool-results'
 export const inject = ['tools', 'sandbox']
-export interface ToolResultsConfig extends Partial<ResultStoreConfig> { maxPreviewBytes?: number }
+export interface ToolResultsConfig extends Partial<ResultStoreConfig> { maxPreviewBytes?: number; onStore?: (store: ToolResultStore) => void }
 
 export function apply(ctx: Context, config: ToolResultsConfig = {}) {
   const directory = config.directory ?? '.mini-dsh/tool-results'
   const store = new ToolResultStore({ ...config, directory: ctx.sandbox.resolvePath(directory) })
+  config.onStore?.(store)
   const maxPreviewBytes = positiveLimit(config.maxPreviewBytes, 16 * 1024, 'maxPreviewBytes')
   const tailLimit = Math.max(1, Math.floor(maxPreviewBytes / PREVIEW_TAIL_DIVISOR))
   ctx.effect(() => ctx.tools.setResultProjection(async (tool, result, execution) => {

@@ -40,3 +40,11 @@
 - 预留和派发意图落盘后调用 adapter，按 requestId 一次结算；重复结算不重复扣账，冲突 usage 拒绝。派发前崩溃释放；派发后缺 usage 保留 unknown 预留并阻止全组继续派发。超预留 usage 记录 overrun 并取消可取消请求。估算误差仍可能超额，不声明 token 计费硬上限。
 - 显式 dispatchScope 传到中央 LlmRuntime 守门后从 provider 请求移除，关闭功能时 adapter 请求内容不变；工具能力检查继续独立有效。新增词表由 contracts/validation/JSONL parser/inspect 共同识别。
 - build 通过；预算/角色/记忆集成/原摘要/文档定向 30/30；全库 Biome 235 文件无诊断。完整离线 suite 543 tests / 513 pass / 0 fail / 30 平台 skipped，54.9 秒。并发抢最后余额、root floor、双结算、工具重复、overrun、重启未决请求及摘要/重试归账均有测试，实际 provider 调用 0。
+
+## MA-03（2026-10-26）
+
+- 可选 `delegate_tasks` 在同步工具内部用最多两个 worker 执行、整任务累计最多四个子任务；主循环仍串行。contextRefs 为本任务已确认 read_file 的工作区相对路径，宿主绑定并复核哈希，拒绝外部或陈旧引用。
+- 子 Harness 复用已注册适配器的验证入口，独立日志与只读工具、受父组预算约束；显式模型容量来自适配器或父 run 配置，不猜自定义模型容量。MemoryView 继承父任务批准版本，子退出不关闭根记忆存储。
+- 结果有 schema/版本证据/完整包装大小检查；超大、非法或陈旧结果标 invalid_result。每份完整结果保存制品及 SHA-256，宿主发布父会话拥有的副本，既有 read_tool_result owner 校验继续有效。父日志保留完整关系并校验终态一致性。
+- 预算补边：未知/角色拒绝工具调用也经过组准入；模型取消即保留未知用量，后到响应不重新打开账目。所有行为仍默认关闭。
+- build、协作/预算 7/7、角色与原集成前置通过；全库 Biome 239 文件无诊断。四 child 队列峰值并发 2，12 次脚本化请求与根账本逐项相等，父/子记忆视图 digest 相同、跨 owner 回读拒绝、非法结果与递归角色拒绝均验收。provider 请求 0。

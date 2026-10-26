@@ -152,8 +152,13 @@ export class TaskGroupBudgetCoordinator {
     await this.reserve({ ...scope, ...identity, purpose: request.purpose ?? 'main', reserve })
     try { await this.dispatched(scope.requestId) } catch (error) { await this.release(scope.requestId); throw error }
     const signal = AbortSignal.any([this.#abort.signal, AbortSignal.timeout(Math.max(1, this.start.deadline - this.now())), ...(request.signal ? [request.signal] : [])])
+    if (signal.aborted) { await this.release(scope.requestId); throw new ModelNotDispatchedError('cancelled before provider invocation', 'other_limit') }
     try {
-      const response = await invoke({ ...request, signal })
+      const response = await new Promise<ChatResponse>((resolve, reject) => {
+        const abort = () => reject(new ModelStreamError('group request cancelled; provider usage unknown', { complete: false }))
+        signal.addEventListener('abort', abort, { once: true })
+        void invoke({ ...request, signal }).then(resolve, reject).finally(() => signal.removeEventListener('abort', abort)).catch(() => {})
+      })
       await this.settle(scope.requestId, response.usage)
       const state = this.snapshot()
       if (state.usageUnknown || state.overrun) throw new ModelStreamError('group usage is unknown or exceeded its reservation', { ...response, complete: false })

@@ -27,6 +27,7 @@ const knownTypes = new Set(['verification/start', 'verification/result', 'file/b
 const safeToolName = (name: string | undefined) => name && /^[\w.:-]{1,80}$/.test(name) ? name : undefined
 for (const type of ['memory/view', 'memory/query', 'memory/proposal-receipt']) knownTypes.add(type)
 for (const type of ['group/start', 'group/budget-reserved', 'group/model-dispatched', 'group/reservation-released', 'group/usage-unknown', 'group/budget-settled', 'group/tool-admitted']) knownTypes.add(type)
+for (const type of ['delegation/start', 'delegation/child-created', 'delegation/child-finish', 'delegation/finish']) knownTypes.add(type)
 
 function warning(error: unknown, line: number, byteOffset: number): InspectWarning {
   const message = error instanceof Error ? error.message : String(error)
