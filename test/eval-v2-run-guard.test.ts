@@ -24,3 +24,14 @@ test('component runner rejects a mismatched protocol before any isolation or mod
     assert.match(result.stderr, /protocol\/split mismatch/)
   } finally { fs.rmSync(directory, { recursive: true, force: true }) }
 })
+
+test('component-loo runner accepts only its own protocol before any isolation or model work', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nx51-loo-run-guard-'))
+  try {
+    const manifest = path.join(directory, 'manifest.json')
+    fs.writeFileSync(manifest, JSON.stringify({ protocol: 'NX-50-component-ab-v1', split: 'component-loo' }))
+    const result = spawnSync(process.execPath, [runner, '--manifest', manifest, '--validate-only'], { encoding: 'utf8', timeout: 10_000 })
+    assert.notEqual(result.status, 0)
+    assert.match(result.stderr, /protocol\/split mismatch/)
+  } finally { fs.rmSync(directory, { recursive: true, force: true }) }
+})

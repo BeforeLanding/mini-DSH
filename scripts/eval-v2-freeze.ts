@@ -11,12 +11,12 @@ const config = JSON.parse(await fs.readFile(args[1]!, 'utf8')) as Omit<V2FreezeI
 const status = execFileSync('git', ['status', '--porcelain'], { cwd: repository, encoding: 'utf8' })
 if (status.trim()) throw new Error('V2 freeze requires a clean checkout; commit fixture and source changes first')
 const gitCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' }).trim()
-if (config.split === 'component') {
-  if (!config.sourceBaseCommit || !/^[0-9a-f]{40}$/.test(config.sourceBaseCommit)) throw new Error('component freeze requires a 40-hex sourceBaseCommit')
+if (config.split === 'component' || config.split === 'component-loo') {
+  if (!config.sourceBaseCommit || !/^[0-9a-f]{40}$/.test(config.sourceBaseCommit)) throw new Error(`${config.split} freeze requires a 40-hex sourceBaseCommit`)
   try {
     execFileSync('git', ['merge-base', '--is-ancestor', config.sourceBaseCommit, gitCommit], { cwd: repository, stdio: 'ignore' })
   } catch {
-    throw new Error('component sourceBaseCommit must be an ancestor of the evaluation commit')
+    throw new Error(`${config.split} sourceBaseCommit must be an ancestor of the evaluation commit`)
   }
 }
 const manifest = await freezeV2({ ...config, gitCommit })
