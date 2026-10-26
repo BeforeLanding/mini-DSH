@@ -74,7 +74,9 @@ export class DelegationRuntime {
           results[index] = await this.#child(planned, { ...execution, signal }, start, group, memory, append)
         }
       }
-      await Promise.all(Array.from({ length: Math.min(this.limits.maxConcurrent, tasks.length) }, worker))
+      const workers = Array.from({ length: Math.min(this.limits.maxConcurrent, tasks.length) }, worker)
+      try { await Promise.all(workers) }
+      catch (error) { controller.abort(); await Promise.allSettled(workers); throw error }
       const batch = boundDelegationBatch({ batchId: start.batchId, results, truncated: false }, this.limits)
       await append('delegation/finish', { batchId: start.batchId, toolCallId, toolSequence, result: JSON.stringify(batch) })
       return batch
@@ -102,7 +104,9 @@ export class DelegationRuntime {
         if (Buffer.byteLength(JSON.stringify(candidateDiff)) > 8192) throw new Error('review diff exceeds bounded input; split the review task')
       }
       const prompt = JSON.stringify({ objective: planned.task.objective, outputFocus: planned.task.outputFocus, context: candidateAnchors, ...(candidate ? { candidate, candidateDiff } : {}), responseFormat: { findings: [{ kind: 'observation|hypothesis|recommendation', text: 'bounded finding', evidence: [{ path: 'workspace-relative', contentSha256: 'read_file hash', line: 1 }] }], unresolved: ['remaining question'] }, instructions: `Investigate using the available read tools. Return ONLY the JSON object, within ${this.limits.maxResultTokens} estimated tokens and ${this.limits.maxResultBytes} bytes. Cite current file hashes. Do not claim to have run tests. Candidate reviews apply only to the supplied version and are invalid after file changes.` })
+      execution.signal.throwIfAborted()
       const text = await child.send(prompt, execution.signal)
+      execution.signal.throwIfAborted()
       if (child.status() !== 'completed') throw new Error('child did not complete')
       const findings = parseChildFindings(text, this.limits)
       if (candidate && await reviewValidity(this.deps.workspace, candidate) === 'stale') throw new StaleReviewError()

@@ -9,6 +9,41 @@ import { JsonlStore, parseLog } from '../src/core/event-store.js'
 import { delegationLimits } from '../src/core/delegation-contracts.js'
 import type { DelegationBatch } from '../src/core/delegation-contracts.js'
 
+test('a worker publication failure cancels and drains sibling workers before releasing the batch', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'delegation-worker-failure-'))
+  const h = await createHarness({ workspace: directory, profile: 'general', delegation: { mode: 'read-only', directory: path.join(directory, 'teams') } })
+  t.after(async () => { await h.dispose(); await fs.rm(directory, { recursive: true, force: true }) })
+  const runtime = h.delegation!, session = h.root.sessions.create({ workspace: directory }), state = h.root.sessions.beginRun(session.id, {}, 'scripted/test')
+  const task = { role: 'analyst', objective: 'Investigate', contextRefs: [], outputFocus: 'evidence' }
+  const batch = h.root.sessions.append(session.id, 'assistant/tool_calls', { toolCalls: [{ id: 'delegate', name: 'delegate_tasks', arguments: { tasks: [task, task, task] } }] }, state)
+  let built = 0, cancelled = false, disposed = 0, siblingStarted!: () => void
+  const ready = new Promise<void>(resolve => { siblingStarted = resolve })
+  const result = JSON.stringify({ findings: [], unresolved: [] })
+  runtime.deps.buildChild = async () => {
+    const index = built++
+    return { sessionId: randomUUID(), capabilityDigest: 'a'.repeat(64), status: () => 'completed', dispose: async () => { disposed++ },
+      async send(_input, signal) {
+        if (index === 0) { await ready; return result }
+        siblingStarted()
+        return new Promise<string>(resolve => {
+          const timer = setTimeout(() => resolve(result), 1000)
+          signal.addEventListener('abort', () => { cancelled = true; clearTimeout(timer); resolve(result) }, { once: true })
+        })
+      } }
+  }
+  const save = runtime.deps.results.save.bind(runtime.deps.results)
+  let publications = 0
+  runtime.deps.results.save = async (...args) => { if (publications++ === 0) throw new Error('injected publication failure'); return save(...args) }
+  const execution = { sessionId: session.id, toolCallId: 'delegate', toolSequence: batch.seq, agent: { model: 'scripted/test' } as import('../src/core/contracts.js').Agent, signal: new AbortController().signal }
+  await assert.rejects(runtime.run([task, task, task], execution), /injected publication failure/)
+  assert.equal(cancelled, true, 'failure must cancel an active sibling')
+  assert.equal(disposed, 2, 'all created children must be disposed before rejection')
+  assert.equal(built, 2, 'queued children must not start after worker failure')
+  const finishes = h.root.sessions.get(session.id).events.filter(event => event.type === 'delegation/child-finish')
+  assert.ok(finishes.every(event => event.type === 'delegation/child-finish' && event.data.status !== 'completed'))
+  await runtime.close()
+})
+
 for (const window of ['reserved', 'dispatched', 'settled', 'artifact'] as const) test(`delegation recovers the ${window} crash window without repeating a provider request`, async t => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'delegation-recovery-')), workspace = path.join(directory, 'project'), teams = path.join(directory, 'teams'), logs = path.join(directory, 'logs')
   await fs.mkdir(workspace)
