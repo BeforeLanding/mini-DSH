@@ -62,8 +62,11 @@ test('delegate_tasks runs two read-only workers, queues additional children, acc
   await assert.rejects(Promise.resolve().then(() => tool.execute({ ref: first.resultRef }, { sessionId: first.childSessionId, signal: new AbortController().signal })), /owner|session/i)
   await h.root.sessions.flush(session.id)
   parseLog((await store.read()).map(event => JSON.stringify(event) + '\n').join(''), session.id)
-  const inspection = await inspectSession(path.join(logs, session.id, 'events.jsonl'))
+  const inspection = await inspectSession(path.join(logs, session.id, 'events.jsonl'), { tree: true })
   assert.equal(inspection.integrity.complete, true)
+  assert.equal(inspection.coordination?.groups[0].requests, 12)
+  assert.equal(inspection.coordination?.groups[0].settledTokens, 12 * 102)
+  assert.equal(inspection.coordination?.children.length, 4)
   const parentView = h.root.sessions.get(session.id).events.find(event => event.type === 'memory/view' && event.taskId === state.taskId)!
   for (const result of batches[0].results) {
     const childEvents = (await fs.readFile(path.join(teams, 'sessions', result.childSessionId!, 'events.jsonl'), 'utf8')).trimEnd().split('\n').map(line => JSON.parse(line))

@@ -36,6 +36,7 @@ import type { MemoryViewSnapshot } from '../core/memory-runtime.js'
 import { JsonlStore } from '../core/event-store.js'
 import { CLI_BUDGET } from '../core/budget.js'
 import * as delegationPlugin from '../plugins/delegation.js'
+import { delegationRecovery } from '../core/delegation-recovery.js'
 
 export interface HarnessAdapter { provider: string; model: string; chat: Adapter['chat']; capabilities?: Adapter['capabilities'] }
 export interface HarnessConfig {
@@ -121,6 +122,7 @@ export async function createHarness(config: HarnessConfig) {
         },
       }, config.delegation.limits)
       await root.plugin(delegationPlugin, { runtime: delegation })
+      root.sessions.setDelegationRecovery(delegationRecovery(delegation.deps))
     }
     // MCP 工具经 ToolRuntime 中央授权：插件不声明 effect/origin，因此按 unknown 默认询问；
     // failOnStartupError 固定为 false，连接失败只丢该 server 的工具，不阻断主循环。

@@ -7,6 +7,8 @@ import type { SessionEvent } from './contracts.js'
 
 export interface InspectWarning { code: 'truncated_tail' | 'corrupt_json' | 'unknown_event_type' | 'invalid_record' | 'invalid_utf8' | 'changed_during_read' | 'read_error' | 'missing_session_start'; line: number; byteOffset: number; message: string }
 export interface InspectReport {
+  coordination?: { groups: { id: string; requests: number; tools: number; settledTokens: number; outstandingTokens: number; usageUnknown: number; deadline: number; overrun: boolean }[]; children: { id: string; sessionId?: string; role: string; status: string }[] }
+  tree?: boolean
   version: 2
   integrity: { complete: boolean; confirmedEvents: number; confirmedBytes: number; warnings: InspectWarning[] }
   session: { id: string | null; startedAt: string | null; endedAt: null; lastRecordedAt: string | null; runs: number; finishedRuns: number; resets: number }
@@ -35,7 +37,7 @@ function warning(error: unknown, line: number, byteOffset: number): InspectWarni
   return { code, line, byteOffset, message: code === 'corrupt_json' ? 'Invalid JSON record' : 'Invalid event envelope, payload, or event sequence' }
 }
 
-export async function inspectSession(file: string, options: { trace?: boolean } = {}): Promise<InspectReport> {
+export async function inspectSession(file: string, options: { trace?: boolean; tree?: boolean } = {}): Promise<InspectReport> {
   const before = await stat(file)
   if (!before.isFile()) throw new Error('inspect path must be a JSONL file')
   const report: InspectReport = {
@@ -51,11 +53,13 @@ export async function inspectSession(file: string, options: { trace?: boolean } 
     frozenSnapshots: { currentEpoch: { runtime: null, project: null }, legacyCurrentRecorded: 0 },
     tokenError: new TokenObservationCollector().summary(),
     ...(options.trace ? { trace: { events: [], truncated: false } } : {}),
+    ...(options.tree ? { tree: true } : {}),
   }
   const requests = new Map<string, Request>()
   const projections = new Map<string, string>()
   const finishedRuns = new Set<string>()
   const awaitingSummary = new Set<string>()
+  const groupReservations = new Map<string, number>()
   let parser: ReturnType<typeof createLogRecordParser> | undefined
   let lineNumber = 0
   let stopped = false
@@ -84,6 +88,34 @@ export async function inspectSession(file: string, options: { trace?: boolean } 
       if (report.trace.events.length > 40) { report.trace.events.shift(); report.trace.truncated = true }
     }
     switch (event.type) {
+      case 'group/start':
+        report.coordination ??= { groups: [], children: [] }
+        report.coordination.groups.push({ id: event.data.groupId, requests: 0, tools: 0, settledTokens: 0, outstandingTokens: 0, usageUnknown: 0, deadline: event.data.deadline, overrun: false })
+        break
+      case 'group/budget-reserved': {
+        const group = report.coordination!.groups.find(group => group.id === event.data.groupId)!
+        group.requests++; group.outstandingTokens += event.data.reserve
+        groupReservations.set(`${event.data.groupId}/${event.data.requestId}`, event.data.reserve); break
+      }
+      case 'group/budget-settled': case 'group/reservation-released': case 'group/usage-unknown': case 'group/tool-admitted': {
+        const group = report.coordination!.groups.find(group => group.id === event.data.groupId)!
+        if (event.type === 'group/tool-admitted') group.tools++
+        else if (event.type === 'group/usage-unknown') group.usageUnknown++
+        else {
+          group.outstandingTokens -= groupReservations.get(`${event.data.groupId}/${event.data.requestId}`) ?? 0
+          if (event.type === 'group/reservation-released') group.requests--
+          else { group.settledTokens += event.data.usage.totalTokens; group.overrun ||= event.data.overrun }
+        }
+        break
+      }
+      case 'delegation/start':
+        for (const child of event.data.children) report.coordination!.children.push({ id: child.delegationId, role: child.task.role, status: 'planned' })
+        break
+      case 'delegation/child-created': {
+        const child = report.coordination!.children.find(child => child.id === event.data.delegationId)!
+        child.sessionId = event.data.childSessionId; child.status = 'running'; break
+      }
+      case 'delegation/child-finish': report.coordination!.children.find(child => child.id === event.data.delegationId)!.status = event.data.status; break
       case 'session/start':
         if (report.session.id === null) { report.session.id = event.sessionId; report.session.startedAt = event.at }
         break
@@ -238,6 +270,8 @@ export function formatInspect(report: InspectReport) {
     `Mechanisms: compaction attempts ${mechanisms.compactionAttempts}, applied ${mechanisms.compactionApplied}, declined ${mechanisms.compactionDeclined}; read_history ${mechanisms.historyReads}; preview truncations ${mechanisms.previewTruncations}`,
     `Frozen snapshot source (current epoch): runtime ${frozenSnapshots.currentEpoch.runtime ?? 'none'}, project ${frozenSnapshots.currentEpoch.project ?? 'none'}; legacy-current records ${frozenSnapshots.legacyCurrentRecorded}`,
     `Token error (provider usage only): ${tokenError.samples} samples in ${tokenError.groups.length} groups; median ${percent(tokenError.medianRelativeError)}, underestimate ${percent(tokenError.underestimateRate)}, |error| p50 ${percent(tokenError.p50AbsRelativeError)} / p95 ${percent(tokenError.p95AbsRelativeError)}; excluded missing usage ${tokenError.excluded.missingUsage}, estimated usage ${tokenError.excluded.estimatedUsage}, zero actual ${tokenError.excluded.actualZero}, orphan usage ${tokenError.excluded.orphanUsage}, rejected ${tokenError.excluded.rejected}`,
+    ...(report.coordination ? report.coordination.groups.map(group => `Group ${group.id} (includes children): requests ${group.requests}, tools ${group.tools}, provider tokens ${group.settledTokens}, outstanding ${group.outstandingTokens}, unknown requests ${group.usageUnknown}, overrun ${group.overrun}, wall deadline ${new Date(group.deadline).toISOString()}`) : []),
+    ...(report.tree && report.coordination ? ['Children:', ...report.coordination.children.map(child => `  ${child.role} ${child.id} session=${child.sessionId ?? 'not-started'} status=${child.status}`)] : []),
     ...integrity.warnings.map(item => `WARNING ${item.code} at line ${item.line}, byte ${item.byteOffset}: ${item.message}`),
     ...(report.trace ? ['Trace (last 40 selected metadata events):', ...report.trace.events.map(event => `  #${event.seq} ${event.type}${event.detail ? ` ${event.detail}` : ''}`), ...(report.trace.truncated ? ['  ... earlier selected events omitted'] : [])] : []),
   ].join('\n')
