@@ -15,7 +15,7 @@ export class MemoryRuntime {
   readonly limits: Readonly<MemoryRecallLimits>
   constructor(readonly store: MemoryStore, limits: Partial<MemoryRecallLimits> = {}, private now: () => number = Date.now) {
     this.limits = Object.freeze({ ...MEMORY_RECALL_LIMITS, ...limits })
-    for (const [key, value] of Object.entries(this.limits)) if (!Number.isSafeInteger(value) || value < 1) throw new Error(`invalid memory recall limit: ${key}`)
+    for (const [key, value] of Object.entries(this.limits)) if (!(key in MEMORY_RECALL_LIMITS) || !Number.isSafeInteger(value) || value < 1) throw new Error(`invalid memory recall limit: ${key}`)
   }
   async createView(): Promise<MemoryView> {
     const records = (await this.store.records()).filter(record => record.state === 'approved').sort((a, b) => a.id.localeCompare(b.id))

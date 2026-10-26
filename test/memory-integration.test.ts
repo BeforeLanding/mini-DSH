@@ -76,6 +76,14 @@ test('memory defaults remain absent, show-config does not create storage, and re
   const read = await createHarness({ workspace, profile: 'coding', memory: { mode: 'recall', directory: memoryDirectory } })
   try { assert.ok(read.root.tools.get('memory_search')); assert.equal(read.root.tools.get('memory_propose'), undefined) } finally { await read.dispose() }
   assert.throws(() => productionHarnessConfig({ MINI_DSH_MEMORY: 'automatic' }), /MINI_DSH_MEMORY/)
+  assert.throws(() => productionHarnessConfig({ MINI_DSH_DELEGATION: 'swarm' }), /MINI_DSH_DELEGATION/)
+  assert.throws(() => productionHarnessConfig({ MINI_DSH_DELEGATION: 'read-only', MINI_DSH_TEAM_LIMITS: '{"maxConcurrent":10}' }), /at most two/)
+  assert.throws(() => productionHarnessConfig({ MINI_DSH_TASK_GROUP_BUDGET: '[]' }), /JSON object/)
+  const teamDirectory = path.join(directory, 'teams')
+  const teamConfig = await inspectProductionConfig({ MINI_DSH_DELEGATION: 'read-only', MINI_DSH_TEAM_DIR: teamDirectory, MINI_DSH_MCP: '0' }, () => 'environment', workspace)
+  assert.equal(teamConfig.delegation.mode, 'read-only')
+  assert.ok(teamConfig.tools.includes('delegate_tasks'))
+  await assert.rejects(fs.stat(teamDirectory), { code: 'ENOENT' })
 })
 
 test('memory rejects malformed, excessive and secret-bearing proposals while CLI exposes review without a model request', async t => {

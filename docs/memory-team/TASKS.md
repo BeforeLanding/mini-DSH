@@ -11,7 +11,7 @@
 | MA-03 | done | 双 worker 批次分工、有界结构化结果与父会话制品发布 |
 | MA-04 | done | 取消、四个崩溃窗口、父子恢复与 inspect；未知请求不重发 |
 | MA-05 | done | reviewer 的固定候选版本与 stale 检测 |
-| EV-01 | in_progress | 零模型 memory/team 演示与离线故障证据 |
-| EV-02 | planned | 四条件同预算新协议及 validate-only；真实执行待授权 |
+| EV-01 | done | 零模型 memory/team 演示与离线故障证据 |
+| EV-02 | in_progress | 四条件同预算新协议及 validate-only；真实执行待授权 |
 
 每项完成后记录实际提交和检查，不把计划视为实现。里程碑结束运行 check/test/lint，隔离相关修改运行对应环境检查。

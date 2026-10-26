@@ -17,6 +17,7 @@ export const name = 'mini-cli'
 export const inject = ['sessions', 'agents', 'agentLoop', 'tools', 'systemPrompt', 'llm', 'sandbox']
 export interface CliConfig {
   memory?: import('./memory.js').MemoryController
+  taskGroups?: import('../core/task-groups.js').TaskGroups
   model?: string; input?: Readable & { isTTY?: boolean }; output?: Writable & { isTTY?: boolean }
   budget?: BudgetPolicy; sessionDirectory?: string | false; resumeSessionId?: string
   maxChangeOutputBytes?: number
@@ -67,6 +68,8 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
     input.on('data', onKey)
     print('mini-dsh — a local agent Harness')
     print('Commands: /tools /models /model /history /prompt /reset /continue /compact /budget [JSON] /changes [fileOffset] /diff [fileOffset] [byteOffset] /report [fileOffset] [verificationOffset] [byteOffset] /trace [requestOffset] [byteOffset] /exit')
+    if (config.memory) print('Memory: /memory review [offset] | approve <id> <revision> <digest> | forget <id> <revision>')
+    if (config.taskGroups) print('Shared task budget: /budget includes root and all child usage; inspect <root-log> --tree lists child outcomes.')
     print(`Sandbox workspace: ${workspace}`)
     print(`Session: ${session.id}${store ? ` (${store.directory})` : ' (memory)'}`)
     const clockMode = config.runtimeClockMode ?? config.contextLayout
@@ -222,7 +225,8 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
         case '/budget': {
           if (parts.length) { const next = { ...budget, ...parsePolicy(parts.join(' ')) }; effective(agent.model, next); budget = next; agent.budget = next; await persistConfig() }
           const run = ctx.sessions.latestRun(session.id)
-          print(JSON.stringify({ policy: effective(agent.model), run, task: run ? ctx.sessions.taskState(session.id, run.taskId) : undefined, estimate: 'ASCII 0.3 / other Unicode 1.0; message 32 / request 256; estimated usage is uncertain' }, null, 2))
+          const group = run && config.taskGroups && ctx.sessions.get(session.id).events.some(event => event.type === 'group/start' && event.taskId === run.taskId) ? (await config.taskGroups.get(session.id, run.taskId)).snapshot() : undefined
+          print(JSON.stringify({ policy: effective(agent.model), run, task: run ? ctx.sessions.taskState(session.id, run.taskId) : undefined, ...(group ? { group } : {}), estimate: 'ASCII 0.3 / other Unicode 1.0; message 32 / request 256; estimated usage is uncertain' }, null, 2))
           break
         }
         case '/continue': await runInput(); break

@@ -34,7 +34,15 @@ for (const window of ['reserved', 'dispatched', 'settled', 'artifact'] as const)
   }
   await h.root.sessions.flush(session.id); await h.root.sessions.close(); await h.dispose()
   const recovered = await createHarness(config)
-  t.after(async () => { await recovered.root.sessions.close(); await recovered.dispose(); await fs.rm(directory, { recursive: true, force: true }) })
+  t.after(async () => {
+    await recovered.root.sessions.close(); await recovered.dispose()
+    if (process.env.MINI_DSH_MEMORY_TEAM_EVIDENCE) {
+      const target = path.join(path.resolve(process.env.MINI_DSH_MEMORY_TEAM_EVIDENCE), window)
+      await fs.cp(directory, target, { recursive: true, force: false, errorOnExist: true })
+      t.diagnostic(`synthetic recovery evidence: ${target}`)
+    }
+    await fs.rm(directory, { recursive: true, force: true })
+  })
   const reopened = await JsonlStore.open(logs, session.id)
   await recovered.root.sessions.restore(reopened, workspace)
   const events = recovered.root.sessions.get(session.id).events

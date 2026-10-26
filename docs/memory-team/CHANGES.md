@@ -73,3 +73,10 @@
 - 子结果只允许 findings/unresolved 及约定的证据字段，模型不能通过额外字段覆盖宿主生成的 delegationId/status/ref。子任务输入同样拒绝未声明字段。
 - 在第一个 await 之前取得逻辑任务分工租约，拒绝同时提交的第二批；结果额度不能高于持久化协议的 16 KiB 包装上限。第一版并发/累计上限可收窄，扩大需另修协议。
 - build、协作/恢复/reviewer 9/9、全库 Biome 243 文件无诊断。测试增加伪造结果字段、越界配置和同时第二批准入拒绝，模型请求仍为脚本化调用。
+
+## EV-01（2026-10-26）
+
+- 生产通过 MINI_DSH_DELEGATION / TEAM_DIR / TEAM_LIMITS / TASK_GROUP_BUDGET 显式开启并展示配置；CLI `/budget` 展示已存在的组账目，`--show-config` 不创建 team 目录或请求模型。记忆额度支持显式 JSON 配置并拒绝未知键。
+- demo:memory 验证候选、跨 session 召回、文件变化与模拟时钟过期；demo:team 保存成功、invalid_result、父取消与排队 skipped 轨迹。scripted usage 只用于账本机制，输出显式标记 synthetic，不作为供应商用量或能力证据。
+- 零模型演示全部 PASS；team 共 14 次脚本请求、真实 provider 请求 0，取消后两条未知 usage 保留约 40K 的估算预留（具体值随有界包装长度变化）。证据 `.demo-runs/team-1793025231110/`；四崩溃窗口制品通过测试导出至 `.demo-runs/recovery-20261026/`，均不入库。
+- build、CLI/配置/inspect/记忆集成 21/21；恢复 5/5；Biome 244 文件无诊断。旧功能默认配置仍不安装记忆/协作工具。

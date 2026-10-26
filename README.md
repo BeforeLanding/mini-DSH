@@ -107,6 +107,8 @@ pnpm start
 
 项目记忆默认关闭，设 `MINI_DSH_MEMORY=assist` 可启用候选提案与按需检索，`recall` 只给模型检索工具。存储默认在 `~/.mini-dsh/memory/<projectId>/`；projectId 按真实工作区路径隔离，跨 worktree 需显式设置 `MINI_DSH_MEMORY_PROJECT_ID`。用 `/memory review [offset]` 检视来源、有效性、revision 和 digest，再用 `/memory approve <id> <revision> <digest>` 批准；模型没有批准工具。`/memory forget <id> <revision>` 撤销未来召回资格，已进入上下文和 JSONL 的内容仍保留。文件变化、来源不可达、过期和撤销都会拒绝回读。`pnpm demo:memory` 为零模型机制演示。实现状态和只读 Multi-Agent 后续任务见 [专题任务](docs/memory-team/TASKS.md)。
 
+只读协作默认关闭，设 `MINI_DSH_DELEGATION=read-only` 后，主 Agent 可通过 `delegate_tasks` 调度 analyst/test_designer/reviewer。第一版同时最多两个子 Agent、每任务累计最多四个，子角色禁止写入、Bash、MCP 和递归委派。主/子/摘要/重试共用持久化根预算，`/continue` 不刷新额度和 wall deadline；`/budget` 显示根组统计，`mini-dsh inspect <root-events.jsonl> --tree` 展示子会话状态。审查结果绑定候选版本，后续编辑使其失效，可用 `review_status` 复核。`MINI_DSH_TEAM_LIMITS` 和 `MINI_DSH_TASK_GROUP_BUDGET` 接受有界配置，`--show-config` 显示实际值。`pnpm demo:team` 是脚本化机制演示，usage 为合成账本数据，不是供应商消费；真实效果尚未评测。子会话与完整结果默认存于 `~/.mini-dsh/teams/`，父结果副本仍受会话 owner 检查。
+
 - [src/core/agent-loop-runtime.ts](src/core/agent-loop-runtime.ts)：请求投影、主动压缩和预算停止；[src/core/compaction-runtime.ts](src/core/compaction-runtime.ts)：摘要调用与结算。
 - [src/core/session-runtime.ts](src/core/session-runtime.ts) 与 [src/core/event-store.ts](src/core/event-store.ts)：JSONL 事件、恢复和统计重建。
 - [src/tools/files.ts](src/tools/files.ts)、[src/tools/bash.ts](src/tools/bash.ts)：有界读写、命令和验证证据；[src/plugins/tool-results.ts](src/plugins/tool-results.ts)、[src/plugins/read-history.ts](src/plugins/read-history.ts)：结果与历史回读。
