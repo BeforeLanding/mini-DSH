@@ -1,5 +1,15 @@
 # 改动与验收证据
 
+### NX-51 四臂消融零付费准备：component-loo、通用比较器与离线探针（2026-10-26）
+
+新增 `component-loo` split 与 `NX-51-component-loo-v1`：沿用六道开发题、每题 2 次、单 `context` 执行臂，每份 manifest 12 条；`variant` 字段标识源码变体。四臂统一 `postCompactionPrune` 默认关闭，`package.json` 和全部冻结源码路径逐字相同，只允许 `sourceBaseCommit`、`gitCommit` 与预期的 `src/**` 差异。
+
+比较器保留 NX-50 的 `compareV2Batches`，新增 `compareV2LooBatches`：一个 `full` 参考批＋`no-preview`／`no-projection`／`no-report` 三个变体批，按 `taskId/repeat` 配对；校验 12/12 完整性、provider usage 覆盖、批次顺序、环境与 `package.json` 相等、源码差异**恰好**落在预期路径。每臂输出可靠完成/产物验收差值、token/耗时/摘要/工具读数、逐题逐重复配对与描述性归因（`signal`／`inconclusive`／`efficiency-tradeoff`，5% 诊断阈值，不宣称显著性）。
+
+离线探针纳入比较器：预览看 `withinLimit/tailVisible/fullRecall`，投影看 `propertyReads`，报告看 `snapshotOpens`；校验 `suiteSha256`、case id、`sourceCommit` 与投影/报告的 `outputSha256`。付费侧新增 `nonModelActiveDurationMs` 作为本地 CPU/工具/I/O 代理，并明确它不是 CPU 时间、投影/报告不得只看总主动耗时。
+
+验收：`pnpm typecheck` 通过；隔离完整 `pnpm test` **536/536，0 fail，0 skipped**；`pnpm check` 198 files；`pnpm lint` 225 files 0 诊断。新增 `test/eval-v2-loo-compare.test.ts` 覆盖四臂配对、四种归因、源码路径精确匹配、批次顺序、provenance 漂移与 CLI 参数。**真实 provider 请求 0**；四份 manifest 的冻结与 `--validate-only` 见下一节。
+
 ### NX-51 24 条 prune 开/关结果：摘要下降假设未获支持（2026-10-25）
 
 两臂各 12/12 执行，`incomplete=false`；manifest 除 `sourceBaseCommit`、`gitCommit` 与 `src/**` 外逐字相同，均通过 `--validate-only`。实际 usage 估价 on `$1.734961`、off `$1.352154`，合计 `$3.087115`，低于 $44 上限。
