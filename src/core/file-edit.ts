@@ -125,17 +125,3 @@ export async function commitFile(resolve: () => string, before: FileSnapshot, te
     try { await fs.rm(temporary, { force: true }) } catch (error) { if (!committed) throw error }
   }
 }
-
-/** One read-only query shares versions, not source text. Create a fresh reader per query. */
-export function fileVersionQuery(maxBytes: number, signal: AbortSignal) {
-  const versions = new Map<string, Promise<Pick<FileSnapshot, 'hash' | 'location'>>>()
-  return (target: string) => {
-    signal.throwIfAborted()
-    let pending = versions.get(target)
-    if (!pending) {
-      pending = snapshot(target, maxBytes, signal).then(({ hash, location }) => ({ hash, location }))
-      versions.set(target, pending)
-    }
-    return pending
-  }
-}

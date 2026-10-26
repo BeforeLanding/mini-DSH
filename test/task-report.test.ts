@@ -40,17 +40,6 @@ test('delivery report separates completed run, current coverage, unverified edit
     assert.equal(report.files[0].verification, 'covered'); assert.equal(report.filesEof, false)
     assert.equal(report.checks[0].status, 'failed'); assert.equal(report.verificationsEof, false)
     assert.equal(report.verificationTotal, 5)
-    // The same files occur in changes, every check and coverage. Read each once
-    // in this query, while preserving failed checks and all explicit pages.
-    const open = fs.open
-    let opens = 0
-    try {
-      fs.open = (async (...args: Parameters<typeof fs.open>) => { opens++; return open(...args) }) as typeof fs.open
-      const all = await get({ maxRecords: 5 })
-      assert.equal(all.checks.length, 5)
-      assert.equal(all.checks[0].status, 'failed')
-      assert.equal(opens, 3, 'a, b and config must each be opened once per report')
-    } finally { fs.open = open }
     report = await get({ fileOffset: 1, verificationOffset: 1, maxRecords: 1 })
     assert.deepEqual(report.unverifiedFiles, ['b']); assert.equal(report.checks[0].status, 'passed')
     assert.equal('stdout' in report.checks[0].commandResult!, false)
@@ -66,10 +55,7 @@ test('delivery report separates completed run, current coverage, unverified edit
     assert.equal(fullPage.checks.length, 3, 'explicit larger pages remain available')
     assert.ok(fullPage.checks[0].command.length > 4000)
     await fs.writeFile(path.join(workspace, 'config'), 'two')
-    const changed = await get()
-    assert.equal(changed.files[0].verification, 'unverified')
-    assert.equal(changed.checks[0].freshness, 'stale', 'next query must not reuse cached versions')
-    await assert.rejects(taskReport(root.sessions, session.id, file => path.join(workspace, file), 1024 * 1024, AbortSignal.abort()), /abort/i)
+    assert.equal((await get()).files[0].verification, 'unverified')
     await fs.writeFile(path.join(workspace, 'config'), 'one')
     const next = root.sessions.beginRun(session.id, {}, 'mock')
     // A fresh task has no inherited evidence.

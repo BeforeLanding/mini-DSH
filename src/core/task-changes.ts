@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { SessionRuntime } from './session-runtime.js'
 import type { Execution, EventData } from './contracts.js'
-import { fileVersionQuery, unifiedDiff, type FileSnapshot } from './file-edit.js'
+import { snapshot, unifiedDiff, type FileSnapshot } from './file-edit.js'
 
 type Sessions = Pick<SessionRuntime, 'latestRun' | 'append' | 'flush' | 'confirmedEvents'>
 export class TaskChanges {
@@ -52,7 +52,7 @@ export class TaskChanges {
   }
 }
 
-export async function taskChanges(sessions: Sessions, sessionId: string, resolve: (file: string) => string, maxBytes: number, signal: AbortSignal, includeDiff = true, offset = 0, maxFiles = 100, readVersion = fileVersionQuery(maxBytes, signal)) {
+export async function taskChanges(sessions: Sessions, sessionId: string, resolve: (file: string) => string, maxBytes: number, signal: AbortSignal, includeDiff = true, offset = 0, maxFiles = 100) {
   const confirmed = sessions.confirmedEvents(sessionId)
   const latest = [...confirmed].reverse().find(event => event.type === 'run/start')
   const taskId = latest?.type === 'run/start' ? latest.data.state.taskId : null
@@ -77,7 +77,7 @@ export async function taskChanges(sessions: Sessions, sessionId: string, resolve
       expected = attempt.after?.hash
     }
     let currentHash: string | undefined, currentError: string | undefined
-    try { currentHash = (await readVersion(resolve(file))).hash }
+    try { currentHash = (await snapshot(resolve(file), maxBytes, signal)).hash }
     catch (error) { signal.throwIfAborted(); currentError = error instanceof Error ? error.message : String(error) }
     files.push({ path: file, status: own.some(attempt => attempt.status === 'unknown') ? 'unknown' : applied.length ? 'applied' : own.some(attempt => attempt.status === 'failed') ? 'failed' : 'unchanged',
       beforeHash: before?.hash, afterHash: after?.hash, currentHash, currentError,
