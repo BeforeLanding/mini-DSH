@@ -10,6 +10,30 @@
 
 验收：`pnpm typecheck` 通过；隔离完整 `pnpm test` **536/536，0 fail，0 skipped**；`pnpm check` 198 files；`pnpm lint` 225 files 0 诊断。新增 `test/eval-v2-loo-compare.test.ts` 覆盖四臂配对、四种归因、源码路径精确匹配、批次顺序、provenance 漂移与 CLI 参数。**真实 provider 请求 0**；四份 manifest 的冻结与 `--validate-only` 见下一节。
 
+### NX-51 四臂源码变体、四份 manifest 与 dry-run（2026-10-26）
+
+PR #6 合并为 `a5d9191`；四臂共用评测提交 `3752ca4`（split `component-loo`／协议 `NX-51-component-loo-v1`）。源码提交与评测 HEAD：
+
+| variant | sourceBaseCommit | gitCommit | branch | manifest digest |
+|---|---|---|---|---|
+| `full` | `a5d9191` | `3752ca4` | `nx51-loo/full` | `20f2344e4b242e8d79cb29efc156e39ea3cec5eb86db8c119b6802a57fb562d5` |
+| `no-preview` | `f528d8c` | `a8b8dae` | `nx51-loo/no-preview` | `fd2af3a0ad7cc4079d56ab402ead164e474f5333ebca5d99e032fce8727b84a0` |
+| `no-projection` | `bb06975` | `a51e1a4` | `nx51-loo/no-projection` | `44fb919b9a0f2a5faa187436d66281f87198734be06083566e1ae765388db168` |
+| `no-report` | `eeba377` | `b5942df` | `nx51-loo/no-report` | `36afcb96a89599a9def2a38d3ffe098baac916350ccd242650373ecae7053590` |
+
+四份 manifest 除 `variant`、`sourceBaseCommit`、`gitCommit`、digest 与预期 `src/**` 外逐字相同：协议、6 题、12 episodes、单 `context` 臂、seed 20261026、tier/window、模型/版本/thinking/采样、价格快照、tool schema（`47105100…`）与 `package.json` 全部相等。源码差异精确匹配预期；四臂均通过 `--validate-only`：`tasks=6`、`episodes=12`、`isolation=wsl-bwrap`、`paidRequests=0`。四份 `--plan-only` 均为 6 题/1 臂/12 episodes，caps 768 请求/1,536 工具/12M token/7.2M ms，`readiness=6/6`。
+
+离线探针（`providerRequests=0`，suite `34af74cd…`，四臂 `sourceCommit` 与 manifest 一致）：
+
+| variant | 工具窗口 12 项通过 | fullRecall | propertyReads | snapshotOpens |
+|---|---:|---:|---:|---:|
+| `full` | 12 | 12/12 | 32,982 | 6 |
+| `no-preview` | **0** | 12/12 | 32,982 | 6 |
+| `no-projection` | 12 | 12/12 | **2,284,323** | 6 |
+| `no-report` | 12 | 12/12 | 32,982 | **91** |
+
+比较器 dry-run 用四份冻结 manifest＋四份真实探针＋合成 observations 跑通 CLI：17 项结构检查全 `true`，三个变体在合成“变差”读数下均判 `signal`，输出在 `prep/dry-run-comparison.json`；这不是付费结果，只证明接线与口径。四臂完整测试分别 **536/536、533/533、535/535、537/537，0 fail，0 skipped**（差异来自各臂保留／删除的组件测试）。准备目录 `D:\Agent\outputs\nx51-component-loo-20261026\` 的 `evidence/` 为空，`prep/validation.json` 记录四臂 digest、validate、probe 与 `paidRequests=0`。**未执行 `--execute`，未读取 API key，未产生费用。**
+
 ### NX-51 24 条 prune 开/关结果：摘要下降假设未获支持（2026-10-25）
 
 两臂各 12/12 执行，`incomplete=false`；manifest 除 `sourceBaseCommit`、`gitCommit` 与 `src/**` 外逐字相同，均通过 `--validate-only`。实际 usage 估价 on `$1.734961`、off `$1.352154`，合计 `$3.087115`，低于 $44 上限。

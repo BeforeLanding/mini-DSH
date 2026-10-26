@@ -1,12 +1,12 @@
 # 任务清单
 
-### NX-51 四臂逐项消融：零付费准备（2026-10-26，进行中）
+### NX-51 四臂逐项消融：零付费准备完成（2026-10-26，未授权付费）
 
 协议见 [NX-51 四臂消融](NX-51-COMPONENT-ABLATION.md)。`full`／`no-preview`／`no-projection`／`no-report` 四份 manifest 各 12 条，合计 48 条；每份仍是单 `context` 执行臂，`variant` 标识源码变体。四个可独立验证的步骤：
 
-- NX-51-5a（进行中，本条目所在提交）：新增 `component-loo` split / `NX-51-component-loo-v1`、通用 LOO 比较器与离线探针校验。验收：`pnpm typecheck`、`pnpm check`、`pnpm lint`、隔离完整 `pnpm test` 536/536/0/0；新增 `eval-v2-loo-compare` 定向 7/7；NX-50 legacy 比较器测试保持不变。真实模型请求 0。
-- NX-51-5b（待做）：从合并后的 `main` 派生四臂；三个变体各做一个只含预期 `src/**` 与测试适配的源码提交，同一份评测代码 cherry-pick 到四臂；每臂在源码提交上生成离线探针。
-- NX-51-5c（待做）：四份 config/manifest 冻结到 `D:\Agent\outputs\nx51-component-loo-20261026\`，逐臂 `--validate-only`，记录 `paidRequests=0`。付费执行尚未授权。
+- NX-51-5a（完成，`3752ca4`）：新增 `component-loo` split / `NX-51-component-loo-v1`、通用 LOO 比较器与离线探针校验。验收：`pnpm typecheck`、`pnpm check`、`pnpm lint`、隔离完整 `pnpm test` 536/536/0/0；新增 `eval-v2-loo-compare` 定向 7/7；NX-50 legacy 比较器测试保持不变。真实模型请求 0。
+- NX-51-5b（完成）：从 `a5d9191` 派生四臂；`full`=`a5d9191`，`no-preview`=`f528d8c`，`no-projection`=`bb06975`，`no-report`=`eeba377`；同一评测提交 `3752ca4` cherry-pick 到各臂，评测 HEAD 分别为 `3752ca4`／`a8b8dae`／`a51e1a4`／`b5942df`。四臂分支与 `nx51-loo/source-*` tag 已推送。离线探针：预览 12→0 项双窗口通过但 fullRecall 保持 12/12；投影 propertyReads 32,982→2,284,323；报告 snapshotOpens 6→91。四臂完整测试 536/533/535/537，0 fail。
+- NX-51-5c（完成）：四份 config/manifest 冻结到 `D:\Agent\outputs\nx51-component-loo-20261026\`，逐臂 `--validate-only` 均为 6 题/12 episodes/`wsl-bwrap`/`paidRequests=0`；比较器用四份 manifest＋探针＋合成 observations 的 dry-run 跑通，17 项检查全过。准备目录 `evidence/` 为空。付费执行尚未授权。
 - NX-51-5d（待做）：48 条真实批次，单批 $22、合计 $88 上限；只有取得该批授权后才执行 `--execute`，任一批 incomplete 即停，不补跑。
 
 ### NX-51 变慢任务诊断、摘要后裁剪与持久化（2026-10-25，零付费完成）

@@ -1,8 +1,10 @@
 # 开发进度
 
-更新：2026-10-25。历史逐步记录已整体迁入 [2026-09-28 至 2026-09-30 归档](docs/history/PROGRESS-2026-09-28--2026-09-30.md)；本文件只维护当前状态、阻塞和下一步。
+更新：2026-10-26。历史逐步记录已整体迁入 [2026-09-28 至 2026-09-30 归档](docs/history/PROGRESS-2026-09-28--2026-09-30.md)；本文件只维护当前状态、阻塞和下一步。
 
 ## 当前状态
+
+- **NX-51 四臂消融零付费准备完成（2026-10-26，未授权付费）**：PR #6 合并为 `a5d9191`；新增 `component-loo` split / `NX-51-component-loo-v1`、通用 LOO 比较器与离线探针校验（评测提交 `3752ca4`）。四臂源码提交为 `full=a5d9191`、`no-preview=f528d8c`、`no-projection=bb06975`、`no-report=eeba377`，评测 HEAD 分别为 `3752ca4`／`a8b8dae`／`a51e1a4`／`b5942df`；分支与 `nx51-loo/source-*` tag 已推送。四份 manifest 各 12 条、合计 48 条，除预期 `src/**` 外逐字相同，全部 `--validate-only` 通过（`wsl-bwrap`、`paidRequests=0`）。离线探针：预览双窗口通过 12→0（fullRecall 仍 12/12）、投影 propertyReads 32,982→2,284,323、报告 snapshotOpens 6→91。四臂完整测试 536/533/535/537，0 fail；比较器 dry-run 17 项检查全过。证据目录 `D:\Agent\outputs\nx51-component-loo-20261026\` 的 `evidence/` 为空。**下一步：单独取得 48 条批次的金额与执行授权；单批 $22、合计 $88 上限，未授权前不运行 `--execute`。** 详见 [消融协议](docs/context-budget/NX-51-COMPONENT-ABLATION.md) 与 CHANGES 的 NX-51-5 节。
 
 - **NX-51 摘要后裁剪：机制已持久化，24 条真实对照未支持性能假设（2026-10-25）**：只读 NX-50 两批轨迹做耗时分解；净增 60.0 s 中摘要占 45.0 s，T04 的重复摘要来自“压力摘要只压当前 task、旧任务仍占 35～41k token”。压力摘要 applied 后按压缩后目标线裁掉已结束旧任务，并把决定写成 `context/prune` 事件；后续轮次、`/continue` 与重启恢复继续排除，原始事件不删、`read_history` 仍可回读。新增两条回归用例，原不可约前缀用例改用当前 task 构造；定向 28/28（covenant 4/4），隔离完整 525/525/0/0，check 197 / lint 223 / fixtures 25 / eval:offline 12/12 / bench:components 全过。提交 `9e30f5c`，PR [#6](https://github.com/BeforeLanding/mini-DSH/pull/6) 六 job 全绿。随后按 [24 条协议](docs/context-budget/NX-51-PRUNE-AB.md) 执行 on/off 各 12 条（usage 估价合计 $3.087115）：摘要 3→7、摘要耗时 43,249→105,394 ms、主动耗时 +37.7%、输出 token +48.4%，可靠完成 11→10、产物验收 12→12。**离线反事实未在真实轨迹复现**，按预注册规则改为显式 opt-in：`postCompactionPrune` 默认关闭，两条持久化回归测试显式开启，另增默认关闭用例；隔离完整 526/526/0/0，定向 28/28，check 197 / lint 224 / fixtures 25 / eval:offline 12/12 / bench:components 全过。完整读数见 [结果](docs/context-budget/NX-51-PRUNE-RESULT.md)。下一步是冻结 48 条三项组件消融（统一以默认背景运行）；复跑或新批次需重新授权。
 
