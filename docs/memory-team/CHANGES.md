@@ -26,3 +26,10 @@
 - `memory_search/get/propose`、每 run 最多三条提案、用户专属 `/memory review/approve/forget`；批准绑定 revision 与完整记录 digest，并再次复核来源。源输入可只提供 seq，由宿主绑定本任务 session/task/event ids；模型不需要猜不可见的 event UUID。已知凭证形状与敏感锚点拒绝是窄过滤，不能宣称完整 DLP。
 - `memory/view/query/proposal-receipt` 加入契约、运行时校验、原日志读取器与 inspect 词表；恢复使用原版本快照，不重新检索历史 tool/result。receipt 先落盘、跨日志 opId 对账；CLI 退出与 Harness dispose 释放记忆写锁。
 - 完整离线回归：535 tests / 505 pass / 0 fail / 30 平台条件 skipped，34.5 秒（正常权限）。`node scripts/build.js`、`node scripts/check-syntax.js`、全库 Biome 230 文件无诊断；memory 集成/召回/存储 12/12。`demo-memory` 验候选不可召回、新 session 批准版本可召回、文件变更后拒绝；provider 请求 0。尚无真实模型效果证据。
+
+## MA-01（2026-10-26）
+
+- `agent-capabilities.ts` 与 createHarness 的 analyst/test_designer/reviewer 角色：独立服务与会话，文件插件只注册允许的读取工具；不加载 Bash/MCP/写入/报告工具。角色提示按实际能力渲染。
+- ToolRuntime 不可变能力集合同时过滤 schemas/list 并在 execute 授权前验证工具名、builtin 来源和 read effect。伪造工具调用不能因 autoApprove 或自报 read 获得写入能力。
+- 子角色关闭工作区内工具结果落盘，读取保留既有有界输出；会话日志由宿主保存。角色装配仍为应用策略，不声明 OS 隔离。
+- `node scripts/build.js` 与角色/原集成/中央授权定向 8/8 通过；全库 Biome 232 文件无诊断。测试验证父子服务独立、20 KiB 读取不在工作区生成结果文件、伪造写调用不执行、角色不支持的配置被拒绝及 dispose 释放服务。未调用 provider。
