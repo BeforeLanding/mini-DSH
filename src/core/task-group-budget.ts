@@ -55,8 +55,10 @@ export class TaskGroupBudgetCoordinator {
   }
   #scope() {
     const state = this.sessions.latestRun(this.rootSessionId)
-    if (!state || state.taskId !== this.rootTaskId) throw new Error('root task scope changed')
-    return state
+    if (state?.taskId === this.rootTaskId) return state
+    const original = [...this.sessions.get(this.rootSessionId).events].reverse().find(event => event.type === 'run/start' && event.taskId === this.rootTaskId)
+    if (original?.type !== 'run/start') throw new Error('root task scope is unavailable')
+    return original.data.state
   }
   async #persist(event: GroupBudgetEvent) {
     try { this.sessions.append(this.rootSessionId, event.type, event.data, this.#scope()); await this.sessions.flush(this.rootSessionId) }
@@ -118,8 +120,15 @@ export class TaskGroupBudgetCoordinator {
       await this.#persist({ type: 'group/budget-reserved', data: { ...reservation, groupId: this.start.groupId } })
     })
   }
-  async dispatched(requestId: string) { return this.#serial(async () => { this.#check(); await this.#persist({ type: 'group/model-dispatched', data: { groupId: this.start.groupId, requestId } }) }) }
-  async release(requestId: string) { return this.#serial(() => this.#persist({ type: 'group/reservation-released', data: { groupId: this.start.groupId, requestId } })) }
+  async dispatched(requestId: string) { return this.#serial(async () => {
+    this.#check()
+    if (this.#reservations.get(requestId)?.status !== 'reserved') throw new Error('group dispatch requires a reserved request')
+    await this.#persist({ type: 'group/model-dispatched', data: { groupId: this.start.groupId, requestId } })
+  }) }
+  async release(requestId: string) { return this.#serial(async () => {
+    if (!['reserved', 'dispatched'].includes(this.#reservations.get(requestId)?.status ?? '')) throw new Error('group release requires an outstanding request')
+    await this.#persist({ type: 'group/reservation-released', data: { groupId: this.start.groupId, requestId } })
+  }) }
   async settle(requestId: string, usage?: Usage) {
     return this.#serial(async () => {
       const reservation = this.#reservations.get(requestId)
@@ -129,6 +138,7 @@ export class TaskGroupBudgetCoordinator {
         return
       }
       if (reservation.status === 'unknown') return
+      if (reservation.status !== 'dispatched') throw new Error('group settlement requires a dispatched request')
       if (!usage || !validUsage(usage) || usage.source !== 'provider' || usage.uncertain) {
         await this.#persist({ type: 'group/usage-unknown', data: { groupId: this.start.groupId, requestId } }); return
       }

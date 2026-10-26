@@ -40,6 +40,11 @@ test('group settles once, accounts tools by batch identity, detects conflicts an
   const h = await setup(t)
   await h.group.reserve(h.reservation('one')); await h.group.dispatched('one'); await h.group.settle('one', usage(500))
   await h.group.settle('one', usage(500))
+  await assert.rejects(h.group.dispatched('one'), /requires a reserved/)
+  await assert.rejects(h.group.release('one'), /outstanding/)
+  await h.group.reserve(h.reservation('not-sent'))
+  await assert.rejects(h.group.settle('not-sent', usage(1)), /requires a dispatched/)
+  await h.group.release('not-sent')
   await assert.rejects(h.group.settle('one', usage(600)), /conflicting duplicate/)
   assert.equal(h.group.snapshot().settledTokens, 500); assert.equal(h.group.snapshot().outstandingTokens, 0)
   const tool = { key: memoryHash('batch1'), agentId: h.session.id, sessionId: h.session.id, runId: h.state.runId, toolCallId: 'read' }
