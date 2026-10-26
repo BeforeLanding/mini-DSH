@@ -12,3 +12,10 @@
 - 写入先 sync 再发布内存状态；I/O 失败后拒绝继续写。日志按 schema/版本/序号和内容不变契约校验；部分尾部保留原文并拒绝打开，不自动丢弃。索引不作为读取事实来源。
 - Node 24.16.0 / 锁定 TypeScript 7.0.2：`node scripts/build.js` 通过；定向 memory-store 5/5、docs-links 1/1 通过。覆盖重启 receipt、锁与显式共享、并发 CAS/冲突替代、容量/非法路径和损坏日志；未调用模型。
 - 完整回归在 sandbox 内输出测试后未退出；按 AGENTS 指令改用正常用户权限的 `node --test --test-timeout=120000 dist/test/*.test.js`，528 tests / 498 pass / 0 fail / 30 skipped（隔离测试按既有平台条件跳过），35.2 秒。日志：工作区外 `outputs/memory-team-baseline-normal-20261026.tap`。定向 Biome 3 文件无诊断。跨平台结论等待本分支 CI。
+
+## MM-02（2026-10-26）
+
+- `memory-retriever.ts` / `memory-runtime.ts`：已批准版本快照、标识符/中文二元词检索、确定性排序、来源制品与当前文件哈希复核、整条记录返回及完整包装的 token/字节上限。记录和索引不进入 system 全量注入。
+- 为限定最坏 I/O，先在有界记录集合内进行词法排序，最多检查 64 个候选的来源与锚点；用 `candidateLimitReached` 明示未检查完的情况。这是对原提案“全部来源验证后排序”的有界实施修订。
+- 最小来源只由当前任务已确认的允许事件生成；不借用可见历史解析 reset 前的记录。持久化 receipt 优先于今天的文件状态，重复 opId 仍校验原命令，不因丢失会话 receipt 重复新增。
+- `node scripts/build.js`、memory-store/recall 9/9、定向 Biome 3 文件无诊断；模型调用 0。覆盖候选过滤、任务内视图不刷新、撤销/期限/文件变化/来源损坏、中文和标识符召回、有界结果、reset 后来源可达、未知及超大来源拒绝。
