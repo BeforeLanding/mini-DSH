@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { ToolResultStore, previewWindow, utf8Suffix, PREVIEW_TAIL_DIVISOR, type ResultStoreConfig } from '../core/tool-result-store.js'
+import { ToolResultStore, utf8Prefix, utf8Suffix, PREVIEW_TAIL_DIVISOR, type ResultStoreConfig } from '../core/tool-result-store.js'
 import { positiveLimit } from '../core/bounded-text.js'
 import type { CommandResult, CommandStream } from '../core/command-runner.js'
 import type { AvailableRange } from '../core/tool-result-store.js'
@@ -18,19 +18,20 @@ export function apply(ctx: Context, config: ToolResultsConfig = {}) {
     // 结果存储只会把「按 seq 分页」变成「按 ref 分页」。
     if (tool === 'read_tool_result' || tool === 'read_history' || !execution.sessionId) return result
     if (tool === 'bash' && (result.value as CommandResult | null)?.type === 'command') {
-      const project = async (stream: CommandStream, limit: number): Promise<CommandStream> => {
+      const limit = Math.max(1, Math.floor(maxPreviewBytes / 2))
+      const project = async (stream: CommandStream): Promise<CommandStream> => {
         const bytes = Buffer.from(stream.text)
         if (bytes.length <= limit && !stream.truncated) return stream
-        const tailSource = stream.truncated ? Buffer.from(stream.tail ?? '') : bytes
-        const { head, tail, omittedBytes, resumeOffset } = previewWindow(bytes, tailSource, stream.bytes, limit, tailLimit)
+        const head = utf8Prefix(bytes, limit)
         const preview = head.toString('utf8')
-        // Explicitly replace a capture tail even when no full character fits.
-        const window = { tail: tail.length ? tail.toString('utf8') : undefined, omittedBytes, resumeOffset }
+        const tail = stream.truncated ? utf8Suffix(Buffer.from(stream.tail ?? ''), tailLimit)
+          : utf8Suffix(bytes.subarray(head.length), tailLimit)
+        const omittedBytes = stream.bytes - head.length - tail.length
+        const window = omittedBytes > 0 ? { tail: tail.toString('utf8'), omittedBytes, resumeOffset: head.length } : {}
         try {
           ctx.sandbox.resolvePath(directory)
           const saved = stream.truncated
-            ? await store.saveSparse(execution.sessionId!, stream.text,
-              utf8Suffix(tailSource, Math.max(0, stream.bytes - bytes.length)).toString('utf8'), stream.bytes, execution.signal)
+            ? await store.saveSparse(execution.sessionId!, stream.text, stream.tail ?? '', stream.bytes, execution.signal)
             : await store.save(execution.sessionId!, stream.text, execution.signal)
           return { ...stream, text: preview, ...window, previewTruncated: true, ref: saved.ref,
             storedBytes: saved.bytes, storageTruncated: saved.truncated,
@@ -41,8 +42,7 @@ export function apply(ctx: Context, config: ToolResultsConfig = {}) {
         }
       }
       const value = result.value as CommandResult
-      const stdout = await project(value.stdout, Math.ceil(maxPreviewBytes / 2))
-      const stderr = await project(value.stderr, Math.floor(maxPreviewBytes / 2))
+      const stdout = await project(value.stdout), stderr = await project(value.stderr)
       const projected = { ...value, stdout, stderr }
       // NX-39：把「这一份被换成了预览」提到 ToolResult 上，让运行时有可数的信号。只认流自己的
       // previewTruncated，不认 storageTruncated——后者是存盘时的上限，与进历史的那份是不是预览无关。
@@ -54,11 +54,13 @@ export function apply(ctx: Context, config: ToolResultsConfig = {}) {
     if (bytes.length <= maxPreviewBytes) return result
     ctx.sandbox.resolvePath(directory)
     const saved = await store.save(execution.sessionId, text, execution.signal)
-    const { head, tail, omittedBytes, resumeOffset } = previewWindow(bytes, bytes, bytes.length, maxPreviewBytes, tailLimit)
+    const head = utf8Prefix(bytes, maxPreviewBytes)
     const preview = head.toString('utf8')
-    const window = { ...(tail.length ? { tail: tail.toString('utf8') } : {}), omittedBytes, resumeOffset }
+    const tail = utf8Suffix(bytes.subarray(head.length), tailLimit)
+    const omittedBytes = bytes.length - head.length - tail.length
+    const window = omittedBytes > 0 ? { tail: tail.toString('utf8'), omittedBytes, resumeOffset: head.length } : {}
     return { ...result, value: { ...saved, preview, ...window }, previewTruncated: true,
-      content: [{ type: 'text', text: `${preview}\n[tool_result ${JSON.stringify({ ...saved, originalBytes: bytes.length, ...window })}; use read_tool_result with ref and offset=${resumeOffset}]` }] }
+      content: [{ type: 'text', text: `${preview}\n[tool_result ${JSON.stringify({ ...saved, originalBytes: bytes.length, ...window })}; use read_tool_result with ref and offset=0]` }] }
   }), 'register tool result projection')
   ctx.effect(() => ctx.tools.register({
     name: 'read_tool_result',
