@@ -15,6 +15,33 @@ import { memoryHash } from '../src/core/memory-contracts.js'
 import type { Usage } from '../src/core/budget.js'
 
 const usage = (tokens: number): Usage => ({ inputTokens: tokens, outputTokens: 0, totalTokens: tokens, source: 'provider', uncertain: false })
+
+for (const approval of [false, true]) test(`group wall deadline interrupts a pending ${approval ? 'approval' : 'tool'} before the per-run deadline`, async t => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'group-wall-'))
+  const h = await createHarness({ workspace, profile: 'general', taskGroupPolicy: { maxWallDurationMs: 250 } })
+  t.after(async () => { await h.dispose(); await fs.rm(workspace, { recursive: true, force: true }) })
+  let aborted = false, timer: ReturnType<typeof setTimeout> | undefined
+  h.root.tools.register({ name: 'blocked', origin: 'builtin', effect: 'read', async execute(_args, execution) {
+    const wait = () => new Promise<string>(resolve => {
+      timer = setTimeout(() => resolve('late'), 1500)
+      execution.signal.addEventListener('abort', () => { aborted = true; clearTimeout(timer); resolve('cancelled') }, { once: true })
+    })
+    return approval ? execution.approval!(wait) : wait()
+  } })
+  h.root.sandbox.setApprover(async () => true)
+  let requests = 0
+  h.root.llm.register('scripted', { models: ['test'], chat: async () => { requests++; return { usage: usage(100), toolCalls: [{ id: 'blocked', name: 'blocked', arguments: {} }] } } })
+  const session = h.root.sessions.create({ workspace }), agent = h.root.agents.create({ sessionId: session.id, model: 'scripted/test', loop: h.root.agentLoop, budget: { maxActiveDurationMs: 5000 } })
+  const started = performance.now()
+  try { await assert.rejects(agent.send('Wait for the tool.')) } finally { clearTimeout(timer) }
+  assert.ok(performance.now() - started < 1200, 'group deadline must bound tool and approval waits')
+  assert.equal(aborted, true); assert.equal(requests, 1)
+  assert.equal(h.root.sessions.latestRun(session.id)?.status, 'timeout')
+  const events = h.root.sessions.get(session.id).events
+  assert.equal(events.filter(event => event.type === 'run/finish').length, 1)
+  assert.equal(events.filter(event => event.type === 'tool/result').length, 1)
+  parseLog(events.map(event => JSON.stringify(event) + '\n').join(''), session.id)
+})
 async function setup(t: import('node:test').TestContext, policy = {}) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'group-budget-')), sessions = new SessionRuntime(), session = sessions.create({ workspace: directory })
   const store = await JsonlStore.open(directory, session.id); sessions.attachStore(session.id, store)
@@ -24,6 +51,31 @@ async function setup(t: import('node:test').TestContext, policy = {}) {
   const reservation = (id: string = randomUUID(), reserve = 1000, root = false): GroupReservation => ({ sessionId: root ? session.id : randomUUID(), taskId: root ? state.taskId : randomUUID(), runId: root ? state.runId : randomUUID(), agentId: root ? session.id : 'worker', requestId: id, root, reserve, purpose: 'main' })
   return { directory, sessions, session, state, group, reservation }
 }
+
+test('unknown sibling usage cancels an in-flight root tool and blocks continuation', async t => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'group-unknown-tool-'))
+  const h = await createHarness({ workspace, profile: 'general', autoApprove: true, taskGroupPolicy: {} })
+  t.after(async () => { await h.dispose(); await fs.rm(workspace, { recursive: true, force: true }) })
+  let entered!: () => void
+  const ready = new Promise<void>(resolve => { entered = resolve })
+  h.root.sandbox.setApprover(async () => true)
+  h.root.tools.register({ name: 'blocked', origin: 'builtin', effect: 'read', async execute(_args, execution) {
+    entered()
+    return new Promise<string>(resolve => execution.signal.addEventListener('abort', () => resolve('stopped'), { once: true }))
+  } })
+  h.root.llm.register('scripted', { models: ['test'], chat: async () => ({ usage: usage(10), toolCalls: [{ id: 'blocked', name: 'blocked', arguments: {} }] }) })
+  const session = h.root.sessions.create({ workspace }), agent = h.root.agents.create({ sessionId: session.id, model: 'scripted/test', loop: h.root.agentLoop })
+  const running = agent.send('Wait.'); const stopped = assert.rejects(running)
+  await ready
+  const state = h.root.sessions.latestRun(session.id)!, group = await h.taskGroups!.get(session.id, state.taskId)
+  await group.reserve({ sessionId: 'child', taskId: 'child-task', runId: 'child-run', requestId: 'unknown', agentId: 'child', root: false, purpose: 'main', reserve: 100 })
+  await group.dispatched('unknown'); await group.settle('unknown')
+  await stopped
+  assert.equal(h.root.sessions.latestRun(session.id)?.status, 'error')
+  const requests = group.snapshot().requests
+  await assert.rejects(agent.continue())
+  assert.equal(group.snapshot().requests, requests)
+})
 
 test('group atomically admits at most one competing reservation and preserves root floors', async t => {
   const h = await setup(t, { maxModelRequests: 3, rootRequestFloor: 2, rootTokenFloor: 8000 })

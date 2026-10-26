@@ -1,5 +1,11 @@
 # 项目记忆与只读协作变更证据
 
+## REV-01：PR #7 独立审查，共享组中止覆盖整个 run
+
+- P1：250 ms wall deadline 原来只约束模型，挂起工具及暂停主动计时的审批均等到 1500 ms 才返回；两个失败回归在修复前复现。
+- 将不可变 run guard 接入普通与人工摘要 run，共享 deadline、未知 usage、超额及持久化失败向 RunBudgetRuntime 传播；工具、审批及等待模型统一收到取消。解绑监听器，不改变默认关闭路径。
+- `node scripts/build.js`、`node scripts/check-syntax.js`（222 文件）与 `node node_modules/@biomejs/biome/bin/biome check .`（251 文件）通过。正常用户权限全量测试 561 条，530 pass / 1 文档行号锚点失败 / 30 平台 skipped；同步移位的 DECISIONS 锚点后补跑文档测试。预算/委派/恢复/reviewer 定向 17 条通过。沙箱 Bash 挂起，按 AGENTS 使用正常用户权限验证；无真实 provider 请求。
+
 ## MM-00（2026-10-26）
 
 - 已从远端 `main@cc2b769` 创建独立 `feat/memory-team` / `D:\Agent\mini-DSH-memory-team`，未复制其他工作区未提交改动。

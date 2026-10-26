@@ -33,6 +33,7 @@ export class TaskGroupBudgetCoordinator {
   #failure: unknown
   #overrun = false
   #abort = new AbortController()
+  #signal?: AbortSignal
   readonly start: GroupStart
   private constructor(readonly sessions: Sessions, readonly rootSessionId: string, readonly rootTaskId: string, start: GroupStart, private now: () => number) { this.start = Object.freeze({ ...start, policy: groupPolicy(start.policy) }) }
   static async open(sessions: Sessions, rootSessionId: string, rootTaskId: string, overrides: Partial<TaskGroupPolicy> = {}, now = Date.now) {
@@ -101,6 +102,16 @@ export class TaskGroupBudgetCoordinator {
       settledTokens: requests.reduce((sum, item) => sum + (item.usage?.totalTokens ?? 0), 0), outstandingTokens: requests.filter(item => !item.usage).reduce((sum, item) => sum + item.reserve, 0),
       rootRequests: requests.filter(item => item.root).length, rootTokens: requests.filter(item => item.root).reduce((sum, item) => sum + spent(item), 0),
       usageUnknown: requests.some(item => item.status === 'unknown'), overrun: this.#overrun }
+  }
+  get signal() {
+    this.#signal ??= AbortSignal.any([this.#abort.signal, AbortSignal.timeout(Math.max(1, this.start.deadline - this.now()))])
+    return this.#signal
+  }
+  get stopReason(): 'timeout' | 'token_budget' | 'error' | undefined {
+    if (this.now() >= this.start.deadline) return 'timeout'
+    if (this.#overrun) return 'token_budget'
+    if (this.#failure || this.snapshot().usageUnknown) return 'error'
+    return undefined
   }
   #check() {
     const state = this.snapshot()

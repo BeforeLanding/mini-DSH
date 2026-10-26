@@ -25,6 +25,11 @@ const CANCELLED_RESULT = 'ToolError: the run was cancelled before this tool ran'
 const REQUEST_TOOL = 'read_history'
 type Projection = ReturnType<ContextBudgetRuntime['project']>
 export class AgentLoopRuntime {
+    #runGuard?: (state: RunState, control: RunBudgetRuntime) => Promise<() => void>
+    setRunGuard(guard: (state: RunState, control: RunBudgetRuntime) => Promise<() => void>) {
+        if (this.#runGuard) throw new Error('run guard already fixed')
+        this.#runGuard = guard
+    }
     sessions: Pick<SessionRuntime, keyof SessionRuntime>
     systemPrompt: Pick<SystemPromptRuntime, "assemble">
     tools: Pick<ToolRuntime, "schemas" | "execute" | "renderResult">
@@ -55,6 +60,7 @@ export class AgentLoopRuntime {
         let activeRequestId: string | undefined
         let activeToolCallId: string | undefined
         let errorRecorded = false
+        let releaseGuard: (() => void) | undefined
         const observeCommit = (confirmed: boolean, status: StopReason = terminalStatus!) => {
             state.counters.approvalDurationMs = control.approvalDurationMs
             state.counters.activeDurationMs = control.activeDurationMs
@@ -62,6 +68,7 @@ export class AgentLoopRuntime {
         }
         const append: SessionRuntime['append'] = (id, type, data) => this.sessions.append(id, type, data, state)
         try {
+        if (this.#runGuard) releaseGuard = await control.wait(() => this.#runGuard!(state, control))
         if (input !== undefined) append(sessionId, 'user/message', { content: input })
 
         let step = 0
@@ -380,7 +387,7 @@ export class AgentLoopRuntime {
                 if (!(commitError instanceof BudgetStop)) throw commitError
             }
             throw error
-        } finally { control.dispose() }
+        } finally { releaseGuard?.(); control.dispose() }
     }
 
     // §8.4：失败闩从**日志折叠**得出，不是内存计数器——这样事后可解释。作用域是当前 run：新 run
@@ -435,7 +442,9 @@ export class AgentLoopRuntime {
         let applied = false
         let terminal: StopReason = 'completed'
         let failure: unknown
+        let releaseGuard: (() => void) | undefined
         try {
+            if (this.#runGuard) releaseGuard = await control.wait(() => this.#runGuard!(state, control))
             const system = await control.wait(() => this.systemPrompt.assemble({ agent, sessionId, step: 1 }))
             control.check()
             const schemas = this.tools.schemas()
@@ -449,7 +458,7 @@ export class AgentLoopRuntime {
         }
         state.counters.approvalDurationMs = control.approvalDurationMs
         state.counters.activeDurationMs = control.activeDurationMs
-        control.dispose()
+        releaseGuard?.(); control.dispose()
         this.sessions.finishRun(state, terminal)
         try {
             await control.finalize(() => this.sessions.flush(sessionId))

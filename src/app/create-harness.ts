@@ -82,7 +82,7 @@ export async function createHarness(config: HarnessConfig) {
     if (config.taskGroupPolicy || config.parentTaskGroup || config.delegation?.mode === 'read-only') {
       if (config.taskGroupPolicy && config.parentTaskGroup) throw new Error('child cannot override parent task group policy')
       taskGroups = config.parentTaskGroup ? undefined : new TaskGroups(root.sessions, groupPolicy(config.taskGroupPolicy))
-      guardTaskGroup(root.llm, root.tools, root.sessions, config.parentTaskGroup ? async () => config.parentTaskGroup! : (sessionId, taskId) => taskGroups!.get(sessionId, taskId), { root: !config.parentTaskGroup })
+      guardTaskGroup(root.llm, root.tools, root.sessions, config.parentTaskGroup ? async () => config.parentTaskGroup! : (sessionId, taskId) => taskGroups!.get(sessionId, taskId), { root: !config.parentTaskGroup }, root.agentLoop)
     }
     if (readOnly) root.tools.setCapabilities(READ_ONLY_TOOLS)
     const runtimeClockMode = config.runtimeClockMode ?? config.contextLayout ?? 'live'

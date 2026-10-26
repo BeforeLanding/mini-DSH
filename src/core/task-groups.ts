@@ -4,6 +4,7 @@ import type { SessionRuntime } from './session-runtime.js'
 import type { LlmRuntime } from './llm-runtime.js'
 import type { ToolRuntime } from './tool-runtime.js'
 import { memoryHash } from './memory-contracts.js'
+import type { AgentLoopRuntime } from './agent-loop-runtime.js'
 
 type Sessions = Pick<SessionRuntime, keyof SessionRuntime>
 export class TaskGroups {
@@ -17,7 +18,15 @@ export class TaskGroups {
   }
 }
 export function guardTaskGroup(llm: Pick<LlmRuntime, 'setDispatchGuard'>, tools: Pick<ToolRuntime, 'setAdmission'>, sessions: Sessions,
-  resolve: (sessionId: string, taskId: string) => Promise<TaskGroupBudgetCoordinator>, identity: { root: boolean; agentId?: string }) {
+  resolve: (sessionId: string, taskId: string) => Promise<TaskGroupBudgetCoordinator>, identity: { root: boolean; agentId?: string }, loop: Pick<AgentLoopRuntime, 'setRunGuard'>) {
+  loop.setRunGuard(async (state, control) => {
+    const group = await resolve(state.sessionId, state.taskId)
+    if (control.signal.aborted) return () => {}
+    const signal = group.signal, stop = () => control.stop(group.stopReason ?? 'timeout')
+    signal.addEventListener('abort', stop, { once: true })
+    if (signal.aborted || group.stopReason) stop()
+    return () => signal.removeEventListener('abort', stop)
+  })
   llm.setDispatchGuard(async (request, invoke) => {
     const scope = request.dispatchScope
     if (!scope) throw new Error('task group request is missing its scope')
