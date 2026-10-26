@@ -3,6 +3,11 @@ import { validUsage } from './event-validation.js'
 import { ModelStreamError } from './model-error.js'
 import type { Adapter, ChatRequest, ChatResponse, ModelSelection } from './contracts.js'
 export class LlmRuntime {
+    #dispatchGuard?: (request: ChatRequest, invoke: (request: ChatRequest) => Promise<ChatResponse>) => Promise<ChatResponse>
+    setDispatchGuard(guard: (request: ChatRequest, invoke: (request: ChatRequest) => Promise<ChatResponse>) => Promise<ChatResponse>) {
+        if (this.#dispatchGuard) throw new Error('model dispatch guard already fixed')
+        this.#dispatchGuard = guard
+    }
     #providers = new Map<string, Adapter>()
     #defaultSelection: string | null = null
 
@@ -62,7 +67,12 @@ export class LlmRuntime {
             throw new Error(`no LLM provider: ${provider}`)
         }
 
-        const response = await adapter.chat({ ...request, model })
+        const invoke = (input: ChatRequest) => this.#invoke(adapter, { ...input, model })
+        return this.#dispatchGuard ? this.#dispatchGuard(request, invoke) : invoke(request)
+    }
+    async #invoke(adapter: Adapter, input: ChatRequest) {
+        const { dispatchScope: _scope, ...request } = input
+        const response = await adapter.chat(request)
         const calls = response?.toolCalls ?? []
         if (!isRecord(response) || (response.content !== undefined && typeof response.content !== 'string') ||
             (response.reasoningContent !== undefined && typeof response.reasoningContent !== 'string') ||

@@ -21,6 +21,11 @@ export class ToolRuntime {
     #authorize?: (tool: ToolDefinition, args: Arguments, execution: Execution) => Promise<void>
     #authorizationConfigured = false
     #capabilities?: ReadonlySet<string>
+    #admission?: (execution: Execution) => Promise<void>
+    setAdmission(admit: (execution: Execution) => Promise<void>) {
+        if (this.#admission) throw new Error('tool admission already configured')
+        this.#admission = admit
+    }
     setCapabilities(names: readonly string[]) {
         if (this.#capabilities) throw new Error('tool capabilities already fixed')
         this.#capabilities = new Set(names)
@@ -91,12 +96,14 @@ export class ToolRuntime {
             signal: exec.signal ?? new AbortController().signal,
             sessionId: exec.sessionId,
             toolCallId: exec.toolCallId,
+            toolSequence: exec.toolSequence,
             agent: exec.agent,
         }
 
         let result: ToolResult
         try {
             if (!this.#permitted(tool)) throw new Error('tool is forbidden by immutable role capabilities')
+            await this.#admission?.(execution)
             if (this.#authorizationConfigured && !this.#authorize) throw new Error('tool authorization unavailable')
             await this.#authorize?.(tool, args, execution)
             execution.signal.throwIfAborted()

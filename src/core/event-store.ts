@@ -169,6 +169,7 @@ export function createLogRecordParser(sessionId: string): (line: string) => Sess
   const changes = new Map<string, { taskId: string; runId: string; planned: boolean }>(), results = new Set<string>()
   const snapshots = new Set<string>()
   const memoryViews = new Map<string, string>(), memoryReceipts = new Set<string>()
+  const groups = new Map<string, { taskId: string; requests: Map<string, { status: string; reserve: number }>; tools: Set<string> }>()
   const verifications = new Map<string, { taskId: string; runId: string; data: import('./task-verification.js').VerificationStart }>(), verificationResults = new Set<string>()
   return (line: string) => {
     let event: unknown
@@ -177,6 +178,31 @@ export function createLogRecordParser(sessionId: string): (line: string) => Sess
     if ((event.taskId !== undefined && typeof event.taskId !== 'string') || (event.runId !== undefined && typeof event.runId !== 'string')) throw new Error('invalid event scope')
     validatePayload(event.type, event.data)
     const parsed = event as unknown as SessionEvent
+    if (parsed.type.startsWith('group/')) {
+      const groupId = String(event.data.groupId), run = parsed.runId ? runs.get(parsed.runId) : undefined
+      if (!run || run.taskId !== parsed.taskId) throw new Error('invalid root group event scope')
+      if (parsed.type === 'group/start') {
+        if (run.ended || groups.has(groupId) || [...groups.values()].some(group => group.taskId === parsed.taskId)) throw new Error('duplicate task group')
+        groups.set(groupId, { taskId: parsed.taskId!, requests: new Map(), tools: new Set() })
+      } else {
+        const group = groups.get(groupId)
+        if (!group || group.taskId !== parsed.taskId) throw new Error('unknown or cross-task group')
+        if (parsed.type === 'group/tool-admitted') {
+          if (group.tools.has(parsed.data.key)) throw new Error('duplicate group tool')
+          group.tools.add(parsed.data.key)
+        } else if (parsed.type === 'group/budget-reserved') {
+          if (group.requests.has(parsed.data.requestId)) throw new Error('duplicate group request')
+          group.requests.set(parsed.data.requestId, { status: 'reserved', reserve: parsed.data.reserve })
+        } else if (parsed.type === 'group/model-dispatched' || parsed.type === 'group/reservation-released' || parsed.type === 'group/usage-unknown' || parsed.type === 'group/budget-settled') {
+          const request = group.requests.get(parsed.data.requestId)
+          if (!request) throw new Error('missing group request')
+          const expected = parsed.type === 'group/model-dispatched' ? ['reserved'] : parsed.type === 'group/reservation-released' ? ['reserved', 'dispatched'] : ['dispatched']
+          if (!expected.includes(request.status)) throw new Error('invalid group request transition')
+          if (parsed.type === 'group/budget-settled' && parsed.data.overrun !== (parsed.data.usage.totalTokens > request.reserve)) throw new Error('group overrun mismatch')
+          request.status = parsed.type === 'group/model-dispatched' ? 'dispatched' : parsed.type === 'group/reservation-released' ? 'released' : parsed.type === 'group/usage-unknown' ? 'unknown' : 'settled'
+        }
+      }
+    }
     if (parsed.type === 'memory/view' || parsed.type === 'memory/query' || parsed.type === 'memory/proposal-receipt') {
       const run = parsed.runId ? runs.get(parsed.runId) : undefined
       if (!run || run.ended || run.taskId !== parsed.taskId) throw new Error('invalid memory event scope')

@@ -7,8 +7,8 @@
 | MM-02 | done | 已批准记忆的确定性有界检索；快照、来源、失效与跨项目拒绝 |
 | MM-03 | done | 提案/审核/撤销、CLI 与重放 receipt；模型不能批准 |
 | MA-01 | done | 独立只读 Harness 与中央能力拒绝；资源释放 |
-| MA-02 | in_progress | 可恢复共享预算；并发竞争、重复结算、未知用量与 root floor |
-| MA-03 | planned | 双 worker 批次分工、有界结构化结果与父会话制品发布 |
+| MA-02 | done | 可恢复共享预算；并发竞争、重复结算、未知用量与 root floor |
+| MA-03 | in_progress | 双 worker 批次分工、有界结构化结果与父会话制品发布 |
 | MA-04 | planned | 取消、四个崩溃窗口、父子恢复与 inspect；未知请求不重发 |
 | MA-05 | planned | reviewer 的固定候选版本与 stale 检测 |
 | EV-01 | planned | 零模型 memory/team 演示与离线故障证据 |

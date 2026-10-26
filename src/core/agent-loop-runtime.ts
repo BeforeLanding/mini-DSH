@@ -187,6 +187,7 @@ export class AgentLoopRuntime {
                 try {
                     response = await control.wait(() => this.llm.chat({
                         purpose: 'main', maxOutputTokens, system, messages, tools: schemas, signal: control.signal,
+                        dispatchScope: { sessionId, taskId: state.taskId, runId: state.runId, requestId: attemptRequestId },
                         onReasoning: chunk => { if (control.signal.aborted || journal.closed) return; journal.add('reasoning', chunk); onReasoning?.(chunk) },
                         onContent: chunk => { if (control.signal.aborted || journal.closed) return; journal.add('content', chunk); onContent?.(chunk) },
                     }, agent.model), policy.requestTimeoutMs ?? 180_000)
@@ -292,6 +293,7 @@ export class AgentLoopRuntime {
                     signal: control.signal,
                     sessionId,
                     toolCallId: call.id,
+                    toolSequence: batch.seq,
                     agent,
                     approval: work => control.approve(work),
                 }))

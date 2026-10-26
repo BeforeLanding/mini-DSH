@@ -33,3 +33,10 @@
 - ToolRuntime 不可变能力集合同时过滤 schemas/list 并在 execute 授权前验证工具名、builtin 来源和 read effect。伪造工具调用不能因 autoApprove 或自报 read 获得写入能力。
 - 子角色关闭工作区内工具结果落盘，读取保留既有有界输出；会话日志由宿主保存。角色装配仍为应用策略，不声明 OS 隔离。
 - `node scripts/build.js` 与角色/原集成/中央授权定向 8/8 通过；全库 Biome 232 文件无诊断。测试验证父子服务独立、20 KiB 读取不在工作区生成结果文件、伪造写调用不执行、角色不支持的配置被拒绝及 dispose 释放服务。未调用 provider。
+
+## MA-02（2026-10-26）
+
+- TaskGroupBudgetCoordinator 与 TaskGroups：按逻辑任务创建根账本，所有主请求/摘要/重试统一预留和结算，工具按 session/run/批次/调用标识计数。根 floor 防止子 Agent 耗尽交付额度；deadline 与额度跨恢复保留。
+- 预留和派发意图落盘后调用 adapter，按 requestId 一次结算；重复结算不重复扣账，冲突 usage 拒绝。派发前崩溃释放；派发后缺 usage 保留 unknown 预留并阻止全组继续派发。超预留 usage 记录 overrun 并取消可取消请求。估算误差仍可能超额，不声明 token 计费硬上限。
+- 显式 dispatchScope 传到中央 LlmRuntime 守门后从 provider 请求移除，关闭功能时 adapter 请求内容不变；工具能力检查继续独立有效。新增词表由 contracts/validation/JSONL parser/inspect 共同识别。
+- build 通过；预算/角色/记忆集成/原摘要/文档定向 30/30；全库 Biome 235 文件无诊断。完整离线 suite 543 tests / 513 pass / 0 fail / 30 平台 skipped，54.9 秒。并发抢最后余额、root floor、双结算、工具重复、overrun、重启未决请求及摘要/重试归账均有测试，实际 provider 调用 0。

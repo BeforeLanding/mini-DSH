@@ -26,10 +26,16 @@ import type { MemoryRecallLimits } from '../core/memory-retriever.js'
 import * as memoryPlugin from '../plugins/memory.js'
 import { READ_ONLY_TOOLS, validateAgentRole } from '../core/agent-capabilities.js'
 import type { AgentRole } from '../core/agent-capabilities.js'
+import { TaskGroups, guardTaskGroup } from '../core/task-groups.js'
+import { groupPolicy } from '../core/task-group-budget.js'
+import type { TaskGroupPolicy, TaskGroupBudgetCoordinator } from '../core/task-group-budget.js'
 
 export interface HarnessAdapter { provider: string; model: string; chat: Adapter['chat']; capabilities?: Adapter['capabilities'] }
 export interface HarnessConfig {
   agentRole?: AgentRole
+  taskGroupPolicy?: Partial<TaskGroupPolicy>
+  // Host-only binding: child budgets always resolve to the parent's coordinator.
+  parentTaskGroup?: TaskGroupBudgetCoordinator
   memory?: { mode: 'off' | 'recall' | 'assist'; directory?: string; projectId?: string; readOnly?: boolean; limits?: Partial<MemoryRecallLimits> }
   workspace: string
   profile: 'general' | 'coding'
@@ -55,8 +61,14 @@ export async function createHarness(config: HarnessConfig) {
   const root = new Context()
   let memory: memoryPlugin.MemoryController | undefined
   let memoryStore: MemoryStore | undefined
+  let taskGroups: TaskGroups | undefined
   try {
     for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
+    if (config.taskGroupPolicy || config.parentTaskGroup) {
+      if (config.taskGroupPolicy && config.parentTaskGroup) throw new Error('child cannot override parent task group policy')
+      taskGroups = config.parentTaskGroup ? undefined : new TaskGroups(root.sessions, groupPolicy(config.taskGroupPolicy))
+      guardTaskGroup(root.llm, root.tools, root.sessions, config.parentTaskGroup ? async () => config.parentTaskGroup! : (sessionId, taskId) => taskGroups!.get(sessionId, taskId), { root: !config.parentTaskGroup })
+    }
     if (readOnly) root.tools.setCapabilities(READ_ONLY_TOOLS)
     const runtimeClockMode = config.runtimeClockMode ?? config.contextLayout ?? 'live'
     await root.plugin(runtimeContext, { workspace: config.workspace, profile: config.profile, layout: runtimeClockMode, ...(readOnly ? { agentRole: role } : {}), ...(config.runtimeTime ? { now: config.runtimeTime } : {}) })
@@ -83,8 +95,9 @@ export async function createHarness(config: HarnessConfig) {
       policy: { profile: config.profile, contextLayout: config.contextLayout ?? 'live', runtimeClockMode, projectContext: config.projectContext !== false && config.profile === 'coding', toolOutput: config.toolOutput !== false && !readOnly, toolOutputMaxPreviewBytes: config.toolOutputMaxPreviewBytes ?? null, legacyNoReadHistory: config.legacyNoReadHistory === true, autoApprove: config.autoApprove ?? false, isolatedCommandRunner: config.commandRunner !== undefined, mcpServers: config.mcpServers?.map(entry => entry.config.serverName) ?? [] },
       ...(memory ? { memory: { mode: config.memory!.mode, projectId: memory.runtime.store.projectId, limits: memory.runtime.limits } } : {}),
       ...(readOnly ? { role, capabilities: READ_ONLY_TOOLS } : {}),
+      ...(config.taskGroupPolicy ? { taskGroupPolicy: groupPolicy(config.taskGroupPolicy) } : {}),
     }
-    return { root, capabilityManifest, memory, dispose: async () => { try { await root.fiber.dispose() } finally { memory?.dispose(); await memoryStore?.close() } } }
+    return { root, capabilityManifest, memory, taskGroups, dispose: async () => { try { await root.fiber.dispose() } finally { memory?.dispose(); await memoryStore?.close() } } }
   } catch (error) {
     await root.fiber.dispose()
     memory?.dispose(); await memoryStore?.close()

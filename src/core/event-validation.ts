@@ -35,6 +35,15 @@ export function validUsage(v: unknown): boolean {
 export function validatePayload(type: string, data: Record<string, unknown>) {
   let valid = false
   switch (type) {
+    case 'group/start': {
+      const policy = data.policy
+      valid = memoryId(data.groupId) && integer(data.deadline) && record(policy) && ['maxModelRequests', 'maxToolCalls', 'maxTotalTokens', 'rootTokenFloor', 'rootRequestFloor', 'maxWallDurationMs'].every(key => integer(policy[key])) && Number(policy.rootTokenFloor) <= Number(policy.maxTotalTokens) && Number(policy.rootRequestFloor) <= Number(policy.maxModelRequests) && Number(policy.maxWallDurationMs) > 0
+      break
+    }
+    case 'group/budget-reserved': valid = memoryId(data.groupId) && memoryId(data.requestId) && memoryId(data.agentId) && memoryId(data.sessionId) && memoryId(data.taskId) && memoryId(data.runId) && typeof data.root === 'boolean' && ['main', 'summary'].includes(String(data.purpose)) && integer(data.reserve) && Number(data.reserve) > 0; break
+    case 'group/model-dispatched': case 'group/reservation-released': case 'group/usage-unknown': valid = memoryId(data.groupId) && memoryId(data.requestId); break
+    case 'group/budget-settled': valid = memoryId(data.groupId) && memoryId(data.requestId) && validUsage(data.usage) && record(data.usage) && data.usage.source === 'provider' && data.usage.uncertain === false && typeof data.overrun === 'boolean'; break
+    case 'group/tool-admitted': valid = memoryId(data.groupId) && sha256(data.key) && memoryId(data.agentId) && memoryId(data.sessionId) && memoryId(data.runId) && memoryId(data.toolCallId); break
     case 'memory/view': valid = sha256(data.projectId) && sha256(data.digest) && Array.isArray(data.versions) && data.versions.length <= 2000 && data.versions.every(item => record(item) && memoryId(item.id) && integer(item.revision) && Number(item.revision) > 0); break
     case 'memory/query': valid = sha256(data.projectId) && sha256(data.viewDigest) && sha256(data.queryDigest) && Array.isArray(data.items) && data.items.length <= 2000 && data.items.every(item => record(item) && memoryId(item.id) && integer(item.revision) && Number(item.revision) > 0) && record(data.filtered) && Object.entries(data.filtered).every(([key, count]) => ['not-visible', 'not-approved', 'expired', 'source-unavailable', 'anchor-changed', 'capacity'].includes(key) && integer(count)); break
     case 'memory/proposal-receipt': valid = sha256(data.projectId) && memoryId(data.opId) && memoryId(data.id) && integer(data.revision) && Number(data.revision) > 0 && sha256(data.digest); break
