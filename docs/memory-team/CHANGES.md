@@ -80,3 +80,9 @@
 - demo:memory 验证候选、跨 session 召回、文件变化与模拟时钟过期；demo:team 保存成功、invalid_result、父取消与排队 skipped 轨迹。scripted usage 只用于账本机制，输出显式标记 synthetic，不作为供应商用量或能力证据。
 - 零模型演示全部 PASS；team 共 14 次脚本请求、真实 provider 请求 0，取消后两条未知 usage 保留约 40K 的估算预留（具体值随有界包装长度变化）。证据 `.demo-runs/team-1793025231110/`；四崩溃窗口制品通过测试导出至 `.demo-runs/recovery-20261026/`，均不入库。
 - build、CLI/配置/inspect/记忆集成 21/21；恢复 5/5；Biome 244 文件无诊断。旧功能默认配置仍不安装记忆/协作工具。
+
+## EV-02 零付费准备（2026-10-26）
+
+- 新建独立 memory-team-development-v1、四条件、4 个公开开发蓝图及所有组共同可读的经验包；postCompactionPrune 四份清单均显式 false。没有编辑 NX-50/NX-51 四臂或比较器。
+- eval-memory-team 支持干净 HEAD 冻结四份 manifest 与 validate-only：检查共同模型/预算/准备数据、源码及数据 SHA-256、四种实际 Harness 工具装配，拒绝缺臂、重复臂、不同额度、过期来源、付费或正式标记。正文按 LF 规范化，原始数据文件另有精确字节摘要。
+- build、定向 eval 3/3、全库 Biome 248 文件无诊断；零模型验证。独立目标验收器和准备/目标两阶段真实执行器尚未实施，价格与金额未冻结，付费调用 0；因此仅标 prepared，不把 16 个拟议开发 episode 或正式 128 个目标 episode 当成已执行。

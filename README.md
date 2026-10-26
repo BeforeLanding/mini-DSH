@@ -109,6 +109,8 @@ pnpm start
 
 只读协作默认关闭，设 `MINI_DSH_DELEGATION=read-only` 后，主 Agent 可通过 `delegate_tasks` 调度 analyst/test_designer/reviewer。第一版同时最多两个子 Agent、每任务累计最多四个，子角色禁止写入、Bash、MCP 和递归委派。主/子/摘要/重试共用持久化根预算，`/continue` 不刷新额度和 wall deadline；`/budget` 显示根组统计，`mini-dsh inspect <root-events.jsonl> --tree` 展示子会话状态。审查结果绑定候选版本，后续编辑使其失效，可用 `review_status` 复核。`MINI_DSH_TEAM_LIMITS` 和 `MINI_DSH_TASK_GROUP_BUDGET` 接受有界配置，`--show-config` 显示实际值。`pnpm demo:team` 是脚本化机制演示，usage 为合成账本数据，不是供应商消费；真实效果尚未评测。子会话与完整结果默认存于 `~/.mini-dsh/teams/`，父结果副本仍受会话 owner 检查。
 
+记忆开关 × 协作开关的独立开发协议见 [评测准备](docs/memory-team/EVALUATION.md)。`pnpm eval:memory-team --freeze <new-directory>` 冻结四份零付费 manifest，`--validate-only <directory>` 核对配置和来源；当前不提供付费执行入口，也不复用 PR #6 的 48 条消融结论。
+
 - [src/core/agent-loop-runtime.ts](src/core/agent-loop-runtime.ts)：请求投影、主动压缩和预算停止；[src/core/compaction-runtime.ts](src/core/compaction-runtime.ts)：摘要调用与结算。
 - [src/core/session-runtime.ts](src/core/session-runtime.ts) 与 [src/core/event-store.ts](src/core/event-store.ts)：JSONL 事件、恢复和统计重建。
 - [src/tools/files.ts](src/tools/files.ts)、[src/tools/bash.ts](src/tools/bash.ts)：有界读写、命令和验证证据；[src/plugins/tool-results.ts](src/plugins/tool-results.ts)、[src/plugins/read-history.ts](src/plugins/read-history.ts)：结果与历史回读。

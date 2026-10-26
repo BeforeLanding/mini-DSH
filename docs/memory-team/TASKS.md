@@ -12,6 +12,8 @@
 | MA-04 | done | 取消、四个崩溃窗口、父子恢复与 inspect；未知请求不重发 |
 | MA-05 | done | reviewer 的固定候选版本与 stale 检测 |
 | EV-01 | done | 零模型 memory/team 演示与离线故障证据 |
-| EV-02 | in_progress | 四条件同预算新协议及 validate-only；真实执行待授权 |
+| EV-02 | prepared | 四条件同预算开发蓝图、来源指纹与 validate-only 已实现；独立目标验收、两阶段真实执行器及付费批次留待下一评测阶段 |
 
 每项完成后记录实际提交和检查，不把计划视为实现。里程碑结束运行 check/test/lint，隔离相关修改运行对应环境检查。
+
+提交对照：MM-00 `aecad36`；MM-01 `86fb32e`；MM-02 `be0e8cd`；MM-03 `b0f52a0`；MA-01 `20a2118`；MA-02 `4ae2529`；MA-03 `985cc79`；MA-04 `ad3f29f`；MA-02b `5331a25`；MA-05 `e22ea3f`；MA-03b `2b00f4c`；EV-01 `cb87b19`。EV-02 的零付费准备单独提交，真实结果不得回填为已执行。
