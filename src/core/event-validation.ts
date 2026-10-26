@@ -44,8 +44,8 @@ export function validatePayload(type: string, data: Record<string, unknown>) {
       } catch { valid = false }
       break
     }
-    case 'delegation/child-created': valid = memoryId(data.batchId) && memoryId(data.delegationId) && memoryId(data.childSessionId) && ['analyst', 'test_designer'].includes(String(data.role)) && sha256(data.capabilityDigest); break
-    case 'delegation/child-finish': valid = memoryId(data.batchId) && memoryId(data.delegationId) && (data.childSessionId === undefined || memoryId(data.childSessionId)) && ['completed', 'failed', 'cancelled', 'interrupted', 'invalid_result', 'skipped'].includes(String(data.status)) && memoryId(data.resultRef) && sha256(data.resultSha256); break
+    case 'delegation/child-created': valid = memoryId(data.batchId) && memoryId(data.delegationId) && memoryId(data.childSessionId) && ['analyst', 'test_designer', 'reviewer'].includes(String(data.role)) && sha256(data.capabilityDigest); break
+    case 'delegation/child-finish': valid = memoryId(data.batchId) && memoryId(data.delegationId) && (data.childSessionId === undefined || memoryId(data.childSessionId)) && ['completed', 'failed', 'cancelled', 'interrupted', 'invalid_result', 'skipped', 'stale'].includes(String(data.status)) && memoryId(data.resultRef) && sha256(data.resultSha256); break
     case 'delegation/finish': valid = memoryId(data.batchId) && memoryId(data.toolCallId) && integer(data.toolSequence) && typeof data.result === 'string' && Buffer.byteLength(data.result) <= 16384; break
     case 'group/start': {
       const policy = data.policy

@@ -1,7 +1,7 @@
 import { recordObject, sha256 } from './memory-contracts.js'
 import { estimateText } from './token-estimator.js'
 
-export type ChildRole = 'analyst' | 'test_designer'
+export type ChildRole = 'analyst' | 'test_designer' | 'reviewer'
 export interface DelegateTaskInput { role: ChildRole; objective: string; contextRefs: string[]; outputFocus: string }
 export interface AgentFinding { kind: 'observation' | 'hypothesis' | 'recommendation'; text: string; evidence: { path: string; contentSha256: string; line?: number }[] }
 export interface ChildFindings { findings: AgentFinding[]; unresolved: string[] }
@@ -12,8 +12,9 @@ export interface DelegationLimits {
 export const DELEGATION_LIMITS: Readonly<DelegationLimits> = Object.freeze({ maxConcurrent: 2, maxChildrenPerTask: 4, childMaxModelRequests: 8, childMaxToolCalls: 16, childMaxTotalTokens: 200_000, maxResultTokens: 1536, maxResultBytes: 8192, maxBatchResultTokens: 4096, maxBatchResultBytes: 16384 })
 export interface PlannedChild { delegationId: string; task: DelegateTaskInput }
 export interface DelegationStart { batchId: string; groupId: string; toolCallId: string; toolSequence: number; children: PlannedChild[]; anchors: { path: string; contentSha256: string }[]; limits: DelegationLimits }
-export type ChildStatus = 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'invalid_result' | 'skipped'
-export interface DelegationResult { delegationId: string; childSessionId?: string; status: ChildStatus; findings: AgentFinding[]; unresolved: string[]; resultRef?: string; resultSha256?: string; summaryTruncated?: boolean }
+export type ChildStatus = 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'invalid_result' | 'skipped' | 'stale'
+export interface ReviewCandidate { digest: string; anchors: { path: string; contentSha256: string }[] }
+export interface DelegationResult { delegationId: string; childSessionId?: string; status: ChildStatus; findings: AgentFinding[]; unresolved: string[]; resultRef?: string; resultSha256?: string; summaryTruncated?: boolean; candidate?: ReviewCandidate }
 export interface DelegationBatch { batchId: string; results: DelegationResult[]; truncated: boolean }
 const bounded = (value: unknown, max: number): value is string => typeof value === 'string' && value.trim().length > 0 && Buffer.byteLength(value) <= max
 export function delegationLimits(overrides: Partial<DelegationLimits> = {}): Readonly<DelegationLimits> {
@@ -25,7 +26,7 @@ export function delegationLimits(overrides: Partial<DelegationLimits> = {}): Rea
 export function delegateInputs(value: unknown): DelegateTaskInput[] {
   if (!Array.isArray(value) || !value.length || value.length > 4) throw new Error('delegate_tasks requires one to four independent tasks')
   return value.map(item => {
-    if (!recordObject(item) || !['analyst', 'test_designer'].includes(String(item.role)) || !bounded(item.objective, 4096) || !bounded(item.outputFocus, 1024) || !Array.isArray(item.contextRefs) || item.contextRefs.length > 16 || !item.contextRefs.every(ref => bounded(ref, 1024))) throw new Error('invalid read-only child task')
+    if (!recordObject(item) || !['analyst', 'test_designer', 'reviewer'].includes(String(item.role)) || !bounded(item.objective, 4096) || !bounded(item.outputFocus, 1024) || !Array.isArray(item.contextRefs) || item.contextRefs.length > 16 || !item.contextRefs.every(ref => bounded(ref, 1024)) || (item.role === 'reviewer' && !item.contextRefs.length)) throw new Error('invalid read-only child task')
     return structuredClone(item) as unknown as DelegateTaskInput
   })
 }

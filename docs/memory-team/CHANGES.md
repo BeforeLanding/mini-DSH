@@ -61,3 +61,9 @@
 
 - 在追加之前拒绝重复派发、已结算请求的释放、未派发请求的结算；这些非法调用不能写下一条会导致日志恢复失败的事件。晚到的合法结算保持原根任务作用域，不因新的逻辑任务已创建而丢失证据。
 - build 与 budget 定向 5/5 通过；新增拒绝路径后同一日志仍能通过 parseLog。此边界独立提交，不与 Reviewer 行为合并。
+
+## MA-05（2026-10-26）
+
+- reviewer 复用只读机制，输入带有候选路径/哈希/digest 和最多 8 KiB 的 task 基线至当前候选 diff；完整 diff 过大时明确要求拆分。候选信息作为子会话 user/message 保存，审查不生成验证通过或写入批准。
+- 返回前复核所有候选锚点（包括没有发现问题的审查），外部变化标 stale；结果保存 candidate digest 和锚点。新增只读 `review_status` 有界查询当前任务审查的版本有效性，主 Agent 后续编辑后旧 review 显示 stale。它是原提案单一委派工具之外的读取入口，不创建子 Agent。
+- build 与 reviewer/委派/恢复 9/9；完整 suite 552 tests / 522 pass / 0 fail / 30 平台 skipped，58.1 秒；syntax 219 文件、Biome 243 文件无诊断。验证固定 diff、根再次编辑失效、外部变化与空 findings 失效、review 不能替代检查。provider 请求 0。

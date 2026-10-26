@@ -9,6 +9,7 @@ const builtins: Record<string, ToolDefinition['effect']> = {
   read_history: 'read', read_tool_result: 'read', project_context: 'read',
   memory_search: 'read', memory_get: 'read', memory_propose: 'write',
   delegate_tasks: 'delegate',
+  review_status: 'read',
   write_file: 'write', edit_file: 'write', bash: 'exec',
 }
 
