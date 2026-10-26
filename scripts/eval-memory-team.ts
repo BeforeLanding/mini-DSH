@@ -43,7 +43,7 @@ async function data() {
 export async function prepareMemoryTeamManifests(): Promise<MemoryTeamManifest[]> {
   const shared = await data(), source = { commit: git(['rev-parse', 'HEAD']), codeDigest: await codeDigest() }
   return MEMORY_TEAM_ARMS.map(arm => {
-    const body: Omit<MemoryTeamManifest, 'digest'> = { version: 1, protocol: 'memory-team-development-v1', phase: 'development', arm, source, model: 'deepseek/deepseek-v4-flash', taskGroupPolicy: { ...groupPolicy() }, runBudget: { ...CLI_BUDGET, contextWindowTokens: 1_000_000 }, memory: arm.endsWith('memory-on'), team: arm.startsWith('team-'), postCompactionPrune: false, ...shared, preparationAccessibleToAll: true, paidExecutionAuthorized: false, amountCapUsd: null }
+    const body: Omit<MemoryTeamManifest, 'digest'> = { version: 1, protocol: 'memory-team-development-v1', phase: 'development', arm, source, model: 'deepseek/deepseek-v4-flash', taskGroupPolicy: { ...groupPolicy() }, runBudget: { ...CLI_BUDGET, contextWindowTokens: 1_000_000, postCompactionPrune: false }, memory: arm.endsWith('memory-on'), team: arm.startsWith('team-'), postCompactionPrune: false, ...shared, preparationAccessibleToAll: true, paidExecutionAuthorized: false, amountCapUsd: null }
     return { ...body, digest: manifestDigest(body) }
   })
 }
@@ -60,6 +60,7 @@ export async function validateMemoryTeamManifests(manifests: MemoryTeamManifest[
       if (manifest.version !== 1 || manifest.protocol !== 'memory-team-development-v1' || manifest.phase !== 'development' || manifest.digest !== manifestDigest(manifest) || !sha256(manifest.source.codeDigest) || !/^[a-f0-9]{40}$/.test(manifest.source.commit) || manifest.source.codeDigest !== currentCodeDigest || manifest.memory !== manifest.arm.endsWith('memory-on') || manifest.team !== manifest.arm.startsWith('team-') || manifest.postCompactionPrune !== false || manifest.paidExecutionAuthorized !== false || manifest.amountCapUsd !== null || manifest.preparationAccessibleToAll !== true || manifest.experienceDigest !== shared.experienceDigest || manifest.workflowDigest !== shared.workflowDigest || JSON.stringify(manifest.workflowIds) !== JSON.stringify(shared.workflowIds)) throw new Error(`invalid, stale or paid manifest: ${manifest.arm}`)
       groupPolicy(manifest.taskGroupPolicy)
       resolveBudget(manifest.runBudget)
+      if (manifest.runBudget.postCompactionPrune !== false) throw new Error('development background must explicitly disable postCompactionPrune')
       if (!['deepseek/deepseek-v4-flash', 'deepseek/deepseek-v4-pro'].includes(manifest.model)) throw new Error('development model must match the registered production adapter')
       const harness = await createHarness({ workspace: temporary, profile: 'coding', runtimeClockMode: 'frozen', contextLayout: 'live', taskGroupPolicy: manifest.taskGroupPolicy,
         ...(manifest.memory ? { memory: { mode: 'recall', directory: path.join(temporary, 'memory'), readOnly: true } as const } : {}),

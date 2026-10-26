@@ -1,5 +1,27 @@
 # 改动与验收证据
 
+### NX-51 24 条 prune 开/关结果：摘要下降假设未获支持（2026-10-25）
+
+两臂各 12/12 执行，`incomplete=false`；manifest 除 `sourceBaseCommit`、`gitCommit` 与 `src/**` 外逐字相同，均通过 `--validate-only`。实际 usage 估价 on `$1.734961`、off `$1.352154`，合计 `$3.087115`，低于 $44 上限。
+
+读数：摘要次数 3→**7**、摘要耗时 43,249→**105,394 ms（+143.7%）**、主动耗时 967,446→**1,332,173 ms（+37.7%）**、输出 token 127,305→**188,915（+48.4%）**、provider token 4,115,550→**5,224,805（+27.0%）**；可靠完成 11→**10**（新增失败为 R04/1 的 `token_budget`），产物验收 12→12。`context/prune` 在 R04/0、R04/1、T04/0、T04/1 共 5 条，行为确实触发，但没有带来摘要下降。逐题差值在重复间方向不一致（U02/0 摘要 1→0，U02/1 0→1；B03、F02 两重复方向相反），24 条不足以区分采样方差与机制效应。
+
+结论：离线反事实（T04/0 后两次摘要本可避免）**没有在真实轨迹上复现**；按预注册规则不把“摘要后裁剪”作为默认行为推广。完整表、逐题配对与复现见 [NX-51-PRUNE-RESULT](NX-51-PRUNE-RESULT.md)。
+
+决策回填：新增 `postCompactionPrune` 策略开关并**默认关闭**；两条持久化回归测试显式开启，另增默认关闭用例，默认投影回到 main。验收：隔离完整 `pnpm test` **526/526，0 fail，0 skipped**；定向 `budget`／`context`／`compaction-recovery`／`nx38-covenant` 28/28；`pnpm check` 197 files、`pnpm lint` 224 files 0 诊断、`pnpm fixtures:check` 25 项 `expected=true`、`pnpm eval:offline` 12/12 accepted、`pnpm bench:components` 三项比较全过。真实模型请求 0（本段只回填开关与测试）。
+
+### NX-51 变慢任务离线诊断、摘要后裁剪与持久化（2026-10-25）
+
+只读复用 NX-50 两批 24 个 episode 的 `events.jsonl`，把墙钟拆成模型等待、摘要、工具与投影开销。新增 `scripts/analyze-eval-timing.mjs` 与 `docs/samples/nx51-timing.json`（不含 prompt/模型正文/工具正文）；口径与逐题归因见 [NX-51-TIMING-DIAGNOSIS](NX-51-TIMING-DIAGNOSIS.md)。
+
+读数：旧/新主动耗时 899,287→959,303 ms（+60,016），其中主请求模型等待 775,096→783,688（+8,592）、摘要 38,479→83,483（**+45,004**）、工具 84,001→90,072（+6,071）、投影/循环约 1.7～2.1 s。输入 token 3,937,718→3,647,881，输出 token **127,701→143,322（+12.2%）**；逐 episode 墙钟与输出 token 的 R²=0.983，>10 s 请求 9→19 次。F02 的 +23.8 s 集中在 repeat 1（输出 2.2k→6.7k，含一次 3.6 s 命令冷启动）；T04 的 +82.5 s 中 44.4 s 是摘要次数 1→3；R04 两 repeat 方向相反（+88.3 s / -51.9 s）。`read_file` 与 `task_report` 合计不足 0.4 s，报告正文会进入上下文但直接墙钟可忽略。
+
+根因：`project()` 只在输入超过硬目标 65,536 时裁剪，而压力线是 52,428；压力摘要只压当前 task，已结束旧任务仍占 35,765～41,127 token，摘要后几次请求又越线。修改 `ContextBudgetRuntime.project()` 增加可选 `pruneTargetTokens`，主循环在压力摘要 applied 后按 `postCompactionTargetRatio × compactionBudget` 重投影并裁掉已结束旧任务。摘要仍先发生，保留 NX-38 covenant 的“模型摘要可带下旧知识”路径；单任务、显式 `/compact`、摘要失败/拒绝不改变。
+
+**持久化**：裁剪决定写成 `context/prune` 事件（`targetTokens`、`removedTaskIds`、可选 `summarySeq`），`project()` 读取日志里全部 prune 的并集并在后续轮次、`/continue` 与重启恢复中继续排除。原始事件一条不删，`read_history` 仍按 seq 回读旧阶段；`context/prune` 也计入崩溃折叠，决定先于请求额度检查落盘。没有 `context/prune` 的旧日志行为不变。
+
+验收：新增 `compaction-trigger` 两条回归——目标案例确实裁掉旧任务；后续轮次、`/continue`、重启恢复都不带回它们，且 `read_history` 仍读得到旧阶段原文。原“不可约前缀”与“溢出兜底”用例改用当前 task 自身构造（旧任务在摘要后可裁，不再构成不可约前缀），语义不变。定向 `budget`／`context`／`compaction-recovery`／`nx38-covenant` 28/28（covenant 4/4）；`MINI_DSH_V2_RUNTIME='D:\Agent\tmp\nx42-runtime\unpack' pnpm test` **525/525，0 fail，0 skipped**；`pnpm check` 197 files，`pnpm lint` 223 files 0 诊断；`pnpm fixtures:check` 25 项 `expected=true`、`pnpm eval:offline` 12/12 completed/accepted、`pnpm bench:components` 三项比较全过，均 exit 0。**真实 provider 请求 0**；真实收益与三项组件归因需按 [NX-51 消融设计](NX-51-COMPONENT-ABLATION.md) 另行授权。
+
 ### NX-50 PR5 组件版本对照：两批执行与门槛结果（2026-10-25）
 
 旧版 manifest `6d50a359…`（被测 `74f8e89`，评测 `c17145a`）与优化版 `9746c90f…`（被测 `0b24b32`，评测 `adabea5`）分别在干净工作树冻结并通过 `--validate-only`；两批各 12/12 执行、无 missing/invalid、provider usage 全覆盖、estimated=0。预注册顺序先优化版（03:52–04:09 UTC）后旧版（05:55–06:10 UTC），中间等待旧版单独授权。

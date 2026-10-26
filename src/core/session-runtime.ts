@@ -140,6 +140,9 @@ export class SessionRuntime {
                 state.removedTaskIds = [...new Set([...state.removedTaskIds, ...event.data.removedTaskIds])]
                 state.estimatedInputTokens = event.data.estimatedInputTokens
             }
+            // 裁剪决定本身也计入折叠：崩溃可能停在 prune 与随后的 projection 之间，
+            // 此时 run 的 removedTaskIds 仍应如实包含这次决定。
+            if (event.type === 'context/prune') state.removedTaskIds = [...new Set([...state.removedTaskIds, ...event.data.removedTaskIds])]
             if (event.type === 'model/start') state.counters.modelRequests++
             if (event.type === 'model/rejected') state.counters.modelRequests--
             if (event.type === 'tool/start') state.counters.toolCalls++

@@ -10,7 +10,7 @@ function seal(manifest: MemoryTeamManifest) { const { digest: _digest, ...body }
 test('memory/team development protocol validates four actual Harness configurations with common data and budget and no model dispatch', async () => {
   const manifests = await prepareMemoryTeamManifests(), report = await validateMemoryTeamManifests(manifests)
   assert.equal(report.valid, true); assert.equal(report.providerCalls, 0); assert.equal(report.plannedDevelopmentEpisodes, 16)
-  assert.ok(manifests.every(manifest => manifest.postCompactionPrune === false && !manifest.paidExecutionAuthorized && manifest.amountCapUsd === null))
+  assert.ok(manifests.every(manifest => manifest.postCompactionPrune === false && manifest.runBudget.postCompactionPrune === false && !manifest.paidExecutionAuthorized && manifest.amountCapUsd === null))
   assert.deepEqual(manifests.map(manifest => [manifest.memory, manifest.team]), [[false, false], [true, false], [false, true], [true, true]])
 })
 test('development protocol rejects mismatched budgets, forged/stale provenance, duplicated arms and paid or formal claims', async () => {

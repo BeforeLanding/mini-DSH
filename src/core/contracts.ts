@@ -105,6 +105,10 @@ export interface EventData {
   'context/summary-start': { trigger: 'pressure' | 'context-overflow' | 'explicit'; budgetTokens: number; projectedTokens: number; plannedStart: number; plannedEnd: number; plannedNodes: number }
   'context/summary-end': { startSeq: number; outcome: { kind: 'applied' } | { kind: 'declined'; reason: 'summary-failed' | 'summary-empty' | 'summary-invalid' | 'summary-not-smaller' | 'turn-started' | 'plan-stale' | 'agent-gone' | 'cancelled' | 'unclosed' } }
   'context/pressure-suppressed': { reason: 'above-target' | 'insufficient-reduction'; beforeTokens: number; afterTokens: number; targetTokens: number }
+  // NX-51：一次压力摘要 applied 之后，按压缩后目标线裁掉的“已结束且非当前”任务。
+  // 这是**投影决定**，不是删除：原始事件仍在日志里，read_history 仍按 seq 读得回来。
+  // 写下之后，后续轮次、/continue 与重启恢复的投影都必须继续排除这些任务。
+  'context/prune': { trigger: 'pressure'; summarySeq?: number; targetTokens: number; removedTaskIds: string[] }
   'context/summary': { startSeq: number; trigger: 'pressure' | 'context-overflow' | 'explicit'; budgetTokens: number; projectedTokens: number; shadowedSeqs: number[]; shadowedTokens: number; summaryTokens: number; retainedNodes: number; summary: string; frame: string }
   'model/fragment': { requestId: string; content: string; reasoningContent: string }
   'model/end': { requestId: string; complete: boolean; finishReason?: string }

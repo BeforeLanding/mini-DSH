@@ -90,3 +90,9 @@
 ### EV-02b 配置语义校验
 
 - 四臂除共同预算相等之外，另复用 resolveBudget 拒绝负额度/非法策略，并限制为当前已注册的生产模型 id。定向 eval 3/3 与 Biome 2 文件无诊断，未调用模型。
+
+## 集成已合并的 PR #6（2026-10-26）
+
+- 开发期间 origin/main 前进至 `a5d9191`（PR #6），在本功能分支 merge 保留双方提交历史；仅 PROGRESS 与 DECISIONS 文档发生冲突，保留 NX-51 负结果原文和新功能状态，重新核对源代码锚点。未修改对方真实结果、四臂准备或比较器。
+- `postCompactionPrune` 保持 opt-in，默认关闭回归通过；新 memory/team 四清单的 runBudget 也显式 false，不能用顶层 false 掩盖策略 true。旧 `386ad17` 清单保留为历史，合并后按新源码重新冻结。
+- 合并后 build、compaction/default-off/恢复/预算/文档定向 31/31，完整 558 tests / 528 pass / 0 fail / 30 平台 skipped，19.8 秒；Biome 251 文件无诊断。未调用真实 provider。
