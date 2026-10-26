@@ -7,6 +7,7 @@ export const toolPolicyVersion = 'r02b-v1'
 const builtins: Record<string, ToolDefinition['effect']> = {
   request_trace: 'read', task_report: 'read', read_file: 'read', task_changes: 'read', glob: 'read', grep: 'read',
   read_history: 'read', read_tool_result: 'read', project_context: 'read',
+  memory_search: 'read', memory_get: 'read', memory_propose: 'write',
   write_file: 'write', edit_file: 'write', bash: 'exec',
 }
 

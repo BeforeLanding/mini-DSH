@@ -18,9 +18,16 @@ import * as files from '../tools/files.js'
 import * as bash from '../tools/bash.js'
 import { assertMcpRuntime, secureStdioEntry } from './mcp-config.js'
 import type { McpServerEntry } from './mcp-config.js'
+import os from 'node:os'
+import path from 'node:path'
+import { MemoryStore } from '../core/memory-store.js'
+import { MemoryRuntime } from '../core/memory-runtime.js'
+import type { MemoryRecallLimits } from '../core/memory-retriever.js'
+import * as memoryPlugin from '../plugins/memory.js'
 
 export interface HarnessAdapter { provider: string; model: string; chat: Adapter['chat']; capabilities?: Adapter['capabilities'] }
 export interface HarnessConfig {
+  memory?: { mode: 'off' | 'recall' | 'assist'; directory?: string; projectId?: string; readOnly?: boolean; limits?: Partial<MemoryRecallLimits> }
   workspace: string
   profile: 'general' | 'coding'
   adapter?: HarnessAdapter
@@ -41,6 +48,8 @@ export interface HarnessConfig {
 
 export async function createHarness(config: HarnessConfig) {
   const root = new Context()
+  let memory: memoryPlugin.MemoryController | undefined
+  let memoryStore: MemoryStore | undefined
   try {
     for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
     const runtimeClockMode = config.runtimeClockMode ?? config.contextLayout ?? 'live'
@@ -51,6 +60,12 @@ export async function createHarness(config: HarnessConfig) {
     if (config.projectContext !== false && config.profile === 'coding') await root.plugin(projectContext, { directory: config.projectDirectory, ...(config.contextLayout ? { layout: config.contextLayout } : {}) })
     await root.plugin(files, { workspace: config.workspace })
     await root.plugin(bash, { workspace: config.workspace, ...(config.commandRunner ? { commandRunner: config.commandRunner } : {}) })
+    if (config.memory && config.memory.mode !== 'off') {
+      if (!['recall', 'assist'].includes(config.memory.mode)) throw new Error('invalid memory mode')
+      memoryStore = await MemoryStore.open({ directory: config.memory.directory ?? path.join(os.homedir(), '.mini-dsh', 'memory'), workspace: config.workspace, projectId: config.memory.projectId, readOnly: config.memory.readOnly })
+      memory = new memoryPlugin.MemoryController(new MemoryRuntime(memoryStore, config.memory.limits))
+      await root.plugin(memoryPlugin, { controller: memory, mode: config.memory.mode })
+    }
     // MCP 工具经 ToolRuntime 中央授权：插件不声明 effect/origin，因此按 unknown 默认询问；
     // failOnStartupError 固定为 false，连接失败只丢该 server 的工具，不阻断主循环。
     if (config.mcpServers?.length) { assertMcpRuntime(); await root.plugin(externalPlugins, { entries: config.mcpServers.map(secureStdioEntry) }) }
@@ -60,10 +75,12 @@ export async function createHarness(config: HarnessConfig) {
       tools: schemas.map(schema => schema.function.name).sort(),
       toolSchemaSha256: createHash('sha256').update(JSON.stringify(schemas.slice().sort((a, b) => a.function.name.localeCompare(b.function.name)))).digest('hex'),
       policy: { profile: config.profile, contextLayout: config.contextLayout ?? 'live', runtimeClockMode, projectContext: config.projectContext !== false && config.profile === 'coding', toolOutput: config.toolOutput !== false, toolOutputMaxPreviewBytes: config.toolOutputMaxPreviewBytes ?? null, legacyNoReadHistory: config.legacyNoReadHistory === true, autoApprove: config.autoApprove ?? false, isolatedCommandRunner: config.commandRunner !== undefined, mcpServers: config.mcpServers?.map(entry => entry.config.serverName) ?? [] },
+      ...(memory ? { memory: { mode: config.memory!.mode, projectId: memory.runtime.store.projectId, limits: memory.runtime.limits } } : {}),
     }
-    return { root, capabilityManifest, dispose: () => root.fiber.dispose() }
+    return { root, capabilityManifest, memory, dispose: async () => { try { await root.fiber.dispose() } finally { memory?.dispose(); await memoryStore?.close() } } }
   } catch (error) {
     await root.fiber.dispose()
+    memory?.dispose(); await memoryStore?.close()
     throw error
   }
 }

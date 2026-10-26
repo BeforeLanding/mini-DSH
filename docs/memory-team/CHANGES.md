@@ -19,3 +19,10 @@
 - 为限定最坏 I/O，先在有界记录集合内进行词法排序，最多检查 64 个候选的来源与锚点；用 `candidateLimitReached` 明示未检查完的情况。这是对原提案“全部来源验证后排序”的有界实施修订。
 - 最小来源只由当前任务已确认的允许事件生成；不借用可见历史解析 reset 前的记录。持久化 receipt 优先于今天的文件状态，重复 opId 仍校验原命令，不因丢失会话 receipt 重复新增。
 - `node scripts/build.js`、memory-store/recall 9/9、定向 Biome 3 文件无诊断；模型调用 0。覆盖候选过滤、任务内视图不刷新、撤销/期限/文件变化/来源损坏、中文和标识符召回、有界结果、reset 后来源可达、未知及超大来源拒绝。
+
+## MM-03（2026-10-26）
+
+- 生产/评测共用 createHarness 可选安装 memory 插件；默认不安装、不改变旧工具或提示。`MINI_DSH_MEMORY=recall|assist`、目录与显式项目绑定接入生产配置，`--show-config` 用只读存储，不创建目录/锁。
+- `memory_search/get/propose`、每 run 最多三条提案、用户专属 `/memory review/approve/forget`；批准绑定 revision 与完整记录 digest，并再次复核来源。源输入可只提供 seq，由宿主绑定本任务 session/task/event ids；模型不需要猜不可见的 event UUID。已知凭证形状与敏感锚点拒绝是窄过滤，不能宣称完整 DLP。
+- `memory/view/query/proposal-receipt` 加入契约、运行时校验、原日志读取器与 inspect 词表；恢复使用原版本快照，不重新检索历史 tool/result。receipt 先落盘、跨日志 opId 对账；CLI 退出与 Harness dispose 释放记忆写锁。
+- 完整离线回归：535 tests / 505 pass / 0 fail / 30 平台条件 skipped，34.5 秒（正常权限）。`node scripts/build.js`、`node scripts/check-syntax.js`、全库 Biome 230 文件无诊断；memory 集成/召回/存储 12/12。`demo-memory` 验候选不可召回、新 session 批准版本可召回、文件变更后拒绝；provider 请求 0。尚无真实模型效果证据。

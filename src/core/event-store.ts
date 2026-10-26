@@ -1,9 +1,10 @@
 import { validatePayload } from './event-validation.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import type { FileHandle } from 'node:fs/promises'
 import type { SessionEvent } from './contracts.js'
+const createMemoryViewDigest = (versions: { id: string; revision: number }[]) => createHash('sha256').update(JSON.stringify(versions.map(({ id, revision }) => [id, revision]))).digest('hex')
 export interface EventStore {
   append(event: SessionEvent): Promise<void>
   read(): Promise<SessionEvent[]>
@@ -167,6 +168,7 @@ export function createLogRecordParser(sessionId: string): (line: string) => Sess
   const retryTargets = new Map<string, string>()
   const changes = new Map<string, { taskId: string; runId: string; planned: boolean }>(), results = new Set<string>()
   const snapshots = new Set<string>()
+  const memoryViews = new Map<string, string>(), memoryReceipts = new Set<string>()
   const verifications = new Map<string, { taskId: string; runId: string; data: import('./task-verification.js').VerificationStart }>(), verificationResults = new Set<string>()
   return (line: string) => {
     let event: unknown
@@ -175,6 +177,20 @@ export function createLogRecordParser(sessionId: string): (line: string) => Sess
     if ((event.taskId !== undefined && typeof event.taskId !== 'string') || (event.runId !== undefined && typeof event.runId !== 'string')) throw new Error('invalid event scope')
     validatePayload(event.type, event.data)
     const parsed = event as unknown as SessionEvent
+    if (parsed.type === 'memory/view' || parsed.type === 'memory/query' || parsed.type === 'memory/proposal-receipt') {
+      const run = parsed.runId ? runs.get(parsed.runId) : undefined
+      if (!run || run.ended || run.taskId !== parsed.taskId) throw new Error('invalid memory event scope')
+      const key = `${parsed.taskId}:${parsed.data.projectId}`
+      if (parsed.type === 'memory/view') {
+        if (memoryViews.has(key) || new Set(parsed.data.versions.map(item => item.id)).size !== parsed.data.versions.length || parsed.data.digest !== createMemoryViewDigest(parsed.data.versions)) throw new Error('duplicate or invalid memory view')
+        memoryViews.set(key, parsed.data.digest)
+      }
+      if (parsed.type === 'memory/query' && memoryViews.get(key) !== parsed.data.viewDigest) throw new Error('memory query view mismatch')
+      if (parsed.type === 'memory/proposal-receipt') {
+        if (memoryReceipts.has(parsed.data.opId)) throw new Error('duplicate memory receipt')
+        memoryReceipts.add(parsed.data.opId)
+      }
+    }
     if (parsed.type === 'session/reset') snapshots.clear()
     if (parsed.type === 'context/snapshot') {
       if (parsed.taskId || parsed.runId || snapshots.has(parsed.data.name)) throw new Error('duplicate or scoped context snapshot')

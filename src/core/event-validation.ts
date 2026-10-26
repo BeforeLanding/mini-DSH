@@ -1,6 +1,7 @@
 import { resolveBudget } from './budget.js'
 import { fingerprint } from './file-edit.js'
 import { safeRunMessages } from './model-error.js'
+import { memoryId, sha256 } from './memory-contracts.js'
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const string = (v: unknown) => typeof v === 'string'
 const integer = (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0
@@ -34,6 +35,9 @@ export function validUsage(v: unknown): boolean {
 export function validatePayload(type: string, data: Record<string, unknown>) {
   let valid = false
   switch (type) {
+    case 'memory/view': valid = sha256(data.projectId) && sha256(data.digest) && Array.isArray(data.versions) && data.versions.length <= 2000 && data.versions.every(item => record(item) && memoryId(item.id) && integer(item.revision) && Number(item.revision) > 0); break
+    case 'memory/query': valid = sha256(data.projectId) && sha256(data.viewDigest) && sha256(data.queryDigest) && Array.isArray(data.items) && data.items.length <= 2000 && data.items.every(item => record(item) && memoryId(item.id) && integer(item.revision) && Number(item.revision) > 0) && record(data.filtered) && Object.entries(data.filtered).every(([key, count]) => ['not-visible', 'not-approved', 'expired', 'source-unavailable', 'anchor-changed', 'capacity'].includes(key) && integer(count)); break
+    case 'memory/proposal-receipt': valid = sha256(data.projectId) && memoryId(data.opId) && memoryId(data.id) && integer(data.revision) && Number(data.revision) > 0 && sha256(data.digest); break
     case 'verification/start': valid = string(data.verificationId) && string(data.command) && !!data.command.trim() && string(data.cwd) && optionalString(data.toolCallId) && validVerificationFiles(data.files, false); break
     case 'verification/result': valid = string(data.verificationId) && validCommand(data.commandResult) && validVerificationFiles(data.files, true); break
     case 'file/baseline': valid = filePath(data.path) && validSnapshot(data.snapshot); break

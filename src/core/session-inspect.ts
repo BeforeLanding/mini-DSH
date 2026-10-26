@@ -25,6 +25,7 @@ export interface InspectReport {
 type Request = { kind: 'main' | 'summary'; rejected: boolean; usage: boolean; estimated: boolean }
 const knownTypes = new Set(['verification/start', 'verification/result', 'file/baseline', 'file/observed', 'file/change', 'file/change-result', 'session/start', 'session/config', 'session/reset', 'context/snapshot', 'context/project-version', 'user/message', 'assistant/message', 'assistant/tool_calls', 'tool/result', 'run/start', 'run/error', 'run/finish', 'model/start', 'model/retry', 'model/rejected', 'context/projection', 'context/summary-start', 'context/summary-end', 'context/pressure-suppressed', 'context/summary', 'model/fragment', 'model/end', 'model/usage', 'tool/start'])
 const safeToolName = (name: string | undefined) => name && /^[\w.:-]{1,80}$/.test(name) ? name : undefined
+for (const type of ['memory/view', 'memory/query', 'memory/proposal-receipt']) knownTypes.add(type)
 
 function warning(error: unknown, line: number, byteOffset: number): InspectWarning {
   const message = error instanceof Error ? error.message : String(error)

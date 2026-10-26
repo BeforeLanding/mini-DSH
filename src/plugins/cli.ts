@@ -16,6 +16,7 @@ import type { requestTrace } from '../core/task-trace.js'
 export const name = 'mini-cli'
 export const inject = ['sessions', 'agents', 'agentLoop', 'tools', 'systemPrompt', 'llm', 'sandbox']
 export interface CliConfig {
+  memory?: import('./memory.js').MemoryController
   model?: string; input?: Readable & { isTTY?: boolean }; output?: Writable & { isTTY?: boolean }
   budget?: BudgetPolicy; sessionDirectory?: string | false; resumeSessionId?: string
   maxChangeOutputBytes?: number
@@ -205,6 +206,10 @@ export async function apply(ctx: Context, config: CliConfig = {}) {
       if (!text.startsWith('/')) { await runInput(text); return }
       const [command, ...parts] = text.split(/\s+/)
       switch (command) {
+        case '/memory': {
+          if (!config.memory) throw new Error('memory is disabled; configure MINI_DSH_MEMORY=assist or recall')
+          print(JSON.stringify(await config.memory.command(parts), null, 2)); break
+        }
         case '/tools': print(ctx.tools.list().map(tool => `${tool.name}: ${tool.description ?? ''}`).join('\n') || '(no tools)'); break
         case '/models': print(ctx.llm.models().join('\n')); break
         case '/model': {

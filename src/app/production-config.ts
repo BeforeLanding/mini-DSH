@@ -16,6 +16,7 @@ export function productionHarnessConfig(env: Environment = process.env, cwd = pr
     toolOutputMaxPreviewBytes = Number(preview)
   }
   return {
+    ...memoryConfig(env),
     workspace: env.MINI_DSH_WORKSPACE ?? cwd,
     profile,
     contextLayout,
@@ -23,4 +24,11 @@ export function productionHarnessConfig(env: Environment = process.env, cwd = pr
     ...(env.MINI_DSH_PROJECT_DIRECTORY === undefined ? {} : { projectDirectory: env.MINI_DSH_PROJECT_DIRECTORY }),
     ...(toolOutputMaxPreviewBytes === undefined ? {} : { toolOutputMaxPreviewBytes }),
   }
+}
+
+function memoryConfig(env: Environment): Pick<HarnessConfig, 'memory'> {
+  const mode = env.MINI_DSH_MEMORY ?? 'off'
+  if (!['off', 'recall', 'assist'].includes(mode)) throw new Error('MINI_DSH_MEMORY must be off, recall or assist')
+  if (mode === 'off') return {}
+  return { memory: { mode: mode as 'recall' | 'assist', ...(env.MINI_DSH_MEMORY_DIR ? { directory: env.MINI_DSH_MEMORY_DIR } : {}), ...(env.MINI_DSH_MEMORY_PROJECT_ID ? { projectId: env.MINI_DSH_MEMORY_PROJECT_ID } : {}) } }
 }

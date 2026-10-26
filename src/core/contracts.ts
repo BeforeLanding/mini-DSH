@@ -61,6 +61,9 @@ export interface PromptEntry { name: string; order?: number; text: string | ((co
 export interface ApprovalRequest { tool: string; summary: string; signal?: AbortSignal; approval?: <T>(work: () => Promise<T>) => Promise<T> }
 export interface SandboxConfig { workspace?: string; autoApprove?: boolean }
 export interface EventData {
+  'memory/view': import('./memory-runtime.js').MemoryViewSnapshot
+  'memory/query': { projectId: string; viewDigest: string; queryDigest: string; items: { id: string; revision: number }[]; filtered: Record<string, number> }
+  'memory/proposal-receipt': { projectId: string; opId: string; id: string; revision: number; digest: string }
   'verification/start': import('./task-verification.js').VerificationStart
   'verification/result': import('./task-verification.js').VerificationResult
   'file/baseline': { path: string; snapshot: FileSnapshot }

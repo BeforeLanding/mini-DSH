@@ -105,6 +105,8 @@ pnpm start
 
 ## 实现入口
 
+项目记忆默认关闭，设 `MINI_DSH_MEMORY=assist` 可启用候选提案与按需检索，`recall` 只给模型检索工具。存储默认在 `~/.mini-dsh/memory/<projectId>/`；projectId 按真实工作区路径隔离，跨 worktree 需显式设置 `MINI_DSH_MEMORY_PROJECT_ID`。用 `/memory review [offset]` 检视来源、有效性、revision 和 digest，再用 `/memory approve <id> <revision> <digest>` 批准；模型没有批准工具。`/memory forget <id> <revision>` 撤销未来召回资格，已进入上下文和 JSONL 的内容仍保留。文件变化、来源不可达、过期和撤销都会拒绝回读。`pnpm demo:memory` 为零模型机制演示。实现状态和只读 Multi-Agent 后续任务见 [专题任务](docs/memory-team/TASKS.md)。
+
 - [src/core/agent-loop-runtime.ts](src/core/agent-loop-runtime.ts)：请求投影、主动压缩和预算停止；[src/core/compaction-runtime.ts](src/core/compaction-runtime.ts)：摘要调用与结算。
 - [src/core/session-runtime.ts](src/core/session-runtime.ts) 与 [src/core/event-store.ts](src/core/event-store.ts)：JSONL 事件、恢复和统计重建。
 - [src/tools/files.ts](src/tools/files.ts)、[src/tools/bash.ts](src/tools/bash.ts)：有界读写、命令和验证证据；[src/plugins/tool-results.ts](src/plugins/tool-results.ts)、[src/plugins/read-history.ts](src/plugins/read-history.ts)：结果与历史回读。
