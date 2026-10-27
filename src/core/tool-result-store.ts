@@ -21,13 +21,6 @@ export function utf8Suffix(bytes: Buffer, maxBytes: number): Buffer {
   return bytes.subarray(start)
 }
 
-/** Head and tail share one payload budget, even when capture windows overlap. */
-export function previewWindow(bytes: Buffer, tailSource: Buffer, totalBytes: number, limit: number, tailLimit: number) {
-  const tail = utf8Suffix(tailSource, Math.min(tailLimit, limit, totalBytes))
-  const head = utf8Prefix(bytes, Math.min(limit - tail.length, totalBytes - tail.length))
-  return { head, tail, omittedBytes: totalBytes - head.length - tail.length, resumeOffset: head.length }
-}
-
 export interface ResultStoreConfig { directory: string; maxCaptureBytes?: number; maxStoreBytes?: number; maxFiles?: number; maxReadBytes?: number }
 export interface AvailableRange { start: number; end: number }
 

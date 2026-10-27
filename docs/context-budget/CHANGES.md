@@ -4550,3 +4550,8 @@ README 增加无 key 的 inspect 文本、`--json`、`--trace` 示例和退出�
 
 最终检查：正常权限 `pnpm check`（syntax 158 文件）、`pnpm test`（435 项、405 通过、30 跳过、0 失败）、`pnpm lint`（172 文件、0 诊断），另核对 `git diff --check`。tarball 仅作本地安装验收，未发布 npm；只在 Windows `.cmd` 路径验证安装，不推断其他平台结果。
 
+
+
+### CE-2 no-preview 源码变体（2026-10-27）
+
+基于 main `0b8b973`，只回退对应组件与适配测试；`pnpm check` 和定向 tool-results, component-benchmark 测试通过。真实 provider 请求 0。完整冻结证据由收口 PR 统一记录。
