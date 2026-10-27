@@ -53,6 +53,7 @@ export class MemoryStore {
     if (!stat) return
     if (stat.size > this.limits.maxJournalBytes) throw new Error('memory journal limit exceeded')
     const bytes = await fs.readFile(target)
+    if (bytes.length > this.limits.maxJournalBytes) throw new Error('memory journal limit exceeded')
     if (bytes.length && bytes.at(-1) !== 10) throw new Error('incomplete memory JSONL tail; preserve and quarantine before opening')
     const source = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
     for (const line of source.split('\n').slice(0, -1)) {
@@ -89,9 +90,23 @@ export class MemoryStore {
     for (const record of event.records) this.#records.set(record.id, structuredClone(record))
     this.#ops.set(event.opId, structuredClone(event)); this.#seq = event.seq
   }
-  async records() { await this.#queue; return structuredClone([...this.#records.values()]) }
-  async get(id: string) { await this.#queue; return structuredClone(this.#records.get(id)) }
-  async receipt(opId: string) { await this.#queue; return structuredClone(this.#ops.get(opId)) }
+  #readSnapshot<T>(read: () => T): Promise<T> {
+    const operation = this.#queue.then(async () => {
+      if (this.#failure) throw new Error('memory storage failed; close and inspect before reading', { cause: this.#failure })
+      if (this.readOnly) {
+        // Independent readers must see revocation by the writer. Swap only a fully validated journal.
+        const latest = new MemoryStore(this.directory, this.workspace, this.projectId, this.limits)
+        await latest.#load()
+        this.#records = latest.#records; this.#ops = latest.#ops; this.#seq = latest.#seq; this.#bytes = latest.#bytes
+      }
+      return structuredClone(read())
+    })
+    this.#queue = operation.then(() => {}, () => {})
+    return operation
+  }
+  records() { return this.#readSnapshot(() => [...this.#records.values()]) }
+  get(id: string) { return this.#readSnapshot(() => this.#records.get(id)) }
+  receipt(opId: string) { return this.#readSnapshot(() => this.#ops.get(opId)) }
   #write(opId: string, action: MemoryEvent['action'], command: unknown, build: () => MemoryRecord[]): Promise<MemoryRecord[]> {
     if (this.#closed || this.readOnly) return Promise.reject(new Error('memory store is closed or read-only'))
     const digest = memoryHash(JSON.stringify(command))

@@ -1,5 +1,11 @@
 # 项目记忆与只读协作变更证据
 
+## REV-04：只读会话重查外部撤销
+
+- P1：writer 与 read-only reader 同时打开同项目时，reader 原来永久使用启动时 Map；writer 撤销后旧 MemoryView 仍返回已撤销正文。新增回归在修复前稳定复现。
+- 只读 records/get/receipt 串行重读有界事实日志，在临时状态中完整校验后整体替换；损坏或未写完日志拒绝本次读取，不回退陈旧已批准内容。writer 持久化已失败时读取也拒绝。索引不参与信任，冻结视图仍不接纳后来批准的记录。
+- build、记忆存储/召回/集成及委派 16/16、定向 Biome 与 diff 检查通过；覆盖外部撤销、后续新批准、坏尾部失败与修复日志后再读取，无真实 provider 请求。
+
 ## REV-03：提案幂等身份包含工具批次
 
 - P2：provider 的 toolCallId 仅在单次响应内唯一，旧身份只含 session/task/run/toolCallId，跨响应复用 ID 的新提案会被当作旧调用或直接拒绝；失败回归已复现。

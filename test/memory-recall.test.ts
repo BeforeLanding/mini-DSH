@@ -39,6 +39,26 @@ test('recall is approval-only, project-scoped and frozen per view; new views see
   await assert.rejects(h.runtime.get(current, candidate.id), /unknown/)
 })
 
+test('an already-open read-only view observes external revocation and refuses damaged journal refreshes', async t => {
+  const h = await setup(t), approved = await h.add('good')
+  const reader = await MemoryStore.open({ directory: path.join(h.directory, 'memory'), workspace: h.workspace, readOnly: true })
+  try {
+    const runtime = new MemoryRuntime(reader), view = await runtime.createView()
+    assert.equal((await runtime.get(view, approved.id)).items.length, 1)
+    await h.store.revoke('external-revoke', approved.id, approved.revision)
+    assert.equal((await runtime.get(view, approved.id)).items.length, 0, 'revocation must be checked against the current journal')
+    const newRecord = await h.add('new', { ...h.input, key: 'new-entry' })
+    assert.equal((await runtime.get(view, newRecord.id)).items.length, 0, 'refresh must preserve frozen view membership')
+    const next = await runtime.createView()
+    assert.equal((await runtime.get(next, newRecord.id)).items.length, 1)
+    const journal = path.join(h.store.directory, 'events.jsonl'), bytes = await fs.readFile(journal)
+    await fs.appendFile(journal, '{"partial":')
+    await assert.rejects(runtime.get(next, newRecord.id), /incomplete/)
+    await fs.writeFile(journal, bytes)
+    assert.equal((await runtime.get(next, newRecord.id)).items.length, 1, 'failed refresh must not partially apply journal state')
+  } finally { await reader.close() }
+})
+
 test('recall rejects expired, revoked, changed and unreachable evidence, including source corruption', async t => {
   const h = await setup(t), good = await h.add('good'), view = await h.runtime.createView()
   assert.equal((await h.runtime.get(view, good.id)).items.length, 1)
