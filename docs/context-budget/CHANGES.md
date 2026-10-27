@@ -1,6 +1,10 @@
 # 改动与验收证据
 
 
+### CE-R1 评测提交与源码提交身份一致（2026-10-27）
+
+PR #8 审查发现冻结器此前只验 `sourceBaseCommit` 为评测 HEAD 的祖先，无法拒绝两次提交之间修改产品源码。冻结与运行入口现用 `git diff --quiet SOURCE EVAL -- src` 检查，任何产品源码差异在模型请求前报错；比较器及 manifest 冻结清单纳入该检查文件。临时 Git 仓库正反例验证文档变更通过、`src/**` 变更拒绝。`pnpm check` syntax 226 files，相关 25/25 测试、`pnpm lint` 256 files 0 诊断（CE-R2 的未提交测试也在同一工作树中通过）。原 2026-10-27 四份零付费证据保留为当时固定 HEAD 的结果；合并后按新代码重新冻结。
+
 ### CE-2 证据换行修正（2026-10-27）
 
 CE-1 `4251382`、CE-2 `6bbc1de` 分别对应计划中的协议收口与冻结验收；随后单独修正新增机器记录的换行。`.gitattributes` 对 docs/samples/** 设置 -text，首次写入 CRLF 导致 git diff --check 报行尾空白；改为 LF 后复检通过。JSON 解析值及四份 manifest/probe 原始文件、digest 均不变，不改写已有提交。最终 lint 254 files、0 诊断。
