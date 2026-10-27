@@ -159,6 +159,16 @@ test('LOO attribution marks a cheaper but less reliable arm as an efficiency tra
   assert.equal(review.variants['no-preview'].attribution.status, 'inconclusive')
 })
 
+test('LOO reviews a large quality gain in a removed-component arm before calling the component beneficial', () => {
+  const all = batches({ full: (_, index) => ({ success: index >= 2 }), 'no-preview': () => ({ output: 12 }) })
+  const result = compareV2LooBatches(all.full, {
+    'no-preview': all['no-preview'], 'no-projection': all['no-projection'], 'no-report': all['no-report'],
+  }, { probes: probes() })
+  assert.equal(result.variants['no-preview'].attribution.status, 'inconclusive')
+  assert.equal(result.variants['no-preview'].reviewRequired, true)
+  assert.equal(result.variants['no-preview'].attribution.qualityDifference, 2)
+})
+
 test('LOO comparator rejects inexact source paths and incomplete batches', () => {
   const all = batches()
   const missing = variantManifest('no-preview')
