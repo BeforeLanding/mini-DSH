@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { assertEvidenceRootUnused, blockSizeForV2Split, calibrationTasks, componentScheduleSeed, componentTasks, developmentReserveUsd, developmentTasks, formalTasks, parseV2Arguments, resolveV2Arms, resolveV2Episodes, resolveV2Plan } from '../scripts/eval-v2-plan.js'
+import { assertEvidenceRootUnused, blockSizeForV2Split, calibrationTasks, componentLooScheduleSeed, componentLooVariants, componentScheduleSeed, componentTasks, developmentReserveUsd, developmentTasks, formalTasks, parseV2Arguments, protocolForV2Split, resolveV2Arms, resolveV2Episodes, resolveV2Plan, seedForV2Split, tasksForV2Split } from '../scripts/eval-v2-plan.js'
 
 test('V2 plans complete matched blocks with explicit repeats and shared resource limits', () => {
   assert.equal(formalTasks.length, 20)
@@ -88,6 +88,28 @@ test('component protocol fixes six unexposed roots, one context arm and twelve s
   assert.ok(Math.abs(reserve.perEpisodeUsd - 1.7596608) < 1e-9)
   assert.ok(Math.abs(reserve.batchUsd - 21.1355904) < 1e-9)
   assert.throws(() => developmentReserveUsd({ inputPerMillion: 0.3, outputPerMillion: 1.2, cacheReadPerMillion: 0.006 }, { arm: 'context', episodes: 0 }), /positive safe integer/)
+})
+
+test('component-loo keeps one context arm per manifest and requires a source variant', () => {
+  assert.deepEqual(componentLooVariants, ['full', 'no-preview', 'no-projection', 'no-report'])
+  assert.deepEqual(tasksForV2Split('component-loo').map(task => task.id), ['U02', 'B03', 'F01', 'F02', 'R04', 'T04'])
+  assert.equal(protocolForV2Split('component-loo'), 'NX-51-component-loo-v1')
+  assert.equal(seedForV2Split('component-loo'), componentLooScheduleSeed)
+  assert.equal(blockSizeForV2Split('component-loo'), 1)
+  const episodes = resolveV2Episodes('component-loo')
+  assert.equal(episodes.length, 12)
+  assert.equal(episodes.every(row => row.arm === 'context'), true)
+  for (const task of componentTasks) assert.deepEqual(episodes.filter(row => row.taskId === task.id).map(row => row.repeat).sort(), [0, 1])
+  const plan = resolveV2Plan({ split: 'component-loo', variant: 'no-preview', tier: '1m', window: 1_000_000, evidenceRoot: 'unused', planOnly: true })
+  assert.equal(plan.variant, 'no-preview')
+  assert.equal(plan.arms[0]!.budget.postCompactionPrune, false)
+  assert.deepEqual(plan.caps, { runs: 12, modelRequests: 768, toolCalls: 1536, totalTokens: 12_000_000, activeDurationMs: 7_200_000 })
+  const args = ['--split', 'component-loo', '--variant', 'no-report', '--tier', '1m', '--window', '1000000', '--evidence-root', 'unused']
+  assert.equal(parseV2Arguments(args).variant, 'no-report')
+  assert.throws(() => parseV2Arguments(args.filter((_, index) => index !== 2 && index !== 3)), /requires --variant/)
+  assert.throws(() => parseV2Arguments(args.map(value => value === 'no-report' ? 'yes' : value)), /--variant must be one of/)
+  assert.throws(() => parseV2Arguments(['--split', 'component', '--variant', 'full', '--tier', '1m', '--window', '1000000', '--evidence-root', 'unused']), /only accepted with --split component-loo/)
+  assert.throws(() => resolveV2Plan({ split: 'component-loo', tier: '1m', window: 1_000_000, evidenceRoot: 'unused', planOnly: true }), /registered variant/)
 })
 
 test('V2 refuses ambiguous or colliding paid-plan configuration before effects', () => {
