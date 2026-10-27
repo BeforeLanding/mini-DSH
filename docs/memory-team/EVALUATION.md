@@ -2,15 +2,15 @@
 
 本专题与 PR #6 的 full/no-preview/no-projection/no-report 四臂及其 48 条消融分开。原负结果、指标口径和 `postCompactionPrune` 默认关闭保持其原有结论。
 
-协议 `memory-team-development-v2` 是开发准备批次：single-memory-off / single-memory-on / team-memory-off / team-memory-on，4 个工作流 × 4 条件 = 16 个目标 episode。它们是公开开发工作流，不是正式 holdout；开发观察不能追溯变为正式证据。
+协议 `memory-team-development-v2.1` 是开发准备批次：single-memory-off / single-memory-on / team-memory-off / team-memory-on，4 个工作流 × 4 条件 = 16 个目标 episode。它们是公开开发工作流，不是正式 holdout；开发观察不能追溯变为正式证据。
 
 ## 固定的批次输入
 
 - 模型：请求名 `deepseek/deepseek-v4-flash`，服务端回显 `deepseek-flash`，版本 `DeepSeek-V4.1-Flash-1017`，1,000,000 token 窗口，provider 默认采样。付费前再次做直接与流式探测，回显不符即停。
 - 价格：官方价格页 2026-10-27 快照，币种 USD，按高峰档 `input $0.30 / cache-read $0.006 / output $1.20` 每百万 token 计上限。峰谷价差只会让实际账单更低，上限按高峰价算。
-- 任务：`docs/memory-team/eval/workflows.json` 的 W01—W04。每项都有公开交付物 `answer.json` 的精确 schema；W02 还要求把 `docs/ENTRY.md` 改成当前入口。
-- 共同预算：prepare + goal + 所有子 Agent + 摘要 + 重试共用一个 episode 账本：24 次模型请求、48 次工具调用、240,000 token、900 秒 wall deadline；单 run 仍受 600 秒主动时长约束。root floor 为 80,000 token / 8 请求，子 Agent 不能耗尽交付额度。
-- 金额：每 episode 上限 $0.50（覆盖 240k token 全按 output 计价的极端情形），整批上限 $8.50（16 × $0.50 + $0.05 探测预留）。执行时 `--max-usd` 不得超过冻结值。
+- 任务：`docs/memory-team/eval/workflows.json` 的 W01—W04。每项都有公开交付物 `answer.json` 的精确 schema，但提示只给字段、不在提示里给出期望值；W02 还要求把 `docs/ENTRY.md` 改成当前入口，工作区用 `package.json` 的 `main` 给出权威当前入口，历史文档与记忆仍指向旧入口。
+- 共同预算：prepare + goal + 所有子 Agent + 摘要 + 重试共用一个 episode 账本：32 次模型请求、64 次工具调用、320,000 token、900 秒 wall deadline；单 run 仍受 600 秒主动时长约束。root floor 为 120,000 token / 10 请求，子 Agent 不能耗尽交付额度。32 次请求给两个 8 请求子 Agent 留出空间，避免团队臂在展示协作开销前先撞公共上限。
+- 金额：每 episode 上限 $0.50（覆盖 320k token 全按 output 计价的极端情形仍只需约 $0.384），整批上限 $8.50（16 × $0.50 + $0.05 探测，另留 $0.45 余量）。执行时 `--max-usd` 不得超过冻结值。
 - 数据：四条件读同一份 `.memory-team/preparation.json`；memory-on 另外拥有一份预先批准、只读、从同一经验包生成的记忆快照。目标阶段不批准或抽取新记忆。
 
 ## 四个客观工作流
@@ -45,6 +45,16 @@
 - 逐题配对的收益（可靠完成/验收差值）与额外开销（token、成本、请求、wall、子 Agent、摘要、重试、记忆）。
 
 16 个开发 episode 是探索性规模，不作显著性、泛化或“默认开启”结论。
+
+## v2 开发观察（2026-10-27，仅作设计输入）
+
+v2（提示内嵌期望答案）已执行 16/16：15 条独立验收通过，估算 $0.469586，1,437,395 token / 197 请求 / 249 工具；prepare 538,146、goal 899,249、child 0、summary 0、retry 0；记忆查询 7 / 命中 6；委派批次 0。该批不能用于收益或开销结论，原因是任务构造而非模型能力：
+
+1. W01/W02/W04 的目标提示直接写出了期望的 `answer.json` 值，测到的是照抄与服从，记忆/协作没有发挥空间。
+2. W02 工作区只有 `src/new.mjs` 文件存在，没有权威证据说明它是当前入口；`single-memory-off` 因此拒绝改 `docs/ENTRY.md`，而其它臂按文件命名猜中。这是蓝图缺陷，不是干净的能力失败。
+3. W03 的团队臂一次也没有委派；任务规模也没有触发摘要或重试。因此 v2 的“团队”差异主要是工具/schema/提示开销，不是协作收益。
+
+v2.1 据此修正：提示只给字段不给值；W02 在 `package.json.main` 提供权威当前入口，旧 `docs/ENTRY.md` 与旧记忆仍指向旧入口；W03 明确要求有只读委派工具时把两个独立调查委派出去；共同预算放宽到 32 请求 / 64 工具 / 320k token。v2 证据保留但不再与 v2.1 混算。v2.1 尚未执行。
 
 ## 命令与授权边界
 

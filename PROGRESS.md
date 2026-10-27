@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- **EV-02a 零付费评测代码完成，16 条开发 episode 等待付费授权（2026-10-27）**：四个公开蓝图已改为客观 `answer.json` 交付与 W02 目标文件，独立验收器在候选退出后检查复制件。新增 prepare → goal 两阶段执行器、冻结只读记忆快照、adapter 级共同预算（24 请求 / 48 工具 / 240k token / 900s / 每 episode $0.50）和完整账目：prepare/goal、root/summary/child、重试失败用量、记忆查询命中/过滤、委派子会话、makespan 与主动时间分开。模型、官方高峰价快照、任务、共同预算与 $8.50 整批上限已固定；`--validate-only` 覆盖 16 个 episode 装配和验收正反例且 provider 请求 0。付费批次尚未执行，需用户当次授权。详见 [评测协议](docs/memory-team/EVALUATION.md) 与 [变更](docs/memory-team/CHANGES.md)。
+- **EV-02 v2 开发批次已执行，v2.1 等待重跑授权（2026-10-27）**：四个公开蓝图已改为客观 `answer.json` 交付与 W02 目标文件，独立验收器在候选退出后检查复制件；新增 prepare → goal 两阶段执行器、冻结只读记忆快照、adapter 级共同预算和完整账目。用户授权 $8.50 后 v2 执行 16/16：15 通过、估算 $0.469586、1.44M token；child/summary/retry 均为 0，记忆查询 7/命中 6，委派 0，无未知 usage。**该批不作收益结论**：提示内嵌答案、W02 缺权威入口证据、W03 团队臂零委派，均为蓝图构造问题。v2.1 已修正提示与 W02 `package.json.main`、明确 W03 委派、预算放宽到 32 请求 / 64 工具 / 320k token；冻结后重跑仍需用户当次授权。详见 [评测协议](docs/memory-team/EVALUATION.md) 与 [变更](docs/memory-team/CHANGES.md)。
 
 - **PR #7 独立核心复核（2026-10-27）**：共享 deadline 未覆盖工具/审批、worker 失败清理、提案批次身份及跨会话撤销四项已分别修复推送（`afdaca5` / `bc4ef50` / `9750558` / `525ecc9`）。本地 check 222 / lint 251 零诊断，完整 564 tests / 534 pass / 0 fail / 30 平台 skipped；两个零 provider 演示通过。默认关闭、人工批准及项目隔离复核未发现其它阻塞；最终 head 六项 CI 全绿后以 merge commit 收口，见 [审查记录](docs/memory-team/REVIEW-PR7.md)。
 

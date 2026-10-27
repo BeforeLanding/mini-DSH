@@ -19,8 +19,8 @@
 
 ## EV-02 开发评测
 
-- EV-02a（done，独立提交）：W01—W04 的公开目标改为 `answer.json` 精确字段 + W02 目标文件；独立验收器在候选退出后检查复制件，拒绝受保护文件变化和额外文件。执行器在同一 session 内跑 prepare/goal 两个 root task，共用 adapter 级 episode 守卫（24 请求 / 48 工具 / 240k token / 900s / $0.50），完整归账 root、summary、child、retry、记忆查询和委派；冻结记忆快照由同一公开经验包生成。零付费验证覆盖 16 个 episode 装配、验收器正反例，provider 请求 0。详见 [评测协议](EVALUATION.md)。
-- EV-02b（awaiting authorization）：模型 `deepseek/deepseek-v4-flash`（回显 `deepseek-flash`，V4.1-Flash-1017）、官方价格 2026-10-27 高峰档快照、4 工作流 × 4 条件 = 16 episode、整批金额上限 $8.50。冻结后仍须用户当次授权；付费批次尚未执行，不能回填结果。
+- EV-02a（done，独立提交）：W01—W04 的公开目标改为 `answer.json` 精确字段 + W02 目标文件；独立验收器在候选退出后检查复制件，拒绝受保护文件变化和额外文件。执行器在同一 session 内跑 prepare/goal 两个 root task，共用 adapter 级 episode 守卫（v2.1：32 请求 / 64 工具 / 320k token / 900s / $0.50），完整归账 root、summary、child、retry、记忆查询和委派；冻结记忆快照由同一公开经验包生成。零付费验证覆盖 16 个 episode 装配、验收器正反例，provider 请求 0。详见 [评测协议](EVALUATION.md)。
+- EV-02b（v2 executed, v2.1 awaiting authorization）：v2 已执行 16/16、15 通过、$0.469586；但提示内嵌答案、W02 缺权威入口证据、W03 团队臂零委派，故只作蓝图缺陷观察，不作收益结论。v2.1 修正提示与 W02 证据、明确 W03 委派、预算放宽到 32/64/320k；冻结后仍需用户当次授权重跑。
 
 ## PR #7 独立收口
 

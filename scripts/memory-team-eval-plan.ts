@@ -14,7 +14,7 @@ const repository = fileURLToPath(new URL('../../', import.meta.url))
 export const MEMORY_TEAM_ARMS = ['single-memory-off', 'single-memory-on', 'team-memory-off', 'team-memory-on'] as const
 export type MemoryTeamArm = typeof MEMORY_TEAM_ARMS[number]
 export type MemoryTeamPhase = 'development'
-export const MEMORY_TEAM_PROTOCOL = 'memory-team-development-v2' as const
+export const MEMORY_TEAM_PROTOCOL = 'memory-team-development-v2.1' as const
 
 // Frozen model contract. `deepseek-v4-flash` is a legacy request name that the
 // provider routes to DeepSeek-V4.1-Flash; the probe below verifies the echo.
@@ -32,16 +32,19 @@ export const MEMORY_TEAM_PRICE = Object.freeze({
 // One common budget for prepare + goal + every child + summary + retry. The
 // executor's adapter guard enforces it across both runs; the task-group policy
 // protects the root share inside each run.
+// 32 requests / 64 tools / 320k tokens leaves room for two delegated children
+// (8 requests each) plus a root prepare and goal without making a team episode
+// hit the common cap before it can show collaboration overhead.
 export const MEMORY_TEAM_BUDGET = Object.freeze({
-  taskGroup: Object.freeze(groupPolicy({ maxModelRequests: 24, maxToolCalls: 48, maxTotalTokens: 240_000, rootTokenFloor: 80_000, rootRequestFloor: 8, maxWallDurationMs: 900_000 })),
-  run: Object.freeze({ ...CLI_BUDGET, maxModelRequests: 24, maxToolCalls: 48, maxTotalTokens: 240_000, contextWindowTokens: 1_000_000, postCompactionPrune: false }),
+  taskGroup: Object.freeze(groupPolicy({ maxModelRequests: 32, maxToolCalls: 64, maxTotalTokens: 320_000, rootTokenFloor: 120_000, rootRequestFloor: 10, maxWallDurationMs: 900_000 })),
+  run: Object.freeze({ ...CLI_BUDGET, maxModelRequests: 32, maxToolCalls: 64, maxTotalTokens: 320_000, contextWindowTokens: 1_000_000, postCompactionPrune: false }),
 })
 export const MEMORY_TEAM_DELEGATION = Object.freeze(delegationLimits({ maxConcurrent: 2, maxChildrenPerTask: 4, childMaxModelRequests: 8, childMaxToolCalls: 16, childMaxTotalTokens: 80_000 }))
 export const MEMORY_TEAM_AMOUNT = Object.freeze({
   perEpisodeUsd: 0.50, batchUsd: 8.50, probeReserveUsd: 0.05,
-  note: 'Per-episode cap covers the full 240k-token ceiling at peak output rates; batch cap is 16 x $0.50 plus a $0.05 protocol probe.',
+  note: 'Per-episode cap covers the full 320k-token ceiling at peak output rates; batch cap is 16 x $0.50 plus a $0.05 probe and leaves $0.45 margin.',
 })
-const MEMORY_SNAPSHOT_PROJECT_ID = memoryHash('memory-team-development-v2-memory')
+const MEMORY_SNAPSHOT_PROJECT_ID = memoryHash('memory-team-development-v2.1-memory')
 
 export interface ExperienceRecord { workflowId: string; key: string; kind: 'project_fact' | 'procedure' | 'episode'; sourcePath: string; content: string }
 export interface MemorySnapshotRecord {

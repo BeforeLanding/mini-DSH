@@ -129,6 +129,12 @@
 - 冻结 manifest 固定模型请求名/回显/版本、官方高峰价快照、任务与数据摘要、共同预算、episode 与整批金额上限、16 条确定性 schedule。`--validate-only` 做四份真实装配、16 个 episode 工作区、记忆快照和验收正反例，provider 请求 0；`--execute` 需干净且与冻结来源相同的 HEAD、当次 `--max-usd` 和模型探测，`--report` 生成按臂/工作流与四组配对的收益/开销。
 - 验证：`pnpm build`；定向 memory-team eval 7/7；完整 568 tests / 538 pass / 0 fail / 30 平台 skipped；`pnpm check` syntax 226 文件；`pnpm lint` 255 文件无诊断。付费调用 0；16 个开发目标 episode 尚未执行。
 
+### EV-02b v2 付费开发观察（2026-10-27，仅作设计输入）
+
+- 用户当次授权 $8.50 上限后执行 v2 的 16/16 条：15 条独立验收通过，估算 **$0.469586**，1,437,395 token / 197 请求 / 249 工具；prepare 538,146、goal 899,249、child 0、summary 0、retry 0；记忆查询 7 / 命中 6；委派 0；无未知 usage、无预算停止。证据在 `.eval-evidence/memory-team-dev-v2-run-20261027/`（不入库）。
+- **该批不作收益/开销结论**：提示内嵌期望答案，测到的是照抄；W02 缺权威当前入口证据，`single-memory-off` 合理拒绝改文件而其它臂按文件名猜中；W03 团队臂零委派。三条都是蓝图构造问题，不是干净的能力差异。完整轨迹保留，不把 15/16 当作记忆或协作收益。
+- v2.1 修正：目标提示只给 `answer.json` schema、不给期望值；W02 增加 `package.json.main = src/new.mjs` 作为权威当前入口，旧 `docs/ENTRY.md` 与旧记忆仍指向 `src/old.mjs`；W03 明确“有只读委派工具时委派两个独立调查”；共同预算放宽为 32 请求 / 64 工具 / 320k token（root floor 120k / 10），金额上限仍是每 episode $0.50、整批 $8.50。v2.1 冻结与重跑需另行授权。
+
 ## 集成已合并的 PR #6（2026-10-26）
 
 - 开发期间 origin/main 前进至 `a5d9191`（PR #6），在本功能分支 merge 保留双方提交历史；仅 PROGRESS 与 DECISIONS 文档发生冲突，保留 NX-51 负结果原文和新功能状态，重新核对源代码锚点。未修改对方真实结果、四臂准备或比较器。
