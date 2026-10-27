@@ -12,9 +12,15 @@
 | MA-04 | done | 取消、四个崩溃窗口、父子恢复与 inspect；未知请求不重发 |
 | MA-05 | done | reviewer 的固定候选版本与 stale 检测 |
 | EV-01 | done | 零模型 memory/team 演示与离线故障证据 |
-| EV-02 | prepared | 四条件同预算开发蓝图、来源指纹与 validate-only 已实现；独立目标验收、两阶段真实执行器及付费批次留待下一评测阶段 |
+| EV-02a | done | 四个蓝图改为客观交付；独立验收器；准备/目标两阶段执行器；记忆、子 Agent、摘要、重试的完整账目；16 episode 零付费装配验证 |
+| EV-02b | awaiting authorization | 固定模型/价格/预算/金额上限并冻结 16 个开发目标 episode；付费执行需用户当次授权 |
 
 每项完成后记录实际提交和检查，不把计划视为实现。里程碑结束运行 check/test/lint，隔离相关修改运行对应环境检查。
+
+## EV-02 开发评测
+
+- EV-02a（done，独立提交）：W01—W04 的公开目标改为 `answer.json` 精确字段 + W02 目标文件；独立验收器在候选退出后检查复制件，拒绝受保护文件变化和额外文件。执行器在同一 session 内跑 prepare/goal 两个 root task，共用 adapter 级 episode 守卫（24 请求 / 48 工具 / 240k token / 900s / $0.50），完整归账 root、summary、child、retry、记忆查询和委派；冻结记忆快照由同一公开经验包生成。零付费验证覆盖 16 个 episode 装配、验收器正反例，provider 请求 0。详见 [评测协议](EVALUATION.md)。
+- EV-02b（awaiting authorization）：模型 `deepseek/deepseek-v4-flash`（回显 `deepseek-flash`，V4.1-Flash-1017）、官方价格 2026-10-27 高峰档快照、4 工作流 × 4 条件 = 16 episode、整批金额上限 $8.50。冻结后仍须用户当次授权；付费批次尚未执行，不能回填结果。
 
 ## PR #7 独立收口
 

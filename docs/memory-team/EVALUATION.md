@@ -2,19 +2,68 @@
 
 本专题与 PR #6 的 full/no-preview/no-projection/no-report 四臂及其 48 条消融分开。原负结果、指标口径和 `postCompactionPrune` 默认关闭保持其原有结论。
 
-新协议 `memory-team-development-v1` 为开发准备：single-memory-off / single-memory-on / team-memory-off / team-memory-on；W01 知识复用、W02 旧知识失效、W03 并行调查、W04 简单任务及误导经验负对照，共 4 工作流 × 4 条件 = 16 个拟议开发目标 episode。它们是公开蓝图，尚无独立隐藏验收器，不能作为正式能力测量。
+协议 `memory-team-development-v2` 是开发准备批次：single-memory-off / single-memory-on / team-memory-off / team-memory-on，4 个工作流 × 4 条件 = 16 个目标 episode。它们是公开开发工作流，不是正式 holdout；开发观察不能追溯变为正式证据。
 
-四条件共享模型选择、生产输入/输出配置、完整根任务预算、公开准备原文和工作流集合；memory-on 仅增加预先批准索引的 recall 权限，目标阶段不批准/抽取新记录。所有组均可从公开 preparation 数据读取同一来源。后续实际执行必须把准备、记忆处理、所有子 Agent、摘要、重试和汇总全部计入成本；不得按 Agent 数扩大额度。
+## 固定的批次输入
 
-当前命令只负责冻结和零模型 validate-only，没有付费执行路径，manifest 明示 `paidExecutionAuthorized=false`、`amountCapUsd=null`。从干净 HEAD 运行：
+- 模型：请求名 `deepseek/deepseek-v4-flash`，服务端回显 `deepseek-flash`，版本 `DeepSeek-V4.1-Flash-1017`，1,000,000 token 窗口，provider 默认采样。付费前再次做直接与流式探测，回显不符即停。
+- 价格：官方价格页 2026-10-27 快照，币种 USD，按高峰档 `input $0.30 / cache-read $0.006 / output $1.20` 每百万 token 计上限。峰谷价差只会让实际账单更低，上限按高峰价算。
+- 任务：`docs/memory-team/eval/workflows.json` 的 W01—W04。每项都有公开交付物 `answer.json` 的精确 schema；W02 还要求把 `docs/ENTRY.md` 改成当前入口。
+- 共同预算：prepare + goal + 所有子 Agent + 摘要 + 重试共用一个 episode 账本：24 次模型请求、48 次工具调用、240,000 token、900 秒 wall deadline；单 run 仍受 600 秒主动时长约束。root floor 为 80,000 token / 8 请求，子 Agent 不能耗尽交付额度。
+- 金额：每 episode 上限 $0.50（覆盖 240k token 全按 output 计价的极端情形），整批上限 $8.50（16 × $0.50 + $0.05 探测预留）。执行时 `--max-usd` 不得超过冻结值。
+- 数据：四条件读同一份 `.memory-team/preparation.json`；memory-on 另外拥有一份预先批准、只读、从同一经验包生成的记忆快照。目标阶段不批准或抽取新记忆。
+
+## 四个客观工作流
+
+| 工作流 | 类别 | 独立验收 |
+| --- | --- | --- |
+| W01 | 知识复用 | `answer.json` 精确给出验证入口、验证命令和模块路径；受保护文件不变 |
+| W02 | 旧知识失效 | `docs/ENTRY.md` 精确改为新入口；`answer.json` 判历史记忆不再适用；受保护文件不变 |
+| W03 | 并行调查 | 两个模块路径齐全；parse/format 各有一个非空边界案例；`testsRan=false`；源码不变 |
+| W04 | 负对照 | NaN 被判为接受；最小检查必须来自允许集合；历史尝试判为无帮助；源码不变；另行报告是否发生不必要委派 |
+
+验收器 `scripts/memory-team-verifier.ts` 不参与执行：候选 Harness 完全退出后，执行器把工作区复制到 `acceptance-copy/`，验收器只读复制件，检查 `answer.json`、目标文件、受保护文件和未声明的额外文件。零付费验证还会同时断言两件事：未改动的初始工作区必须被拒收，人工构造的正确交付必须通过。
+
+## 准备 → 目标两阶段
+
+每个 episode 在同一个 session 内跑两个 root task：
+
+1. **准备**：读取公开准备数据和项目文件，写 `PREPARE.md`；四条件使用同一提示和同一公开数据。
+2. **目标**：下发工作流目标，产出 `answer.json`（W02 同时改 `docs/ENTRY.md`）。
+
+两阶段各有独立的 run 计数，但共用一个 adapter 级 episode 守卫：每次 provider 调用前检查累计请求数、估算输入 + 输出上限、已花费美元和 wall deadline；provider 缺少可信 usage 立即阻止后续派发。组账本继续约束 root/child/summary/retry 的单 run 额度，因此子 Agent 不会因为并行而获得额外预算。准备或目标的成本分别落盘，不以合并总数掩盖。
+
+## 必须报告的消耗
+
+- 可靠完成与独立验收、基础设施失败、未知 usage、预算停止。
+- prepare / goal 分别的请求、工具、provider token、成本；完整 episode 成本包括记忆处理、所有子 Agent、摘要、重试与汇总。
+- root / summary / child 三类账目；每类请求数、token、成本、未知请求。
+- 重试次数、失败尝试的 token 与成本。
+- 记忆查询次数、命中条数、过滤原因（过期、撤销、锚点变化等）与 view 事件数。
+- 委派批次数、子会话数、子结果状态与字节数；W04 是否发生不必要委派。
+- makespan（用户等待）与所有 Agent 主动时间之和分开报告；后者不能当作等待时间。
+- 逐题配对的收益（可靠完成/验收差值）与额外开销（token、成本、请求、wall、子 Agent、摘要、重试、记忆）。
+
+16 个开发 episode 是探索性规模，不作显著性、泛化或“默认开启”结论。
+
+## 命令与授权边界
+
+冻结会先做完整零付费验证，然后写入四份 manifest：
 
 ```powershell
-pnpm eval:memory-team --freeze .eval-evidence/memory-team-dev-YYYYMMDD
-pnpm eval:memory-team --validate-only .eval-evidence/memory-team-dev-YYYYMMDD
+pnpm eval:memory-team --freeze .eval-evidence/memory-team-dev-v2-YYYYMMDD
+pnpm eval:memory-team --validate-only .eval-evidence/memory-team-dev-v2-YYYYMMDD
 ```
 
-冻结四份 manifest；提交 SHA、源码指纹（Git 枚举 src/scripts/配置，正文按 LF 规范化）、准备数据与工作流 SHA-256 共同固定来源。验证实际装配四种 createHarness，拒绝重复臂、不同总预算、来源变化、付费/正式标记，并确认模型派发数为 0。代码或数据变化后重新冻结；纯文档证据提交不会伪装成源码变化。
+零付费验证创建四份真实装配、16 个 episode 工作区、冻结记忆快照和独立验收自测，provider 请求为 0。manifest 明示 `paidExecutionAuthorized=false`；冻结本身不是付费授权。
 
-进入真实开发批次前仍需：独立目标验收、逐工作流准备/目标两阶段执行器、固定 provider 版本与价格快照、美元金额上限及用户授权。原提案正式 16 工作流 × 4 条件 × 2 次重复的 128 个目标 episode 尚未构建或执行；开发观察不能追溯变为正式证据。
+付费执行必须由用户对当次批次明确授权，并在干净、与冻结来源相同的 HEAD 上运行：
 
-报告需同时展示可靠完成/独立验收、基础设施与未知用量、请求/工具/token、完整工作流成本、用户等待时间、所有 Agent 主动时间之和、过期记忆拒绝、结果采用及协作开销。预览评价信息保留和行为，投影/报告缓存评价 CPU/I/O；不把总耗时单一差异当价值结论。默认开启需要真实证据，本实现保持默认关闭。
+```powershell
+pnpm eval:memory-team --execute .eval-evidence/memory-team-dev-v2-YYYYMMDD --evidence-root .eval-evidence/memory-team-dev-v2-run-YYYYMMDD --max-usd 8.50
+pnpm eval:memory-team --report .eval-evidence/memory-team-dev-v2-run-YYYYMMDD
+```
+
+执行前做模型回显探测与价格/来源复核；任何未知 usage、金额上限不足一个完整 episode 或基础设施/证据错误都会停止批次。复跑是新的付费批次，需要再次授权，不复用上一次的授权。原提案正式 16 工作流 × 4 条件 × 2 次重复的 128 个目标 episode 尚未构建或执行。
+
+预览评价信息保留和行为，投影/报告缓存评价 CPU/I/O；不把总耗时单一差异当价值结论。默认开启需要真实证据，本实现保持默认关闭。

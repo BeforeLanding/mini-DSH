@@ -121,6 +121,14 @@
 
 - 四臂除共同预算相等之外，另复用 resolveBudget 拒绝负额度/非法策略，并限制为当前已注册的生产模型 id。定向 eval 3/3 与 Biome 2 文件无诊断，未调用模型。
 
+## EV-02a 客观验收、两阶段执行与完整账目（2026-10-27）
+
+- 协议升级为 `memory-team-development-v2`。W01—W04 的公开目标改为精确 `answer.json` 交付；W02 同时要求把 `docs/ENTRY.md` 改成当前入口。验收器在候选 Harness 退出后只读 `acceptance-copy/`，检查答案字段、目标文件、受保护文件与未声明文件；零付费验证同时断言未改动工作区必被拒收、人工正确交付必通过。
+- 新增 prepare → goal 两阶段执行器：同一 session 两个 root task，公共 adapter 守卫在每次 provider 调用前检查 24 请求 / 240k token / 900s wall / $0.50 episode 上限；缺失可信 usage 立即停批。组账本继续约束 root floor、子 Agent、摘要和重试，不按 Agent 数扩大额度。
+- 冻结记忆快照由公开经验包确定性生成，四个 memory-on episode 复制同一只读快照；目标阶段不允许新增批准。账目从持久化事件派生：prepare/goal 分列，root/summary/child、重试失败尝试、记忆查询命中/过滤、委派批次/子会话/状态、makespan 与主动时间分开。
+- 冻结 manifest 固定模型请求名/回显/版本、官方高峰价快照、任务与数据摘要、共同预算、episode 与整批金额上限、16 条确定性 schedule。`--validate-only` 做四份真实装配、16 个 episode 工作区、记忆快照和验收正反例，provider 请求 0；`--execute` 需干净且与冻结来源相同的 HEAD、当次 `--max-usd` 和模型探测，`--report` 生成按臂/工作流与四组配对的收益/开销。
+- 验证：`pnpm build`；定向 memory-team eval 7/7；完整 568 tests / 538 pass / 0 fail / 30 平台 skipped；`pnpm check` syntax 226 文件；`pnpm lint` 255 文件无诊断。付费调用 0；16 个开发目标 episode 尚未执行。
+
 ## 集成已合并的 PR #6（2026-10-26）
 
 - 开发期间 origin/main 前进至 `a5d9191`（PR #6），在本功能分支 merge 保留双方提交历史；仅 PROGRESS 与 DECISIONS 文档发生冲突，保留 NX-51 负结果原文和新功能状态，重新核对源代码锚点。未修改对方真实结果、四臂准备或比较器。

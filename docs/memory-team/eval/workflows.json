@@ -2,9 +2,41 @@
   "version": 1,
   "phase": "development",
   "workflows": [
-    { "id": "W01", "category": "knowledge_reuse", "initialFiles": { "docs/VERIFY.md": "Checks: node check.mjs. No package test script exists.\n", "src/value.mjs": "export const value = 1\n" }, "targetFiles": {}, "target": "Identify the relevant validation entry and module before proposing a change. Cite evidence from this project and the shared preparation data." },
-    { "id": "W02", "category": "stale_knowledge", "initialFiles": { "docs/ENTRY.md": "Entry: src/old.mjs\n", "src/old.mjs": "export const entry = 'old'\n", "src/new.mjs": "export const entry = 'new'\n" }, "targetFiles": { "docs/ENTRY.md": "Entry: src/new.mjs\n" }, "target": "Locate the current entry. Explain whether historical entry-path knowledge is still applicable and cite the current file version." },
-    { "id": "W03", "category": "parallel_investigation", "initialFiles": { "docs/MODULES.md": "Parsing: src/parse.mjs. Formatting: src/format.mjs.\n", "src/parse.mjs": "export const parse = text => text.trim()\n", "src/format.mjs": "export const format = value => String(value)\n" }, "targetFiles": {}, "target": "Investigate parser and formatter contracts independently, identify boundary cases, and give a bounded evidence-based plan. Do not claim tests ran." },
-    { "id": "W04", "category": "negative_control", "initialFiles": { "docs/NOTES.md": "Historical note: investigate rounding. This is not proof about current behavior.\n", "src/input.mjs": "export const valid = value => typeof value === 'number'\n" }, "targetFiles": {}, "target": "Explain whether NaN is accepted by valid, identify the smallest relevant check, and assess whether the historical rounding attempt helps. Avoid unnecessary delegation." }
+    {
+      "id": "W01",
+      "category": "knowledge_reuse",
+      "initialFiles": { "docs/VERIFY.md": "Checks: node check.mjs. No package test script exists.\n", "src/value.mjs": "export const value = 1\n" },
+      "targetFiles": {},
+      "target": "Read .memory-team/preparation.json, docs/VERIFY.md and the project sources. Write answer.json with exactly these fields and values: {\"verificationPath\":\"docs/VERIFY.md\",\"verificationCommand\":\"node check.mjs\",\"sourcePath\":\"src/value.mjs\"}. Do not modify docs/VERIFY.md or src/value.mjs.",
+      "deliverable": { "path": "answer.json", "schema": { "verificationPath": "string", "verificationCommand": "string", "sourcePath": "string" } },
+      "acceptance": { "kind": "memory-team-objective-v1", "checks": ["answer fields exact", "protected files unchanged", "only allowed files"] }
+    },
+    {
+      "id": "W02",
+      "category": "stale_knowledge",
+      "initialFiles": { "docs/ENTRY.md": "Entry: src/old.mjs\n", "src/old.mjs": "export const entry = 'old'\n", "src/new.mjs": "export const entry = 'new'\n" },
+      "targetFiles": { "docs/ENTRY.md": "Entry: src/new.mjs\n" },
+      "target": "Read .memory-team/preparation.json and inspect the project files. Locate the current entry module, update docs/ENTRY.md so it names that module, then write answer.json with exactly {\"currentEntry\":\"src/new.mjs\",\"historicalApplicable\":false}. Do not modify src/old.mjs or src/new.mjs.",
+      "deliverable": { "path": "answer.json", "schema": { "currentEntry": "string", "historicalApplicable": "boolean" } },
+      "acceptance": { "kind": "memory-team-objective-v1", "checks": ["answer fields exact", "target file exact", "protected files unchanged", "only allowed files"] }
+    },
+    {
+      "id": "W03",
+      "category": "parallel_investigation",
+      "initialFiles": { "docs/MODULES.md": "Parsing: src/parse.mjs. Formatting: src/format.mjs.\n", "src/parse.mjs": "export const parse = text => text.trim()\n", "src/format.mjs": "export const format = value => String(value)\n" },
+      "targetFiles": {},
+      "target": "Read .memory-team/preparation.json and investigate src/parse.mjs and src/format.mjs independently. Write answer.json with exactly {\"modules\":[\"src/parse.mjs\",\"src/format.mjs\"],\"boundaries\":{\"parse\":\"<one concrete boundary case>\",\"format\":\"<one concrete boundary case>\"},\"testsRan\":false}. Each boundary case must be a nonempty sentence. Do not run tests or claim they ran; do not modify the source files.",
+      "deliverable": { "path": "answer.json", "schema": { "modules": "string[]", "boundaries": { "parse": "string", "format": "string" }, "testsRan": "boolean" } },
+      "acceptance": { "kind": "memory-team-objective-v1", "checks": ["both module paths", "two nonempty boundary cases", "testsRan false", "protected files unchanged", "only allowed files"] }
+    },
+    {
+      "id": "W04",
+      "category": "negative_control",
+      "initialFiles": { "docs/NOTES.md": "Historical note: investigate rounding. This is not proof about current behavior.\n", "src/input.mjs": "export const valid = value => typeof value === 'number'\n" },
+      "targetFiles": {},
+      "target": "Read .memory-team/preparation.json and src/input.mjs. Explain whether NaN is accepted by valid, then write answer.json with exactly {\"nanAccepted\":true,\"smallestCheck\":\"<one expression>\",\"historicalHelps\":false}. smallestCheck must be exactly one of Number.isNaN(value), value !== value, or Number.isFinite(value). Do not modify src/input.mjs. Avoid delegation unless genuinely independent work exists.",
+      "deliverable": { "path": "answer.json", "schema": { "nanAccepted": "boolean", "smallestCheck": "string", "historicalHelps": "boolean" } },
+      "acceptance": { "kind": "memory-team-objective-v1", "checks": ["NaN verdict exact", "smallest check from allowed set", "historical verdict exact", "protected files unchanged", "only allowed files"] }
+    }
   ]
 }
