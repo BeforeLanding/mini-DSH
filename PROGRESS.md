@@ -4,6 +4,9 @@
 
 ## 当前状态
 
+- **PR #8 合并前审查补强（2026-10-27）**：六项原 CI 全绿、暂无评审评论。CE-R1 在冻结与运行前强制源码提交到评测提交之间 `src/**` 不变；CE-R2 在 LOO 归因中把双向质量差异超过 1 条都设为审阅，避免“回退臂质量明显更好”仍判组件有益。定向 25/25、check 226、lint 256 通过。修订后需等待新 CI，再合并并按新 HEAD 重冻四臂。
+
+
 - **组件评测收口完成（2026-10-27，零付费）**：CE-1 `4251382` 在 main `0b8b973` 上统一独立 LOO 协议、允许变化/顺序/阈值与显式裁剪关闭；完整隔离 576/576，最终相关定向 26/26，check/lint/fixtures/offline/bench 通过。CE-2 四臂重新冻结与 validate-only 全过（wsl-bwrap、paidRequests=0），精确源码/共同字段与离线输出审计全过，48 条仅是计划、实际 episode 0；源码变体分支已推送。[冻结验收](docs/context-budget/COMPONENT-EVAL-CLOSURE.md) 与机器记录含源码/评测 commit、manifest digest、探针/日志哈希和复现。下一步是 PR 审阅；付费前须重新核价/重冻并单独授权，未执行付费、未合并 main。
 
 

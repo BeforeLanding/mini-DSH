@@ -1,6 +1,10 @@
 # 改动与验收证据
 
 
+### CE-R2 消融归因双向质量差异（2026-10-27）
+
+PR #8 审查发现，`qualityLoss` 只检查“去掉组件后变差”，若回退臂可靠完成或产物验收比 full 明显更好，仍可能把资源方向和离线探针组成 `signal`。现在保留单向 `qualityLoss` 用于效率权衡，另以双向最大绝对差定义 `qualityDifference`；任一质量读数超过 1 条时 `reviewRequired=true`、归因为 `inconclusive`，先读逐题轨迹。新增 full 质量下降 2 条而 no-preview 资源变差/离线机制变差的反例，断言不能标为组件收益。`pnpm check` syntax 226 files；相关 25/25 测试、`pnpm lint` 256 files 0 诊断，和 CE-R1 同一完整工作树验收。历史付费证据未改写。
+
 ### CE-R1 评测提交与源码提交身份一致（2026-10-27）
 
 PR #8 审查发现冻结器此前只验 `sourceBaseCommit` 为评测 HEAD 的祖先，无法拒绝两次提交之间修改产品源码。冻结与运行入口现用 `git diff --quiet SOURCE EVAL -- src` 检查，任何产品源码差异在模型请求前报错；比较器及 manifest 冻结清单纳入该检查文件。临时 Git 仓库正反例验证文档变更通过、`src/**` 变更拒绝。`pnpm check` syntax 226 files，相关 25/25 测试、`pnpm lint` 256 files 0 诊断（CE-R2 的未提交测试也在同一工作树中通过）。原 2026-10-27 四份零付费证据保留为当时固定 HEAD 的结果；合并后按新代码重新冻结。

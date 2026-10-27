@@ -69,7 +69,7 @@ NX-50 只验证了“三项组件一起上”不越过可靠完成/产物验收/
 - `signal`：去掉 X 后，付费输出 token 或主动耗时变差 **≥5%**（预览臂），或付费 `nonModelActiveDurationMs` 变差 **≥5%**（投影/报告臂），且离线机制同时显示 `withinLimit/tailVisible` 下降、`propertyReads` 上升或 `snapshotOpens` 上升；可靠完成/产物验收下降不超过 1 条 episode，重复方向不矛盾。
 - `efficiency-tradeoff`：去掉 X 后资源变好 ≥5%，但可靠完成或产物验收下降 ≥1 条；更快不是收益。
 - `inconclusive`：变化 <5%、方向在两次重复间相反、离线机制未确认，或只有总主动耗时变化而 CPU/I/O 代理无变化。
-- 可靠完成或产物验收下降超过 1 条时 `reviewRequired=true`，先审该题轨迹，不能只因总量过关就写结论。
+- 可靠完成或产物验收在任一方向相差超过 1 条时 `reviewRequired=true`，先审该题轨迹，不能只因总量过关就写结论。
 
 5% 是诊断阈值，不是统计显著性；48 条只够开发期排序，不足以为正式题库下结论。离线机制与付费读数分栏呈现，离线变差不自动升级为付费 `signal`。
 
