@@ -1,5 +1,7 @@
 # 记忆与协作的独立开发协议
 
+**当前状态：暂缓（用户决定，2026-10-27）。** 记忆与 Multi-Agent 核心保留且默认关闭，当前组件优化测评不加入这两个因子；本专题不再推进新开发、验收器扩展、重评分或付费/零付费实验批次。v2/v2.1 结果和 v2.2 冻结件原样保留，下文协议与命令仅作历史及未来参考。其它组件优化完成、测评任务能够检验实际作用后，再由用户决定是否重启；不得自动执行 v2.2 或正式 128 条。
+
 本专题与 PR #6 的 full/no-preview/no-projection/no-report 四臂及其 48 条消融分开。原负结果、指标口径和 `postCompactionPrune` 默认关闭保持其原有结论。
 
 协议 `memory-team-development-v2.2` 是开发准备批次：single-memory-off / single-memory-on / team-memory-off / team-memory-on，4 个工作流 × 4 条件 = 16 个目标 episode。它们是公开开发工作流，不是正式 holdout；开发观察不能追溯变为正式证据。
