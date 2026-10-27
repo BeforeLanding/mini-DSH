@@ -1,6 +1,10 @@
 # 改动与验收证据
 
 
+### CE-F1 PR #8 合并后的四臂零付费重冻（2026-10-27）
+
+PR #8 merge commit `54a1921` 的六项 CI 全绿。full 评测 HEAD 固定为该 merge；三个回退臂各自应用两项审查修复后重新运行 `pnpm check` 和定向测试（14/14、14/14、15/15、15/15）。官方 DeepSeek 模型版本、thinking、1M 窗口和峰值单价仍与协议一致，新快照时间 `2026-10-27T12:51:07Z`。四臂重新 `eval-v2-freeze`、`--validate-only` 全过，独立审计确认共同字段/非组件文件逐字相同、源码精确差异、tool schema、源码身份与探针输出一致；每臂 12 条计划、实际运行/付费请求 0。按峰值价机械储备每批 $21.1355904，拟定每批 $22、四批 $88 硬上限，尚未执行任何付费批次。提交号、digest、日志哈希、复现与后续授权边界见 [合并后冻结](COMPONENT-LOO-POSTMERGE-FREEZE.md) 和 [机器记录](../samples/component-loo-postmerge-freeze-20261027.json)。
+
 ### CE-R2 消融归因双向质量差异（2026-10-27）
 
 PR #8 审查发现，`qualityLoss` 只检查“去掉组件后变差”，若回退臂可靠完成或产物验收比 full 明显更好，仍可能把资源方向和离线探针组成 `signal`。现在保留单向 `qualityLoss` 用于效率权衡，另以双向最大绝对差定义 `qualityDifference`；任一质量读数超过 1 条时 `reviewRequired=true`、归因为 `inconclusive`，先读逐题轨迹。新增 full 质量下降 2 条而 no-preview 资源变差/离线机制变差的反例，断言不能标为组件收益。`pnpm check` syntax 226 files；相关 25/25 测试、`pnpm lint` 256 files 0 诊断，和 CE-R1 同一完整工作树验收。历史付费证据未改写。
