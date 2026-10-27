@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { freezeV2 } from './eval-v2-report.js'
+import { assertV2ProductSourceUnchanged } from './eval-v2-provenance.js'
 import type { V2FreezeInput } from './eval-v2-report.js'
 
 const repository = fileURLToPath(new URL('../../', import.meta.url))
@@ -18,6 +19,7 @@ if (config.split === 'component' || config.split === 'component-loo') {
   } catch {
     throw new Error(`${config.split} sourceBaseCommit must be an ancestor of the evaluation commit`)
   }
+  assertV2ProductSourceUnchanged(repository, config.sourceBaseCommit, gitCommit)
 }
 const manifest = await freezeV2({ ...config, gitCommit })
 await fs.writeFile(args[3]!, `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })

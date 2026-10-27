@@ -15,6 +15,7 @@ import { blockSizeForV2Split, developmentReserveUsd, protocolForV2Split } from '
 import { createSmokeAmountGuard } from './smoke-cost.js'
 import { createIsolationBackend } from './eval-v2-isolation.js'
 import { reportV2, verifyV2FrozenFiles } from './eval-v2-report.js'
+import { assertV2ProductSourceUnchanged } from './eval-v2-provenance.js'
 import type { V2Manifest, V2Observation } from './eval-v2-report.js'
 
 const repository = fileURLToPath(new URL('../../', import.meta.url))
@@ -47,6 +48,7 @@ if (strictSplit) {
     } catch {
       throw new Error(`${manifest.split} sourceBaseCommit must be an ancestor of the frozen HEAD`)
     }
+      assertV2ProductSourceUnchanged(repository, manifest.sourceBaseCommit, head)
   }
 }
 reportV2(manifest, []) // Validate the entire fixed task, arm and episode schedule before side effects.

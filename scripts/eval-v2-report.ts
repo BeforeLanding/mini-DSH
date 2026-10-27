@@ -59,7 +59,8 @@ const frozenSourcePaths = (split: V2Split): string[] => {
     // 离线探针脚本本身必须冻结：它的 SHA-256 就是四份探针的 suiteSha256。NX-51 文档定义本协议，
     // 因此在冻结清单里；结果文档留到付费执行之后，不能进这份清单。
     case 'component-loo': return [...sourcePaths, 'scripts/smoke-cost.ts', 'scripts/benchmark-components.mjs',
-      'docs/context-budget/NX-50-COMPONENT-AB.md', 'docs/context-budget/NX-51-COMPONENT-ABLATION.md', 'scripts/eval-v2-component-protocol.ts']
+      'docs/context-budget/NX-50-COMPONENT-AB.md', 'docs/context-budget/NX-51-COMPONENT-ABLATION.md',
+      'scripts/eval-v2-component-protocol.ts', 'scripts/eval-v2-provenance.ts']
   }
 }
 const componentLikeSplit = (split: V2Split): boolean => split === 'component' || split === 'component-loo'
