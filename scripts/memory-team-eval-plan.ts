@@ -14,7 +14,7 @@ const repository = fileURLToPath(new URL('../../', import.meta.url))
 export const MEMORY_TEAM_ARMS = ['single-memory-off', 'single-memory-on', 'team-memory-off', 'team-memory-on'] as const
 export type MemoryTeamArm = typeof MEMORY_TEAM_ARMS[number]
 export type MemoryTeamPhase = 'development'
-export const MEMORY_TEAM_PROTOCOL = 'memory-team-development-v2.1' as const
+export const MEMORY_TEAM_PROTOCOL = 'memory-team-development-v2.2' as const
 
 // Frozen model contract. `deepseek-v4-flash` is a legacy request name that the
 // provider routes to DeepSeek-V4.1-Flash; the probe below verifies the echo.
@@ -44,7 +44,7 @@ export const MEMORY_TEAM_AMOUNT = Object.freeze({
   perEpisodeUsd: 0.50, batchUsd: 8.50, probeReserveUsd: 0.05,
   note: 'Per-episode cap covers the full 320k-token ceiling at peak output rates; batch cap is 16 x $0.50 plus a $0.05 probe and leaves $0.45 margin.',
 })
-const MEMORY_SNAPSHOT_PROJECT_ID = memoryHash('memory-team-development-v2.1-memory')
+const MEMORY_SNAPSHOT_PROJECT_ID = memoryHash('memory-team-development-v2.2-memory')
 
 export interface ExperienceRecord { workflowId: string; key: string; kind: 'project_fact' | 'procedure' | 'episode'; sourcePath: string; content: string }
 export interface MemorySnapshotRecord {

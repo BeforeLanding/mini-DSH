@@ -7,7 +7,7 @@
       "category": "knowledge_reuse",
       "initialFiles": { "docs/VERIFY.md": "Checks: node check.mjs. No package test script exists.\n", "src/value.mjs": "export const value = 1\n" },
       "targetFiles": {},
-      "target": "Read .memory-team/preparation.json, docs/VERIFY.md and the project sources. Determine which file is the validation entry, which command it requires, and which module is the relevant change target. Write answer.json with exactly these fields: {\"verificationPath\":\"<path>\",\"verificationCommand\":\"<command>\",\"sourcePath\":\"<path>\"}. Do not modify docs/VERIFY.md or src/value.mjs.",
+      "target": "Read .memory-team/preparation.json, docs/VERIFY.md and the project sources. Determine the project document that records the validation command, the command itself, and the module that is the relevant change target. Write answer.json with exactly these fields: {\"verificationPath\":\"<document path>\",\"verificationCommand\":\"<command>\",\"sourcePath\":\"<path>\"}. verificationPath must name the document, not the script it invokes. Do not modify docs/VERIFY.md or src/value.mjs.",
       "deliverable": { "path": "answer.json", "schema": { "verificationPath": "string", "verificationCommand": "string", "sourcePath": "string" } },
       "acceptance": { "kind": "memory-team-objective-v1", "checks": ["answer fields exact", "protected files unchanged", "only allowed files"] }
     },
@@ -34,7 +34,7 @@
       "category": "negative_control",
       "initialFiles": { "docs/NOTES.md": "Historical note: investigate rounding. This is not proof about current behavior.\n", "src/input.mjs": "export const valid = value => typeof value === 'number'\n" },
       "targetFiles": {},
-      "target": "Read .memory-team/preparation.json and src/input.mjs. Determine whether NaN is accepted by valid, choose the smallest check that distinguishes it, and assess whether the historical rounding attempt helps. Write answer.json with exactly {\"nanAccepted\":<boolean>,\"smallestCheck\":\"<one JavaScript expression>\",\"historicalHelps\":<boolean>}. Do not modify src/input.mjs. Avoid delegation unless genuinely independent work exists.",
+      "target": "Read .memory-team/preparation.json and src/input.mjs. Determine whether NaN is accepted by valid, choose the smallest standard JavaScript predicate that distinguishes it, and assess whether the historical rounding attempt helps. Write answer.json with exactly {\"nanAccepted\":<boolean>,\"smallestCheck\":\"<one predicate expression over value>\",\"historicalHelps\":<boolean>}. smallestCheck must be a standard predicate over value, not a call to valid. Do not modify src/input.mjs. Avoid delegation unless genuinely independent work exists.",
       "deliverable": { "path": "answer.json", "schema": { "nanAccepted": "boolean", "smallestCheck": "string", "historicalHelps": "boolean" } },
       "acceptance": { "kind": "memory-team-objective-v1", "checks": ["NaN verdict exact", "smallest check from allowed set", "historical verdict exact", "protected files unchanged", "only allowed files"] }
     }

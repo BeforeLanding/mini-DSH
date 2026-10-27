@@ -2,7 +2,7 @@
 
 本专题与 PR #6 的 full/no-preview/no-projection/no-report 四臂及其 48 条消融分开。原负结果、指标口径和 `postCompactionPrune` 默认关闭保持其原有结论。
 
-协议 `memory-team-development-v2.1` 是开发准备批次：single-memory-off / single-memory-on / team-memory-off / team-memory-on，4 个工作流 × 4 条件 = 16 个目标 episode。它们是公开开发工作流，不是正式 holdout；开发观察不能追溯变为正式证据。
+协议 `memory-team-development-v2.2` 是开发准备批次：single-memory-off / single-memory-on / team-memory-off / team-memory-on，4 个工作流 × 4 条件 = 16 个目标 episode。它们是公开开发工作流，不是正式 holdout；开发观察不能追溯变为正式证据。
 
 ## 固定的批次输入
 
@@ -46,15 +46,18 @@
 
 16 个开发 episode 是探索性规模，不作显著性、泛化或“默认开启”结论。
 
-## v2 开发观察（2026-10-27，仅作设计输入）
+## v2 / v2.1 开发观察（2026-10-27，仅作设计输入）
 
-v2（提示内嵌期望答案）已执行 16/16：15 条独立验收通过，估算 $0.469586，1,437,395 token / 197 请求 / 249 工具；prepare 538,146、goal 899,249、child 0、summary 0、retry 0；记忆查询 7 / 命中 6；委派批次 0。该批不能用于收益或开销结论，原因是任务构造而非模型能力：
+**v2**（提示内嵌期望答案）已执行 16/16：15 条独立验收通过，估算 $0.469586，1,437,395 token / 197 请求 / 249 工具；prepare 538,146、goal 899,249、child 0、summary 0、retry 0；记忆查询 7 / 命中 6；委派批次 0。该批不能用于收益结论：提示内嵌答案、W02 缺权威入口证据、W03 团队臂零委派。
 
-1. W01/W02/W04 的目标提示直接写出了期望的 `answer.json` 值，测到的是照抄与服从，记忆/协作没有发挥空间。
-2. W02 工作区只有 `src/new.mjs` 文件存在，没有权威证据说明它是当前入口；`single-memory-off` 因此拒绝改 `docs/ENTRY.md`，而其它臂按文件命名猜中。这是蓝图缺陷，不是干净的能力失败。
-3. W03 的团队臂一次也没有委派；任务规模也没有触发摘要或重试。因此 v2 的“团队”差异主要是工具/schema/提示开销，不是协作收益。
+**v2.1**（提示只给 schema、W02 增加 `package.json.main`、W03 要求团队臂委派、预算 32/64/320k）已执行 16/16：**11 条通过**，估算 $0.518104，1,584,009 token / 219 请求 / 267 工具；prepare 602,808、goal 981,201；child 33,932；summary 0；retry 0；记忆查询 9 / 命中 8；委派 **2 批 / 4 个子会话**。无未知 usage、无预算停止。
 
-v2.1 据此修正：提示只给字段不给值；W02 在 `package.json.main` 提供权威当前入口，旧 `docs/ENTRY.md` 与旧记忆仍指向旧入口；W03 明确要求有只读委派工具时把两个独立调查委派出去；共同预算放宽到 32 请求 / 64 工具 / 320k token。v2 证据保留但不再与 v2.1 混算。v2.1 尚未执行。
+- 5 条失败全部是验收口径歧义，不是能力差异：W01 两条把 `verificationPath` 写成 `check.mjs`（记录命令的文档是 `docs/VERIFY.md`）；W04 三条把 `smallestCheck` 写成 `valid(NaN)` / `valid(NaN) === true`（直接调用被测函数，而允许集合只收标准谓词）。
+- 团队因子在 W03 真正发生：团队臂 2 批、4 个子会话、33,932 子 token；W04 负对照没有委派。W03 团队相对单 Agent 约 +74.5k token、+8 请求、+17s，验收结果相同（1/1 对 1/1），即本批未观察到大任务分解收益，只观察到协作开销。
+- 记忆 on/off 没有验收增益：W01 的差异同样来自验收歧义，W02/W03/W04 配对结果相同；memory-on 的总 token 高于 off（single +24.3%，team +44.9%，但 team-on 的 W03 也发生了委派，不能把差额全归记忆）。
+- 摘要与重试仍未触发：这些开发任务太小，相关账目字段为 0。它们的存在只证明统计路径可报零，不证明真实负载下的开销。
+
+v2.2 据此只修正验收口径：W01 明确 `verificationPath` 必须是记录命令的项目文档；W04 明确 `smallestCheck` 必须是标准 JavaScript 谓词、不得调用 `valid`。v2.2 只做零付费冻结与验证，未授权付费重跑。v2/v2.1 证据保留但不再混算。
 
 ## 命令与授权边界
 

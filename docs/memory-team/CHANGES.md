@@ -133,7 +133,9 @@
 
 - 用户当次授权 $8.50 上限后执行 v2 的 16/16 条：15 条独立验收通过，估算 **$0.469586**，1,437,395 token / 197 请求 / 249 工具；prepare 538,146、goal 899,249、child 0、summary 0、retry 0；记忆查询 7 / 命中 6；委派 0；无未知 usage、无预算停止。证据在 `.eval-evidence/memory-team-dev-v2-run-20261027/`（不入库）。
 - **该批不作收益/开销结论**：提示内嵌期望答案，测到的是照抄；W02 缺权威当前入口证据，`single-memory-off` 合理拒绝改文件而其它臂按文件名猜中；W03 团队臂零委派。三条都是蓝图构造问题，不是干净的能力差异。完整轨迹保留，不把 15/16 当作记忆或协作收益。
-- v2.1 修正：目标提示只给 `answer.json` schema、不给期望值；W02 增加 `package.json.main = src/new.mjs` 作为权威当前入口，旧 `docs/ENTRY.md` 与旧记忆仍指向 `src/old.mjs`；W03 明确“有只读委派工具时委派两个独立调查”；共同预算放宽为 32 请求 / 64 工具 / 320k token（root floor 120k / 10），金额上限仍是每 episode $0.50、整批 $8.50。v2.1 冻结与重跑需另行授权。
+- v2.1 修正：目标提示只给 `answer.json` schema、不给期望值；W02 增加 `package.json.main = src/new.mjs` 作为权威当前入口，旧 `docs/ENTRY.md` 与旧记忆仍指向 `src/old.mjs`；W03 明确“有只读委派工具时委派两个独立调查”；共同预算放宽为 32 请求 / 64 工具 / 320k token（root floor 120k / 10），金额上限仍是每 episode $0.50、整批 $8.50。
+- 用户再次授权后执行 v2.1 16/16：**11 通过**，估算 **$0.518104**，1,584,009 token / 219 请求 / 267 工具；prepare 602,808、goal 981,201；child 33,932；summary 0；retry 0；记忆查询 9 / 命中 8；委派 **2 批 / 4 子会话**。W03 的团队臂真正发生委派；W04 负对照未委派。5 条失败全是验收口径歧义：W01 两条把 `verificationPath` 写成 `check.mjs`，W04 三条把 `smallestCheck` 写成 `valid(NaN)` / `valid(NaN) === true`。这些不是能力差异，v2.1 同样不作收益结论。
+- v2.2 只修正口径：W01 明确 `verificationPath` 是记录命令的项目文档而非脚本；W04 明确 `smallestCheck` 是标准 JavaScript 谓词而非调用 `valid`。v2.2 已零付费冻结与验证，未授权付费重跑；v2 / v2.1 证据保留且不混算。摘要和重试在开发任务中仍未触发，相关零值只证明统计路径可报零。
 
 ## 集成已合并的 PR #6（2026-10-26）
 
