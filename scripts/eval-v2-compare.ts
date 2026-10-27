@@ -567,9 +567,10 @@ function looAttribution(
   label: ComponentLooVariant, reference: LooMetrics, variant: LooMetrics, referenceBatch: V2BatchEvidence, variantBatch: V2BatchEvidence,
   mechanism: string,
 ) {
-  const qualityLoss = Math.max(reference.reliableSuccesses - variant.reliableSuccesses, reference.artifactAccepted - variant.artifactAccepted)
-  const qualityWithinTolerance = qualityLoss <= componentLooProtocol.qualityTolerance
-  const reviewRequired = qualityLoss > componentLooProtocol.qualityTolerance
+  const qualityLoss = Math.max(0, reference.reliableSuccesses - variant.reliableSuccesses, reference.artifactAccepted - variant.artifactAccepted)
+  const qualityDifference = Math.max(Math.abs(reference.reliableSuccesses - variant.reliableSuccesses), Math.abs(reference.artifactAccepted - variant.artifactAccepted))
+  const qualityWithinTolerance = qualityDifference <= componentLooProtocol.qualityTolerance
+  const reviewRequired = !qualityWithinTolerance
   const output = looDelta(reference.outputTokens, variant.outputTokens)
   const active = looDelta(reference.activeDurationMs, variant.activeDurationMs)
   const nonModel = looDelta(reference.nonModelActiveDurationMs, variant.nonModelActiveDurationMs)
@@ -585,7 +586,7 @@ function looAttribution(
   const repeatConsistent = worseRepeats.every(distribution => signConsistent(Object.values(distribution).map(item => item.variant - item.reference)))
   const reasons: string[] = []
   let status: 'signal' | 'inconclusive' | 'efficiency-tradeoff' = 'inconclusive'
-  if (reviewRequired) reasons.push('quality-loss-beyond-tolerance')
+  if (reviewRequired) reasons.push('quality-difference-beyond-tolerance')
   else if (better.length && qualityLoss >= 1) { status = 'efficiency-tradeoff'; reasons.push('resource-better-with-quality-loss') }
   else if (worse.length && qualityWithinTolerance && repeatConsistent && mechanism === 'confirmed-adverse') status = 'signal'
   else {
@@ -597,7 +598,7 @@ function looAttribution(
   if (mechanism === 'confirmed-adverse' && status === 'inconclusive') reasons.push(preview ? 'offline-retention-loss-without-paid-signal' : 'offline-cpu-io-only-below-paid-threshold')
   if (mechanism === 'not-measured') reasons.push('offline-probe-not-measured')
   return {
-    status, reasons, thresholdPct: LOO_THRESHOLD * 100, qualityLoss, qualityWithinTolerance, reviewRequired, repeatConsistent,
+    status, reasons, thresholdPct: LOO_THRESHOLD * 100, qualityLoss, qualityDifference, qualityWithinTolerance, reviewRequired, repeatConsistent,
     deltaBasis: 'full - no-X; positive means full consumed more or scored higher',
     resources: { outputTokens: output, activeDurationMs: active, nonModelActiveDurationMs: nonModel },
     repeats: { outputTokens: repeatOutput, activeDurationMs: repeatActive, nonModelActiveDurationMs: repeatNonModel },
