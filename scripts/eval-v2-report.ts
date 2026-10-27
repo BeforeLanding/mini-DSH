@@ -4,8 +4,8 @@ import { createHash } from 'node:crypto'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { createHarness } from '../src/app/create-harness.js'
-import { armsForV2Split, protocolForV2Split, repeatsForV2Split, resolveV2Arms, resolveV2Episodes, seedForV2Split, tasksForV2Split } from './eval-v2-plan.js'
-import type { V2Episode, V2Protocol, V2Split, V2Tier } from './eval-v2-plan.js'
+import { componentLooVariants, protocolForV2Split, repeatsForV2Split, resolveV2SplitArms, resolveV2Episodes, seedForV2Split, tasksForV2Split } from './eval-v2-plan.js'
+import type { ComponentLooVariant, V2Episode, V2Protocol, V2Split, V2Tier } from './eval-v2-plan.js'
 import type { AblationPhase } from './eval-runner.js'
 
 export interface V2FreezeInput {
@@ -23,13 +23,15 @@ export interface V2FreezeInput {
   // Product-code commit under test. Component batches carry an evaluation
   // harness commit on top, so gitCommit alone cannot identify what was compared.
   sourceBaseCommit?: string
+  // component-loo：这份证据来自哪一条源码变体。每份 manifest 仍只有一条 `context` 执行臂。
+  variant?: ComponentLooVariant
 }
 export interface V2FrozenFile { path: string; sha256: string }
 export interface V2Manifest extends V2FreezeInput {
   protocol: V2Protocol
   scheduleSeed: number
   tasks: readonly { id: string; family: string; shape: string; groups: string[]; files: V2FrozenFile[] }[]
-  arms: ReturnType<typeof resolveV2Arms>
+  arms: ReturnType<typeof resolveV2SplitArms>
   episodes: readonly V2Episode[]
   sourceFiles: V2FrozenFile[]
   toolSchemaSha256?: string
@@ -54,9 +56,15 @@ const frozenSourcePaths = (split: V2Split): string[] => {
     case 'calibration': return sourcePaths
     case 'development': return [...sourcePaths, 'scripts/smoke-cost.ts', 'docs/context-budget/NX-45-DEVELOPMENT.md']
     case 'component': return [...sourcePaths, 'scripts/smoke-cost.ts', 'docs/context-budget/NX-50-COMPONENT-AB.md']
+    // 离线探针脚本本身必须冻结：它的 SHA-256 就是四份探针的 suiteSha256。NX-51 文档定义本协议，
+    // 因此在冻结清单里；结果文档留到付费执行之后，不能进这份清单。
+    case 'component-loo': return [...sourcePaths, 'scripts/smoke-cost.ts', 'scripts/benchmark-components.mjs',
+      'docs/context-budget/NX-50-COMPONENT-AB.md', 'docs/context-budget/NX-51-COMPONENT-ABLATION.md',
+      'scripts/eval-v2-component-protocol.ts', 'scripts/eval-v2-provenance.ts']
   }
 }
-const strictV2Split = (split: V2Split): boolean => split === 'development' || split === 'component'
+const componentLikeSplit = (split: V2Split): boolean => split === 'component' || split === 'component-loo'
+const strictV2Split = (split: V2Split): boolean => split === 'development' || componentLikeSplit(split)
 const COMPONENT_MODEL_VERSION = 'DeepSeek-V4.1-Flash-1017'
 const COMPONENT_PRICE = Object.freeze({ inputPerMillion: 0.30, outputPerMillion: 1.20, cacheReadPerMillion: 0.006 })
 const OFFICIAL_PRICE_SOURCE = 'https://api-docs.deepseek.com/quick_start/pricing/'
@@ -96,20 +104,23 @@ async function listFiles(root: string, relative = ''): Promise<V2FrozenFile[]> {
 }
 
 export async function freezeV2(input: V2FreezeInput): Promise<V2Manifest> {
-  if (input.split !== 'formal' && input.split !== 'calibration' && input.split !== 'development' && input.split !== 'component') throw new Error('invalid V2 split')
+  if (input.split !== 'formal' && input.split !== 'calibration' && input.split !== 'development' && input.split !== 'component' && input.split !== 'component-loo') throw new Error('invalid V2 split')
   if (input.tier !== '2m' && input.tier !== '1m') throw new Error('invalid V2 tier')
   if (strictV2Split(input.split) && input.tier !== '1m') throw new Error(`${input.split} protocol requires the shared 1m tier`)
   if (strictV2Split(input.split) && (input.window !== 1_000_000 || input.model !== 'deepseek/deepseek-flash' || input.echoedModel !== 'deepseek-flash' ||
     input.thinking !== 'enabled' || input.sampling !== 'provider-default' || !input.modelVersion)) throw new Error(`${input.split} model contract mismatch`)
   if (strictV2Split(input.split) && input.priceSnapshot.source !== OFFICIAL_PRICE_SOURCE) throw new Error(`${input.split} price snapshot must use the official source`)
-  if (input.split === 'component' && (input.modelVersion !== COMPONENT_MODEL_VERSION ||
+  if (componentLikeSplit(input.split) && (input.modelVersion !== COMPONENT_MODEL_VERSION ||
     input.priceSnapshot.inputPerMillion !== COMPONENT_PRICE.inputPerMillion ||
     input.priceSnapshot.outputPerMillion !== COMPONENT_PRICE.outputPerMillion ||
     input.priceSnapshot.cacheReadPerMillion !== COMPONENT_PRICE.cacheReadPerMillion ||
-    input.priceSnapshot.currency !== 'USD')) throw new Error('component model or price snapshot mismatch')
-  if (input.split === 'component' && (!input.sourceBaseCommit || !/^[0-9a-f]{40}$/.test(input.sourceBaseCommit) || input.sourceBaseCommit === input.gitCommit)) {
-    throw new Error('component freeze requires a distinct 40-hex sourceBaseCommit')
+    input.priceSnapshot.currency !== 'USD')) throw new Error(`${input.split} model or price snapshot mismatch`)
+  if (componentLikeSplit(input.split) && (!input.sourceBaseCommit || !/^[0-9a-f]{40}$/.test(input.sourceBaseCommit) || input.sourceBaseCommit === input.gitCommit)) {
+    throw new Error(`${input.split} freeze requires a distinct 40-hex sourceBaseCommit`)
   }
+  if (input.split === 'component-loo') {
+    if (input.variant === undefined || !(componentLooVariants as readonly string[]).includes(input.variant)) throw new Error('component-loo freeze requires a registered variant')
+  } else if (input.variant !== undefined) throw new Error(`variant is only valid for component-loo, not ${input.split}`)
   if (!input.model || !input.echoedModel || !input.baseUrl || !/^[0-9a-f]{40}$/.test(input.gitCommit) ||
     !['enabled', 'disabled'].includes(input.thinking) || input.sampling !== 'provider-default') throw new Error('freeze requires model, echo label, thinking, provider-default sampling, endpoint and clean Git commit')
   const price = input.priceSnapshot
@@ -130,7 +141,7 @@ export async function freezeV2(input: V2FreezeInput): Promise<V2Manifest> {
     ...await Promise.all(frozenSourcePaths(input.split).map(async file => ({ path: file, sha256: sha(await fs.readFile(path.join(repository, file))) }))),
     ...(await listFiles(path.join(repository, 'src'))).map(file => ({ path: `src/${file.path}`, sha256: file.sha256 })),
   ].sort((a, b) => a.path.localeCompare(b.path, 'en'))
-  const arms = resolveV2Arms(input.window, input.tier).filter(arm => armsForV2Split(input.split).includes(arm.name))
+  const arms = resolveV2SplitArms(input.split, input.window, input.tier)
   const fields = { protocol: protocolForV2Split(input.split),
     scheduleSeed: seedForV2Split(input.split), ...input, tasks: frozenTasks, arms, episodes: resolveV2Episodes(input.split), sourceFiles,
     ...(strictV2Split(input.split) ? { toolSchemaSha256: await currentToolSchemaSha256() } : {}) }
@@ -222,19 +233,23 @@ export function reportV2(manifest: V2Manifest, observations: readonly V2Observat
   const expectedTasks = tasksForV2Split(manifest.split)
   const protocolMatches = manifest.split === 'development' ? manifest.protocol === 'NX-45-dev-2arm-v1'
     : manifest.split === 'component' ? manifest.protocol === 'NX-50-component-ab-v1'
+    : manifest.split === 'component-loo' ? manifest.protocol === 'NX-51-component-loo-v1'
     : manifest.protocol === 'NX-42-eval-v2' || manifest.protocol === 'NX-42-eval-v2.1'
-  if (sha(stable(fields)) !== digest || !protocolMatches ||
+  const variantMatches = manifest.split === 'component-loo'
+    ? manifest.variant !== undefined && (componentLooVariants as readonly string[]).includes(manifest.variant)
+    : manifest.variant === undefined
+  if (sha(stable(fields)) !== digest || !protocolMatches || !variantMatches ||
     manifest.scheduleSeed !== seedForV2Split(manifest.split) || (strictV2Split(manifest.split) && manifest.tier !== '1m') ||
     (strictV2Split(manifest.split) && (!/^[a-f0-9]{64}$/.test(manifest.toolSchemaSha256 ?? '') || !manifest.modelVersion || manifest.window !== 1_000_000 ||
       manifest.model !== 'deepseek/deepseek-flash' || manifest.echoedModel !== 'deepseek-flash' || manifest.thinking !== 'enabled' || manifest.sampling !== 'provider-default' ||
       manifest.priceSnapshot.source !== OFFICIAL_PRICE_SOURCE)) ||
-    (manifest.split === 'component' && (manifest.modelVersion !== COMPONENT_MODEL_VERSION ||
+    (componentLikeSplit(manifest.split) && (manifest.modelVersion !== COMPONENT_MODEL_VERSION ||
       manifest.priceSnapshot.inputPerMillion !== COMPONENT_PRICE.inputPerMillion || manifest.priceSnapshot.outputPerMillion !== COMPONENT_PRICE.outputPerMillion ||
       manifest.priceSnapshot.cacheReadPerMillion !== COMPONENT_PRICE.cacheReadPerMillion || manifest.priceSnapshot.currency !== 'USD' ||
       !/^[0-9a-f]{40}$/.test(manifest.sourceBaseCommit ?? '') || manifest.sourceBaseCommit === manifest.gitCommit)) ||
     stable(manifest.tasks.map(({ id, family, shape }) => ({ id, family, shape }))) !== stable(expectedTasks) ||
     stable(manifest.episodes) !== stable(resolveV2Episodes(manifest.split)) ||
-    stable(manifest.arms) !== stable(resolveV2Arms(manifest.window, manifest.tier).filter(arm => armsForV2Split(manifest.split).includes(arm.name)))) throw new Error('V2 manifest integrity or schedule mismatch')
+    stable(manifest.arms) !== stable(resolveV2SplitArms(manifest.split, manifest.window, manifest.tier))) throw new Error('V2 manifest integrity or schedule mismatch')
   const expected = new Map(manifest.episodes.map(episode => [`${episode.taskId}/${episode.repeat}/${episode.arm}`, episode]))
   const seen = new Map<string, V2Observation>()
   for (const record of observations) {
@@ -305,7 +320,7 @@ export function reportV2(manifest: V2Manifest, observations: readonly V2Observat
     split: manifest.split, singleArm, planned: manifest.episodes.length, executed: observations.length, incomplete: missing.length > 0 || invalid.length > 0,
     missing, invalid, arms, primary, exploratory, pairs,
     measurementLimits: ['Policy/parameter rejection has no structured event subtype in the current Harness; null means not measurable, never zero.', 'A failed test command is counted as a tool error but cannot be reliably separated from an unexpected command error without a structured check marker.', 'A provider call interrupted before usage is durable may cost more than the token-derived estimate; the runner stops the batch after an infrastructure or evidence failure.'],
-    interpretation: missing.length || invalid.length ? 'incomplete' : manifest.split === 'development' || manifest.split === 'component' ? 'development-only' : manifest.split === 'calibration' ? 'calibration-only' : !primary.complete ? 'incomplete' : primary.estimate! >= 0.10 && primary.lower95! > 0 ? 'supported-improvement' : 'no-supported-improvement',
+    interpretation: missing.length || invalid.length ? 'incomplete' : manifest.split === 'development' || manifest.split === 'component' || manifest.split === 'component-loo' ? 'development-only' : manifest.split === 'calibration' ? 'calibration-only' : !primary.complete ? 'incomplete' : primary.estimate! >= 0.10 && primary.lower95! > 0 ? 'supported-improvement' : 'no-supported-improvement',
     thresholdClaimSupported: manifest.split === 'formal' && primary.complete && primary.lower95! >= 0.10 }
 }
 export type V2Report = ReturnType<typeof reportV2>
