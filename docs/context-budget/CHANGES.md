@@ -1,5 +1,14 @@
 # 改动与验收证据
 
+
+### CE-2 四臂重新冻结与零付费验收（2026-10-27，完成）
+
+CE-1 提交 `4251382` 已推送。从最新 main `0b8b973` 重新派生三个独立回退源码提交，分别 check/针对性测试通过后，再应用相同评测代码。源码变体源提交与评测 HEAD 的 `src/**` 一致；四份 manifest 各 12 条，合计 48 条计划，全部 `--validate-only` 通过（wsl-bwrap、paidRequests=0）。规范化共同字段及非组件文件逐字相同，精确源码路径审计通过，四臂显式 prune=false、tool schema 一致。
+
+离线预览通过 12→0（fullRecall 全部 12/12），投影 propertyReads 32,982→2,284,323，报告 snapshotOpens 6→91；投影/报告输出哈希一致。源码定向测试 no-preview 14/14、no-projection 机制 4/4＋实际 compaction 四文件 46/46、no-report 6/6，三臂 check 与应用评测代码后的 check 全过。full 另从干净源码 HEAD 运行探针；没有伪造 sourceCommit。新证据根 `D:\Agent\outputs\component-eval-closure-20261027\`，evidence/ 为空，真实 episode 0、provider 请求 0。
+
+实际命令：各评测工作树 `pnpm check`、`node dist/scripts/eval-v2-freeze.js --config CONFIG --output MANIFEST`、设置 MINI_DSH_V2_RUNTIME 后 `node dist/scripts/eval-v2-run.js --manifest MANIFEST --validate-only`；各源码工作树 `node scripts/benchmark-components.mjs --out PROBE`；`node D:/Agent/outputs/component-eval-closure-20261027/audit.mjs` 检查四份实际材料，全项通过。提交号/digest/哈希/复现与边界见 [冻结验收](COMPONENT-EVAL-CLOSURE.md) 和 [机器记录](../samples/component-eval-closure-20261027.json)。CE-2 不修改冻结输入；付费执行与实时价格核对/重冻仍需另行安排，未授权。
+
 ### CE-1 组件评测协议收口（2026-10-27，完成）
 
 从 main `0b8b973` 复用未合并的 `3752ca4`（原实现作者与提交记录保留），引入独立 `component-loo` 与四臂比较器。NX-50 的比较器/历史门槛不变；LOO 的包文件必须完全相等，源码仅允许精确组件路径差异。`scripts/eval-v2-component-protocol.ts` 集中维护新协议的调度、裁剪开关、允许路径与诊断阈值。

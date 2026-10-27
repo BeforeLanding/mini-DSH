@@ -1,0 +1,250 @@
+{
+  "protocol": "NX-51-component-loo-v1",
+  "evidenceKind": "zero-paid-freeze-validation",
+  "date": "2026-10-27",
+  "sourceMain": "0b8b9736b7da181ade20d7a33dea480bd985aa46",
+  "evaluationChange": "425138299f2cfd1586ad9d5e5a00e58f65ca5afb",
+  "paidRequests": 0,
+  "plannedEpisodes": 48,
+  "executedEpisodes": 0,
+  "paidEvidenceDirectoryEmpty": true,
+  "priceSnapshot": {
+    "source": "https://api-docs.deepseek.com/quick_start/pricing/",
+    "capturedAt": "2026-10-26T14:04:42Z",
+    "currency": "USD",
+    "inputPerMillion": 0.3,
+    "outputPerMillion": 1.2,
+    "cacheReadPerMillion": 0.006
+  },
+  "priceIsHistoricalSnapshot": true,
+  "acceptance": {
+    "canonicalPlans": true,
+    "explicitPruneOff": true,
+    "commonConfigurationIdentical": true,
+    "exactSourcePaths": true,
+    "sourceMatchesEvaluation": true,
+    "schemaIdentical": true,
+    "fourValidateOnlyPassed": true,
+    "offlineEvidencePreserved": true
+  },
+  "variants": {
+    "full": {
+      "sourceBaseCommit": "0b8b9736b7da181ade20d7a33dea480bd985aa46",
+      "evaluationCommit": "425138299f2cfd1586ad9d5e5a00e58f65ca5afb",
+      "manifestDigest": "2a05b4971b55e6841afd61881aa5ae0989c931d34d0dae7d349f1384a4eaaa34",
+      "manifestFileSha256": "5fded272c99b78b773233b7452b04ee0337772673a38f2bec2920131a316b324",
+      "toolSchemaSha256": "47105100606a23b5e366a79f7b5206203b31e852117354df54662ee15d35d6c1",
+      "episodes": 12,
+      "plannedOnly": true,
+      "executed": 0,
+      "sourceDifferences": [],
+      "postCompactionPrune": false,
+      "preflight": {
+        "manifestDigest": "2a05b4971b55e6841afd61881aa5ae0989c931d34d0dae7d349f1384a4eaaa34",
+        "variant": "full",
+        "sourceBaseCommit": "0b8b9736b7da181ade20d7a33dea480bd985aa46",
+        "evaluationCommit": "425138299f2cfd1586ad9d5e5a00e58f65ca5afb",
+        "tasks": 6,
+        "episodes": 12,
+        "isolation": "wsl-bwrap",
+        "paidRequests": 0
+      },
+      "probe": {
+        "fileSha256": "c96be197ec4b46361e94c6d3e41d61fda691bf4cf5b2021a5e703967c3bb4380",
+        "suiteSha256": "34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28",
+        "providerRequests": 0,
+        "previewPassed": 12,
+        "previewCases": 12,
+        "fullRecall": 12,
+        "propertyReads": 32982,
+        "snapshotOpens": 6,
+        "compactionOutputSha256": [
+          "5454a07cb80e66cf234f00cda2b000f6e3a8286546a6f8ee2ed39b8f12a4ad27",
+          "fe15a40987bf9ce97ac0f48f5625b833010bc6d0357342570308106d6aebc2e3",
+          "7db1a5977d31d4dc324b387669e6fc514475d8aae30e7a25e704686910ac17ce"
+        ],
+        "reportOutputSha256": [
+          "5c747590207ac6daf528a4ab8ba04ad8d0154799f554dbf432d962e92c539f6a",
+          "ef674097c70dee379d0272327b904fc858c812c4797c63a40fc9bbc6444a586a",
+          "eb12ef44253b712a45ea5e35d9509837a652ffb993241bcf3418ae6ba6302f37"
+        ]
+      }
+    },
+    "no-preview": {
+      "sourceBaseCommit": "38b4730315bdc93fe116a8e817d6ef0eac5627f3",
+      "evaluationCommit": "429aacef840b61fca5b7380699de0be0028efef6",
+      "manifestDigest": "63676172263be0cc5374e4ef8cf3bc64db394a791e36329421ac0246911b0a9a",
+      "manifestFileSha256": "5f45a562b34a27e71923663780e01544dbb9935257fe589287a9a11d96151051",
+      "toolSchemaSha256": "47105100606a23b5e366a79f7b5206203b31e852117354df54662ee15d35d6c1",
+      "episodes": 12,
+      "plannedOnly": true,
+      "executed": 0,
+      "sourceDifferences": [
+        "src/core/tool-result-store.ts",
+        "src/plugins/tool-results.ts"
+      ],
+      "postCompactionPrune": false,
+      "preflight": {
+        "manifestDigest": "63676172263be0cc5374e4ef8cf3bc64db394a791e36329421ac0246911b0a9a",
+        "variant": "no-preview",
+        "sourceBaseCommit": "38b4730315bdc93fe116a8e817d6ef0eac5627f3",
+        "evaluationCommit": "429aacef840b61fca5b7380699de0be0028efef6",
+        "tasks": 6,
+        "episodes": 12,
+        "isolation": "wsl-bwrap",
+        "paidRequests": 0
+      },
+      "probe": {
+        "fileSha256": "2bc349d71c1888b9eedf2b9c22b0439466399732c85521bde0ea665ff1ba0779",
+        "suiteSha256": "34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28",
+        "providerRequests": 0,
+        "previewPassed": 0,
+        "previewCases": 12,
+        "fullRecall": 12,
+        "propertyReads": 32982,
+        "snapshotOpens": 6,
+        "compactionOutputSha256": [
+          "5454a07cb80e66cf234f00cda2b000f6e3a8286546a6f8ee2ed39b8f12a4ad27",
+          "fe15a40987bf9ce97ac0f48f5625b833010bc6d0357342570308106d6aebc2e3",
+          "7db1a5977d31d4dc324b387669e6fc514475d8aae30e7a25e704686910ac17ce"
+        ],
+        "reportOutputSha256": [
+          "5c747590207ac6daf528a4ab8ba04ad8d0154799f554dbf432d962e92c539f6a",
+          "ef674097c70dee379d0272327b904fc858c812c4797c63a40fc9bbc6444a586a",
+          "eb12ef44253b712a45ea5e35d9509837a652ffb993241bcf3418ae6ba6302f37"
+        ]
+      }
+    },
+    "no-projection": {
+      "sourceBaseCommit": "de7558cb95f7ca98d5d3497f6293ed2371fb6c5d",
+      "evaluationCommit": "208b1ebb56bff1736262f3194ccb5c3ee45b1cc8",
+      "manifestDigest": "7f1fb7188223c37d899377e3610120395e63a7ac83d351cc6efe85f97c30cff0",
+      "manifestFileSha256": "e6faf32bd1880c7d5b28bd621f19d36b64f00a46e59696051146db20df40bc93",
+      "toolSchemaSha256": "47105100606a23b5e366a79f7b5206203b31e852117354df54662ee15d35d6c1",
+      "episodes": 12,
+      "plannedOnly": true,
+      "executed": 0,
+      "sourceDifferences": [
+        "src/core/compaction-plan.ts"
+      ],
+      "postCompactionPrune": false,
+      "preflight": {
+        "manifestDigest": "7f1fb7188223c37d899377e3610120395e63a7ac83d351cc6efe85f97c30cff0",
+        "variant": "no-projection",
+        "sourceBaseCommit": "de7558cb95f7ca98d5d3497f6293ed2371fb6c5d",
+        "evaluationCommit": "208b1ebb56bff1736262f3194ccb5c3ee45b1cc8",
+        "tasks": 6,
+        "episodes": 12,
+        "isolation": "wsl-bwrap",
+        "paidRequests": 0
+      },
+      "probe": {
+        "fileSha256": "bed70a1ed0a94dc7d18cbeeab25ea81e760431807bfa430f3e6263f2b87a3ccc",
+        "suiteSha256": "34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28",
+        "providerRequests": 0,
+        "previewPassed": 12,
+        "previewCases": 12,
+        "fullRecall": 12,
+        "propertyReads": 2284323,
+        "snapshotOpens": 6,
+        "compactionOutputSha256": [
+          "5454a07cb80e66cf234f00cda2b000f6e3a8286546a6f8ee2ed39b8f12a4ad27",
+          "fe15a40987bf9ce97ac0f48f5625b833010bc6d0357342570308106d6aebc2e3",
+          "7db1a5977d31d4dc324b387669e6fc514475d8aae30e7a25e704686910ac17ce"
+        ],
+        "reportOutputSha256": [
+          "5c747590207ac6daf528a4ab8ba04ad8d0154799f554dbf432d962e92c539f6a",
+          "ef674097c70dee379d0272327b904fc858c812c4797c63a40fc9bbc6444a586a",
+          "eb12ef44253b712a45ea5e35d9509837a652ffb993241bcf3418ae6ba6302f37"
+        ]
+      }
+    },
+    "no-report": {
+      "sourceBaseCommit": "ddc04fc951edf3b567d9b19405e52f9b85a5aecd",
+      "evaluationCommit": "606f1294493542fba9049f975770ad2bfb86564a",
+      "manifestDigest": "9f11b77ecbbc9d8a86ed6d3b8711b87ee6af5d3efe9f5eff30cfba0395161422",
+      "manifestFileSha256": "e8a69989d66a1e53e9077965353e3c102b85b8cee44ddfdf3a9761495b69c711",
+      "toolSchemaSha256": "47105100606a23b5e366a79f7b5206203b31e852117354df54662ee15d35d6c1",
+      "episodes": 12,
+      "plannedOnly": true,
+      "executed": 0,
+      "sourceDifferences": [
+        "src/core/file-edit.ts",
+        "src/core/task-changes.ts",
+        "src/core/task-verification.ts"
+      ],
+      "postCompactionPrune": false,
+      "preflight": {
+        "manifestDigest": "9f11b77ecbbc9d8a86ed6d3b8711b87ee6af5d3efe9f5eff30cfba0395161422",
+        "variant": "no-report",
+        "sourceBaseCommit": "ddc04fc951edf3b567d9b19405e52f9b85a5aecd",
+        "evaluationCommit": "606f1294493542fba9049f975770ad2bfb86564a",
+        "tasks": 6,
+        "episodes": 12,
+        "isolation": "wsl-bwrap",
+        "paidRequests": 0
+      },
+      "probe": {
+        "fileSha256": "5ddee78b413895e23e2bc96e4aa7a2fe03495f1f437eedb793ad722f3a2eb62a",
+        "suiteSha256": "34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28",
+        "providerRequests": 0,
+        "previewPassed": 12,
+        "previewCases": 12,
+        "fullRecall": 12,
+        "propertyReads": 32982,
+        "snapshotOpens": 91,
+        "compactionOutputSha256": [
+          "5454a07cb80e66cf234f00cda2b000f6e3a8286546a6f8ee2ed39b8f12a4ad27",
+          "fe15a40987bf9ce97ac0f48f5625b833010bc6d0357342570308106d6aebc2e3",
+          "7db1a5977d31d4dc324b387669e6fc514475d8aae30e7a25e704686910ac17ce"
+        ],
+        "reportOutputSha256": [
+          "5c747590207ac6daf528a4ab8ba04ad8d0154799f554dbf432d962e92c539f6a",
+          "ef674097c70dee379d0272327b904fc858c812c4797c63a40fc9bbc6444a586a",
+          "eb12ef44253b712a45ea5e35d9509837a652ffb993241bcf3418ae6ba6302f37"
+        ]
+      }
+    }
+  },
+  "limits": [
+    "No paid observations; no model effectiveness, significance or generalization claim.",
+    "The 2026-10-26 price snapshot is reused only for zero-paid validation; recheck and refreeze before any separately authorized paid run."
+  ],
+  "verification": {
+    "fullIsolatedTests": {
+      "pass": 576,
+      "fail": 0,
+      "skipped": 0
+    },
+    "finalEvalTargetedTests": {
+      "pass": 26,
+      "fail": 0
+    },
+    "sourceVariantTests": {
+      "no-preview": 14,
+      "no-projectionMechanism": 4,
+      "no-projectionCompaction": 46,
+      "no-report": 6
+    },
+    "syntaxFiles": 224,
+    "lintFiles": 253,
+    "lintDiagnostics": 0,
+    "fixtureChecks": 25,
+    "offlineCompleted": 12,
+    "offlineAccepted": 12
+  },
+  "logSha256": {
+    "full-freeze.log": "3ebba27359a6bc29a65d962073afe2d10f2633114d21fd4c0f76f6c88493b4bb",
+    "full-validate.log": "1559d59bfb4b444c501b7190aea83f9df08aa53a8ecbc64c75793cb4094ada61",
+    "no-preview-freeze.log": "99b6b4a08d0d0da17025e2a5c288f3ae135baf94d25edbb775861cecde04034c",
+    "no-preview-test.log": "22defded9585cc554b4382af676bce0a626f53177f789f4e701a4a6e84f93f2c",
+    "no-preview-validate.log": "2a9140008f2e01b9dd995c610562c2d94d47d3fc0b53a7b06f8de3e8170452e6",
+    "no-projection-compaction-test.log": "e6b5e4504a973383f824427eb9331952828b03d74ddef27554850b27bd573304",
+    "no-projection-freeze.log": "6c9f722afd1a482749ae1ce75357af5709acc8dbb987543d733c23e3acd513a0",
+    "no-projection-test.log": "9244494e276d4021e9090346081feae421c005a64e0e4acfebd27f405c48b25a",
+    "no-projection-validate.log": "1cc53bcf38b334531eee3efbcd05ac98b2ee8cee7d8fad0fe6e00d7620153567",
+    "no-report-freeze.log": "c675a5beb69c02e79e86afa5fad830a91598c03c7346afce1b32e91af4b6f471",
+    "no-report-test.log": "7a0522a15c62cba32ee0ac26d59f03b4e9485eaf4c8595b38f89f64f12efa229",
+    "no-report-validate.log": "a54e60ec19ecb29513753a067bb3339d9327f3406c2c9f0b16a3bd5609fe4b50"
+  }
+}
