@@ -1,13 +1,10 @@
 # 开发进度
 
-更新：2026-10-25。历史逐步记录已整体迁入 [2026-09-28 至 2026-09-30 归档](docs/history/PROGRESS-2026-09-28--2026-09-30.md)；本文件只维护当前状态、阻塞和下一步。
+更新：2026-10-27。历史逐步记录已整体迁入 [2026-09-28 至 2026-09-30 归档](docs/history/PROGRESS-2026-09-28--2026-09-30.md)；本文件只维护当前状态、阻塞和下一步。
 
 ## 当前状态
 
-- **PR #8 合并前审查补强（2026-10-27）**：六项原 CI 全绿、暂无评审评论。CE-R1 在冻结与运行前强制源码提交到评测提交之间 `src/**` 不变；CE-R2 在 LOO 归因中把双向质量差异超过 1 条都设为审阅，避免“回退臂质量明显更好”仍判组件有益。定向 25/25、check 226、lint 256 通过。修订后需等待新 CI，再合并并按新 HEAD 重冻四臂。
-
-
-- **组件评测收口完成（2026-10-27，零付费）**：CE-1 `4251382` 在 main `0b8b973` 上统一独立 LOO 协议、允许变化/顺序/阈值与显式裁剪关闭；完整隔离 576/576，最终相关定向 26/26，check/lint/fixtures/offline/bench 通过。CE-2 四臂重新冻结与 validate-only 全过（wsl-bwrap、paidRequests=0），精确源码/共同字段与离线输出审计全过，48 条仅是计划、实际 episode 0；源码变体分支已推送。[冻结验收](docs/context-budget/COMPONENT-EVAL-CLOSURE.md) 与机器记录含源码/评测 commit、manifest digest、探针/日志哈希和复现。下一步是 PR 审阅；付费前须重新核价/重冻并单独授权，未执行付费、未合并 main。
+- **组件 LOO 合并后重冻完成（2026-10-27，零付费）**：PR #8 已以 merge `54a1921` 合并，六项 CI 全绿；代码审查补齐源码身份与双向质量差异边界。四臂在新评测 HEAD 重冻，12 × 4 条计划、`--validate-only` 全过（wsl-bwrap，paidRequests=0），共同配置/精确源码差异/tool schema 与离线输出审计通过，实际模型 episode 0。官方模型与峰值价格当日核对，单批储备 $21.1355904，拟设硬上限 $22、合计 $88。下一步需 full 12 条批次的明确付费授权；[新冻结与预算](docs/context-budget/COMPONENT-LOO-POSTMERGE-FREEZE.md)。
 
 
 - **PR #7 独立核心复核（2026-10-27）**：共享 deadline 未覆盖工具/审批、worker 失败清理、提案批次身份及跨会话撤销四项已分别修复推送（`afdaca5` / `bc4ef50` / `9750558` / `525ecc9`）。本地 check 222 / lint 251 零诊断，完整 564 tests / 534 pass / 0 fail / 30 平台 skipped；两个零 provider 演示通过。默认关闭、人工批准及项目隔离复核未发现其它阻塞；最终 head 六项 CI 全绿后以 merge commit 收口，见 [审查记录](docs/memory-team/REVIEW-PR7.md)。

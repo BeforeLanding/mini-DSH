@@ -1,0 +1,244 @@
+{
+  "protocol": "NX-51-component-loo-v1",
+  "evidenceKind": "zero-paid-freeze-validation",
+  "date": "2026-10-27",
+  "sourceMain": "0b8b9736b7da181ade20d7a33dea480bd985aa46",
+  "evaluationChange": "54a1921962e42be5fd4e7dab23e71c02be0edf8b",
+  "paidRequests": 0,
+  "plannedEpisodes": 48,
+  "executedEpisodes": 0,
+  "paidEvidenceDirectoryEmpty": true,
+  "priceSnapshot": {
+    "source": "https://api-docs.deepseek.com/quick_start/pricing/",
+    "capturedAt": "2026-10-27T12:51:07Z",
+    "currency": "USD",
+    "inputPerMillion": 0.3,
+    "outputPerMillion": 1.2,
+    "cacheReadPerMillion": 0.006
+  },
+  "priceIsHistoricalSnapshot": false,
+  "acceptance": {
+    "canonicalPlans": true,
+    "explicitPruneOff": true,
+    "commonConfigurationIdentical": true,
+    "exactSourcePaths": true,
+    "sourceMatchesEvaluation": true,
+    "schemaIdentical": true,
+    "fourValidateOnlyPassed": true,
+    "offlineEvidencePreserved": true
+  },
+  "variants": {
+    "full": {
+      "sourceBaseCommit": "0b8b9736b7da181ade20d7a33dea480bd985aa46",
+      "evaluationCommit": "54a1921962e42be5fd4e7dab23e71c02be0edf8b",
+      "manifestDigest": "31b9b58387c32fe17ddb5d0657fd52266a2bd6b7db83b9eaa350e637bbebd2cb",
+      "manifestFileSha256": "aab974aca03cfd029f9b76c803b07b41685fa88745e1d35cc4e5ac0ccfc3c6d2",
+      "toolSchemaSha256": "47105100606a23b5e366a79f7b5206203b31e852117354df54662ee15d35d6c1",
+      "episodes": 12,
+      "plannedOnly": true,
+      "executed": 0,
+      "sourceDifferences": [],
+      "postCompactionPrune": false,
+      "preflight": {
+        "manifestDigest": "31b9b58387c32fe17ddb5d0657fd52266a2bd6b7db83b9eaa350e637bbebd2cb",
+        "variant": "full",
+        "sourceBaseCommit": "0b8b9736b7da181ade20d7a33dea480bd985aa46",
+        "evaluationCommit": "54a1921962e42be5fd4e7dab23e71c02be0edf8b",
+        "tasks": 6,
+        "episodes": 12,
+        "isolation": "wsl-bwrap",
+        "paidRequests": 0
+      },
+      "probe": {
+        "fileSha256": "c96be197ec4b46361e94c6d3e41d61fda691bf4cf5b2021a5e703967c3bb4380",
+        "suiteSha256": "34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28",
+        "providerRequests": 0,
+        "previewPassed": 12,
+        "previewCases": 12,
+        "fullRecall": 12,
+        "propertyReads": 32982,
+        "snapshotOpens": 6,
+        "compactionOutputSha256": [
+          "5454a07cb80e66cf234f00cda2b000f6e3a8286546a6f8ee2ed39b8f12a4ad27",
+          "fe15a40987bf9ce97ac0f48f5625b833010bc6d0357342570308106d6aebc2e3",
+          "7db1a5977d31d4dc324b387669e6fc514475d8aae30e7a25e704686910ac17ce"
+        ],
+        "reportOutputSha256": [
+          "5c747590207ac6daf528a4ab8ba04ad8d0154799f554dbf432d962e92c539f6a",
+          "ef674097c70dee379d0272327b904fc858c812c4797c63a40fc9bbc6444a586a",
+          "eb12ef44253b712a45ea5e35d9509837a652ffb993241bcf3418ae6ba6302f37"
+        ]
+      }
+    },
+    "no-preview": {
+      "sourceBaseCommit": "38b4730315bdc93fe116a8e817d6ef0eac5627f3",
+      "evaluationCommit": "d27a016a39ad3139aa57912087c4bab069dc498c",
+      "manifestDigest": "22359059357399c196e40114682276f204334409a5c8cee04cba491621a91250",
+      "manifestFileSha256": "f04a43200fd047067aa089f8eafd983f38a4d807c3ebe66d0d226be21fe1e310",
+      "toolSchemaSha256": "47105100606a23b5e366a79f7b5206203b31e852117354df54662ee15d35d6c1",
+      "episodes": 12,
+      "plannedOnly": true,
+      "executed": 0,
+      "sourceDifferences": [
+        "src/core/tool-result-store.ts",
+        "src/plugins/tool-results.ts"
+      ],
+      "postCompactionPrune": false,
+      "preflight": {
+        "manifestDigest": "22359059357399c196e40114682276f204334409a5c8cee04cba491621a91250",
+        "variant": "no-preview",
+        "sourceBaseCommit": "38b4730315bdc93fe116a8e817d6ef0eac5627f3",
+        "evaluationCommit": "d27a016a39ad3139aa57912087c4bab069dc498c",
+        "tasks": 6,
+        "episodes": 12,
+        "isolation": "wsl-bwrap",
+        "paidRequests": 0
+      },
+      "probe": {
+        "fileSha256": "2bc349d71c1888b9eedf2b9c22b0439466399732c85521bde0ea665ff1ba0779",
+        "suiteSha256": "34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28",
+        "providerRequests": 0,
+        "previewPassed": 0,
+        "previewCases": 12,
+        "fullRecall": 12,
+        "propertyReads": 32982,
+        "snapshotOpens": 6,
+        "compactionOutputSha256": [
+          "5454a07cb80e66cf234f00cda2b000f6e3a8286546a6f8ee2ed39b8f12a4ad27",
+          "fe15a40987bf9ce97ac0f48f5625b833010bc6d0357342570308106d6aebc2e3",
+          "7db1a5977d31d4dc324b387669e6fc514475d8aae30e7a25e704686910ac17ce"
+        ],
+        "reportOutputSha256": [
+          "5c747590207ac6daf528a4ab8ba04ad8d0154799f554dbf432d962e92c539f6a",
+          "ef674097c70dee379d0272327b904fc858c812c4797c63a40fc9bbc6444a586a",
+          "eb12ef44253b712a45ea5e35d9509837a652ffb993241bcf3418ae6ba6302f37"
+        ]
+      }
+    },
+    "no-projection": {
+      "sourceBaseCommit": "de7558cb95f7ca98d5d3497f6293ed2371fb6c5d",
+      "evaluationCommit": "8a9f5c2310b9228253708b8470f1b0fab5c152fc",
+      "manifestDigest": "8c54ba9dac165e2c833afae2db0db3fd2ed3420f376aaad1862f191f5844b313",
+      "manifestFileSha256": "e47e27ac533d894648d699291bd681b1f88b8139622be1e46c2c890e3754e381",
+      "toolSchemaSha256": "47105100606a23b5e366a79f7b5206203b31e852117354df54662ee15d35d6c1",
+      "episodes": 12,
+      "plannedOnly": true,
+      "executed": 0,
+      "sourceDifferences": [
+        "src/core/compaction-plan.ts"
+      ],
+      "postCompactionPrune": false,
+      "preflight": {
+        "manifestDigest": "8c54ba9dac165e2c833afae2db0db3fd2ed3420f376aaad1862f191f5844b313",
+        "variant": "no-projection",
+        "sourceBaseCommit": "de7558cb95f7ca98d5d3497f6293ed2371fb6c5d",
+        "evaluationCommit": "8a9f5c2310b9228253708b8470f1b0fab5c152fc",
+        "tasks": 6,
+        "episodes": 12,
+        "isolation": "wsl-bwrap",
+        "paidRequests": 0
+      },
+      "probe": {
+        "fileSha256": "bed70a1ed0a94dc7d18cbeeab25ea81e760431807bfa430f3e6263f2b87a3ccc",
+        "suiteSha256": "34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28",
+        "providerRequests": 0,
+        "previewPassed": 12,
+        "previewCases": 12,
+        "fullRecall": 12,
+        "propertyReads": 2284323,
+        "snapshotOpens": 6,
+        "compactionOutputSha256": [
+          "5454a07cb80e66cf234f00cda2b000f6e3a8286546a6f8ee2ed39b8f12a4ad27",
+          "fe15a40987bf9ce97ac0f48f5625b833010bc6d0357342570308106d6aebc2e3",
+          "7db1a5977d31d4dc324b387669e6fc514475d8aae30e7a25e704686910ac17ce"
+        ],
+        "reportOutputSha256": [
+          "5c747590207ac6daf528a4ab8ba04ad8d0154799f554dbf432d962e92c539f6a",
+          "ef674097c70dee379d0272327b904fc858c812c4797c63a40fc9bbc6444a586a",
+          "eb12ef44253b712a45ea5e35d9509837a652ffb993241bcf3418ae6ba6302f37"
+        ]
+      }
+    },
+    "no-report": {
+      "sourceBaseCommit": "ddc04fc951edf3b567d9b19405e52f9b85a5aecd",
+      "evaluationCommit": "d3a8429cad3b3d306ac7fa04df21694c69fb4d46",
+      "manifestDigest": "5627852b418a0857291c4e27e654f51736f4c8347c454214064711457b841688",
+      "manifestFileSha256": "908fc2c9b06d52b7768b028a86e73f3cdc3431614fe00d58713ae7068324d568",
+      "toolSchemaSha256": "47105100606a23b5e366a79f7b5206203b31e852117354df54662ee15d35d6c1",
+      "episodes": 12,
+      "plannedOnly": true,
+      "executed": 0,
+      "sourceDifferences": [
+        "src/core/file-edit.ts",
+        "src/core/task-changes.ts",
+        "src/core/task-verification.ts"
+      ],
+      "postCompactionPrune": false,
+      "preflight": {
+        "manifestDigest": "5627852b418a0857291c4e27e654f51736f4c8347c454214064711457b841688",
+        "variant": "no-report",
+        "sourceBaseCommit": "ddc04fc951edf3b567d9b19405e52f9b85a5aecd",
+        "evaluationCommit": "d3a8429cad3b3d306ac7fa04df21694c69fb4d46",
+        "tasks": 6,
+        "episodes": 12,
+        "isolation": "wsl-bwrap",
+        "paidRequests": 0
+      },
+      "probe": {
+        "fileSha256": "5ddee78b413895e23e2bc96e4aa7a2fe03495f1f437eedb793ad722f3a2eb62a",
+        "suiteSha256": "34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28",
+        "providerRequests": 0,
+        "previewPassed": 12,
+        "previewCases": 12,
+        "fullRecall": 12,
+        "propertyReads": 32982,
+        "snapshotOpens": 91,
+        "compactionOutputSha256": [
+          "5454a07cb80e66cf234f00cda2b000f6e3a8286546a6f8ee2ed39b8f12a4ad27",
+          "fe15a40987bf9ce97ac0f48f5625b833010bc6d0357342570308106d6aebc2e3",
+          "7db1a5977d31d4dc324b387669e6fc514475d8aae30e7a25e704686910ac17ce"
+        ],
+        "reportOutputSha256": [
+          "5c747590207ac6daf528a4ab8ba04ad8d0154799f554dbf432d962e92c539f6a",
+          "ef674097c70dee379d0272327b904fc858c812c4797c63a40fc9bbc6444a586a",
+          "eb12ef44253b712a45ea5e35d9509837a652ffb993241bcf3418ae6ba6302f37"
+        ]
+      }
+    }
+  },
+  "limits": [
+    "No paid observations; no model effectiveness, significance or generalization claim.",
+    "The price and model contract were checked against the official DeepSeek pricing page on 2026-10-27; paid runs still require explicit batch authorization."
+  ],
+  "verification": {
+    "postMergeFullTargeted": 14,
+    "noPreviewTargeted": 14,
+    "noProjectionTargeted": 15,
+    "noReportTargeted": 15,
+    "allChecks": "pass",
+    "allValidateOnly": "pass",
+    "paidRequests": 0
+  },
+  "budgetReservation": {
+    "source": "developmentReserveUsd; official peak model rates checked 2026-10-27",
+    "perEpisodeUsd": 1.7596608,
+    "twelveEpisodeBatchUsd": 21.1355904,
+    "perBatchHardCapUsd": 22,
+    "fourBatchHardCapUsd": 88,
+    "status": "awaiting explicit batch authorization"
+  },
+  "logSha256": {
+    "full-freeze.log": "19d73310fa426d855978ab318d304db93971dd556066707468d4d260486bb14a",
+    "full-targeted-test.log": "b094c72385a5e5f3dac0c428f21fc1a82dc0bb0e488582cbd1aa356265547229",
+    "full-validate.log": "7c6120011a88160775b56b727ee6a0481599a70e2fbdad5273f3369c8d3f2a3a",
+    "no-preview-freeze.log": "fdb0274d6541693a70bc7940c0c48dd80580d882ffa8f2d28f2e4205e0043dd9",
+    "no-preview-targeted-test.log": "b16195e90d0ab100c2474504186d7af58acb84a5871c6afe35b33b386c2112be",
+    "no-preview-validate.log": "cdc6e2f06027a3c0a35dd7fceeefc0814fcfc1535229da8c93291ae687ae71cc",
+    "no-projection-freeze.log": "bb8502352ee7027106bd952a4b6b833fecdcb3c016dcc714f6cf419d8eb72485",
+    "no-projection-targeted-test.log": "e8004ba8c8d9c4402ac09e9922b2c557a589ba3797b8d77c9d91e26d8ef2fbb0",
+    "no-projection-validate.log": "03f34365030b94e995eb010c778c52cdeab6faf83c619fc4da25ad780337a38c",
+    "no-report-freeze.log": "72abd0e15d17eeddbeaa2cb2e7b960d650094e05a81b17086a63afdac1801bfc",
+    "no-report-targeted-test.log": "6c49f94580850291f5204c1ecb437147b536613658573f6dd1bc241f707866db",
+    "no-report-validate.log": "1ffb7195d7646eb9273a6d12fa6bf9eacf5719822982b0b155ddf92b72cc3278"
+  }
+}
