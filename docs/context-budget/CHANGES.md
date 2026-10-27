@@ -1,6 +1,10 @@
 # 改动与验收证据
 
 
+### CE-2 证据换行修正（2026-10-27）
+
+CE-1 `4251382`、CE-2 `6bbc1de` 分别对应计划中的协议收口与冻结验收；随后单独修正新增机器记录的换行。`.gitattributes` 对 docs/samples/** 设置 -text，首次写入 CRLF 导致 git diff --check 报行尾空白；改为 LF 后复检通过。JSON 解析值及四份 manifest/probe 原始文件、digest 均不变，不改写已有提交。最终 lint 254 files、0 诊断。
+
 ### CE-2 四臂重新冻结与零付费验收（2026-10-27，完成）
 
 CE-1 提交 `4251382` 已推送。从最新 main `0b8b973` 重新派生三个独立回退源码提交，分别 check/针对性测试通过后，再应用相同评测代码。源码变体源提交与评测 HEAD 的 `src/**` 一致；四份 manifest 各 12 条，合计 48 条计划，全部 `--validate-only` 通过（wsl-bwrap、paidRequests=0）。规范化共同字段及非组件文件逐字相同，精确源码路径审计通过，四臂显式 prune=false、tool schema 一致。
