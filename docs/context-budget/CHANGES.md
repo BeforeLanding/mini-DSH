@@ -1,5 +1,15 @@
 # 改动与验收证据
 
+### CE-1 组件评测协议收口（2026-10-27，完成）
+
+从 main `0b8b973` 复用未合并的 `3752ca4`（原实现作者与提交记录保留），引入独立 `component-loo` 与四臂比较器。NX-50 的比较器/历史门槛不变；LOO 的包文件必须完全相等，源码仅允许精确组件路径差异。`scripts/eval-v2-component-protocol.ts` 集中维护新协议的调度、裁剪开关、允许路径与诊断阈值。
+
+补齐原准备代码的校验缺口：四臂预算显式冻结 `postCompactionPrune=false`；全部四批严格按预注册顺序、不重叠；比较器重新验证 manifest 与每条 observation，核对汇总 digest 和 provenance，拒绝共同配置漂移、重复/伪造观察和源码路径新增/删除。离线机制与付费归因分开，5% 仅为诊断阈值，不输出 mergeEligible 或显著性结论。
+
+本轮实测：`pnpm check` → syntax 224 files；设置 `MINI_DSH_V2_RUNTIME=D:\Agent\tmp\nx42-runtime\unpack` 后 `pnpm test` → **576/576，0 fail，0 skipped**（包含隔离验收）；复核发现可选源码 pin 的空配置被误拒绝，修复后重新 `pnpm check` 与五个 eval-v2 相关测试文件 → **26/26**；`pnpm lint` → 253 files，0 诊断。`node dist/scripts/check-coding-fixtures.js` → 25 项 expected=true；`node dist/scripts/eval-offline.js` → 12/12 completed/accepted；`node scripts/benchmark-components.mjs --compare docs/samples/components-baseline.json` → tools/compaction/reports 全过、providerRequests=0。
+
+初次沙箱 pnpm 引导因无法联网校验签名失败；正常用户环境 `pnpm install --frozen-lockfile --offline` 与以上检查使用固定 pnpm 11.22.0 通过，未修改锁文件、未跳过签名。本轮完整日志在仓库外 `D:\Agent\outputs\component-eval-{test,targeted,fixtures,offline}-20261027.log`；真实 provider 请求 0。NX-50 历史源码比较器的三条回归用例保持不变并通过。
+
 ### NX-51 24 条 prune 开/关结果：摘要下降假设未获支持（2026-10-25）
 
 两臂各 12/12 执行，`incomplete=false`；manifest 除 `sourceBaseCommit`、`gitCommit` 与 `src/**` 外逐字相同，均通过 `--validate-only`。实际 usage 估价 on `$1.734961`、off `$1.352154`，合计 `$3.087115`，低于 $44 上限。

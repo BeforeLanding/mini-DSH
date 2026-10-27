@@ -1,5 +1,21 @@
 # 任务清单
 
+### 组件评测收口（2026-10-27，进行中）
+
+从最新 main `0b8b973` 开发，复用未合并的 `3752ca4` LOO 实现，重新验证；不沿用旧分支的测试通过声明。按可独立回退的验收结论分两次提交：
+
+- CE-1（完成，本提交）：独立 LOO 协议、集中配置/允许变化/验收规则；显式冻结 `postCompactionPrune=false`；保持 NX-50 历史比较器；拒绝共同配置漂移、调换顺序、重复观察、伪造报告和意外源码差异。验收：完整隔离 576/576，最终定向 26/26、check 224、lint 253 无诊断；fixtures/offline/bench 通过，详见 CHANGES。
+- CE-2（下一步）：统一消融文档、从当前基线重新派生四臂并冻结 manifest，逐臂 `--validate-only` 与离线探针；记录 commit/digest/命令、零付费结果。旧准备材料保留；不执行付费批次。完成后一个 PR，两个步骤分别提交并推送。
+
+### NX-51 四臂逐项消融：旧分支准备记录（2026-10-26）
+
+协议见 [NX-51 四臂消融](NX-51-COMPONENT-ABLATION.md)。`full`／`no-preview`／`no-projection`／`no-report` 四份 manifest 各 12 条，合计 48 条；每份仍是单 `context` 执行臂，`variant` 标识源码变体。四个可独立验证的步骤：
+
+- NX-51-5a（旧分支已验证，`3752ca4`；本 PR 重新验收）：新增 `component-loo` split / `NX-51-component-loo-v1`、通用 LOO 比较器与离线探针校验。验收：`pnpm typecheck`、`pnpm check`、`pnpm lint`、隔离完整 `pnpm test` 536/536/0/0；新增 `eval-v2-loo-compare` 定向 7/7；NX-50 legacy 比较器测试保持不变。真实模型请求 0。
+- NX-51-5b（待做）：从合并后的 `main` 派生四臂；三个变体各做一个只含预期 `src/**` 与测试适配的源码提交，同一份评测代码 cherry-pick 到四臂；每臂在源码提交上生成离线探针。
+- NX-51-5c（待做）：四份 config/manifest 冻结到 `D:\Agent\outputs\nx51-component-loo-20261026\`，逐臂 `--validate-only`，记录 `paidRequests=0`。付费执行尚未授权。
+- NX-51-5d（待做）：48 条真实批次，单批 $22、合计 $88 上限；只有取得该批授权后才执行 `--execute`，任一批 incomplete 即停，不补跑。
+
 ### NX-51 变慢任务诊断、摘要后裁剪与持久化（2026-10-25，零付费完成）
 
 只读复用 NX-50 两批轨迹做耗时分解，诊断与逐题读数见 [NX-51-TIMING-DIAGNOSIS](NX-51-TIMING-DIAGNOSIS.md)。两个可独立验证的步骤：
