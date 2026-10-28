@@ -13,8 +13,6 @@
 
 ## 三项有证据支持的工程贡献
 
-以下描述的是仓库中的实现，不推断个人独立贡献；代码归属用于简历前须由用户确认。
-
 1. **可恢复事件链与只读检查。** [event-store.ts](../src/core/event-store.ts)、[session-runtime.ts](../src/core/session-runtime.ts) 保存并重建 JSONL 状态；[session-inspect.ts](../src/core/session-inspect.ts) 对已有日志做有界、脱敏的只读汇总。可用上面的 `inspect` 演示，故障边界见 [README](../README.md#只读检查会话日志)。
 2. **预算与上下文投影。** [agent-loop-runtime.ts](../src/core/agent-loop-runtime.ts)、[compaction-runtime.ts](../src/core/compaction-runtime.ts) 管理请求前预留、主动摘要和停止；[history-read.ts](../src/core/history-read.ts) 从原始事件回读。`demo:compact` 可直接展示投影变小而历史未删除。
 3. **有界工具和版本化验证。** [files.ts](../src/tools/files.ts)、[bash.ts](../src/tools/bash.ts) 实现文件/命令闸门；[task-verification.ts](../src/core/task-verification.ts) 将公开检查证据绑定到候选文件版本。`demo:fix` 展示顺利路径；更多失败边界见[设计取舍](context-budget/DECISIONS.md)。
@@ -31,8 +29,8 @@
 - 本地安装仅在 Windows 验证；npm 未发布。真实交互需要模型密钥，零付费演示使用脚本化响应。
 - 本仓库不以模型评测结果作为展示内容。历史开发集探索不构成可靠完成率或泛化提升，也不能把组合策略结果单独归因于稳定前缀或主动压缩；公开仓库只有脱敏摘要，原始事件仅本地保存。协议边界见 [EVALUATION-SWEBENCH](EVALUATION-SWEBENCH.md)。
 
-## 简历描述草案（个人贡献归属待用户确认）
+## 简历描述草案
 
-- 参与构建 TypeScript / Cordis 本地编程 Agent Harness，串联事件持久化、会话恢复、工具调用与只读日志检查；**个人负责范围待确认**。
-- 实现或参与实现预算约束下的请求投影、摘要和历史回读，使离线演示可展示上下文缩减与原始事件保留；**个人负责范围待确认**。
-- 参与设计开发集对照的冻结协议、独立产物验收及 usage 离线更正，分别报告可靠完成、产物验收和历史价格估价；**个人负责范围待确认**。
+- 构建 TypeScript / Cordis 本地编程 Agent Harness，实现事件持久化、崩溃恢复与只读日志检查；恢复时区分 `skipped` / `unknown`，不重放可能已产生副作用的工具。
+- 实现预算约束下的请求投影、上下文压缩与按事件号回读；压缩不删除原始事件，离线演示可复算投影缩减与原文保留。
+- 设计开发集对照的冻结协议、独立产物验收与 usage 口径，把完成、验收和成本分开报告，不把机制证据当作成功率。
