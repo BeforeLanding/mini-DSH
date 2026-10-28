@@ -2,6 +2,8 @@
 
 **Status (2026-10-24).** The pre-registered 50-task, four-arm formal batch has completed all 200 paid model episodes and all 200 official scores. The results and budget-parity limitation are recorded below. The historical “50 tasks ≈ $2 / 10 minutes” figure from an external GPT-5 experiment is not a promise for this project.
 
+**Showcase boundary (2026-10-28).** The repository README and walkthrough do not present these numbers as capability claims. This page remains the reference for the protocol, results and evidence boundaries; it is not a benchmark leaderboard.
+
 ## Formal four-arm result (2026-10-24, 50 tasks per arm)
 
 The frozen formal manifest used source commit `8b3047c`, SWE-bench Verified at revision `c104f840…`, the same `deepseek/deepseek-flash` model across four arms, and a nominal 416,666 input+output-token cap per episode. All 200 scheduled episodes ran. Official SWE-bench v3.0.17 scoring under the final `score3` run IDs returned 200 results, **0 scoring errors and 0 infrastructure failures**. The run statuses were 129 budget stops and 71 normal completions. Six core evidence checksums pass.
@@ -15,7 +17,7 @@ The pre-declared paired candidate/baseline cells are both resolved 24, candidate
 
 The baseline's watchdog checks between model steps. **22/50 baseline episodes exceeded the shared nominal token cap** by one final response, compared with 0/50 in each mini-DSH arm; baseline maximum was 457,686 tokens, about 9.8% above the cap. One over-cap baseline episode resolved. The frozen sensitivity rule excludes over-cap resolutions while keeping all 50 tasks in the denominator: candidate **26/50**, baseline **26/50**, context-reference **28/50**, context-proposed **27/50**. This is a conservative sensitivity reading, not a replacement for official scores. Nominal cap configuration did not ensure exact consumed-token parity, so the 27/50 vs 26/50 primary comparison is not a clean capability claim.
 
-Provider-usage cost estimate at the frozen prices is **$3.618705108 known usage**, plus **one episode with unknown exact usage** after a transient model retry. It is not an invoice. The first official scoring attempts were interrupted by Docker Desktop; all paid episodes were already saved. Final `score3` rescored only those patches after the environment recovered and made no additional model requests. The final report is `D:\Agent\outputs\mini-dsh-swebench-formal-20261022\formal-report.json`; frozen sensitivity result is `formal-token-sensitivity.json`; compact final archive excluding workspaces is `formal-evidence-final.tar.gz` (SHA-256 `fb58277adf09d9f303b80d23a811a0e24ccbae5d499a0e734da57122c52b40bd`). Full original evidence remains at `/home/jeffery/swebench-evidence-4arm-formal-20261022`. Hidden scoring rows and score logs are local evidence, not for publication.
+Provider-usage cost estimate at the frozen prices is **$3.618705108 known usage**, plus **one episode with unknown exact usage** after a transient model retry. It is not an invoice. The first official scoring attempts were interrupted by Docker Desktop; all paid episodes were already saved. Final `score3` rescored only those patches after the environment recovered and made no additional model requests. The final report is `formal-report.json` (local evidence, not published); frozen sensitivity result is `formal-token-sensitivity.json`; compact final archive excluding workspaces is `formal-evidence-final.tar.gz` (SHA-256 `fb58277adf09d9f303b80d23a811a0e24ccbae5d499a0e734da57122c52b40bd`). Full original evidence remains on the development machine and is not published. Hidden scoring rows and score logs are local evidence, not for publication.
 
 ## Development observation (2026-10-21, n=5, candidate only)
 
@@ -24,7 +26,7 @@ Provider-usage cost estimate at the frozen prices is **$3.618705108 known usage*
 - 4/5 episodes ended at the per-task token cap (`budget`); 1 completed normally. The resolved astropy patch was produced before its budget stop.
 - Provider-usage estimate at the frozen peak prices: **$0.0918** for the batch (single-task cap $0.50, batch cap $2.50). Tokens: 1,565,239 input, 41,522 output, 1,454,464 cache-read; active time 8m38s.
 - Wilson 95% interval for 2/5 is 11.8%–76.9%. With n=5, one arm and no same-model baseline, this is a **development diagnostic**, not a success-rate claim. The budget-stop frequency is evidence that the $0.50 per-task cap is tight for this subset; it should be revisited before the formal batch.
-- Evidence: `D:\Agent\outputs\mini-dsh-swebench-dev-20261021` (local; `score.*.log` and the hidden test rows are not for publication).
+- Evidence: the local development batch directory (not published); `score.*.log` and the hidden test rows are not for publication.
 
 ## Four-arm development observation (2026-10-21, n=5, descriptive only)
 
@@ -39,7 +41,7 @@ The 4-arm development batch ran 20/20 planned episodes with 0 infrastructure fai
 
 - The only arm-level difference is one task: `django__django-12273` resolved by the baseline and not by the three mini-DSH arms. Paired candidate/baseline: both resolved 2, baseline-only 1, candidate-only 0, neither 2; exact McNemar p=1. The context pair is identical on all five tasks (both 2, neither 3, p=1). **n=5 cannot support a capability claim.**
 - **Budget parity was not established in this observation.** The mini-DSH arms hit the token cap derived from the $0.50 per-task cap (about 416k input+output tokens), while the baseline's `cost_limit` of $0.50 allowed it to use about 1.1M input tokens per episode because most input was cache hits. The baseline therefore had a larger effective token allowance; the 3/5 vs 2/5 difference is confounded by the budget policy, not a clean capability comparison. On 2026-10-21 the **shared-token-cap** policy was chosen and implemented: the external watchdog and the post-run check use the same `tokenCapFromUsd(perTask.maxCostUsd, prices)` value as the candidate (416,667 for $0.50 at these prices). The observation above predates this change; a four-arm development observation under the shared cap is still needed before the formal batch.
-- Evidence: `D:\Agent\outputs\mini-dsh-swebench-4arm-dev-20261021b` (local; scoring logs and hidden test rows are not for publication). The first attempt was aborted by a missing `mcp` dependency in the baseline venv before any baseline model call; that incident and its $0.0175 candidate-only spend are recorded separately in CHANGES.
+- Evidence: the local four-arm development batch directory (not published); scoring logs and hidden test rows are not for publication. The first attempt was aborted by a missing `mcp` dependency in the baseline venv before any baseline model call; that incident and its $0.0175 candidate-only spend are recorded separately in CHANGES.
 
 ## Shared-token-cap four-arm development rerun (2026-10-22, n=5, descriptive only)
 
@@ -47,7 +49,7 @@ At source commit `309af44`, the same five development tasks and four-arm schedul
 
 The baseline watchdog applies the same nominal token cap but checks the trajectory between model steps. All four baseline budget-stop episodes exceeded it by one final response: total input+output tokens ranged from 427,115 to 453,214, or up to 8.8% above 416,666. The candidate's maximum was 403,611. One over-cap baseline episode (`astropy__astropy-14539`) resolved, so nominal cap parity does **not** prove exact consumed-token parity. The formal report must show per-arm over-cap counts and a sensitivity reading that excludes over-cap resolutions; any capability interpretation must retain this limitation.
 
-The first official-scoring attempt failed because the clean WSL run script did not place the SWE-bench Python venv on `PATH`; it made no extra model calls. A `--resume` pass verified all 20 paid episodes already existed, then re-scored only those saved patches with the pinned venv. All six top-level evidence checksums pass. Evidence: `D:\Agent\outputs\mini-dsh-swebench-formal-20261022\development-evidence` (12 MB, excluding workspaces); full original evidence remains in WSL at `~/swebench-evidence-4arm-dev-20261022-shared`.
+The first official-scoring attempt failed because the clean WSL run script did not place the SWE-bench Python venv on `PATH`; it made no extra model calls. A `--resume` pass verified all 20 paid episodes already existed, then re-scored only those saved patches with the pinned venv. All six top-level evidence checksums pass. Evidence: the local development-evidence directory (12 MB, excluding workspaces; not published); full original evidence remains in the local WSL workspace and is not published.
 
 ## What is implemented
 
@@ -76,19 +78,19 @@ The external arm runs the **unmodified** mini-SWE-agent batch CLI; the repositor
 - **Prompt/context:** the native mini-SWE-agent prompt, single bash tool and linear context are used. Candidate vs baseline is therefore a **system-level** comparison, not an isolated prompt or context factor.
 - **Limits:** `step_limit` = per-task model requests, `cost_limit` = per-task dollar cap (LiteLLM estimate), `wall_time_limit_seconds` = wall clock, `max_tokens` = output cap. A live trajectory watchdog enforces cost/request/action/time bounds between steps; the hard process timeout is the wall clock plus two minutes. The canonical cost is recomputed from provider usage and the frozen price snapshot, not from LiteLLM. The baseline's action count is not directly capped at the candidate's `maxToolCalls`; the report states this limitation.
 - **Outcome:** patch comes only from `preds.json`; the workspace diff is diagnostic. Status maps `Submitted`→completed, `LimitsExceeded`/context-window→budget, `TimeExceeded`→timeout, auth/permission/unknown→infrastructure. Missing usage is never zero-filled and stops a priced batch. Empty submitted patches stay in the denominator.
-- **Zero-model probe:** `swebench:external-probe` runs the real CLI + dataset + config + Docker + `DeterministicModel`, asserts `Submitted`, empty or submitted patch parsing, labeled-container cleanup and no provider key in the container. The 2026-10-21 probe passed with an empty patch and with a non-empty `README.rst` patch. Evidence: `D:\Agent\outputs\mini-dsh-swebench-external-probe-20261021`.
-- **Frozen four-arm manifest:** `D:\Agent\outputs\mini-dsh-swebench-4arm-20261021\manifest-frozen.json` (schema 3, 20 development + 200 formal episodes, all external fields present, `freezeStatus: frozen`, `paidRequests: 0`, $110 configuration ceiling). The shared-cap rerun used a separately frozen $10 development manifest at `D:\Agent\outputs\mini-dsh-swebench-formal-20261022\manifest-development.json`; the formal split is separately frozen at a $100 batch configuration cap in `manifest-formal.json`. Both preserve the original task selection and schedule. Formal execution still requires all 50 pinned images locally and separate paid authorization. The earlier `manifest-draft.json` is retained as the pre-freeze record.
+- **Zero-model probe:** `swebench:external-probe` runs the real CLI + dataset + config + Docker + `DeterministicModel`, asserts `Submitted`, empty or submitted patch parsing, labeled-container cleanup and no provider key in the container. The 2026-10-21 probe passed with an empty patch and with a non-empty `README.rst` patch. Evidence: the local probe directory (not published).
+- **Frozen four-arm manifest:** `manifest-frozen.json` (local, not published; schema 3, 20 development + 200 formal episodes, all external fields present, `freezeStatus: frozen`, `paidRequests: 0`, $110 configuration ceiling). The shared-cap rerun used a separately frozen $10 development manifest (`manifest-development.json`); the formal split is separately frozen at a $100 batch configuration cap in `manifest-formal.json`. Both preserve the original task selection and schedule. Formal execution still requires all 50 pinned images locally and separate paid authorization. The earlier `manifest-draft.json` is retained as the pre-freeze record.
 
 ## Frozen material for the first PoC
 
 - Dataset revision `c104f840cc67f8b6eec6f759ebc8b2693d585d4a`; 500-row parquet SHA-256 `a45b1fe4e2f0c8390b2b2938ac83e92ed5979000856808f3679c07812e9e6dcd`.
 - Official harness v3.0.17 commit `3f01bd622c0a22c00406139f69a234ef08225f22`.
 - Instance `sympy__sympy-20590`; image `swebench/sweb.eval.x86_64.sympy_1776_sympy-20590@sha256:3a282752833ce34730ee0621e22033501c993f45742775ca57f04c9ff27178a0`.
-- Local data and official harness checkout: `D:\Agent\outputs\mini-dsh-swebench-poc`.
+- Local dataset and official harness checkout are kept on the development machine and are not published with the repository.
 
 ## Verified no-model evidence
 
-The manual [CI run 39395532729](https://github.com/BeforeLanding/mini-DSH/actions/runs/39395532729) at commit `f52699c` passed all seven jobs. Candidate evidence (`D:\Agent\outputs\mini-dsh-swebench-poc\ci-39395532729\candidate-evidence.json`):
+The manual [CI run 39395532729](https://github.com/BeforeLanding/mini-DSH/actions/runs/39395532729) at commit `f52699c` passed all seven jobs. Candidate evidence (a local CI artifact, not published with the repository):
 
 - Image HEAD `5efaed…` vs dataset base `cffd4e0…`: 1828 paths content-identical; 1758 differ only by `100644→100755` mode; raw diff object changes 0. Content, added/removed paths or type changes are still rejected.
 - Host `write_file` → container Bash and container Bash → host `read_file` both visible; path escape rejected.
@@ -103,9 +105,9 @@ This proves the candidate tool path, patch export and independent scoring channe
 
 A real dataset run of the pre-registration was produced without model calls or Docker:
 
-- Sanitized dataset: `D:\Agent\outputs\mini-dsh-swebench-preregistration-20261020\verified-sanitized.json` (500 rows; `instance_id`, `repo`, `base_commit`, `version`, `environment_setup_commit`, `problem_statement` only; gold/hidden fields absent).
-- Candidate-only historical draft: `D:\Agent\outputs\mini-dsh-swebench-preregistration-20261020\manifest-draft.json`.
-- Frozen four-arm manifest: `D:\Agent\outputs\mini-dsh-swebench-4arm-20261021\manifest-frozen.json`, schema 3, `seed=20261020`, development 5, formal 50, 11 repositories, 4 arms, 200 formal episodes + 20 development episodes; all external fields present (`mini-swe-agent` 2.4.6, config/install hashes, model `deepseek/deepseek-flash`, `candidate-isolation-v1`); budget ceiling $110.00 at $0.50/task/arm. This is a configuration ceiling, not an expected spend.
+- Sanitized dataset (local artifact, not published): 500 rows; `instance_id`, `repo`, `base_commit`, `version`, `environment_setup_commit`, `problem_statement` only; gold/hidden fields absent.
+- Candidate-only historical draft manifest (local artifact, not published).
+- Frozen four-arm manifest (local artifact, not published), schema 3, `seed=20261020`, development 5, formal 50, 11 repositories, 4 arms, 200 formal episodes + 20 development episodes; all external fields present (`mini-swe-agent` 2.4.6, config/install hashes, model `deepseek/deepseek-flash`, `candidate-isolation-v1`); budget ceiling $110.00 at $0.50/task/arm. This is a configuration ceiling, not an expected spend.
 - `freezeStatus` is **frozen**, `paidRequests: 0`. The shared-cap development rerun and separately authorized $100-cap formal batch are recorded above. The manifest itself did not grant authorization; the user separately authorized both paid batches. If the per-task budget changes in a future batch, re-freeze rather than editing the frozen file.
 
 The price snapshot shape is fixed but its values must come from an official source with a capture date:
@@ -124,7 +126,7 @@ Replace each `null` with the observed number; the validator rejects missing or n
 - A price snapshot with an official source and capture date. The runner refuses paid execution without one and never zero-fills unknown usage.
 - The shared-cap four-arm development observation is complete; its baseline one-response overshoot must remain visible in the formal report and sensitivity reading.
 - The official harness v3.0.17 must already be installed in the Python environment used by the runner (`python -m swebench.harness.run_evaluation`); the runner does not install or upgrade it.
-- A separate hidden-rows file with `test_patch` and `FAIL_TO_PASS`/`PASS_TO_PASS`, passed as `--scoring-dataset`. The 50 formal rows have been generated from the dataset with SHA-256 `a45b1fe4…` at `D:\Agent\outputs\mini-dsh-swebench-formal-20261022\scoring-rows-formal.hidden.json` (file SHA-256 `db26064f…`). The Agent dataset stays sanitized; the runner validates each scored row against the frozen repo/base and writes the hidden rows only to a temporary directory for the official scorer, never into the evidence tree.
+- A separate hidden-rows file with `test_patch` and `FAIL_TO_PASS`/`PASS_TO_PASS`, passed as `--scoring-dataset`. The 50 formal rows have been generated from the dataset with SHA-256 `a45b1fe4…`; the local hidden-rows file has SHA-256 `db26064f…` and is not published. The Agent dataset stays sanitized; the runner validates each scored row against the frozen repo/base and writes the hidden rows only to a temporary directory for the official scorer, never into the evidence tree.
 - Explicit user authorization for paid model calls and any new cloud/compute resources. The manifest records `paidRequests: 0`; it did not grant authorization. The user authorized the development rerun and the formal 200-episode batch separately.
 
 ## Commands

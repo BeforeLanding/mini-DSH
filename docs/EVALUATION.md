@@ -6,7 +6,7 @@ The [2026-10-25 component optimization](COMPONENT-OPTIMIZATION.md) adds a frozen
 
 1. **Regression fixtures** (`test/fixtures/`, `pnpm fixtures:check`) verify the harness mechanics: projection, compaction, approval gates, persistence, recovery.
 2. **Synthetic public samples** (`docs/samples/`) verify the event format, one successful scripted repair, and one provider failure/recovery path. They are scripted and must not be read as model capability results.
-3. **Real model runs** are not published in this repository. The historical NX-45 run kept its raw prompts and outputs private; its summary is not upgraded to reproducible evidence by publishing a checksum. A real public experiment needs a new frozen protocol, approved budget, and privacy review.
+3. **Real model runs** are not published in this repository, and the showcase surface (README and walkthrough) does not use model-evaluation numbers as capability claims. The historical NX-45 run kept its raw prompts and outputs private; its summary is not upgraded to reproducible evidence by publishing a checksum. A real public experiment needs a new frozen protocol, approved budget, and privacy review.
 
 ## What is in `docs/samples/`
 

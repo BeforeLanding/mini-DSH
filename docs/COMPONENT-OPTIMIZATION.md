@@ -6,7 +6,7 @@
 
 远端 main 基线为 `74f8e89721820ef514e26df71cbb05e0c69683c7`。2026-10-25 复跑 `pnpm test` 为 509 tests / 479 pass / 0 fail / 30 skipped，`pnpm check` 193 files，`pnpm lint` 无诊断。30 项需要 Linux 隔离环境；不能把 skipped 算作通过。其他工作目录的未提交变更未动。
 
-历史 [NX-45](context-budget/NX-45-EXPLORATION-RESULT.md) 的 Full/Baseline 可靠完成为 10/12 对 11/12，独立产物验收为 12/12 对 11/12；Full 请求和工具次数更多。原报告只提示重复回读/报告查询等可改进方向，没有证明每一次查询都无用。故本次先处理可确定复现的预览信息丢失、长历史扫描和报告重复读盘，不新增自动完成、隐藏轮数上限或依据隐藏验收提前停止。
+历史 [NX-45](context-budget/NX-45-EXPLORATION-RESULT.md) 的开发集探索只提示重复回读/报告查询等可改进方向，没有证明每一次查询都无用，也不构成成功率提升或泛化结论。故本次先处理可确定复现的预览信息丢失、长历史扫描和报告重复读盘，不新增自动完成、隐藏轮数上限或依据隐藏验收提前停止。
 
 ## 固定测试集及前后效果
 
@@ -46,6 +46,4 @@ node scripts/benchmark-components.mjs --compare baseline-run.json --out optimize
 
 这批是已曝光的机制测试，未触及 SWE-bench 分数。稳定前缀、主动压缩等已有功能也没有因本次改动获得新的模型效果结论。真实效果应另冻结 A/B 或逐项消融：同模型/同任务/同预算，报告固定分母的可靠完成（completed 且独立验收）、产物验收、provider usage 覆盖、请求/工具/错误数、主动时间及压缩触发率，保留停止/基础设施失败，不只展示有利案例。
 
-应先运行独立开发批次，再决定是否上正式保留集；不在开发题上宣称泛化或统计显著性。新模型请求需要具体清单、官方价格快照、金额上限与单独授权；当前没有运行或追溯改写 NX-45，也没有修改正式评测题或隐藏验收。本仓库已按 [NX-50 组件版本对照协议](context-budget/NX-50-COMPONENT-AB.md) 执行两批：六道未曝光开发题、同模型同预算、旧版/优化版各 12 条。可靠完成与产物验收均为 12/12 对 12/12；token 4,065,419→3,791,203（-6.75%），主动耗时 898,977→958,913 ms（+6.67%），预注册门槛为 `pass`。逐题变化不均，且两批串行、时间窗不同；不据此宣称显著性、泛化或单项组件归因。完整结果与边界见 [NX-50 结果](context-budget/NX-50-RESULT.md)；正式执行入口仍见 [SWE-bench 协议](EVALUATION-SWEBENCH.md)。
-
-NX-50 之后的离线诊断见 [NX-51 变慢任务诊断](context-budget/NX-51-TIMING-DIAGNOSIS.md)：主动耗时约 90% 是模型生成等待，输出 token 与墙钟的 R²=0.983；F02/T04/R04 的增量分别来自生成长度、摘要重复与一次长轨迹，不是三项组件的直接回归。三项组件的逐项归因需要 [NX-51 消融设计](context-budget/NX-51-COMPONENT-ABLATION.md) 中的单独批次，尚未执行或授权。
+真实模型效果不在本页结论范围。历史上曾按 [NX-50 组件版本对照协议](context-budget/NX-50-COMPONENT-AB.md) 执行两批开发题对照，结果与边界记录在 [NX-50 结果](context-budget/NX-50-RESULT.md)；本仓库不把这些数字作为展示内容，也不据此宣称显著性、泛化或单项组件归因。NX-50 之后的离线诊断见 [NX-51 变慢任务诊断](context-budget/NX-51-TIMING-DIAGNOSIS.md)；逐项归因的 [NX-51 消融设计](context-budget/NX-51-COMPONENT-ABLATION.md) 尚未执行或授权。正式执行入口仍见 [SWE-bench 协议](EVALUATION-SWEBENCH.md)。

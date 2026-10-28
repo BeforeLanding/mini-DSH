@@ -1,6 +1,6 @@
 # mini-DSH：五分钟项目讲解
 
-本页是讲解提纲；完整安装、配置和命令说明以 [README](../README.md) 为准。项目是单 Agent、单本地工作区的 TypeScript / Cordis 编程 Harness，目标是让编辑、验证、预算停止与恢复留下可检查的事件证据。
+本页是讲解提纲，只讲工程线索与取舍，不展示模型评测结果；完整安装、配置和命令说明以 [README](../README.md) 为准。项目是单 Agent、单本地工作区的 TypeScript / Cordis 编程 Harness，目标是让编辑、验证、预算停止与恢复留下可检查的事件证据。
 
 ## 五分钟演示顺序
 
@@ -9,7 +9,7 @@
 3. **约 2 分钟：脚本化机制演示。** 运行 `pnpm demo:compact`，依次看压缩前后请求投影、事件仍保留、`read_history` 回读。脚本使用预设模型响应；它证明 Harness 路径可演示，不代表真实模型完成编程任务。演示最后会打印生成的 `events.jsonl` 路径。
 4. **约 1 分钟：检查日志。** 将上一步打印的路径填入 `$log`，运行 `node dist/src/index.js inspect $log --trace`。指出完整性、最近一次 run 状态、usage 和有限事件轨迹；`inspect` 不执行日志里的工具，也不恢复会话。若时间允许，再运行 `pnpm demo:fix` 看脚本化编辑与公开检查。
 
-以上演示命令无需模型密钥；依赖首次安装可能访问包注册表。`pnpm start` 或已安装的 `mini-dsh` 进入交互模式时需要 `DEEPSEEK_API_KEY`，实际对话可能产生费用。本地 tarball 安装已在 Windows 验证，npm 尚未发布；其他平台的安装未验证。
+以上演示命令无需模型密钥；依赖首次安装可能访问包注册表。`pnpm start` 或已安装的 `mini-dsh` 进入交互模式时需要 `DEEPSEEK_API_KEY`，实际对话可能产生费用。本地 tarball 安装已在 Windows 验证，Linux 由 CI 的 `package-install` job 验证，npm 尚未发布；macOS 安装未验证。
 
 ## 三项有证据支持的工程贡献
 
@@ -21,7 +21,7 @@
 
 ## 三个关键取舍
 
-- **稳定前缀与规则新鲜度：** frozen 会话复用保存的时间及规则快照，帮助保持提示前缀稳定；磁盘规则更新需新会话或 `/reset` 才进入系统提示，`project_context` 仍读取当前文件。生产默认 live。见 [README](../README.md#生产配置与-v21-对照)。
+- **稳定前缀与规则新鲜度：** frozen 会话复用保存的时间及规则快照，帮助保持提示前缀稳定；磁盘规则更新需新会话或 `/reset` 才进入系统提示，`project_context` 仍读取当前文件。生产默认是项目上下文 `live`、运行时钟 `frozen`，两者不是同一个开关。见 [README](../README.md#生产配置与-v21-对照)。
 - **预算停止与产物验收：** token 等预算触顶会停止调度，即使退出候选通过独立验收，也不记为“可靠完成”。[NX-45 公开证据摘要](context-budget/NX-45-PUBLIC-EVIDENCE.md)分别列出两种口径。
 - **严格回放与环境动态字段：** 原录制请求和回放请求做指纹比较；限定的 Bash 工作区根和 `durationMs` 可在比较副本中归一化，命令与输出等仍严格比较。原录制保持不变。见 [NX-44 回放复盘](context-budget/NX-44-REPAIR-REPLAY.md)。
 
@@ -29,7 +29,7 @@
 
 - 单 Agent、单本地工作区；应用层路径和命令闸门不等于操作系统隔离。
 - 本地安装仅在 Windows 验证；npm 未发布。真实交互需要模型密钥，零付费演示使用脚本化响应。
-- [NX-45](context-budget/NX-45-PUBLIC-EVIDENCE.md) 是已曝光开发集。Full 的费用估价更低，但可靠完成为 10/12，Baseline 为 11/12；不能声称可靠完成率或泛化提升，也不能将组合策略结果单独归因于稳定前缀或主动压缩。公开仓库只有脱敏摘要，原始事件目前仅本地保存。
+- 本仓库不以模型评测结果作为展示内容。历史开发集探索不构成可靠完成率或泛化提升，也不能把组合策略结果单独归因于稳定前缀或主动压缩；公开仓库只有脱敏摘要，原始事件仅本地保存。协议边界见 [EVALUATION-SWEBENCH](EVALUATION-SWEBENCH.md)。
 
 ## 简历描述草案（个人贡献归属待用户确认）
 
