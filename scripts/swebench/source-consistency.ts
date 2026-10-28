@@ -6,6 +6,14 @@
 // even though every blob is byte-identical. The candidate may accept the image
 // checkout only when a recursive path-by-path object comparison proves content
 // equality; mode differences are recorded, never silently discarded.
+//
+// A few official images also pin build tooling in the environment commit (for
+// example `astropy` rewrites `requires = ["setuptools"]` to
+// `["setuptools==68.0.0"]`). That is build metadata, not task source. The
+// narrow exception below accepts a small, content-only diff confined to a fixed
+// set of build-metadata files; the caller then starts from the image HEAD and
+// exports the patch against it, so the agent and the official scorer see the
+// same tree. Every other content difference remains a hard refusal.
 
 export interface TreeEntry { mode: string; type: string; object: string; path: string }
 
@@ -125,6 +133,41 @@ export function summarizeRawDiff(entries: RawDiffEntry[]): RawDiffSummary {
     if (status !== 'M' || entry.oldObject !== entry.newObject) contentChanges++
   }
   return { entries: entries.length, contentChanges, statuses }
+}
+
+const buildMetadataBasenames = new Set([
+  'pyproject.toml', 'setup.py', 'setup.cfg', 'Pipfile', 'Pipfile.lock', 'poetry.lock', 'tox.ini',
+  'environment.yml', 'environment.yaml',
+])
+const requirementsBasename = /^requirements(?:[-_.][^/]*)?\.txt$/
+
+export interface EnvironmentCommitReading {
+  allowed: boolean
+  paths: string[]
+  reason?: string
+}
+
+/**
+ * Narrow exception for the official image's environment commit. It accepts
+ * only a small, content-only diff whose every path is build metadata. The
+ * caller records both heads and must export the patch against the image HEAD.
+ */
+export function classifyEnvironmentCommit(comparison: SourceComparison, limit = 8): EnvironmentCommitReading {
+  const paths = comparison.differences.map(difference => difference.path)
+  if (comparison.contentEqual) return { allowed: false, paths, reason: 'content is already equal' }
+  if (comparison.differences.length > limit) {
+    return { allowed: false, paths, reason: `more than ${limit} content differences` }
+  }
+  for (const difference of comparison.differences) {
+    if (difference.kind !== 'content') {
+      return { allowed: false, paths, reason: `${difference.kind} path ${difference.path} is not build metadata` }
+    }
+    const basename = difference.path.slice(difference.path.lastIndexOf('/') + 1)
+    if (!buildMetadataBasenames.has(basename) && !requirementsBasename.test(basename)) {
+      return { allowed: false, paths, reason: `${difference.path} is not build metadata` }
+    }
+  }
+  return { allowed: true, paths }
 }
 
 /** Bounded, path-naming description of a rejected comparison. */

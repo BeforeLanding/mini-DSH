@@ -6,8 +6,9 @@ import os from 'node:os'
 import path from 'node:path'
 import type { HarnessAdapter } from '../src/app/create-harness.js'
 import { buildSchedule, validateRunManifest } from '../scripts/swebench/protocol.js'
-import type { PriceSnapshot, SwebenchArm, SwebenchInstance, SwebenchRunManifest } from '../scripts/swebench/protocol.js'
+import type { EpisodeStatus, PriceSnapshot, SwebenchArm, SwebenchInstance, SwebenchRunManifest } from '../scripts/swebench/protocol.js'
 import { runSwebenchBatch } from '../scripts/swebench/run.js'
+import type { ExternalEpisodeOutcome, ExternalEpisodeRequest } from '../scripts/swebench/external-run.js'
 
 const nowUsage = { inputTokens: 1_000, outputTokens: 500, totalTokens: 1_500, source: 'provider' as const, uncertain: false, cacheReadTokens: 0 }
 const prices: PriceSnapshot = { currency: 'USD', inputUsdPerMillion: 1, cachedInputUsdPerMillion: 0.5, outputUsdPerMillion: 2, capturedAt: '2026-10-20', source: 'test snapshot' }
@@ -36,20 +37,38 @@ async function fixtures(directory: string, ids: readonly string[]) {
   return { root, instances }
 }
 
+const externalCommand = ['{python}', '-m', 'minisweagent.run.benchmarks.swebench', '--subset', '{dataset}', '--split', 'test',
+  '--output', '{output}', '--workers', '1', '--redo-existing', '-c', '{upstream_config}', '-c', '{config}']
+
 const arms: SwebenchArm[] = [
   { id: 'candidate', system: 'mini-dsh', role: 'candidate', model: { provider: 'scripted', name: 'agent', contextWindowTokens: 1_000_000 }, budget: { inputTargetTokens: 65_536 } },
-  { id: 'baseline', system: 'external', role: 'baseline', model: { provider: 'scripted', name: 'agent', contextWindowTokens: 1_000_000 }, external: { commit: 'abc1234', command: ['baseline'] }, budget: {} },
+  { id: 'baseline', system: 'external', role: 'baseline', model: { provider: 'scripted', name: 'agent', contextWindowTokens: 1_000_000 }, external: {
+    commit: 'a83fcae82d2a08f0ee0c688f9d137b3566c097f8', command: externalCommand, contractVersion: 1, version: '2.4.6',
+    modelName: 'scripted/agent', upstreamConfigSha256: 'a'.repeat(64), installSha256: 'b'.repeat(64),
+    environmentParity: 'candidate-isolation-v1', apiKeyEnv: 'DEEPSEEK_API_KEY',
+  }, budget: {} },
 ]
 
-function manifestFor(instances: SwebenchInstance[], overrides: Partial<SwebenchRunManifest> = {}): SwebenchRunManifest {
+const fixPatch = 'diff --git a/input.txt b/input.txt\n--- a/input.txt\n+++ b/input.txt\n@@ -1 +1 @@\n-broken\n+fixed\n'
+
+function externalOutcome(input: { patch: string; status?: EpisodeStatus; usageUnknown?: boolean; costUsd?: number }): ExternalEpisodeOutcome {
+  return { status: input.status ?? 'completed', patch: input.patch, costUsd: input.costUsd ?? 0.001, usageUnknown: input.usageUnknown ?? false,
+    counters: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, modelRequests: 1, toolCalls: 1, activeDurationMs: 1 },
+    external: { command: ['fake'], datasetPath: '', datasetSha256: 'c'.repeat(64), configPath: '', configSha256: 'd'.repeat(64),
+      upstreamConfigPath: '', upstreamConfigSha256: 'e'.repeat(64), stdoutPath: '', stderrPath: '', resultPath: '',
+      exitCode: 0, signal: null, durationMs: 1, maxTotalTokens: 1_000_000, miniExitStatus: 'Submitted', miniApiCalls: 1, miniReportedCostUsd: 0.001,
+      actions: 1, usageReasons: [], containerIds: [], containerEnvNames: [], removedContainerIds: [], leftoverContainerIds: [], secretLeak: false } }
+}
+
+function manifestFor(instances: SwebenchInstance[], overrides: Partial<SwebenchRunManifest> = {}, armList: SwebenchArm[] = arms): SwebenchRunManifest {
   const developmentInstances = instances.slice(0, 1)
-  const armIds = arms.map(arm => arm.id)
+  const armIds = armList.map(arm => arm.id)
   const base = {
-    schemaVersion: 2 as const, kind: 'swebench-run-manifest' as const, freezeStatus: 'frozen' as const,
+    schemaVersion: 3 as const, kind: 'swebench-run-manifest' as const, freezeStatus: 'frozen' as const,
     dataset: { name: 'SWE-bench Verified', revision: 'test-revision' }, harnessCommit: 'abc1234', selection: {},
     development: { tasks: developmentInstances.length, seed: 1, exclusions: [], instances: developmentInstances, arms: armIds, schedule: buildSchedule(developmentInstances, armIds, 1) },
     formal: { tasks: instances.length, seed: 2, exclusions: [], instances, arms: armIds, schedule: buildSchedule(instances, armIds, 2) },
-    arms, promptTemplate: 'Issue:\n{problem_statement}\n', caps: {
+    arms: armList, promptTemplate: 'Issue:\n{problem_statement}\n', caps: {
       perTask: { maxCostUsd: 1, maxModelRequests: 10, maxToolCalls: 10, wallClockMs: 60_000, maxOutputTokens: 1_024 },
       developmentPerTask: { maxCostUsd: 1, maxModelRequests: 10, maxToolCalls: 10, wallClockMs: 60_000, maxOutputTokens: 1_024 },
       batch: { maxCostUsd: 10, maxEpisodes: 20 },
@@ -71,19 +90,24 @@ test('the offline runner executes createHarness episodes, saves evidence, scores
     const datasetPath = await writeDataset(directory, instances)
     const manifest = validateRunManifest(manifestFor(instances))
     const adapters: string[] = []
+    const externalRequests: ExternalEpisodeRequest[] = []
     const report = await runSwebenchBatch({ manifest, manifestPath: path.join(directory, 'manifest-input.json'), datasetPath,
       evidenceRoot: path.join(directory, 'evidence'), split: 'formal', backend: 'fixture', scoring: 'mock', batchId: 'test-batch',
       fixtureRoot: root, adapterFor: (arm, instance) => {
         adapters.push(`${arm.id}/${instance.instance_id}`)
-        const solved = arm.id === 'candidate' || instance.instance_id.endsWith('-1')
-        return scripted({ solve: solved }).adapter
+        return scripted({ solve: true }).adapter
+      },
+      externalRunner: async request => {
+        externalRequests.push(request)
+        return externalOutcome({ patch: request.instance.instance_id.endsWith('-1') ? fixPatch : '' })
       },
       scoreMock: async (_instance, workspace) => (await fs.readFile(path.join(workspace, 'input.txt'), 'utf8')).trim() === 'fixed' })
 
     assert.equal(report.plannedEpisodes, 4)
     assert.equal(report.executedEpisodes, 4)
     assert.equal(report.unexecutedEpisodes, 0)
-    assert.deepEqual(adapters.sort(), ['baseline/demo__fix-1', 'baseline/demo__fix-2', 'candidate/demo__fix-1', 'candidate/demo__fix-2'])
+    assert.deepEqual(adapters.sort(), ['candidate/demo__fix-1', 'candidate/demo__fix-2'])
+    assert.ok(externalRequests.every(request => request.caps.maxTotalTokens === 500_000))
     const candidate = report.perArm.find(arm => arm.armId === 'candidate')!
     const baseline = report.perArm.find(arm => arm.armId === 'baseline')!
     assert.equal(candidate.resolved, 2)
@@ -119,7 +143,7 @@ test('an infrastructure failure stops the batch and leaves unexecuted episodes e
   try {
     const { root, instances } = await fixtures(directory, ['demo__fix-1', 'demo__fix-2'])
     const datasetPath = await writeDataset(directory, instances)
-    const manifest = validateRunManifest(manifestFor(instances))
+    const manifest = validateRunManifest(manifestFor(instances, {}, [arms[0]!]))
     const report = await runSwebenchBatch({ manifest, manifestPath: path.join(directory, 'manifest-input.json'), datasetPath,
       evidenceRoot: path.join(directory, 'evidence'), split: 'formal', backend: 'fixture', scoring: 'mock', batchId: 'stop-batch',
       fixtureRoot: root, adapterFor: () => scripted({ solve: true, throwOnFirst: true }).adapter,
@@ -137,7 +161,7 @@ test('unknown provider usage is never zero-filled and stops a priced batch', asy
   try {
     const { root, instances } = await fixtures(directory, ['demo__fix-1'])
     const datasetPath = await writeDataset(directory, instances)
-    const manifest = validateRunManifest(manifestFor(instances))
+    const manifest = validateRunManifest(manifestFor(instances, {}, [arms[0]!]))
     const report = await runSwebenchBatch({ manifest, manifestPath: path.join(directory, 'manifest-input.json'), datasetPath,
       evidenceRoot: path.join(directory, 'evidence'), split: 'formal', backend: 'fixture', scoring: 'mock', batchId: 'usage-batch',
       fixtureRoot: root, adapterFor: () => scripted({ solve: true, usage: false }).adapter,
@@ -172,12 +196,34 @@ test('draft manifests and gold-bearing datasets are refused before any evidence 
   } finally { await fs.rm(directory, { recursive: true, force: true }) }
 })
 
+test('official scoring refuses to start without complete hidden rows and never creates evidence', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-swebench-scoring-'))
+  try {
+    const { root, instances } = await fixtures(directory, ['demo__fix-1'])
+    const datasetPath = await writeDataset(directory, instances)
+    const frozen = validateRunManifest(manifestFor(instances, {}, [arms[0]!]))
+    const missing = path.join(directory, 'missing-evidence')
+    await assert.rejects(runSwebenchBatch({ manifest: frozen, manifestPath: 'm', datasetPath, evidenceRoot: missing,
+      split: 'formal', backend: 'fixture', scoring: 'official', batchId: 'official-missing', fixtureRoot: root,
+      adapterFor: () => scripted({ solve: true }).adapter }), /--scoring-dataset/)
+    assert.equal(await fs.stat(missing).catch(() => undefined), undefined)
+
+    const incompleteRows = path.join(directory, 'incomplete-rows.json')
+    await fs.writeFile(incompleteRows, JSON.stringify([{ instance_id: 'demo__fix-1', repo: 'demo/fix', base_commit: 'a1' }]))
+    const incomplete = path.join(directory, 'incomplete-evidence')
+    await assert.rejects(runSwebenchBatch({ manifest: frozen, manifestPath: 'm', datasetPath, evidenceRoot: incomplete,
+      split: 'formal', backend: 'fixture', scoring: 'official', scoringDataset: incompleteRows, batchId: 'official-incomplete',
+      fixtureRoot: root, adapterFor: () => scripted({ solve: true }).adapter }), /lacks test_patch/)
+    assert.equal(await fs.stat(incomplete).catch(() => undefined), undefined)
+  } finally { await fs.rm(directory, { recursive: true, force: true }) }
+})
+
 test('a stopped batch can resume without re-running completed or interrupted episodes', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-swebench-resume-'))
   try {
     const { root, instances } = await fixtures(directory, ['demo__fix-1', 'demo__fix-2'])
     const datasetPath = await writeDataset(directory, instances)
-    const manifest = validateRunManifest(manifestFor(instances))
+    const manifest = validateRunManifest(manifestFor(instances, {}, [arms[0]!]))
     const evidenceRoot = path.join(directory, 'evidence')
     const first = await runSwebenchBatch({ manifest, manifestPath: path.join(directory, 'manifest-input.json'), datasetPath,
       evidenceRoot, split: 'formal', backend: 'fixture', scoring: 'mock', batchId: 'resume-batch', fixtureRoot: root,
@@ -189,11 +235,11 @@ test('a stopped batch can resume without re-running completed or interrupted epi
       evidenceRoot, split: 'formal', backend: 'fixture', scoring: 'mock', batchId: 'resume-batch', fixtureRoot: root, resume: true,
       adapterFor: () => { calls++; return scripted({ solve: true }).adapter },
       scoreMock: async (_instance, workspace) => (await fs.readFile(path.join(workspace, 'input.txt'), 'utf8')).trim() === 'fixed' })
-    assert.equal(calls, 3)
-    assert.equal(resumed.executedEpisodes, 4)
+    assert.equal(calls, 1)
+    assert.equal(resumed.executedEpisodes, 2)
     assert.equal(resumed.unexecutedEpisodes, 0)
     assert.equal(resumed.perArm.reduce((total, arm) => total + arm.statusCounts.infrastructure, 0), 1)
     assert.equal(resumed.batch.stopReason, undefined)
-    assert.equal(resumed.scoring.resolved, 3)
+    assert.equal(resumed.scoring.resolved, 1)
   } finally { await fs.rm(directory, { recursive: true, force: true }) }
 })

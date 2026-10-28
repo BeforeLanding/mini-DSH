@@ -27,9 +27,12 @@ test('preregistration separates development and formal batches, sanitizes gold, 
     await fs.writeFile(dataset, JSON.stringify(rows))
     const prices = path.join(directory, 'prices.json')
     await fs.writeFile(prices, JSON.stringify({ currency: 'USD', inputUsdPerMillion: 1, cachedInputUsdPerMillion: 0.5, outputUsdPerMillion: 2, capturedAt: '2026-10-20', source: 'official price page' }))
+    const baselineCommand = JSON.stringify(['{python}', '-m', 'minisweagent.run.benchmarks.swebench', '--subset', '{dataset}',
+      '--split', 'test', '--output', '{output}', '--workers', '1', '--redo-existing', '-c', '{upstream_config}', '-c', '{config}'])
     const common = ['--dataset', dataset, '--tasks', '50', '--seed', '42', '--dataset-revision', 'c104f840', '--harness-commit', '3f01bd6',
       '--arms', '4', '--model', 'test-model', '--context-window-tokens', '1000000', '--prices', prices,
-      '--baseline-commit', 'abc1234', '--baseline-command', '["mini-swe-agent","--model","test-model"]']
+      '--baseline-commit', 'a83fcae82d2a08f0ee0c688f9d137b3566c097f8', '--baseline-command', baselineCommand,
+      '--baseline-version', '2.4.6', '--baseline-upstream-config-sha256', 'a'.repeat(64), '--baseline-install-sha256', 'b'.repeat(64)]
     const draftPath = path.join(directory, 'draft.json')
     await run([...common, '--out', draftPath])
     const draft = JSON.parse(await fs.readFile(draftPath, 'utf8'))

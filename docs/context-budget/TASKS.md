@@ -71,6 +71,24 @@
 
 OPT-0 与 OPT-4 属于各自独立的验收结论；OPT-1/2/3 分别独立提交，全部完成后核对实际提交。真实模型泛化与供应商缓存收益须另行冻结并取得具体预算授权，当前不发模型请求。
 
+### R10 后续：mini-SWE-agent 同模型外部基线（2026-10-21，零付费，工作分支验收完成）
+
+范围：把 `system: 'external'` 从“冻结契约但拒绝执行”变成可执行的外部基线；不动 candidate 的 agent loop、官方判分与既有选择/预算口径。用户 2026-10-21 选定与 candidate **同构的沙箱**。
+
+| 子步骤 | 行为与验收 | 状态 |
+|---|---|---|
+| a | `external-contract.ts`：命令模板校验/渲染、候选同构 `run_args`、label；单测覆盖未知/部分占位符、缺 flag、禁止 model/filter、路径逗号与相对路径 | done |
+| b | schema v3 与 external 字段：冻结 external 臂必须有 40-hex commit、模板命令、版本、modelName、config/install hash、parity、key 名；模型与 candidate 同名；旧 frozen 清单拒绝 | done |
+| c | `external-fingerprint.ts` + `preregister --verify-baseline`：版本、上游 config SHA-256、9 文件安装指纹；draft 可缺，frozen 不可缺 | done |
+| d | `external.ts`：单行 sanitized parquet（含 `image_name` digest）、override 配置（原生 prompt、同构沙箱、limits）、`preds.json`/traj 解析、usage/成本/状态映射、key redaction | done |
+| e | `external-run.ts`：spawn、硬超时、live watchdog、label 清理、容器 env 检查、结果证据 | done |
+| f | `run.ts`/`report.ts`：创建证据前 preflight；external 分支只取 `preds.json` patch；报告 external 元数据与系统级 caveat | done |
+| g | 零模型验收：`external-probe` 用真实 CLI + Docker + `DeterministicModel`，空 patch 与非空 patch 各一次；无残留容器、容器无 key | done（证据 `D:\Agent\outputs\mini-dsh-swebench-external-probe-20261021`） |
+| h | 4 臂 draft 清单：`D:\Agent\outputs\mini-dsh-swebench-4arm-20261021\manifest-draft.json`；外部字段齐备、`freezeStatus=draft`、付费请求 0 | done |
+| i | 4 臂开发复跑（20 episodes）与正式 50 题 × 4 臂（200 episodes）：均已分别获得金额授权、冻结清单并完成官方评分；正式候选 26/50、基线 27/50，22 次基线越额的敏感性读数为双方 26/50，见 [评测结果](../EVALUATION-SWEBENCH.md#formal-four-arm-result-2026-10-24-50-tasks-per-arm) | done（2026-10-24；源码 `8b3047c`，证据 6 项 SHA-256 通过） |
+
+**不做/边界**：不修改 mini-SWE-agent 源码；不把 provider key 放进容器；不把隐藏 `test_patch` 写进外部数据集；不把工作区 diff 冒充外部基线 patch；不称结果能归因到单个 prompt/上下文因子；本步不授权任何付费跑。
+
 ### R10 正式评测执行器零付费准备（2026-10-20，工作分支验收完成）
 
 独立提交 `430234e`：新增 `scripts/swebench/{run,report,workspace}.ts`，并扩展 `protocol.ts`/`preregister.ts`/`docs/EVALUATION-SWEBENCH.md`。行为边界：① 冻结文件同时包含开发批次（默认 5 题）与正式批次（50 题），开发题先选并从正式批排除，排除规则与确定性 arm 交错顺序写入 manifest；② 原始数据集只保留 `instance_id/repo/base_commit/version/environment_setup_commit/problem_statement/image`，gold/hidden 字段在预注册时剥离，执行器再拒绝仍带 `patch`/`test_patch`/`FAIL_TO_PASS` 的输入；③ `preregister` 缺模型、价格、基线命令、镜像 digest 或批次上限时保持 `draft`，只有齐备且 `--finalize` 才成为 `frozen`；④ 执行器复用 `createHarness`，每任务应用请求/工具/时间/输出/token 上限（金额上限按最大单价反推保守 token 上限），保存 session JSONL、终态、usage、空/非空 patch，基础设施失败与未知 usage 停批，批次金额与 episode 数量有硬上限，`--resume` 跳过已完成/中断 episode 而不重跑；⑤ 独立判分只读已保存 prediction，每批每臂使用新 run_id，官方判分失败保留为 error 分类并留在主分母；⑥ 报告给出 planned/executed 分母、每臂 Wilson 区间、预先声明的 candidate/baseline 与 context 两臂配对四格、精确 McNemar、失败分类与三条预声明失败轨迹，并关联 events/patch/session 路径。

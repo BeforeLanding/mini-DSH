@@ -1,5 +1,6 @@
 import path from 'node:path'
 import type { Usage } from '../../src/core/budget.js'
+import { EXTERNAL_CONTRACT_VERSION, validateExternalCommand } from './external-contract.js'
 
 // R10 的离线适配层。这里不运行 Docker、不下载数据集、不调用模型；它只固定正式实验需要的
 // 选择、预算、路径映射、预测格式与汇总口径，好在取得授权后不做“先跑再改协议”。
@@ -183,12 +184,24 @@ export function classifyRunStatus(status: string): EpisodeStatus {
   return 'failed'
 }
 
+export interface SwebenchArmExternal {
+  commit: string | null
+  command: string[] | null
+  contractVersion: number | null
+  version: string | null
+  modelName: string | null
+  upstreamConfigSha256: string | null
+  installSha256: string | null
+  environmentParity: string | null
+  apiKeyEnv: string | null
+}
+
 export interface SwebenchArm {
   id: string
   system: 'mini-dsh' | 'external'
   role: string
   model: { provider: string; name: string | null; contextWindowTokens: number }
-  external?: { commit: string | null; command: string[] | null }
+  external?: SwebenchArmExternal
   budget: Record<string, unknown>
 }
 
@@ -202,7 +215,7 @@ export interface SwebenchBatchManifest {
 }
 
 export interface SwebenchRunManifest {
-  schemaVersion: 2
+  schemaVersion: 3
   kind: 'swebench-run-manifest'
   freezeStatus: 'draft' | 'frozen'
   dataset: { name: string; revision: string }
@@ -267,11 +280,66 @@ function validateBatch(value: unknown, arms: readonly string[], name: string): S
     instances, arms: [...batch.arms], schedule }
 }
 
+const hashPattern = /^[0-9a-f]{64}$/
+
+function validateExternalArm(value: unknown, index: number, frozen: boolean): SwebenchArmExternal | undefined {
+  if (value === undefined || value === null) return undefined
+  if (!isRecord(value)) throw new Error(`arms[${index}].external must be an object`)
+  const commit = value.commit
+  if (commit !== null && commit !== undefined && (typeof commit !== 'string' || !/^[0-9a-f]{7,40}$/.test(commit))) {
+    throw new Error(`arms[${index}].external.commit must be a hex commit`)
+  }
+  if (frozen && (typeof commit !== 'string' || !/^[0-9a-f]{40}$/.test(commit))) {
+    throw new Error(`arms[${index}].external.commit must be a full 40-hex commit when frozen`)
+  }
+  const command = value.command
+  if (command !== null && command !== undefined) {
+    if (!Array.isArray(command) || command.length === 0 || command.some(item => typeof item !== 'string' || !item)) {
+      throw new Error(`arms[${index}].external.command must be a non-empty string array`)
+    }
+    validateExternalCommand(command)
+  }
+  if (frozen && !Array.isArray(command)) throw new Error(`arms[${index}].external.command is required when frozen`)
+  const text = (key: string, required: boolean) => {
+    const item = value[key]
+    if (item === null || item === undefined) {
+      if (required) throw new Error(`arms[${index}].external.${key} is required when frozen`)
+      return null
+    }
+    if (typeof item !== 'string' || !item) throw new Error(`arms[${index}].external.${key} must be a non-empty string`)
+    return item
+  }
+  const hash = (key: string, required: boolean) => {
+    const item = text(key, required)
+    if (item !== null && !hashPattern.test(item)) throw new Error(`arms[${index}].external.${key} must be a lowercase SHA-256`)
+    return item
+  }
+  const contractVersion = value.contractVersion
+  if (contractVersion !== null && contractVersion !== undefined && contractVersion !== EXTERNAL_CONTRACT_VERSION) {
+    throw new Error(`arms[${index}].external.contractVersion must be ${EXTERNAL_CONTRACT_VERSION}`)
+  }
+  if (frozen && contractVersion !== EXTERNAL_CONTRACT_VERSION) throw new Error(`arms[${index}].external.contractVersion is required when frozen`)
+  const version = text('version', frozen)
+  const modelName = text('modelName', frozen)
+  const upstreamConfigSha256 = hash('upstreamConfigSha256', frozen)
+  const installSha256 = hash('installSha256', frozen)
+  const environmentParity = text('environmentParity', frozen)
+  const apiKeyEnv = text('apiKeyEnv', frozen)
+  if (apiKeyEnv !== null && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(apiKeyEnv)) throw new Error(`arms[${index}].external.apiKeyEnv is not an environment variable name`)
+  return {
+    commit: typeof commit === 'string' ? commit : null,
+    command: Array.isArray(command) ? [...command] : null,
+    contractVersion: typeof contractVersion === 'number' ? contractVersion : null,
+    version, modelName, upstreamConfigSha256, installSha256, environmentParity, apiKeyEnv,
+  }
+}
+
 export function validateRunManifest(value: unknown): SwebenchRunManifest {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('run manifest must be an object')
   const manifest = value as Record<string, unknown>
-  if (manifest.schemaVersion !== 2 || manifest.kind !== 'swebench-run-manifest') throw new Error('unsupported run manifest schema')
+  if (manifest.schemaVersion !== 3 || manifest.kind !== 'swebench-run-manifest') throw new Error('unsupported run manifest schema')
   if (manifest.freezeStatus !== 'draft' && manifest.freezeStatus !== 'frozen') throw new Error('run manifest freezeStatus must be draft or frozen')
+  const frozen = manifest.freezeStatus === 'frozen'
   if (!Array.isArray(manifest.arms) || !manifest.arms.length) throw new Error('run manifest needs arms')
   const arms = manifest.arms.map((value, index) => {
     if (!value || typeof value !== 'object') throw new Error(`arms[${index}] must be an object`)
@@ -283,10 +351,24 @@ export function validateRunManifest(value: unknown): SwebenchRunManifest {
     if (model.name !== null && typeof model.name !== 'string') throw new Error(`arms[${index}].model.name must be a string or null`)
     const contextWindowTokens = positiveInteger(model.contextWindowTokens, `arms[${index}].model.contextWindowTokens`)
     if (!arm.budget || typeof arm.budget !== 'object') throw new Error(`arms[${index}].budget is required`)
-    return { id: arm.id, system: arm.system as SwebenchArm['system'], role: typeof arm.role === 'string' ? arm.role : '', model: { provider: model.provider, name: model.name as string | null, contextWindowTokens },
-      ...(arm.external ? { external: arm.external as SwebenchArm['external'] } : {}), budget: arm.budget as Record<string, unknown> }
+    const system = arm.system as SwebenchArm['system']
+    const external = validateExternalArm(arm.external, index, frozen)
+    if (system === 'external' && !external) throw new Error(`arms[${index}].external is required for an external arm`)
+    if (system === 'external' && frozen && (typeof model.name !== 'string' || !model.name)) throw new Error(`arms[${index}].model.name is required when frozen`)
+    if (system === 'mini-dsh' && external) throw new Error(`arms[${index}].external is only valid for an external arm`)
+    return { id: arm.id, system, role: typeof arm.role === 'string' ? arm.role : '', model: { provider: model.provider, name: model.name as string | null, contextWindowTokens },
+      ...(external ? { external } : {}), budget: arm.budget as Record<string, unknown> }
   })
   if (new Set(arms.map(arm => arm.id)).size !== arms.length) throw new Error('arm ids must be unique')
+  const candidate = arms.find(arm => arm.id === 'candidate')
+  for (const arm of arms.filter(item => item.system === 'external')) {
+    if (candidate && (arm.model.provider !== candidate.model.provider || arm.model.name !== candidate.model.name)) {
+      throw new Error(`external arm ${arm.id} must use the same model as candidate`)
+    }
+    if (arm.external?.modelName && arm.model.name && arm.external.modelName !== `${arm.model.provider}/${arm.model.name}`) {
+      throw new Error(`external arm ${arm.id} modelName must be provider/model`)
+    }
+  }
   const ids = arms.map(arm => arm.id)
   const caps = manifest.caps as Record<string, unknown> | undefined
   if (!caps?.perTask || !caps.developmentPerTask || !caps.batch) throw new Error('run manifest caps are required')
@@ -308,7 +390,7 @@ export function validateRunManifest(value: unknown): SwebenchRunManifest {
   if (typeof manifest.createdAt !== 'string') throw new Error('createdAt is required')
   if (!manifest.environment || typeof manifest.environment !== 'object') throw new Error('environment is required')
   return {
-    schemaVersion: 2, kind: 'swebench-run-manifest', freezeStatus: manifest.freezeStatus,
+    schemaVersion: 3, kind: 'swebench-run-manifest', freezeStatus: manifest.freezeStatus,
     dataset: { name: String((manifest.dataset as Record<string, unknown>).name ?? 'SWE-bench Verified'), revision: (manifest.dataset as Record<string, unknown>).revision as string },
     harnessCommit: manifest.harnessCommit, selection: manifest.selection,
     development: validateBatch(manifest.development, ids, 'development'),
