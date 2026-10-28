@@ -147,6 +147,29 @@ test('LOO attribution stays inconclusive below 5%, on conflicting repeats, or wi
   assert.ok(unconfirmedResult.variants['no-preview'].attribution.reasons.includes('mechanism-not-confirmed'))
 })
 
+test('LOO reports conflicting repeats and opposite paid direction when removing a component looks cheaper', () => {
+  const all = batches({
+    'no-preview': episode => ({ output: episode.repeat === 0 ? 7 : 11 }),
+    'no-projection': () => ({ active: 800 }),
+    'no-report': () => ({ active: 800 }),
+  })
+  const result = compareV2LooBatches(all.full, {
+    'no-preview': all['no-preview'], 'no-projection': all['no-projection'], 'no-report': all['no-report'],
+  }, { probes: probes() })
+  const preview = result.variants['no-preview'].attribution
+  assert.equal(preview.status, 'inconclusive')
+  assert.equal(preview.repeatConsistent, false)
+  assert.ok(preview.reasons.includes('repeat-directions-conflict'))
+  assert.ok(preview.reasons.includes('paid-direction-opposes-offline-mechanism'))
+  for (const label of ['no-projection', 'no-report'] as const) {
+    const attribution = result.variants[label].attribution
+    assert.equal(attribution.status, 'inconclusive')
+    assert.equal(attribution.repeatConsistent, true)
+    assert.ok(attribution.reasons.includes('paid-direction-opposes-offline-mechanism'))
+    assert.ok(!attribution.reasons.includes('offline-cpu-io-only-below-paid-threshold'))
+  }
+})
+
 test('LOO attribution marks a cheaper but less reliable arm as an efficiency tradeoff and reviews larger losses', () => {
   const cheaper = batches({ 'no-preview': (_, index) => ({ output: 8, success: index !== 0 }) })
   const tradeoff = compareV2LooBatches(cheaper.full, { 'no-preview': cheaper['no-preview'], 'no-projection': cheaper['no-projection'], 'no-report': cheaper['no-report'] })
