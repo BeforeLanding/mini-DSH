@@ -580,22 +580,28 @@ function looAttribution(
   const repeatOutput = repeatDistribution(referenceBatch, variantBatch, row => row.metrics.outputTokens)
   const repeatActive = repeatDistribution(referenceBatch, variantBatch, row => row.metrics.activeDurationMs)
   const repeatNonModel = repeatDistribution(referenceBatch, variantBatch, row => looNonModel(row))
-  const worseRepeats = preview
-    ? [repeatOutput, repeatActive].filter((_, index) => (index === 0 ? output : active).worseWhenRemoved)
-    : [repeatNonModel]
-  const repeatConsistent = worseRepeats.every(distribution => signConsistent(Object.values(distribution).map(item => item.variant - item.reference)))
+  const relevantRepeats = preview
+    ? [repeatOutput, repeatActive].filter((_, index) => {
+      const delta = index === 0 ? output : active
+      return delta.worseWhenRemoved || delta.betterWhenRemoved
+    })
+    : nonModel.worseWhenRemoved || nonModel.betterWhenRemoved ? [repeatNonModel] : []
+  const repeatConsistent = relevantRepeats.every(distribution => signConsistent(Object.values(distribution).map(item => item.variant - item.reference)))
   const reasons: string[] = []
   let status: 'signal' | 'inconclusive' | 'efficiency-tradeoff' = 'inconclusive'
   if (reviewRequired) reasons.push('quality-difference-beyond-tolerance')
   else if (better.length && qualityLoss >= 1) { status = 'efficiency-tradeoff'; reasons.push('resource-better-with-quality-loss') }
   else if (worse.length && qualityWithinTolerance && repeatConsistent && mechanism === 'confirmed-adverse') status = 'signal'
   else {
-    if (worse.length && !repeatConsistent) reasons.push('repeat-directions-conflict')
+    if (!repeatConsistent) reasons.push('repeat-directions-conflict')
     if (worse.length && mechanism !== 'confirmed-adverse') reasons.push('mechanism-not-confirmed')
     if (!worse.length && !better.length) reasons.push('resource-change-below-threshold')
   }
   if (!preview && active.worseWhenRemoved && !nonModel.worseWhenRemoved) reasons.push('total-active-confounded-by-model-wait')
-  if (mechanism === 'confirmed-adverse' && status === 'inconclusive') reasons.push(preview ? 'offline-retention-loss-without-paid-signal' : 'offline-cpu-io-only-below-paid-threshold')
+  if (mechanism === 'confirmed-adverse' && status === 'inconclusive') {
+    reasons.push(better.length && !worse.length ? 'paid-direction-opposes-offline-mechanism'
+      : preview ? 'offline-retention-loss-without-paid-signal' : 'offline-cpu-io-only-below-paid-threshold')
+  }
   if (mechanism === 'not-measured') reasons.push('offline-probe-not-measured')
   return {
     status, reasons, thresholdPct: LOO_THRESHOLD * 100, qualityLoss, qualityDifference, qualityWithinTolerance, reviewRequired, repeatConsistent,

@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### CE-P1 消融比较器后处理读数修正（2026-10-28）
+
+四批付费执行完成后复核发现，原比较器仅在“去掉组件后资源变差”时计算重复方向：当去掉组件后资源变好，`repeatConsistent` 可对空集合返回 true，掩盖两次重复相反；离线机制变差而付费读数反向时，也误写为“未达阈值”。现在对超过 5% 的任一方向都检查两次重复，冲突写 `repeat-directions-conflict`；付费方向与离线机制相反时写 `paid-direction-opposes-offline-mechanism`。这只修正归因解释，三项 `inconclusive` 结论与原始批次证据不变。新增双重复反例，覆盖预览臂冲突与投影/报告臂反向。
+
+`pnpm check` 因 pnpm 引导访问 npm registry 失败；按 AGENTS 允许的等价命令运行 `node scripts/build.js`（exit 0）、`node scripts/check-syntax.js`（226 files）、定向测试 11/11、设置固定 WSL runtime 后 `node --test dist/test/*.test.js`（579/579，0 fail，0 skipped）；Biome 257 files、0 诊断，`git diff --check` 通过。修正后的四臂比较器全部 16 项协议检查通过，三臂仍为 `inconclusive`，但原因字段现与实测方向一致；后处理额外模型请求 0。
+
 
 ### CE-F1 PR #8 合并后的四臂零付费重冻（2026-10-27）
 
