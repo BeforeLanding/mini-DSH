@@ -1,5 +1,10 @@
 # 任务清单
 
+### SWE 实验分支隔离（2026-10-28）
+
+- SW-R1（完成，本提交）：撤回 PR #12 的 main 变更；保留后续 README/中文文档整理，SWE 完整结果保存在 `feat/swebench-formal-results@dc7e659`。验收：构建通过、227 文件语法通过、完整离线回归 584 项（554 通过、30 平台条件跳过、0 失败）、Biome 259 文件零诊断；diff 与独立分支提交核对通过。没有重跑付费实验。
+
+
 ### 组件 LOO 付费结果收口（2026-10-28，完成）
 
 按可独立回退的验收结论分两步提交：
@@ -70,24 +75,6 @@
 - OPT-4（本地完成）：三组件固定量化门槛接入 `pnpm test` 和 `pnpm bench:components`；基线/脚本 SHA-256 钉版，空改进拒绝探针通过。完整 517/487/0/30、check 195 files、lint 无诊断；fixture checker、12/12 离线筛查、估算器核对、两条公开证据复算通过。结果与复现见 `docs/COMPONENT-OPTIMIZATION.md`；跨平台 CI 由 PR checks 提供，不用本机跳过替代隔离验收。
 
 OPT-0 与 OPT-4 属于各自独立的验收结论；OPT-1/2/3 分别独立提交，全部完成后核对实际提交。真实模型泛化与供应商缓存收益须另行冻结并取得具体预算授权，当前不发模型请求。
-
-### R10 后续：mini-SWE-agent 同模型外部基线（2026-10-21，零付费，工作分支验收完成）
-
-范围：把 `system: 'external'` 从“冻结契约但拒绝执行”变成可执行的外部基线；不动 candidate 的 agent loop、官方判分与既有选择/预算口径。用户 2026-10-21 选定与 candidate **同构的沙箱**。
-
-| 子步骤 | 行为与验收 | 状态 |
-|---|---|---|
-| a | `external-contract.ts`：命令模板校验/渲染、候选同构 `run_args`、label；单测覆盖未知/部分占位符、缺 flag、禁止 model/filter、路径逗号与相对路径 | done |
-| b | schema v3 与 external 字段：冻结 external 臂必须有 40-hex commit、模板命令、版本、modelName、config/install hash、parity、key 名；模型与 candidate 同名；旧 frozen 清单拒绝 | done |
-| c | `external-fingerprint.ts` + `preregister --verify-baseline`：版本、上游 config SHA-256、9 文件安装指纹；draft 可缺，frozen 不可缺 | done |
-| d | `external.ts`：单行 sanitized parquet（含 `image_name` digest）、override 配置（原生 prompt、同构沙箱、limits）、`preds.json`/traj 解析、usage/成本/状态映射、key redaction | done |
-| e | `external-run.ts`：spawn、硬超时、live watchdog、label 清理、容器 env 检查、结果证据 | done |
-| f | `run.ts`/`report.ts`：创建证据前 preflight；external 分支只取 `preds.json` patch；报告 external 元数据与系统级 caveat | done |
-| g | 零模型验收：`external-probe` 用真实 CLI + Docker + `DeterministicModel`，空 patch 与非空 patch 各一次；无残留容器、容器无 key | done（证据 `D:\Agent\outputs\mini-dsh-swebench-external-probe-20261021`） |
-| h | 4 臂 draft 清单：`D:\Agent\outputs\mini-dsh-swebench-4arm-20261021\manifest-draft.json`；外部字段齐备、`freezeStatus=draft`、付费请求 0 | done |
-| i | 4 臂开发复跑（20 episodes）与正式 50 题 × 4 臂（200 episodes）：均已分别获得金额授权、冻结清单并完成官方评分；正式候选 26/50、基线 27/50，22 次基线越额的敏感性读数为双方 26/50，见 [评测结果](../EVALUATION-SWEBENCH.md#正式四臂结果2026-10-24每臂-50-任务) | done（2026-10-24；源码 `8b3047c`，证据 6 项 SHA-256 通过） |
-
-**不做/边界**：不修改 mini-SWE-agent 源码；不把 provider key 放进容器；不把隐藏 `test_patch` 写进外部数据集；不把工作区 diff 冒充外部基线 patch；不称结果能归因到单个 prompt/上下文因子；本步不授权任何付费跑。
 
 ### R10 正式评测执行器零付费准备（2026-10-20，工作分支验收完成）
 

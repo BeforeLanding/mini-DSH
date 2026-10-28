@@ -1,7 +1,5 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { EXTERNAL_CONTRACT_VERSION, validateExternalCommand } from './external-contract.js'
-import { fingerprintBaseline } from './external-fingerprint.js'
 import { buildSchedule, estimateBudget, sanitizeInstanceRow, selectInstances, validatePriceSnapshot } from './protocol.js'
 import type { BatchInstanceList, SwebenchInstance } from './protocol.js'
 
@@ -89,36 +87,7 @@ async function main() {
   if (baselineCommandRaw) {
     const parsed = JSON.parse(baselineCommandRaw) as unknown
     if (!Array.isArray(parsed) || !parsed.every(item => typeof item === 'string') || !parsed.length) throw new Error('--baseline-command must be a JSON array of strings')
-    baselineCommand = validateExternalCommand(parsed)
-  }
-  const baselinePython = optionalArgument('--baseline-python') ?? 'python'
-  const baselineVersionArg = optionalArgument('--baseline-version')
-  const baselineConfigShaArg = optionalArgument('--baseline-upstream-config-sha256')
-  const baselineInstallShaArg = optionalArgument('--baseline-install-sha256')
-  const baselineApiKeyEnv = optionalArgument('--baseline-api-key-env') ?? 'DEEPSEEK_API_KEY'
-  const environmentParity = optionalArgument('--baseline-environment-parity') ?? 'candidate-isolation-v1'
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(baselineApiKeyEnv)) throw new Error('--baseline-api-key-env must be an environment variable name')
-  for (const [name, value] of [['--baseline-upstream-config-sha256', baselineConfigShaArg], ['--baseline-install-sha256', baselineInstallShaArg]] as const) {
-    if (value !== undefined && !/^[0-9a-f]{64}$/.test(value)) throw new Error(`${name} must be a lowercase SHA-256`)
-  }
-  let baselineVersion = baselineVersionArg
-  let baselineConfigSha = baselineConfigShaArg
-  let baselineInstallSha = baselineInstallShaArg
-  if (process.argv.includes('--verify-baseline')) {
-    const fingerprint = fingerprintBaseline(baselinePython)
-    if (baselineVersion && baselineVersion !== fingerprint.version) throw new Error(`baseline version mismatch: requested ${baselineVersion}, installed ${fingerprint.version}`)
-    if (baselineCommit && fingerprint.vcsCommit && !fingerprint.vcsCommit.startsWith(baselineCommit)) throw new Error(`baseline commit mismatch: requested ${baselineCommit}, installed ${fingerprint.vcsCommit}`)
-    baselineVersion = baselineVersion ?? fingerprint.version
-    baselineConfigSha = baselineConfigSha ?? fingerprint.upstreamConfigSha256
-    baselineInstallSha = baselineInstallSha ?? fingerprint.installSha256
-  }
-  const baselineModelName = model && baselineModel ? `${modelProvider}/${baselineModel}` : null
-  const baselineExternal = {
-    commit: baselineCommit ?? null, command: baselineCommand ?? null,
-    contractVersion: baselineCommand ? EXTERNAL_CONTRACT_VERSION : null,
-    version: baselineVersion ?? null, modelName: baselineModelName,
-    upstreamConfigSha256: baselineConfigSha ?? null, installSha256: baselineInstallSha ?? null,
-    environmentParity, apiKeyEnv: baselineApiKeyEnv,
+    baselineCommand = parsed
   }
   const prices = optionalArgument('--prices') ? validatePriceSnapshot(JSON.parse(await fs.readFile(argument('--prices'), 'utf8'))) : null
   const promptTemplate = optionalArgument('--prompt-template') ? await fs.readFile(argument('--prompt-template'), 'utf8') : defaultPrompt
@@ -130,7 +99,7 @@ async function main() {
   const configuredArms = armDefinitions.map(arm => ({
     ...arm,
     model: { provider: modelProvider, name: arm.id === 'baseline' ? baselineModel : model, contextWindowTokens },
-    ...(arm.id === 'baseline' ? { external: baselineExternal } : {}),
+    ...(arm.id === 'baseline' ? { external: { commit: baselineCommit ?? null, command: baselineCommand ?? null } } : {}),
     budget: { ...arm.budget, maxModelRequests: maxRequests, maxToolCalls, maxActiveDurationMs: wallClockMs, maxOutputTokens },
   }))
 
@@ -139,13 +108,7 @@ async function main() {
   const missing: string[] = []
   if (!model) missing.push('candidate model id (--model)')
   if (!prices) missing.push('price snapshot with official source and capture date (--prices)')
-  if (configuredArms.some(arm => arm.id === 'baseline')) {
-    if (!baselineCommit || !baselineCommand) missing.push('same-model baseline commit and invocation (--baseline-commit/--baseline-command)')
-    if (!baselineVersion) missing.push('baseline version (--baseline-version or --verify-baseline)')
-    if (!baselineConfigSha) missing.push('baseline upstream config SHA-256 (--baseline-upstream-config-sha256 or --verify-baseline)')
-    if (!baselineInstallSha) missing.push('baseline install fingerprint (--baseline-install-sha256 or --verify-baseline)')
-    if (!baselineModelName) missing.push('baseline model id (--model/--baseline-model)')
-  }
+  if (configuredArms.some(arm => arm.id === 'baseline') && (!baselineCommit || !baselineCommand)) missing.push('same-model baseline commit and invocation (--baseline-commit/--baseline-command)')
   if (!covered(formal) || !covered(development)) missing.push('per-instance image digests for both batches (--image-digests)')
   if (effectiveBatchCap <= 0) missing.push('positive batch hard cap (--batch-cap-usd)')
   const finalized = process.argv.includes('--finalize')
@@ -160,7 +123,7 @@ async function main() {
   }
 
   const manifest = {
-    schemaVersion: 3,
+    schemaVersion: 2,
     kind: 'swebench-run-manifest',
     freezeStatus: finalized && missing.length === 0 ? 'frozen' : 'draft',
     dataset: { name: 'SWE-bench Verified', revision: datasetRevision },

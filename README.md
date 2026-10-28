@@ -153,7 +153,7 @@ v2.1 的 Full/Baseline 是冻结开发协议里的两条实验臂，不是生产
 
 - **回归与 CI。** `pnpm check` 做 strict 类型检查、构建和产物语法检查；`pnpm test` 跑核心与 Cordis 集成测试，不需要模型密钥，集成测试实际执行 Bash。CI 覆盖 Ubuntu / Windows × Node.js 22 / 24，并包含 Linux 隔离测试与仓库外 tarball 安装检查。
 - **离线机制证据。** `docs/samples/` 的两条合成轨迹可离线复算，`pnpm bench:components` 可复跑组件级信息保留与资源探针；它们验证机制与资源边界，不是模型能力分数。说明见 [EVALUATION](docs/EVALUATION.md) 和 [组件优化](docs/COMPONENT-OPTIMIZATION.md)。
-- **不展示模型评测结果。** 本仓库不以模型评测结果作为项目展示内容：SWE-bench 的四臂正式批次与历史开发集探索已记录在证据文档中，但首页不展示分数，也不构成成功率提升、统计显著性或泛化结论。协议、结果与预算对齐限制见 [EVALUATION-SWEBENCH](docs/EVALUATION-SWEBENCH.md)。
+- **不展示模型评测结果。** 本仓库不以模型评测结果作为项目展示内容：SWE-bench 四臂正式批次和结果仅保留在 [独立实验分支](https://github.com/BeforeLanding/mini-DSH/tree/feat/swebench-formal-results)，不合并 main；历史开发集探索不构成成功率提升、统计显著性或泛化结论。主分支保留的旧版协议与实现边界见 [EVALUATION-SWEBENCH](docs/EVALUATION-SWEBENCH.md)。
 
 已知限制：
 

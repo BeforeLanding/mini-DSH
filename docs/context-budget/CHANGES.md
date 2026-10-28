@@ -1,5 +1,12 @@
 # 改动与验收证据
 
+### SW-R1 撤回 main 中的 SWE 正式实验（2026-10-28）
+
+按用户确认，以 PR #12 merge `94d1728` 的第一父提交为撤回基准，恢复其引入前的代码、测试和 package.json；不重写 Git 历史。完整四臂外部适配器和正式结果保留在 `feat/swebench-formal-results@dc7e659`，不重新合并 main。保留后续 README 展示面护栏、中文文档及其它非 SWE 改动；处理四份翻译文档的撤回冲突，并将 README、文档索引和进度中的结果入口指向独立分支。
+
+`pnpm` 引导访问 npm registry 失败，按 AGENTS 允许的等价命令验收：`node scripts/build.js` 通过；`node scripts/check-syntax.js` 227 文件通过；`node node_modules/@biomejs/biome/bin/biome check .` 259 文件零诊断。沙箱内 Bash/子进程回归受限，正常用户权限下完整离线回归最终为 584 项、554 通过、30 平台条件跳过、0 失败。首次正常权限回归发现展示边界文档断言缺失，恢复边界说明后定向 5/5 与完整回归通过。`git diff --check` 通过；模型调用 0。
+
+
 ### CE-P2 四臂开发批结果与中断边界（2026-10-28）
 
 四份完整付费批次按 `full → no-preview → no-projection → no-report` 顺序分别授权，每批 12/12，价格峰值估价分别 $1.28431524、$1.334783124、$1.354099452、$1.335197268，合计 $5.308395084（含探针储备，不是账单）。首次 no-report 在第五条中断，4/12 条完整，1 个模型请求缺 provider usage，原始证据保留并排除；新目录的完整重跑另获授权。比较器按源码提交、manifest、观察 digest、tool schema、共同配置、批次顺序、provider usage 和离线探针验证，17 项检查全部 true；可靠完成 11/12、12/12、12/12、11/12，产物验收四臂均 12/12。三项归因均 `inconclusive`，不改变组件默认行为或摘要后裁剪默认关闭。逐题逐重复读数、费用边界和完整文件哈希见 [开发批结果](COMPONENT-LOO-PAID-RESULT.md) 与 [机器比较记录](../samples/component-loo-paid-20261028.json)。公开记录不含原始 prompt 或工具正文，报告与 JSON 对照验证通过，文档步骤模型请求 0。
@@ -124,58 +131,6 @@ CE-1 提交 `4251382` 已推送。从最新 main `0b8b973` 重新派生三个独
 基于远端 main `74f8e89721820ef514e26df71cbb05e0c69683c7`，冻结 `scripts/benchmark-components.mjs` 与 `docs/samples/components-baseline.json`。12 个工具输出边界/Unicode/长输出探针、3 个嵌套摘要历史（64/256/1024 工具组）、3 个重复检查报告（1/8/32 条检查、2 个文件）。脚本使用实际生产组件、真实临时文件与结果存储；不装配 provider、不运行模型或 Bash。机制断言与原文回读均成功，工具预览的问题作为测量结果保留：9/12 丢失尾标记，3/12 头尾合计超正文额度；最大历史投影事件属性读取 2,133,569 次，32 检查报告打开文件 67 次。
 
 验证：`pnpm check` → 193 files；正常权限 `pnpm test` → 509 tests / 479 pass / 0 fail / 30 skipped；`node scripts/benchmark-components.mjs --root .eval-evidence/components-baseline --out docs/samples/components-baseline.json` → exit 0；`pnpm lint` → 无诊断。基线编译产物副本位于忽略目录 `.eval-evidence/components-baseline`；JSON 记录源提交、脚本和模块哈希，不依赖本机目录发布原始日志。改动前已列明独立提交边界。后续不得重写本基线或为获得分数修改脚本/题目。
-
-### SWE-bench Verified 正式四臂执行与评分恢复（2026-10-24）
-
-用户分别授权共享 token 上限开发复跑（配置上限 $10）和正式 50 题 × 4 臂（配置上限 $100）。正式执行源码 `8b3047c`；50/50 钉版镜像零模型预检通过，200/200 episode 保存，0 基础设施故障。第 164 次的瞬时模型重试缺精确 provider usage，运行器按预注册停止；从保存记录续跑剩余 36 次，未重跑既有 episode。已知费用估算 $3.618705108，未知用量 episode 1，不能把估算当发票。
-
-首轮及第二轮独立评分因 Docker Desktop/WSL 环境中断，`score2` 的另外三臂错误记录仅是故障证据。恢复 Docker 后用 systemd 用户服务托管 `score3`，脚本先断言已保存日程为 200 条唯一记录，然后只评分补丁，未调用模型。官方 SWE-bench v3.0.17 最终四臂各 50 条、总计 200 条评分，0 error；candidate 26/50、baseline 27/50、context-reference 28/50、context-proposed 27/50。candidate/baseline 配对 24/2/3/21，精确 McNemar p=1；两个 context 臂配对 26/2/1/21，p=1。baseline 22 条超过名义 416,666 token，上限敏感性剔除其 1 条越额成功后 candidate/baseline 均为 26/50，不能作干净的能力差异断言。
-
-验收：四份 `score3` 官方报告与 `scores.json` 逐臂 resolved 数吻合，官方日志均记录错误 0；核心 `SHA256SUMS` 六项通过，最终 `report.json` 的 planned/executed/scored 为 200/200/200、无 stopReason。冻结前脚本 `token_sensitivity.py` SHA-256 `e95fdab630af9c1988b7b8a04d60fc68423b96622ea13033b32fa8f8fceedc6e`，最终敏感性文件 `D:\Agent\outputs\mini-dsh-swebench-formal-20261022\formal-token-sensitivity.json`。精简归档 `formal-evidence-final.tar.gz` SHA-256 `fb58277adf09d9f303b80d23a811a0e24ccbae5d499a0e734da57122c52b40bd`；完整原件在 WSL，评分隐藏行未公开。详见 [正式结果](../EVALUATION-SWEBENCH.md#正式四臂结果2026-10-24每臂-50-任务)。
-
-### R10 后续：接入 mini-SWE-agent 同模型外部基线（2026-10-21，零付费）
-
-**目标。** 正式 4 臂批次被 `external` 臂阻塞：旧 runner 在 `run.ts` 直接拒绝 external，`adapterFor` 只能注入模型适配器，仍跑 mini-DSH 的 agent loop。本步接入**未修改的 mini-SWE-agent v2.4.6**（commit `a83fcae82d2a08f0ee0c688f9d137b3566c097f8`），使用用户选定的**与 candidate 同构的沙箱**。
-
-**实现。**
-- 新 `scripts/swebench/external-contract.ts`：外部命令模板（`{python}` 必须是 argv[0]；必需 `{dataset}`/`{output}`/`{upstream_config}`/`{config}`；固定单行数据集、`--split test`、`--workers 1`、两份 config；禁止 `--filter`/`--slice`/`--shuffle`/`--model`/`--environment-class`）；渲染；候选同构 `run_args`（`--network none`、只读根、宿主 uid/gid、单 `/testbed` 挂载、cap drop、label）。
-- schemaVersion 升到 **3**；external 臂新增 `contractVersion/version/modelName/upstreamConfigSha256/installSha256/environmentParity/apiKeyEnv`。冻结的 external 臂必须齐备、commit 为 40-hex、命令通过模板校验，且模型与 candidate 同名；旧 frozen 清单不能静默执行。
-- 新 `external-fingerprint.ts`：记录 mini-SWE-agent 版本、上游 `swebench.yaml` SHA-256 与 9 个关键文件的安装指纹（防止 editable install 版本不变但代码漂移）；`preregister --verify-baseline` 自动填入。
-- 新 `external.ts`：单行 sanitized 数据集（只含 `image_name` digest，机械拒绝 gold/hidden 字段）写成 `data/test-*.parquet`；override 配置保留上游原生 prompt，设置 step/cost/wall time/max tokens、同构 run_args、`forward_env: []`、`BASH_ENV: ""`、`bash -lc`；解析 `preds.json`/`.traj.json` 的状态、usage（支持 OpenAI/DeepSeek/Anthropic 缓存字段）、成本与 action 数；不可读 usage 不补零。
-- 新 `external-run.ts`：异步 spawn、硬超时与进程组终止、每 2 秒 live-trajectory watchdog（cost/requests/actions/wall clock）、按 label 清理容器、容器 env 检查（provider key 不进入容器）、证据日志/轨迹 key 扫描与 redaction、`result.json` 证据。
-- `run.ts`：external 臂在创建证据前做 preflight（指纹、上游 config hash、key 变量存在、Docker/uid/gid、镜像本地存在、单行 parquet 加载）；external 分支只导出工作区并执行外部 CLI，patch 只取 `preds.json`（工作区 diff 仅作诊断）；报告增加 external 元数据、失败轨迹与“系统级对照”caveat。
-- 新 `external-probe.ts` 与 `swebench:external-probe`：真实 CLI + Docker + `DeterministicModel` 的零模型验收。
-- 新增 `test/swebench-external.test.ts`；更新 runner/protocol/preregister 测试。`pnpm test` 519 tests／489 pass／0 fail／30 skipped；Biome 220 files／0 diagnostics。
-
-**零模型探针（真实 mini-SWE-agent + 真实镜像，provider 请求 0）。** 用 astropy-14539 与 schema 3 draft 清单跑 `external-probe`：`Submitted`、空 patch 被正确解析；随后用写入 `README.rst` 的确定性动作跑非空 patch 变体，`preds.json` 收到完整 diff；容器 label 清理无残留，容器 env 只有 `HOME/PATH/GIT_CONFIG_*/TZ`，无 provider key。证据：`D:\Agent\outputs\mini-dsh-swebench-external-probe-20261021`（`SHA256SUMS`；不含 workspace）。冻结的 4 臂 draft 清单：`D:\Agent\outputs\mini-dsh-swebench-4arm-20261021\manifest-draft.json`（20 开发 + 200 正式 episode，全部 external 字段齐备，`freezeStatus=draft`，`paidRequests=0`，$110 配置上限）。
-
-**首次 4 臂尝试中断（2026-10-21，环境缺口，非模型结果）。** 4 臂开发批次第一次开跑时，baseline 的第一个 episode 在首次 LiteLLM 查询处报 `ModuleNotFoundError: No module named 'mcp'` 并按 mini 的重试策略重试；runner 被手动停止，带 `mini-dsh.external.*` label 的容器与孤儿 mini 进程已清理。该尝试只完成 1 个 candidate episode（astropy，`budget`，估算 $0.0175），**没有发出任何 baseline 模型请求**；证据目录 `~/swebench-evidence-4arm-dev-20261021` 保留为这次环境失败的现场，不作为批次结果。已安装 `mcp==2.3.0`；当前评测环境为 Python 3.12.15 / mini-swe-agent 2.4.6 / litellm 1.106.2 / datasets 5.1.0 / pyarrow 26.0.0。重跑使用新的证据目录与 batch id；该重跑属于同一 $10 授权的重试，但仍按仓库规则单独确认。基线安装指纹的 9 个源码文件未变，但依赖版本不在 manifest 的 `installSha256` 覆盖范围内——这是当前已知的依赖漂移边界。
-
-**4 臂开发批次结果（2026-10-21，用户单独授权；实际估算 $0.471）。** `manifest-frozen.json` 的 development 20/20 episode 完成，0 infrastructure、0 scoring error、0 未知 usage；14:01–14:47 UTC，45m40s。per-arm：candidate **2/5**（$0.092，3 次 budget stop，2 completed）、baseline **3/5**（$0.201，0 budget stop，5 completed）、context-reference **2/5**（$0.089，4 次 budget stop）、context-proposed **2/5**（$0.089，4 次 budget stop）。唯一臂间差异是 `django__django-12273`：baseline resolved，三个 mini-DSH 臂未 resolved。配对 candidate/baseline：both 2、only baseline 1、only candidate 0、neither 2，精确 McNemar p=1；context 两臂五题完全相同（both 2、neither 3，p=1）。评分总计 9 resolved／6 unresolved／5 empty／0 error。**n=5，不能据此下能力结论。**
-
-**预算不同构（必须在正式批次前处理）。** mini-DSH 臂的 `maxTotalTokens` 由 $0.50 按最贵单价反推约 416,667 tokens，三个臂各撞 3–4 次；baseline 的 `cost_limit` 同为 $0.50，但允许约 1.1M input tokens/episode（大部分是 cache hit），5/5 正常完成。两者的有效 token 额度不同，2/5 vs 3/5 被预算口径混杂。**用户 2026-10-21 选择「共享 token 上限」**：`ExternalCaps` 增加 `maxTotalTokens`，runner 用与 candidate 相同的 `tokenCapFromUsd(perTask.maxCostUsd, prices)` 传入；external watchdog 在 live trajectory 的 input+output 达到上限时杀进程，事后对已 `Submitted` 但超限的 episode 记 `budget`。证据记录 `maxTotalTokens`。**上面 4 臂开发批次是在旧口径下观察的**；正式 50 题前应在共享口径下重跑一次 4 臂开发批次（20 episodes，另行授权），把该读数作为正式批次的前置观测。
-
-证据：`D:\Agent\outputs\mini-dsh-swebench-4arm-dev-20261021b`（17MB，已排除 20 个 workspace；顶层 `SHA256SUMS` 校验通过；完整 3.0GB 含 workspace 的原始目录仍在 WSL `~/swebench-evidence-4arm-dev-20261021b`）。首次失败现场 `~/swebench-evidence-4arm-dev-20261021`（1 个 candidate episode，$0.0175，无 baseline 模型请求）保留。
-
-**边界。** 本步未运行正式 50 题；4 臂开发批次已按单独授权执行。基线使用 mini-SWE-agent 原生 prompt/单 bash/线性上下文，candidate 使用自己的 prompt/循环/上下文管理，结论只能写成系统级对照；预算口径尚未同构，当前 2/5 vs 3/5 不作为能力证据。mini 的 `step_limit` 计模型调用，不等价于 candidate 的 `maxToolCalls`；Litellm 成本只作安全限，canonical 成本仍由 provider usage 与冻结价格快照重算。
-
-### R10 后续：镜像环境提交窄口放行与官方判分数据修复（2026-10-21，零付费）
-
-**起因。** 为 5 题开发批次做零付费执行预检时，两张开发镜像暴露了两个会让付费批次白跑的问题。
-
-1. **astropy 镜像的官方环境提交被完整性护栏拒绝。** 镜像 HEAD `820b5794` 与数据集 base `c0a24c1d` 只差 `pyproject.toml` 一行：`requires = ["setuptools"]` → `["setuptools==68.0.0"]`。`scripts/swebench/workspace.ts` 原先要求内容逐字节相同，因此第一个 episode 就会以 infrastructure 停批。正式 50 题里还有 5 个 astropy 题。处置（用户 2026-10-21 选择「窄口放行」）：`source-consistency.ts` 新增 `classifyEnvironmentCommit`，只接受**内容级**、路径全在固定构建元数据集合（`pyproject.toml`、`setup.py`、`setup.cfg`、`requirements*.txt`、`environment.yml`、`Pipfile*`、`poetry.lock`、`tox.ini`）且不超过 8 条的差异；新增/删除路径或任何源码路径变更仍然拒绝。放行时 Agent 从**镜像 HEAD** 起步，补丁对 **image HEAD** 导出，使 Agent 与官方判分器看到同一棵树；证据同时记录 `imageHead`、dataset `baseCommit`、有效 `patchBase` 与差异路径。`scripts/swebench/run.ts` 改用 `dockerWorkspace.patchBase`。
-2. **官方判分数据缺 `test_patch`。** 执行器原先在证据目录写一份只含 `instance_id/repo/base_commit/version/environment_setup_commit` 的 `scoring-dataset.json`，官方 harness 在 `make_test_spec` 里直接 `KeyError: 'test_patch'`。修法：新增 `--scoring-dataset <full-rows.json>`，只用于判分器；执行器逐行核对 `repo/base_commit`、要求 `test_patch` 与 `FAIL_TO_PASS`/`PASS_TO_PASS` 存在，把完整行写入 `os.tmpdir()` 下的临时目录（0600），判分结束即删除，**不写入证据目录、不给 Agent**。缺失时在创建证据目录之前拒绝。
-
-**预检与演练（真实模型请求 0）：**
-- 拉取 5 张开发题镜像并逐题执行 `prepareDockerWorkspace`。修前 4/5 通过（matplotlib 的 4433 个差异全是 mode，内容零差异；astropy 因 pyproject 内容差异失败）；修后 **5/5 通过**，含 uid/gid、只读根、单挂载、非特权与宿主写探针。
-- WSL Ubuntu + Docker Desktop + Node 24.16 + pnpm 11.22 + Python 3.12 + `swebench==3.0.17` 环境就绪；`python -m swebench.harness.run_evaluation` 可用。
-- 官方判分探针：空 patch 在 astropy 上被正确分类为 `empty_patch`（`resolved_ids=[]`、`error_ids=[]`），报告字段与执行器读取一致。
-- 零模型端到端演练：脚本化 adapter 跑完 5/5 episode，`status.completed=5`、无 infrastructure/timeout；官方判分给出 5 个 `empty`、0 error，`stopReason=null`。演练证据在 `~/swebench-dryrun-20261021`，不入库。
-- 冻结的开发清单：`D:\Agent\outputs\mini-dsh-swebench-development-20261021\manifest-development.json`（`seed=20261020`，开发 5、正式 50，1 臂 candidate，`deepseek-flash`，价格快照峰值 $0.30/$0.006/$1.20，55 张镜像 digest，批次上限 **$2.5**，`freezeStatus=frozen`、`paidRequests=0`）。隐藏判分行在同目录 `scoring-rows-dev.hidden.json`（SHA-256 `d58ff352…`），不得给 Agent 或公开。
-
-**验证。** `node scripts/build.js` 通过；`node --test dist/test/swebench-{source-consistency,run,protocol,preregister}.test.js` → 23 tests / 23 pass / 0 fail；完整 `node --test dist/test/*.test.js` → 511 tests / 481 pass / 0 fail / 30 skipped；`pnpm check` syntax 193 files；Biome 214 files / 0 diagnostics。
-
-**5 题开发批次（2026-10-21，用户单独授权 $2.5；实际估算 $0.0918）。** 12:54–13:02 UTC 执行，5/5 episode 完成，0 infrastructure、0 timeout、0 未知 usage、0 判分错误；4 次 `budget`（单题 token 上限）＋1 次 `completed`。官方判分：**2 resolved**（`astropy__astropy-14539`、`pallets__flask-5014`）、2 unresolved、1 empty（`matplotlib__matplotlib-23299`）。token：输入 1,565,239、输出 41,522、缓存命中 1,454,464；Wilson 95% 11.8%–76.9%。**这是单臂 n=5 的开发诊断，不是能力结论**；4/5 撞单题上限说明 $0.50/题对这批题偏紧，正式批次前须按实测重估。证据：`D:\Agent\outputs\mini-dsh-swebench-dev-20261021`（本地；`score.*.log` 与隐藏判分行不公开）。外部 mini-SWE-agent 基线适配器仍未实现；正式 4 臂批次仍被阻塞。
 
 ### R00—R11 本轮收尾核验（2026-10-20，工作分支 tip）
 

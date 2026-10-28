@@ -8,7 +8,7 @@
 - [EVALUATION](EVALUATION.md) — 证据分级、合成样例、校验和与成本口径；不把机制证据当能力分数。
 - [RESULTS](RESULTS.md) — 两条合成轨迹及其离线复算。
 - [COMPONENT-OPTIMIZATION](COMPONENT-OPTIMIZATION.md) — 三项组件的离线前后对照与复跑命令。
-- [EVALUATION-SWEBENCH](EVALUATION-SWEBENCH.md) — 预注册的外部子集协议与正式四臂结果；首页不展示分数，保留预算对齐与证据边界。
+- [EVALUATION-SWEBENCH](EVALUATION-SWEBENCH.md) — 主分支旧版预注册协议与实现边界；正式四臂结果仅保留在独立 SWE 分支。
 - [PROGRESS](../PROGRESS.md) — 已完成、验证、阻塞和下一步。
 - [context-budget/PLAN](context-budget/PLAN.md) — 规范设计决策与参数。
 - [context-budget/TASKS](context-budget/TASKS.md) — 当前任务与验收证据。

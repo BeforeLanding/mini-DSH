@@ -115,18 +115,13 @@ test('cost uses provider usage only and the derived token cap is conservative', 
 
 test('run manifest validation rejects draft-incompatible schemas and inconsistent schedules', () => {
   const instance = { instance_id: 'alpha__one-1', repo: 'alpha/one', base_commit: 'a1', problem_statement: 'Fix it' }
-  const command = ['{python}', '-m', 'minisweagent.run.benchmarks.swebench', '--subset', '{dataset}', '--split', 'test',
-    '--output', '{output}', '--workers', '1', '-c', '{upstream_config}', '-c', '{config}']
   const arms = [
     { id: 'candidate', system: 'mini-dsh', role: 'c', model: { provider: 'p', name: 'm', contextWindowTokens: 1_000_000 }, budget: { inputTargetTokens: 65_536 } },
-    { id: 'baseline', system: 'external', role: 'b', model: { provider: 'p', name: 'm', contextWindowTokens: 1_000_000 }, external: {
-      commit: 'a83fcae82d2a08f0ee0c688f9d137b3566c097f8', command, contractVersion: 1, version: '2.4.6', modelName: 'p/m',
-      upstreamConfigSha256: 'a'.repeat(64), installSha256: 'b'.repeat(64), environmentParity: 'candidate-isolation-v1', apiKeyEnv: 'DEEPSEEK_API_KEY',
-    }, budget: {} },
+    { id: 'baseline', system: 'external', role: 'b', model: { provider: 'p', name: 'm', contextWindowTokens: 1_000_000 }, external: { commit: 'abc1234', command: ['x'] }, budget: {} },
   ]
   const batch = { tasks: 1, seed: 1, exclusions: [], instances: [instance], arms: ['candidate', 'baseline'], schedule: buildSchedule([instance], ['candidate', 'baseline'], 1) }
   const manifest = {
-    schemaVersion: 3, kind: 'swebench-run-manifest', freezeStatus: 'frozen', dataset: { name: 'Verified', revision: 'r1' }, harnessCommit: 'abc1234',
+    schemaVersion: 2, kind: 'swebench-run-manifest', freezeStatus: 'frozen', dataset: { name: 'Verified', revision: 'r1' }, harnessCommit: 'abc1234',
     selection: {}, development: batch, formal: batch, arms, promptTemplate: 'Issue: {problem_statement}',
     caps: { perTask: { maxCostUsd: 1, maxModelRequests: 10, maxToolCalls: 10, wallClockMs: 1000, maxOutputTokens: 100 },
       developmentPerTask: { maxCostUsd: 1, maxModelRequests: 10, maxToolCalls: 10, wallClockMs: 1000, maxOutputTokens: 100 },

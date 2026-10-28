@@ -4,6 +4,9 @@
 
 ## 当前状态
 
+- **SWE 实验隔离（2026-10-28）**：按用户要求撤回 PR #12 对 main 的变更。完整四臂实现和结果保留在 `feat/swebench-formal-results@dc7e659`，后续不合并 main；后续 README 与中文文档整理保留。
+
+
 - **组件 LOO 开发批收口（2026-10-28）**：PR #8 的独立协议与 PR #9 的零付费重冻已合并；四批分别获授权执行，full/no-preview/no-projection/no-report 重跑各 12/12 条完整，17 项可比性检查通过。可靠完成分别 11/12、12/12、12/12、11/12；产物验收均 12/12；三项归因均 `inconclusive`，维持现有组件行为与摘要后裁剪默认关闭。四份完整批次峰值价估价合计 $5.3084，不含首次 no-report 中断批次的未知总费用；中断证据保留且排除。比较器后处理修正 `3f95703` 通过完整 579/579 测试；[描述性结果与边界](docs/context-budget/COMPONENT-LOO-PAID-RESULT.md)。下一步若需泛化判断，先设计未曝光题库并单独冻结/授权。
 
 
@@ -16,12 +19,6 @@
 - **NX-50 PR5 组件版本对照已执行，门槛通过（2026-10-25）**：六道未曝光 formal 题（U02/B03/F01/F02/R04/T04）、`context` 臂、每题两次，旧版 `74f8e89` 与优化版 `0b24b32` 分别干净冻结。两批各 12/12 执行；可靠完成与产物验收均 **12/12 对 12/12**，token **4,065,419→3,791,203（-6.75%）**，主动耗时 **898,977→958,913 ms（+6.67%）**，均在 15% 容差内；`gate=pass`、`mergeEligible=true`，无单题双退步。峰时估价旧 $1.337245368、新 $1.269039468。提交 `f3aab1f`/`5665293`/`e4dfe4b`/`adabea5`；证据在 `D:\Agent\outputs\nx50-component-ab-20261025\`，逐题与边界见 [NX-50-RESULT](docs/context-budget/NX-50-RESULT.md)。两批串行、时间窗不同，不作显著性/泛化结论；main 合并待用户确认。
 
 - **OPT 三组件优化本地验收完成（2026-10-25）**：在 `74f8e89` 上冻结的 18 个探针保持不变，预览尾标记 3/12→12/12、最大摘要投影事件读取 -98.82%、报告打开文件 67→2（-97.01%），投影/报告选定证据哈希相同。基线 `c2ee97b`，功能 `00c8e32` / `cd17cbc` / `fda47d0`，极小额度边界 `14a0d1c`；最终门禁与证据独立提交。完整 517 tests / 487 pass / 0 fail / 30 skipped，check/lint/fixtures、12/12 离线筛查、估算核对与公开复算均通过。`pnpm bench:components` 和完整 test 都验改进，详见 [结果与复现](docs/COMPONENT-OPTIMIZATION.md)。跨平台与隔离实测看 PR checks；未合并 main，未把这些机制/效率结果宣称为真实模型成功率。后续真实模型对照须另冻清单和授权预算。
-
-- **SWE-bench Verified 正式四臂 50 题已完成（2026-10-24）**：冻结源码 `8b3047c`，200/200 次付费 episode、200/200 条官方评分，0 基础设施故障、0 评分错误。candidate 26/50、同模型 mini-SWE-agent baseline 27/50、context-reference 28/50、context-proposed 27/50；candidate/baseline 精确 McNemar p=1。baseline 有 22 次超过共同名义 token 上限，其中 1 次解题；预先冻结的越额敏感性口径为 candidate 26/50、baseline 26/50，**不可把官方 27/50 对 26/50 解读为干净的能力差异**。已知费用估算 $3.618705108，另有 1 次瞬时重试用量未知。最终报告与证据见 [SWE-bench 正式结果](docs/EVALUATION-SWEBENCH.md#正式四臂结果2026-10-24每臂-50-任务)；后续仅需整理结论和归档，不再追加模型任务。
-
-- **mini-SWE-agent 同模型外部基线已接入，4 臂开发批次已执行（2026-10-21，实际估算 $0.471）**：新增 `scripts/swebench/{external-contract,external,external-run,external-fingerprint,external-probe}.ts`，schema 升到 3；external 臂使用**未修改的 mini-SWE-agent v2.4.6**（commit `a83fcae8…`），candidate 同构沙箱（network none、只读根、宿主 uid/gid、单 `/testbed` 挂载）；provider key 只在宿主进程，容器按 label 清理；patch 只取 `preds.json`；usage/成本由 provider usage 与冻结价格快照重算。真实 CLI + Docker 探针（空 patch 与非空 `README.rst` patch）通过；4 臂 development 20/20 episode 完成，0 infrastructure/scoring/unknown usage：**candidate 2/5、baseline 3/5、context-reference 2/5、context-proposed 2/5**；配对 candidate/baseline only-baseline 1（django）、p=1；context 两臂五题相同。**n=5，不是能力结论**。**预算不同构（已决策并实现）**：mini-DSH 臂撞 $0.50 反推的 416,667 token 上限 3–4 次，baseline 的 $0.50 cost_limit 允许约 1.1M input tokens/episode（多为 cache hit），5/5 正常完成；用户 2026-10-21 选择**共享 token 上限**，external watchdog 与事后检查现使用与 candidate 相同的 `tokenCapFromUsd`，证据记录 `maxTotalTokens`。**上面的 4 臂观察是旧口径**；正式前需在新口径下重跑一次 4 臂开发批次（另行授权）。首次尝试因 venv 缺 `mcp` 中止（仅 1 个 candidate episode，$0.0175，无 baseline 请求），已装 `mcp==2.3.0` 后重跑。证据 `D:\Agent\outputs\mini-dsh-swebench-4arm-dev-20261021b`（17MB，无 workspace；完整 3.0GB 在 WSL）。`pnpm test` 519／489 pass／0 fail／30 skipped，Biome 220 files／0 diagnostics。**此段是 2026-10-21 的历史状态；共享口径开发复跑和正式 50 题现均已完成，见本节首条。**
-
-- **SWE-bench 5 题开发批次已执行（2026-10-21，用户单独授权 $2.5；实际估算 $0.0918）**：冻结清单 `D:\Agent\outputs\mini-dsh-swebench-development-20261021\manifest-development.json`（开发 5、正式 50、candidate 单臂、`deepseek-flash`、峰值价格快照、55 张镜像 digest、批次上限 $2.5）。12:54–13:02 UTC 执行，**5/5 episode 完成**，0 infrastructure、0 timeout、0 未知 usage、0 判分错误；4 次单题 token 上限停止＋1 次正常完成。官方判分 **2 resolved**（astropy-14539、flask-5014）、2 unresolved、1 empty（matplotlib-23299）；token 输入 1,565,239／输出 41,522／缓存命中 1,454,464；Wilson 95% 11.8%–76.9%。**单臂 n=5 的开发诊断，不是能力结论**；4/5 撞 $0.50/题上限，正式批次前须按实测重估预算。证据 `D:\Agent\outputs\mini-dsh-swebench-dev-20261021`（SHA256SUMS 校验通过；`score.*.log` 与隐藏判分行不公开）。预检同时修复两处执行器缺口：astropy 构建 pin 的窄口放行、官方判分缺 `test_patch` 的 `--scoring-dataset` 修复；细节见 CHANGES 的 R10 后续条目。
 
 - **工作分支已合并到 main（2026-10-20）**：草稿 [PR #3](https://github.com/BeforeLanding/mini-DSH/pull/3) 以保留提交历史的 merge commit `a58ab5d441185479f4bc83aca30f4b6f63f3f902` 合并；`origin/main` 已从 `32e2598` 前进到 `a58ab5d`。main 的 [CI 39428240871](https://github.com/BeforeLanding/mini-DSH/actions/runs/39428240871) 六个 job 全绿（Ubuntu/Windows × Node 22/24、isolation、package-install）；`Official SWE-bench no-model PoC` 按普通 PR 配置 skipped。历史红灯 run 39133594202 保留作证据，不代表当前 main。工作分支保留，未删除。
 
