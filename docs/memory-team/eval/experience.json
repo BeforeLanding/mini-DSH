@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "purpose": "Public preparation data, equally readable by all four conditions; contains no hidden acceptance tests.",
+  "records": [
+    { "workflowId": "W01", "key": "verification", "kind": "procedure", "sourcePath": "docs/VERIFY.md", "content": "Run node check.mjs to verify this project; package.json does not expose a test script." },
+    { "workflowId": "W02", "key": "entry-path", "kind": "project_fact", "sourcePath": "docs/ENTRY.md", "content": "The historical module entry was src/old.mjs. Revalidate its file anchor before reuse." },
+    { "workflowId": "W03", "key": "module-boundary", "kind": "project_fact", "sourcePath": "docs/MODULES.md", "content": "Parsing and formatting live in separate modules and can be investigated independently." },
+    { "workflowId": "W04", "key": "past-attempt", "kind": "episode", "sourcePath": "docs/NOTES.md", "content": "A historical attempt changed rounding; that observation is not evidence for the current input-validation bug." }
+  ]
+}

@@ -1,8 +1,21 @@
 # 开发进度
 
-更新：2026-10-24。历史逐步记录已整体迁入 [2026-09-28 至 2026-09-30 归档](docs/history/PROGRESS-2026-09-28--2026-09-30.md)；本文件只维护当前状态、阻塞和下一步。
+更新：2026-10-28。历史逐步记录已整体迁入 [2026-09-28 至 2026-09-30 归档](docs/history/PROGRESS-2026-09-28--2026-09-30.md)；本文件只维护当前状态、阻塞和下一步。
 
 ## 当前状态
+
+- **组件 LOO 开发批收口（2026-10-28）**：PR #8 的独立协议与 PR #9 的零付费重冻已合并；四批分别获授权执行，full/no-preview/no-projection/no-report 重跑各 12/12 条完整，17 项可比性检查通过。可靠完成分别 11/12、12/12、12/12、11/12；产物验收均 12/12；三项归因均 `inconclusive`，维持现有组件行为与摘要后裁剪默认关闭。四份完整批次峰值价估价合计 $5.3084，不含首次 no-report 中断批次的未知总费用；中断证据保留且排除。比较器后处理修正 `3f95703` 通过完整 579/579 测试；[描述性结果与边界](docs/context-budget/COMPONENT-LOO-PAID-RESULT.md)。下一步若需泛化判断，先设计未曝光题库并单独冻结/授权。
+
+
+- **PR #7 独立核心复核（2026-10-27）**：共享 deadline 未覆盖工具/审批、worker 失败清理、提案批次身份及跨会话撤销四项已分别修复推送（`afdaca5` / `bc4ef50` / `9750558` / `525ecc9`）。本地 check 222 / lint 251 零诊断，完整 564 tests / 534 pass / 0 fail / 30 平台 skipped；两个零 provider 演示通过。默认关闭、人工批准及项目隔离复核未发现其它阻塞；最终 head 六项 CI 全绿后以 merge commit 收口，见 [审查记录](docs/memory-team/REVIEW-PR7.md)。
+
+- **项目记忆与只读协作核心在独立分支完成（2026-10-26）**：`feat/memory-team` 始于 `main@cc2b769`，现已合入 PR #6 的 `a5d9191`，保留负结果与默认关闭裁剪。MM-01—03、MA-01—05 及边界修复已提交，所有新功能默认关闭。合并后 558 tests / 528 pass / 0 fail / 30 平台条件跳过，零 provider 演示覆盖记忆过期、协作成功/失败/取消及四崩溃窗口。EV-02 只有独立开发蓝图、共同预算和 validate-only 准备；独立验收/两阶段真实评测执行器及付费实验尚未实施。未改 Claude 的 48 条消融、比较器或负结果，本功能未合并 main/部署。实时状态与证据见 [专题任务](docs/memory-team/TASKS.md)。
+
+- **NX-51 摘要后裁剪：机制已持久化，24 条真实对照未支持性能假设（2026-10-25）**：只读 NX-50 两批轨迹做耗时分解；净增 60.0 s 中摘要占 45.0 s，T04 的重复摘要来自“压力摘要只压当前 task、旧任务仍占 35～41k token”。压力摘要 applied 后按压缩后目标线裁掉已结束旧任务，并把决定写成 `context/prune` 事件；后续轮次、`/continue` 与重启恢复继续排除，原始事件不删、`read_history` 仍可回读。新增两条回归用例，原不可约前缀用例改用当前 task 构造；定向 28/28（covenant 4/4），隔离完整 525/525/0/0，check 197 / lint 223 / fixtures 25 / eval:offline 12/12 / bench:components 全过。提交 `9e30f5c`，PR [#6](https://github.com/BeforeLanding/mini-DSH/pull/6) 六 job 全绿。随后按 [24 条协议](docs/context-budget/NX-51-PRUNE-AB.md) 执行 on/off 各 12 条（usage 估价合计 $3.087115）：摘要 3→7、摘要耗时 43,249→105,394 ms、主动耗时 +37.7%、输出 token +48.4%，可靠完成 11→10、产物验收 12→12。**离线反事实未在真实轨迹复现**，按预注册规则改为显式 opt-in：`postCompactionPrune` 默认关闭，两条持久化回归测试显式开启，另增默认关闭用例；隔离完整 526/526/0/0，定向 28/28，check 197 / lint 224 / fixtures 25 / eval:offline 12/12 / bench:components 全过。完整读数见 [结果](docs/context-budget/NX-51-PRUNE-RESULT.md)。下一步是冻结 48 条三项组件消融（统一以默认背景运行）；复跑或新批次需重新授权。
+
+- **NX-50 PR5 组件版本对照已执行，门槛通过（2026-10-25）**：六道未曝光 formal 题（U02/B03/F01/F02/R04/T04）、`context` 臂、每题两次，旧版 `74f8e89` 与优化版 `0b24b32` 分别干净冻结。两批各 12/12 执行；可靠完成与产物验收均 **12/12 对 12/12**，token **4,065,419→3,791,203（-6.75%）**，主动耗时 **898,977→958,913 ms（+6.67%）**，均在 15% 容差内；`gate=pass`、`mergeEligible=true`，无单题双退步。峰时估价旧 $1.337245368、新 $1.269039468。提交 `f3aab1f`/`5665293`/`e4dfe4b`/`adabea5`；证据在 `D:\Agent\outputs\nx50-component-ab-20261025\`，逐题与边界见 [NX-50-RESULT](docs/context-budget/NX-50-RESULT.md)。两批串行、时间窗不同，不作显著性/泛化结论；main 合并待用户确认。
+
+- **OPT 三组件优化本地验收完成（2026-10-25）**：在 `74f8e89` 上冻结的 18 个探针保持不变，预览尾标记 3/12→12/12、最大摘要投影事件读取 -98.82%、报告打开文件 67→2（-97.01%），投影/报告选定证据哈希相同。基线 `c2ee97b`，功能 `00c8e32` / `cd17cbc` / `fda47d0`，极小额度边界 `14a0d1c`；最终门禁与证据独立提交。完整 517 tests / 487 pass / 0 fail / 30 skipped，check/lint/fixtures、12/12 离线筛查、估算核对与公开复算均通过。`pnpm bench:components` 和完整 test 都验改进，详见 [结果与复现](docs/COMPONENT-OPTIMIZATION.md)。跨平台与隔离实测看 PR checks；未合并 main，未把这些机制/效率结果宣称为真实模型成功率。后续真实模型对照须另冻清单和授权预算。
 
 - **SWE-bench Verified 正式四臂 50 题已完成（2026-10-24）**：冻结源码 `8b3047c`，200/200 次付费 episode、200/200 条官方评分，0 基础设施故障、0 评分错误。candidate 26/50、同模型 mini-SWE-agent baseline 27/50、context-reference 28/50、context-proposed 27/50；candidate/baseline 精确 McNemar p=1。baseline 有 22 次超过共同名义 token 上限，其中 1 次解题；预先冻结的越额敏感性口径为 candidate 26/50、baseline 26/50，**不可把官方 27/50 对 26/50 解读为干净的能力差异**。已知费用估算 $3.618705108，另有 1 次瞬时重试用量未知。最终报告与证据见 [SWE-bench 正式结果](docs/EVALUATION-SWEBENCH.md#formal-four-arm-result-2026-10-24-50-tasks-per-arm)；后续仅需整理结论和归档，不再追加模型任务。
 
@@ -182,11 +195,9 @@
 ## 下一步
 
 1. **合并后**：main 的 required CI 已在 `a58ab5d` 上通过；后续改动若再合并，须重新核对对应 main 提交的 CI，不能用旧 run 替代。
-2. **R10 candidate 开发批次已完成**：5/5 执行、2/5 resolved、实际估算 $0.0918；4/5 撞单题 $0.50 上限，说明正式批次前必须按实测重估单题预算，不能直接沿用 $0.50。
-3. **R10 4 臂开发批次已完成**：20/20 执行、candidate 2/5、baseline 3/5、context 两臂各 2/5，$0.471；首次尝试因缺 `mcp` 中止（$0.0175，无 baseline 请求），已修复后重跑。证据见上。
-4. **R10 共享 token 开发复跑已完成（2026-10-22）**：固定源码 `309af44`，20/20 执行、0 基础设施/评分/未知费用，估算 $0.3735；candidate 1/5、baseline 2/5、context 两臂各 1/5。四臂各 4 次预算停止；baseline 的四条预算停止均有一次响应的 token 超限（最多 453,214，对 416,666 名义上限），因此正式报告须披露超限计数及剔除超限成功的敏感性读数。正式 50 题隐藏判分行已准备，50 张固定镜像仍在下载；完成预检后单独申请正式批次金额授权。开发证据见 `D:\Agent\outputs\mini-dsh-swebench-formal-20261022\development-evidence`。
-5. **发布前**：确认作者归属与个人负责范围；npm 发布、tag/Release 与 ECS 部署分别取得明确授权；`Deploy ECS` 保持手动派发。
-6. **不在现有授权内自动执行**：任何付费模型调用、新增付费云资源、npm 发布、tag/Release、ECS 部署。
+2. **R10 付费前**：提供并审核 5 题开发批次配置——模型 id、官方价格快照（来源与日期）、同模型 mini-SWE-agent 的固定 commit 与适配器、50 题选择文件及逐题镜像 digest、批次金额上限。先跑开发批次，按实测使用量重估正式批次，再单独申请正式 50 题授权。
+3. **发布前**：确认作者归属与个人负责范围；npm 发布、tag/Release 与 ECS 部署分别取得明确授权；`Deploy ECS` 保持手动派发。
+4. **不在现有授权内自动执行**：任何付费模型调用、新增付费云资源、npm 发布、tag/Release、ECS 部署。
 
 ## 更新规则
 

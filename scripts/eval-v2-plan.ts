@@ -1,3 +1,4 @@
+import { componentLooProtocol } from './eval-v2-component-protocol.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -5,12 +6,16 @@ import { ablationPolicy, promptLayoutPolicy, toolOutputPolicy } from './eval-run
 import type { AblationPhase, PromptLayoutMode, ToolOutputMode } from './eval-runner.js'
 import type { BudgetPolicy } from '../src/core/budget.js'
 
-export type V2Split = 'calibration' | 'formal' | 'development'
+export type V2Split = 'calibration' | 'formal' | 'development' | 'component' | 'component-loo'
 export type V2Tier = '2m' | '1m'
 export type V2Family = 'comprehension' | 'bugfix' | 'feature' | 'refactor' | 'mutation'
 export type V2Shape = 'single' | 'cross-module' | 'information' | 'multi-stage'
+export type V2Protocol = 'NX-42-eval-v2' | 'NX-42-eval-v2.1' | 'NX-45-dev-2arm-v1' | 'NX-50-component-ab-v1' | 'NX-51-component-loo-v1'
+// 四臂 leave-one-out 的源码变体标签。每份 manifest 仍只有一条 `context` 执行臂；variant 说明
+// 这份证据来自哪个产品源码提交，比较器按它配对 `full - no-X`。
+export type ComponentLooVariant = 'full' | 'no-preview' | 'no-projection' | 'no-report'
 export interface V2Task { id: string; family: V2Family; shape: V2Shape }
-export interface V2Options { split: V2Split; tier: V2Tier; window: number; evidenceRoot: string; planOnly: boolean }
+export interface V2Options { split: V2Split; tier: V2Tier; window: number; evidenceRoot: string; planOnly: boolean; variant?: ComponentLooVariant }
 export interface V2Episode { taskId: string; repeat: number; arm: AblationPhase; block: number }
 export interface V2Arm { name: AblationPhase; budget: Readonly<BudgetPolicy>; toolOutput: ToolOutputMode; promptLayout: PromptLayoutMode }
 
@@ -25,15 +30,82 @@ export const calibrationTasks: readonly V2Task[] = Object.freeze(families.map(([
 // Structural selection only: all five existing calibration roots plus the first
 // single-stage comprehension root. U01 becomes development data once used here.
 export const developmentTasks: readonly V2Task[] = Object.freeze([...calibrationTasks, formalTasks[0]!])
+// Six formal roots that have never appeared in a real-model batch. Once used
+// here they are development data and must not be presented as an untouched
+// formal holdout. The set spans all five families and all four shapes.
+export const componentTasks: readonly V2Task[] = Object.freeze([
+  Object.freeze({ id: 'U02', family: 'comprehension', shape: 'cross-module' }),
+  Object.freeze({ id: 'B03', family: 'bugfix', shape: 'information' }),
+  Object.freeze({ id: 'F01', family: 'feature', shape: 'single' }),
+  Object.freeze({ id: 'F02', family: 'feature', shape: 'cross-module' }),
+  Object.freeze({ id: 'R04', family: 'refactor', shape: 'multi-stage' }),
+  Object.freeze({ id: 'T04', family: 'mutation', shape: 'multi-stage' }),
+])
 
 export const v2Arms = ['baseline', 'context', 'prompt', 'full'] as const
 export const calibrationArms = ['baseline', 'full'] as const
+export const componentArms = ['context'] as const
+export const componentLooVariants = componentLooProtocol.batchOrder
 export const v2ScheduleSeed = 20261015
 export const developmentScheduleSeed = 20261017
-export const tasksForV2Split = (split: V2Split): readonly V2Task[] => split === 'formal' ? formalTasks : split === 'development' ? developmentTasks : calibrationTasks
-export const armsForV2Split = (split: V2Split): readonly AblationPhase[] => split === 'formal' ? v2Arms : calibrationArms
-export const repeatsForV2Split = (split: V2Split) => split === 'formal' ? 3 : 2
-export const seedForV2Split = (split: V2Split) => split === 'development' ? developmentScheduleSeed : v2ScheduleSeed
+export const componentScheduleSeed = 20261025
+// 新协议独立冻结自己的顺序，避免与 NX-50 的 12 条调度混为一谈；四份 manifest 共用这个 seed。
+export const componentLooScheduleSeed = componentLooProtocol.scheduleSeed
+const assertNever = (value: never): never => { throw new Error(`unhandled V2 split: ${String(value)}`) }
+export const tasksForV2Split = (split: V2Split): readonly V2Task[] => {
+  switch (split) {
+    case 'formal': return formalTasks
+    case 'calibration': return calibrationTasks
+    case 'development': return developmentTasks
+    case 'component': return componentTasks
+    case 'component-loo': return componentTasks
+    default: return assertNever(split)
+  }
+}
+export const armsForV2Split = (split: V2Split): readonly AblationPhase[] => {
+  switch (split) {
+    case 'formal': return v2Arms
+    case 'calibration': return calibrationArms
+    case 'development': return calibrationArms
+    case 'component': return componentArms
+    // 四臂是四次独立构建，不是一份 manifest 里的四条臂；这里仍只声明执行臂 `context`。
+    case 'component-loo': return componentArms
+    default: return assertNever(split)
+  }
+}
+export const repeatsForV2Split = (split: V2Split): number => {
+  switch (split) {
+    case 'formal': return 3
+    case 'calibration': return 2
+    case 'development': return 2
+    case 'component': return 2
+    case 'component-loo': return componentLooProtocol.repeats
+    default: return assertNever(split)
+  }
+}
+export const seedForV2Split = (split: V2Split): number => {
+  switch (split) {
+    case 'formal': return v2ScheduleSeed
+    case 'calibration': return v2ScheduleSeed
+    case 'development': return developmentScheduleSeed
+    case 'component': return componentScheduleSeed
+    case 'component-loo': return componentLooScheduleSeed
+    default: return assertNever(split)
+  }
+}
+export const protocolForV2Split = (split: V2Split): V2Protocol => {
+  switch (split) {
+    case 'formal':
+    case 'calibration': return 'NX-42-eval-v2.1'
+    case 'development': return 'NX-45-dev-2arm-v1'
+    case 'component': return 'NX-50-component-ab-v1'
+    case 'component-loo': return componentLooProtocol.id
+    default: return assertNever(split)
+  }
+}
+// A block is the unit that is scheduled together. Formal schedules four arms,
+// calibration/development two, and the component version/LOO batches one.
+export const blockSizeForV2Split = (split: V2Split): number => armsForV2Split(split).length
 const fixtureRoot = fileURLToPath(new URL('../../test/fixtures/harness-v2/', import.meta.url))
 
 const positive = (value: string, flag: string): number => {
@@ -44,7 +116,7 @@ const positive = (value: string, flag: string): number => {
 
 export function parseV2Arguments(argv: readonly string[]): V2Options {
   const values = new Map<string, string>()
-  const allowed = new Set(['split', 'tier', 'window', 'evidence-root', 'plan-only'])
+  const allowed = new Set(['split', 'variant', 'tier', 'window', 'evidence-root', 'plan-only'])
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index]
     if (token === undefined || !token.startsWith('--')) throw new Error(`unexpected argument: ${String(token)}`)
@@ -61,15 +133,21 @@ export function parseV2Arguments(argv: readonly string[]): V2Options {
     values.set(key, value)
   }
   const split = values.get('split')
-  if (split !== 'calibration' && split !== 'formal' && split !== 'development') throw new Error('--split must be calibration, development or formal')
+  if (split !== 'calibration' && split !== 'formal' && split !== 'development' && split !== 'component' && split !== 'component-loo') throw new Error('--split must be calibration, component, component-loo, development or formal')
   const tier = values.get('tier')
   if (tier !== '2m' && tier !== '1m') throw new Error('--tier must be 2m or 1m; choose the formal tier after calibration')
-  if (split === 'development' && tier !== '1m') throw new Error('development protocol requires the shared 1m tier')
+  if ((split === 'development' || split === 'component' || split === 'component-loo') && tier !== '1m') throw new Error(`${split} protocol requires the shared 1m tier`)
+  // variant 只属于 component-loo：让它在别的 split 静默出现，会把一次普通批次误标成某条消融臂。
+  const variant = values.get('variant')
+  if (split === 'component-loo') {
+    if (variant === undefined) throw new Error('--split component-loo requires --variant full, no-preview, no-projection or no-report')
+    if (!(componentLooVariants as readonly string[]).includes(variant)) throw new Error(`--variant must be one of ${componentLooVariants.join(', ')}, got ${variant}`)
+  } else if (variant !== undefined) throw new Error(`--variant is only accepted with --split component-loo, not ${split}`)
   const window = positive(values.get('window') ?? '', '--window')
   if (window <= 65_536) throw new Error('--window must exceed the managed input target of 65,536 tokens')
   const evidenceRoot = values.get('evidence-root')
   if (!evidenceRoot) throw new Error('--evidence-root is required')
-  return { split, tier, window, evidenceRoot: path.resolve(evidenceRoot), planOnly: values.has('plan-only') }
+  return { split, tier, window, evidenceRoot: path.resolve(evidenceRoot), planOnly: values.has('plan-only'), ...(variant === undefined ? {} : { variant: variant as ComponentLooVariant }) }
 }
 
 export function assertEvidenceRootUnused(root: string): void {
@@ -87,16 +165,32 @@ export function resolveV2Arms(window: number, tier: V2Tier): readonly V2Arm[] {
   }))
 }
 
-export function developmentReserveUsd(price: { inputPerMillion: number; outputPerMillion: number; cacheReadPerMillion: number }) {
+export function resolveV2SplitArms(split: V2Split, window: number, tier: V2Tier): readonly V2Arm[] {
+  return resolveV2Arms(window, tier).filter(arm => armsForV2Split(split).includes(arm.name)).map(arm =>
+    split === componentLooProtocol.split
+      ? { ...arm, budget: { ...arm.budget, postCompactionPrune: componentLooProtocol.postCompactionPrune } }
+      : arm)
+}
+
+export interface V2ReserveOptions { arm?: AblationPhase; episodes?: number; tier?: V2Tier; window?: number }
+export function developmentReserveUsd(
+  price: { inputPerMillion: number; outputPerMillion: number; cacheReadPerMillion: number },
+  options: V2ReserveOptions = {},
+) {
   if ([price.inputPerMillion, price.outputPerMillion, price.cacheReadPerMillion].some(value => !Number.isFinite(value) || value < 0)) throw new Error('invalid development price')
-  const budget = resolveV2Arms(1_000_000, '1m')[0]!.budget
+  const arm = options.arm ?? 'baseline', episodes = options.episodes ?? 24
+  const tier = options.tier ?? '1m', window = options.window ?? 1_000_000
+  if (!Number.isSafeInteger(episodes) || episodes <= 0) throw new Error('reserve episodes must be a positive safe integer')
+  const selected = resolveV2Arms(window, tier).find(candidate => candidate.name === arm)
+  if (!selected) throw new Error(`reserve arm is not registered: ${arm}`)
+  const budget = selected.budget
   const maxRate = Math.max(price.inputPerMillion, price.outputPerMillion, price.cacheReadPerMillion)
   const tokenBudgetUsd = budget.maxTotalTokens! * maxRate / 1_000_000
   const marginUsd = tokenBudgetUsd * 0.2
   const finalRequestUsd = price.inputPerMillion + budget.maxOutputTokens! * price.outputPerMillion / 1_000_000
   const perEpisodeUsd = tokenBudgetUsd + marginUsd + finalRequestUsd
   const probeUsd = 16_384 * maxRate / 1_000_000
-  return { tokenBudgetUsd, marginUsd, finalRequestUsd, perEpisodeUsd, probeUsd, batchUsd: perEpisodeUsd * 24 + probeUsd }
+  return { arm, episodes, tier, window, tokenBudgetUsd, marginUsd, finalRequestUsd, perEpisodeUsd, probeUsd, batchUsd: perEpisodeUsd * episodes + probeUsd }
 }
 
 export function resolveV2Episodes(split: V2Split): readonly V2Episode[] {
@@ -124,12 +218,17 @@ export function resolveV2Episodes(split: V2Split): readonly V2Episode[] {
 }
 
 export function resolveV2Plan(options: V2Options) {
+  if (options.split === 'component-loo' && (options.variant === undefined || !(componentLooVariants as readonly string[]).includes(options.variant))) {
+    throw new Error('component-loo plan requires a registered variant')
+  }
+  if (options.split !== 'component-loo' && options.variant !== undefined) throw new Error(`variant is only valid for component-loo, not ${options.split}`)
   const tasks = tasksForV2Split(options.split)
   const episodes = resolveV2Episodes(options.split)
-  const arms = resolveV2Arms(options.window, options.tier).filter(arm => armsForV2Split(options.split).includes(arm.name))
+  const arms = resolveV2SplitArms(options.split, options.window, options.tier)
   const perEpisode = arms[0]!.budget
   return {
-    protocol: options.split === 'development' ? 'NX-45-dev-2arm-v1' : 'NX-42-eval-v2.1', scheduleSeed: seedForV2Split(options.split), split: options.split, tier: options.tier, evidenceRoot: options.evidenceRoot,
+    protocol: protocolForV2Split(options.split), scheduleSeed: seedForV2Split(options.split), split: options.split, tier: options.tier, evidenceRoot: options.evidenceRoot,
+    ...(options.variant === undefined ? {} : { variant: options.variant }),
     modelWindowTokens: options.window, tasks, arms, episodes,
     caps: { runs: episodes.length, modelRequests: episodes.length * perEpisode.maxModelRequests!, toolCalls: episodes.length * perEpisode.maxToolCalls!, totalTokens: episodes.length * perEpisode.maxTotalTokens!, activeDurationMs: episodes.length * perEpisode.maxActiveDurationMs! },
     readiness: { fixturesPresent: tasks.filter(task => fs.existsSync(path.join(fixtureRoot, task.id))).length, fixturesPlanned: tasks.length },

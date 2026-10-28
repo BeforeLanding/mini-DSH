@@ -27,7 +27,7 @@ export async function inspectProductionConfig(env: NodeJS.ProcessEnv, origin: Or
   const budgetSources = Object.fromEntries(Object.keys(budget).map(key => [key,
     Object.hasOwn(budgetOverrides, key) ? origin('MINI_DSH_BUDGET') : key === 'contextWindowTokens' ? 'provider capability' : 'CLI_BUDGET']))
   const mcp = await describeMcpConfig({ env, ...(options.mcpConfigPath ? { configPath: options.mcpConfigPath } : {}) })
-  const harness = await createHarness(config)
+  const harness = await createHarness({ ...config, ...(config.memory ? { memory: { ...config.memory, readOnly: true } } : {}) })
   try {
     const configured = (key: string) => env[key] === undefined ? 'default' : origin(key)
     return {
@@ -41,6 +41,9 @@ export async function inspectProductionConfig(env: NodeJS.ProcessEnv, origin: Or
       projectContext: { enabled: config.profile === 'coding', directory: config.projectDirectory ?? '.', source: configured('MINI_DSH_PROJECT_DIRECTORY') },
       toolResultPreviewBytes: { value: config.toolOutputMaxPreviewBytes ?? 16_384, source: configured('MINI_DSH_TOOL_PREVIEW_BYTES') },
       readHistory: { enabled: harness.capabilityManifest.tools.includes('read_history'), source: 'createHarness' },
+      memory: { mode: config.memory?.mode ?? 'off', source: configured('MINI_DSH_MEMORY'), ...(harness.capabilityManifest.memory ?? {}) },
+      delegation: { mode: config.delegation?.mode ?? 'off', source: configured('MINI_DSH_DELEGATION'), ...(harness.capabilityManifest.delegation ?? {}) },
+      ...(harness.capabilityManifest.taskGroupPolicy ? { taskGroupPolicy: harness.capabilityManifest.taskGroupPolicy } : {}),
       autoApprove: { value: env.MINI_DSH_AUTO_APPROVE === '1', source: configured('MINI_DSH_AUTO_APPROVE') },
       budget: { effective: budget, sources: budgetSources, activeCompactionBudgetTokens: budget.compactionBudgetTokens ?? budget.inputTargetTokens,
         overflowFallbackRetries: budget.maxOverflowRetries },

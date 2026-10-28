@@ -23,18 +23,22 @@ export function deriveEventMessage(event: SessionEvent): Message | undefined {
 }
 
 export function surfaceSeqs(events: readonly SessionEvent[]): number[] {
-  let surface = events.filter(event => deriveEventMessage(event) !== undefined && event.type !== 'context/summary').map(event => event.seq)
+  const bySeq = new Map(events.map(event => [event.seq, event]))
+  // Selecting visibility must not serialize every tool's arguments on each projection.
+  let surface = events.filter(event => event.type === 'user/message' || event.type === 'assistant/message' ||
+    event.type === 'assistant/tool_calls' || event.type === 'tool/result').map(event => event.seq)
   // §7.2 的保护集：**当前 task 的第一条** user/message 永不被遮蔽，后续的允许（§6.1 规则 1）。
   // 只有第一条——「任何 user/message 都不遮蔽」是比方案更严的口径，会把多轮会话压成「只能在两轮之间压」。
   const request = events.find(event => event.type === 'user/message')?.seq
   for (const event of events) {
     if (event.type !== 'context/summary') continue
-    const positions = event.data.shadowedSeqs.map(seq => surface.indexOf(seq)).filter(index => index >= 0)
+    const positionBySeq = new Map(surface.map((seq, index) => [seq, index]))
+    const positions = event.data.shadowedSeqs.map(seq => positionBySeq.get(seq)).filter((index): index is number => index !== undefined)
     if (positions.length !== event.data.shadowedSeqs.length) continue
     const start = Math.min(...positions)
     const end = Math.max(...positions)
     if (end - start + 1 !== positions.length) continue
-    const shadowed = event.data.shadowedSeqs.map(seq => events.find(candidate => candidate.seq === seq)).filter((candidate): candidate is SessionEvent => candidate !== undefined)
+    const shadowed = event.data.shadowedSeqs.map(seq => bySeq.get(seq)).filter((candidate): candidate is SessionEvent => candidate !== undefined)
     if (shadowed.some(candidate => candidate.seq === request || (candidate.type === 'tool/result' && candidate.data.status === 'unknown'))) continue
     try { assertToolProtocol(shadowed.flatMap(candidate => { const item = deriveEventMessage(candidate); return item ? [item] : [] })) } catch { continue }
     surface = [...surface.slice(0, start), event.seq, ...surface.slice(end + 1)]

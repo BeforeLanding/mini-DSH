@@ -1,9 +1,11 @@
 import { validatePayload } from './event-validation.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import type { FileHandle } from 'node:fs/promises'
 import type { SessionEvent } from './contracts.js'
+type EventDataForChildFinish = import('./contracts.js').EventData['delegation/child-finish']
+const createMemoryViewDigest = (versions: { id: string; revision: number }[]) => createHash('sha256').update(JSON.stringify(versions.map(({ id, revision }) => [id, revision]))).digest('hex')
 export interface EventStore {
   append(event: SessionEvent): Promise<void>
   read(): Promise<SessionEvent[]>
@@ -167,6 +169,10 @@ export function createLogRecordParser(sessionId: string): (line: string) => Sess
   const retryTargets = new Map<string, string>()
   const changes = new Map<string, { taskId: string; runId: string; planned: boolean }>(), results = new Set<string>()
   const snapshots = new Set<string>()
+  const memoryViews = new Map<string, string>(), memoryReceipts = new Set<string>()
+  const rawDelegationCalls = new Map<number, { runId?: string; taskId?: string; calls: { id: string; name: string }[] }>()
+  const groups = new Map<string, { taskId: string; requests: Map<string, { status: string; reserve: number }>; tools: Set<string> }>()
+  const delegations = new Map<string, { taskId: string; runId: string; toolCallId: string; toolSequence: number; children: Map<string, string>; created: Map<string, string>; finished: Map<string, EventDataForChildFinish>; ended: boolean }>()
   const verifications = new Map<string, { taskId: string; runId: string; data: import('./task-verification.js').VerificationStart }>(), verificationResults = new Set<string>()
   return (line: string) => {
     let event: unknown
@@ -175,6 +181,70 @@ export function createLogRecordParser(sessionId: string): (line: string) => Sess
     if ((event.taskId !== undefined && typeof event.taskId !== 'string') || (event.runId !== undefined && typeof event.runId !== 'string')) throw new Error('invalid event scope')
     validatePayload(event.type, event.data)
     const parsed = event as unknown as SessionEvent
+    if (parsed.type === 'delegation/start') {
+      const run = parsed.runId ? runs.get(parsed.runId) : undefined, batch = parsed.data
+      const calls = rawDelegationCalls.get(batch.toolSequence)
+      if (!run || run.ended || run.taskId !== parsed.taskId || delegations.has(batch.batchId) || groups.get(batch.groupId)?.taskId !== parsed.taskId || calls?.runId !== parsed.runId || calls?.taskId !== parsed.taskId || !calls?.calls.some(call => call.id === batch.toolCallId && call.name === 'delegate_tasks')) throw new Error('invalid delegation parent/group scope')
+      const children = new Map(batch.children.map(child => [child.delegationId, child.task.role]))
+      if (children.size !== batch.children.length) throw new Error('duplicate delegation child id')
+      delegations.set(batch.batchId, { taskId: parsed.taskId!, runId: parsed.runId!, toolCallId: batch.toolCallId, toolSequence: batch.toolSequence, children, created: new Map(), finished: new Map(), ended: false })
+    }
+    if (parsed.type === 'delegation/child-created' || parsed.type === 'delegation/child-finish' || parsed.type === 'delegation/finish') {
+      const batch = delegations.get(parsed.data.batchId)
+      if (!batch || batch.taskId !== parsed.taskId || batch.runId !== parsed.runId || batch.ended) throw new Error('invalid delegation event scope/terminal')
+      if (parsed.type === 'delegation/child-created') {
+        if (batch.children.get(parsed.data.delegationId) !== parsed.data.role || batch.created.has(parsed.data.delegationId) || batch.finished.has(parsed.data.delegationId)) throw new Error('invalid duplicate delegation child')
+        batch.created.set(parsed.data.delegationId, parsed.data.childSessionId)
+      } else if (parsed.type === 'delegation/child-finish') {
+        if (!batch.children.has(parsed.data.delegationId) || batch.finished.has(parsed.data.delegationId) || batch.created.get(parsed.data.delegationId) !== parsed.data.childSessionId || (parsed.data.status === 'completed' && !parsed.data.childSessionId)) throw new Error('invalid delegation result owner')
+        batch.finished.set(parsed.data.delegationId, parsed.data)
+      } else {
+        if (batch.finished.size !== batch.children.size || batch.toolCallId !== parsed.data.toolCallId || batch.toolSequence !== parsed.data.toolSequence) throw new Error('incomplete delegation terminal')
+        const result: unknown = JSON.parse(parsed.data.result)
+        if (!isRecord(result) || result.batchId !== parsed.data.batchId || !Array.isArray(result.results) || result.results.length !== batch.children.size || new Set(result.results.map(item => isRecord(item) ? item.delegationId : undefined)).size !== batch.children.size || !result.results.every(item => isRecord(item) && batch.finished.get(String(item.delegationId))?.status === item.status && batch.finished.get(String(item.delegationId))?.resultRef === item.resultRef && batch.finished.get(String(item.delegationId))?.resultSha256 === item.resultSha256)) throw new Error('delegation terminal result mismatch')
+        batch.ended = true
+      }
+    }
+    if (parsed.type === 'assistant/tool_calls') rawDelegationCalls.set(parsed.seq, { runId: parsed.runId, taskId: parsed.taskId, calls: parsed.data.toolCalls.map(({ id, name }) => ({ id, name })) })
+    if (parsed.type.startsWith('group/')) {
+      const groupId = String(event.data.groupId), run = parsed.runId ? runs.get(parsed.runId) : undefined
+      if (!run || run.taskId !== parsed.taskId) throw new Error('invalid root group event scope')
+      if (parsed.type === 'group/start') {
+        if (run.ended || groups.has(groupId) || [...groups.values()].some(group => group.taskId === parsed.taskId)) throw new Error('duplicate task group')
+        groups.set(groupId, { taskId: parsed.taskId!, requests: new Map(), tools: new Set() })
+      } else {
+        const group = groups.get(groupId)
+        if (!group || group.taskId !== parsed.taskId) throw new Error('unknown or cross-task group')
+        if (parsed.type === 'group/tool-admitted') {
+          if (group.tools.has(parsed.data.key)) throw new Error('duplicate group tool')
+          group.tools.add(parsed.data.key)
+        } else if (parsed.type === 'group/budget-reserved') {
+          if (group.requests.has(parsed.data.requestId)) throw new Error('duplicate group request')
+          group.requests.set(parsed.data.requestId, { status: 'reserved', reserve: parsed.data.reserve })
+        } else if (parsed.type === 'group/model-dispatched' || parsed.type === 'group/reservation-released' || parsed.type === 'group/usage-unknown' || parsed.type === 'group/budget-settled') {
+          const request = group.requests.get(parsed.data.requestId)
+          if (!request) throw new Error('missing group request')
+          const expected = parsed.type === 'group/model-dispatched' ? ['reserved'] : parsed.type === 'group/reservation-released' ? ['reserved', 'dispatched'] : ['dispatched']
+          if (!expected.includes(request.status)) throw new Error('invalid group request transition')
+          if (parsed.type === 'group/budget-settled' && parsed.data.overrun !== (parsed.data.usage.totalTokens > request.reserve)) throw new Error('group overrun mismatch')
+          request.status = parsed.type === 'group/model-dispatched' ? 'dispatched' : parsed.type === 'group/reservation-released' ? 'released' : parsed.type === 'group/usage-unknown' ? 'unknown' : 'settled'
+        }
+      }
+    }
+    if (parsed.type === 'memory/view' || parsed.type === 'memory/query' || parsed.type === 'memory/proposal-receipt') {
+      const run = parsed.runId ? runs.get(parsed.runId) : undefined
+      if (!run || run.ended || run.taskId !== parsed.taskId) throw new Error('invalid memory event scope')
+      const key = `${parsed.taskId}:${parsed.data.projectId}`
+      if (parsed.type === 'memory/view') {
+        if (memoryViews.has(key) || new Set(parsed.data.versions.map(item => item.id)).size !== parsed.data.versions.length || parsed.data.digest !== createMemoryViewDigest(parsed.data.versions)) throw new Error('duplicate or invalid memory view')
+        memoryViews.set(key, parsed.data.digest)
+      }
+      if (parsed.type === 'memory/query' && memoryViews.get(key) !== parsed.data.viewDigest) throw new Error('memory query view mismatch')
+      if (parsed.type === 'memory/proposal-receipt') {
+        if (memoryReceipts.has(parsed.data.opId)) throw new Error('duplicate memory receipt')
+        memoryReceipts.add(parsed.data.opId)
+      }
+    }
     if (parsed.type === 'session/reset') snapshots.clear()
     if (parsed.type === 'context/snapshot') {
       if (parsed.taskId || parsed.runId || snapshots.has(parsed.data.name)) throw new Error('duplicate or scoped context snapshot')

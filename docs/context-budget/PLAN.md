@@ -1,5 +1,21 @@
 # 上下文与执行预算管理：计划与设计
 
+组件评测收口（2026-10-27）：新增独立 `component-loo` 协议；配置与允许变化由 `scripts/eval-v2-component-protocol.ts` 维护，四臂明确冻结 `postCompactionPrune=false`，顺序 full → no-preview → no-projection → no-report。package 与评测代码必须相同，产品代码仅允许精确组件路径差异。NX-50 历史门槛保持原样；验收见 NX-51-COMPONENT-ABLATION。
+
+新阶段（2026-10-26）：见 [项目记忆与只读协作计划](../memory-team/PLAN.md)。默认关闭的新功能在独立分支实施，不改写下文历史协议、证据或 PR #6 的消融准备。
+
+## OPT-1 工具预览额度修订（2026-10-25）
+
+修订 D-20：`maxPreviewBytes` 约束进入请求的头部与尾部**原文正文合计**，不包括 JSON、引用及分页元数据；Bash stdout/stderr 各分配一半。尾部从该额度中预留，不能在头部之外追加。超过触发阈值的结果保留 `tail`（有完整 UTF-8 字符时）、`omittedBytes` 和 `resumeOffset`，不再在“刚好覆盖全文”的边界丢弃尾部；最小额度容不下完整字符时通过 ref 回读。稀疏命令采集的重叠头尾先消除重叠再保存，原始输出计数与退出信息不变。非截断输出与已保存的历史 JSONL 不变。此修订改变后续请求指纹，不能把旧录制强行匹配到新版本。
+
+压缩压力探针改为同时填满 stdout/stderr，使共享 16 KiB 额度真实受压；阈值、预算和断言不变，独立 fixture 与冻结组件对照集不变。该探针只验收触发机制，不进入能力分数。
+
+极小/奇数额度补充（OPT-1b）：stdout 向上取整、stderr 向下取整分配，额度为 1 时 stderr 正文可为零。原命令采集的 tail 必须显式被裁剪结果覆盖，放不下完整 UTF-8 字符时清空并依赖 ref，不能从原 stream 展开中漏出。
+
+## OPT-3 报告查询的版本读取（2026-10-25）
+
+`taskReport` 内的变更、检查与覆盖视图共用一次查询的文件版本读取，按已解析路径缓存 hash/location 与失败，不保留源文件正文。独立 `taskChanges` / `taskVerifications` 查询各自创建读取器；下一次查询/下一页必定重新读盘，不跨查询或恢复缓存。取消在命中缓存前仍检查。验证命令执行前后的 `verificationFiles` 分别创建读取器，不能复用命令执行前的版本证明执行后稳定。报告是按需读取的一组观测，不是整个文件系统的原子快照；passing/coverage 的范围与 `acceptance: not_asserted` 不变。
+
 ## R01 错误诊断设计（2026-10-19）
 
 先在模型适配器边界给 HTTP／传输失败构造 `ProviderError`，只保留分类、可选状态码、限长 provider request ID 与重试性；响应正文仅用于有界分类判断，不进入错误消息。重试性是供后续 R03 使用的元数据，本项不自动重试。再在现有事件 version 1 中增加 `run/error`，只保存阶段、分类和固定安全消息，运行时 payload 校验及 JSONL 读取器同步更新，重放不再调用模型或工具。主请求与摘要请求各按 requestId 归因，工具异常按 toolCallId 归因；`run/finish` 仍唯一终态。inspect 的 JSON 字段与文字摘要均以已记录错误为准，旧日志未记录死因时写 unknown 而不猜测。
@@ -256,9 +272,11 @@ NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复�
 
 修订 D-02／R-03 的契约：当前 task 的所有 run 原文不再无条件进入模型请求。仍先免费裁剪最旧的已结束任务；裁剪救不了时，才用模型把当前 task 的早期消息段换成持久化摘要。原始事件一条不删，system、当前 task 的原始用户请求、未决及 `unknown` 工具组与保留尾部不被遮蔽。当前请求位于消息开头时，从其后选择连续段，摘要 frame 插在该段原位置；这修正了“从最早消息取前缀”与“保留原始请求”不能同时成立的问题。边界须通过 `assertToolProtocol`。
 
-默认 `compactionBudgetTokens = inputTargetTokens`（65,536）、`compactionRatio = 0.8`、`postCompactionTargetRatio = 0.65`、`retainRatio = 0.16`、`compactionMaxTokens = 8192`、`maxSummaryFailures = 2`、`maxOverflowRetries = 1`，`auto = true`。三个阈值分名：`inputTargetTokens` 是硬输入上限，`compactionBudgetTokens × compactionRatio` 是压力触发线，`compactionBudgetTokens × postCompactionTargetRatio` 是压缩后目标线。压缩预算不能默认取 1M 的 `contextWindowTokens`，否则 80% 阈值在 65,536 输入目标之前永远到不了。默认配置下 0.8 实际等价于“裁剪救不了”；只有显式调整压缩预算时才有独立意义。摘要调用计入 run 的请求数、主动时间与 token，预留输出走现有预算机制；预算不足依现有 `token_budget` 停止。三入口是自动压力、溢出兜底及 CLI `/compact`；后者不受失败闩影响。压缩不是模型可调用的工具。
+默认 `compactionBudgetTokens = inputTargetTokens`（65,536）、`compactionRatio = 0.8`、`postCompactionTargetRatio = 0.65`、`retainRatio = 0.16`、`compactionMaxTokens = 8192`、`maxSummaryFailures = 2`、`maxOverflowRetries = 1`，`auto = true`。三个阈值分名：`inputTargetTokens` 是硬输入上限，`compactionBudgetTokens × compactionRatio` 是压力触发线，`compactionBudgetTokens × postCompactionTargetRatio` 是压缩后目标线。压缩预算不能默认取 1M 的 `contextWindowTokens`，否则 80% 阈值在 65,536 输入目标之前永远到不了。**原句“默认配置下 0.8 实际等价于裁剪救不了”只在没有已完成旧任务时成立**：单任务会话确实只能靠摘要；但多阶段会话在 52,428～65,536 之间仍有可免费裁掉的旧任务，NX-51 的实测证明这部分可占 35～41k token。只有显式调整压缩预算时，压力线才与硬上限解耦。摘要调用计入 run 的请求数、主动时间与 token，预留输出走现有预算机制；预算不足依现有 `token_budget` 停止。三入口是自动压力、溢出兜底及 CLI `/compact`；后者不受失败闩影响。压缩不是模型可调用的工具。
 
 **NX-42 校准后收口（2026-10-15，R05 阈值滞回修订 2026-10-20）**：一次主动压力压缩已应用后，若重新投影仍高于压缩后目标线，或本次压缩使输入减少不足 `max(64, 5%)`，本次 run 不再每轮重复主动压缩，并追加 `context/pressure-suppressed`（原因 `above-target` 或 `insufficient-reduction`，含压缩前后与目标 token）。这比“仍高于压力线才抑制”更保守：一次只降到压力线与目标线之间的压缩也被视为未达到目标，避免下一轮因轻微增长再次付费压缩。这个情形下不可压缩的原始请求或较早任务仍占据输入，再次压缩当前 task 的少量新增消息会耗费模型请求与 token，却不能解除压力条件。输入目标/窗口真正溢出时的兜底压缩、显式 `/compact` 以及一次有效压缩后随新历史增长再次越线的主动压缩均保留。抑制只持续当前 run，不跨阶段或 `/continue`；它是按既有压缩结果作反馈，而非调整 65,536／0.8 默认值。旧付费校准在此行为修订前完成，仅用于诊断；新的正式清单和校准需重新冻结执行。
+
+**NX-51 摘要后裁剪与持久化（2026-10-25，零付费修改；默认关闭）**：压力摘要 applied 之后，主循环用 `postCompactionTargetRatio × compactionBudgetTokens` 作为 `pruneTargetTokens` 再投影一次，先裁掉“已结束且非当前”的旧任务，再判断是否需要 `context-pressure-suppressed`。摘要仍先于裁剪发生：NX-38 的 covenant 用例证明先裁会让模型失去把旧阶段知识写进摘要的机会。裁剪决定写成 `context/prune` 事件（含 `targetTokens`、`removedTaskIds` 与可选的 `summarySeq`），`project()` 读取日志中全部 prune 的并集，并在后续轮次、`/continue` 与重启恢复中继续排除这些任务；原始事件一条不删，`read_history` 仍可回读旧阶段。决定先于预算检查落盘，因此摘要用掉最后一次请求额度时，续跑仍继承它。该行为是**显式 opt-in**：只有 `postCompactionPrune: true` 才启用，默认关闭；24 条真实对照未显示摘要/耗时下降（见 [NX-51 结果](NX-51-PRUNE-RESULT.md)），默认开启不成立。单任务、显式 `/compact`、摘要被拒/失败不变。诊断读数、反事实与边界见 [NX-51 诊断](NX-51-TIMING-DIAGNOSIS.md)。
 
 纯规划器只读事件，摘要尝试在付费调用前记录开始事件，结果以结束事件闭合；失败闩从当前 run 日志折叠。恢复只读已记录的摘要，不重新调用模型；未闭合的尝试按事实补结束事件——已经写下摘要的补 `applied`，连正文都没有的才补 `unclosed`。模型若缺事实，可用有界、session 隔离的 `read_history` 按事件号读回。摘要调用使用主循环的 system 和 tool schema，原样重放遮蔽段；DeepSeek 当前适配器未显式实现前缀缓存，因此缓存收益尚未兑现。与参考实现不同，本仓库的 `beginRun` 排斥同 session 并发 run，不需完整的 after-await 计划重校验；写 applied 前仍复查取消和主动预算。摘要可能遗漏或捏造事实，事件号与回读入口让事实可核对，却不保证模型一定主动核对。
 

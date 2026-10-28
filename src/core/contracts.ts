@@ -15,6 +15,7 @@ export interface Message {
 export interface ToolSchema { type: 'function'; function: { name: string; description: string; parameters: Arguments } }
 
 export interface ChatRequest {
+  dispatchScope?: import('./task-group-budget.js').DispatchScope
   purpose?: 'main' | 'summary'
   maxOutputTokens?: number
   system?: string; messages?: Message[]; tools?: ToolSchema[]; model?: string
@@ -39,7 +40,7 @@ export interface Agent {
 }
 export interface Loop { run(agent: Agent, input: string | undefined, options?: RunOptions): Promise<string> }
 
-export interface Execution { approval?: <T>(work: () => Promise<T>) => Promise<T>; signal: AbortSignal; sessionId?: string; toolCallId?: string; agent?: Agent }
+export interface Execution { approval?: <T>(work: () => Promise<T>) => Promise<T>; signal: AbortSignal; sessionId?: string; toolCallId?: string; toolSequence?: number; agent?: Agent }
 export interface ContentBlock { type: string; text?: string; [key: string]: unknown }
 // NX-39 新增 previewTruncated：工具结果的**预览**被截断（tool-results 插件把超限的那条截成头尾预览并落盘，
 // 返回值带回 ref）。它与 `command.stdout.truncated` 是两件事——后者是命令采集本身的上限（NX-33 的尾部窗口），
@@ -49,7 +50,7 @@ export interface ToolResult { value: unknown; content: ContentBlock[]; isError: 
 export interface ToolDefinition {
   name: string; description?: string; parameters?: Arguments
   exposeErrors?: boolean
-  effect?: 'read' | 'write' | 'exec' | 'network' | 'unknown'
+  effect?: 'read' | 'write' | 'exec' | 'network' | 'unknown' | 'delegate'
   origin?: 'builtin' | 'external'
   resources?(args: Arguments): string[]
   execute(args: Arguments, execution: Execution): unknown | Promise<unknown>
@@ -61,6 +62,20 @@ export interface PromptEntry { name: string; order?: number; text: string | ((co
 export interface ApprovalRequest { tool: string; summary: string; signal?: AbortSignal; approval?: <T>(work: () => Promise<T>) => Promise<T> }
 export interface SandboxConfig { workspace?: string; autoApprove?: boolean }
 export interface EventData {
+  'delegation/start': import('./delegation-contracts.js').DelegationStart
+  'delegation/child-created': { batchId: string; delegationId: string; childSessionId: string; role: import('./delegation-contracts.js').ChildRole; capabilityDigest: string }
+  'delegation/child-finish': { batchId: string; delegationId: string; childSessionId?: string; status: import('./delegation-contracts.js').ChildStatus; resultRef: string; resultSha256: string }
+  'delegation/finish': { batchId: string; toolCallId: string; toolSequence: number; result: string }
+  'group/start': import('./task-group-budget.js').GroupStart
+  'group/budget-reserved': import('./task-group-budget.js').GroupReservation & { groupId: string }
+  'group/model-dispatched': { groupId: string; requestId: string }
+  'group/reservation-released': { groupId: string; requestId: string }
+  'group/usage-unknown': { groupId: string; requestId: string }
+  'group/budget-settled': { groupId: string; requestId: string; usage: Usage; overrun: boolean }
+  'group/tool-admitted': { groupId: string; key: string; agentId: string; sessionId: string; runId: string; toolCallId: string }
+  'memory/view': import('./memory-runtime.js').MemoryViewSnapshot
+  'memory/query': { projectId: string; viewDigest: string; queryDigest: string; items: { id: string; revision: number }[]; filtered: Record<string, number> }
+  'memory/proposal-receipt': { projectId: string; opId: string; id: string; revision: number; digest: string }
   'verification/start': import('./task-verification.js').VerificationStart
   'verification/result': import('./task-verification.js').VerificationResult
   'file/baseline': { path: string; snapshot: FileSnapshot }
@@ -90,6 +105,10 @@ export interface EventData {
   'context/summary-start': { trigger: 'pressure' | 'context-overflow' | 'explicit'; budgetTokens: number; projectedTokens: number; plannedStart: number; plannedEnd: number; plannedNodes: number }
   'context/summary-end': { startSeq: number; outcome: { kind: 'applied' } | { kind: 'declined'; reason: 'summary-failed' | 'summary-empty' | 'summary-invalid' | 'summary-not-smaller' | 'turn-started' | 'plan-stale' | 'agent-gone' | 'cancelled' | 'unclosed' } }
   'context/pressure-suppressed': { reason: 'above-target' | 'insufficient-reduction'; beforeTokens: number; afterTokens: number; targetTokens: number }
+  // NX-51：一次压力摘要 applied 之后，按压缩后目标线裁掉的“已结束且非当前”任务。
+  // 这是**投影决定**，不是删除：原始事件仍在日志里，read_history 仍按 seq 读得回来。
+  // 写下之后，后续轮次、/continue 与重启恢复的投影都必须继续排除这些任务。
+  'context/prune': { trigger: 'pressure'; summarySeq?: number; targetTokens: number; removedTaskIds: string[] }
   'context/summary': { startSeq: number; trigger: 'pressure' | 'context-overflow' | 'explicit'; budgetTokens: number; projectedTokens: number; shadowedSeqs: number[]; shadowedTokens: number; summaryTokens: number; retainedNodes: number; summary: string; frame: string }
   'model/fragment': { requestId: string; content: string; reasoningContent: string }
   'model/end': { requestId: string; complete: boolean; finishReason?: string }

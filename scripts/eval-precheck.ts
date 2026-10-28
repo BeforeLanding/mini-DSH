@@ -87,12 +87,12 @@ export async function precheckFixtures(ids: readonly FixtureId[] = ablationIds):
 // **推到阈值以上**，让「处理会不会出手」变成可观测的。压缩请求由它自己回答（那是真实跑里模型唯一能影响
 // 「压完还剩什么」的地方，见 test/nx38-covenant.test.ts 的同一条约定）。
 const PADDING_CHARS = 64_000
-// 步数只需够把历史推过压缩阈值：有界档每条命令的预览是 16 KiB ≈ 4,915 估算 token，越过 52,429 约需
-// 11 轮。留到 16 是余量而不是目标——步数越多探针越慢，而它每次都要真跑一遍引擎。
+// 两条流都填满，才实际占用共享的 16 KiB 正文额度（只有 stdout 时上限为 8 KiB）。
+// 16 KiB ≈ 4,915 估算 token，越过 52,429 约需 11 轮；留到 16 是余量，不依赖头尾超额。
 const PADDING_STEPS = 16
 const COMPACTION_MARK = '上面的对话正在被摘要'
 const PROBE_SUMMARY = '## Primary Request\npadding probe\n## Completed Work\nread padding\n## Pending Work\ncontinue padding\n## Key Evidence\noriginal events remain in the log'
-const PADDING_COMMAND = `node -e 'process.stdout.write("x".repeat(${PADDING_CHARS}))'`
+const PADDING_COMMAND = `node -e 'process.stdout.write("x".repeat(${PADDING_CHARS}));process.stderr.write("x".repeat(${PADDING_CHARS}))'`
 
 function paddingAdapter(): FixtureAdapter {
   let step = 0

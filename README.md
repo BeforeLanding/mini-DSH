@@ -6,6 +6,8 @@ mini-DSH 是一个 TypeScript / Cordis 编写的本地编程 Agent Harness。它
 
 先看 [两条合成轨迹与离线复算](docs/RESULTS.md)、[评测口径](docs/EVALUATION.md) 和 [三个工程案例](docs/CASES.md)。合成轨迹只证明机制，不是模型能力分数。
 
+2026-10-25 的[组件优化与复现](docs/COMPONENT-OPTIMIZATION.md)提供同一套 18 个离线探针的前后对照：预览尾标记可见 3/12→12/12，最大摘要投影事件读取减少 98.82%，重复检查报告打开文件减少 97.01%。运行 `pnpm bench:components` 可复算；这些是信息保留和资源效率结果，不是新的模型成功率。
+
 仓库的教程基线来自[从零手写 mini-dsh](https://github.com/huangjunsen0406/mini-dsh/blob/main/LEARNING.zh-CN.md)，止于 `c5fc9c4`；`43e3829` 起是本项目的独立扩展。许可证与来源边界见 [LICENSE](LICENSE) 和 [NOTICE](NOTICE)。
 
 ![当前架构：入口、Agent Loop、模型、工具、事件与恢复](docs/images/architecture-v1.png)
@@ -102,6 +104,12 @@ pnpm start
 - 未发布 npm、未打 tag/Release、未部署 ECS；安装验证覆盖 Windows 含空格路径与 Ubuntu CI，macOS 未验证。
 
 ## 实现入口
+
+项目记忆默认关闭，设 `MINI_DSH_MEMORY=assist` 可启用候选提案与按需检索，`recall` 只给模型检索工具。存储默认在 `~/.mini-dsh/memory/<projectId>/`；projectId 按真实工作区路径隔离，跨 worktree 需显式设置 `MINI_DSH_MEMORY_PROJECT_ID`。用 `/memory review [offset]` 检视来源、有效性、revision 和 digest，再用 `/memory approve <id> <revision> <digest>` 批准；模型没有批准工具。`/memory forget <id> <revision>` 撤销未来召回资格，已进入上下文和 JSONL 的内容仍保留。文件变化、来源不可达、过期和撤销都会拒绝回读。`pnpm demo:memory` 为零模型机制演示。实现状态和只读 Multi-Agent 后续任务见 [专题任务](docs/memory-team/TASKS.md)。
+
+只读协作默认关闭，设 `MINI_DSH_DELEGATION=read-only` 后，主 Agent 可通过 `delegate_tasks` 调度 analyst/test_designer/reviewer。第一版同时最多两个子 Agent、每任务累计最多四个，子角色禁止写入、Bash、MCP 和递归委派。主/子/摘要/重试共用持久化根预算，`/continue` 不刷新额度和 wall deadline；`/budget` 显示根组统计，`mini-dsh inspect <root-events.jsonl> --tree` 展示子会话状态。审查结果绑定候选版本，后续编辑使其失效，可用 `review_status` 复核。`MINI_DSH_TEAM_LIMITS` 和 `MINI_DSH_TASK_GROUP_BUDGET` 接受有界配置，`--show-config` 显示实际值。`pnpm demo:team` 是脚本化机制演示，usage 为合成账本数据，不是供应商消费；真实效果尚未评测。子会话与完整结果默认存于 `~/.mini-dsh/teams/`，父结果副本仍受会话 owner 检查。
+
+记忆开关 × 协作开关的独立开发协议见 [评测准备](docs/memory-team/EVALUATION.md)。`pnpm eval:memory-team --freeze <new-directory>` 冻结四份零付费 manifest，`--validate-only <directory>` 核对配置和来源；当前不提供付费执行入口，也不复用 PR #6 的 48 条消融结论。
 
 - [src/core/agent-loop-runtime.ts](src/core/agent-loop-runtime.ts)：请求投影、主动压缩和预算停止；[src/core/compaction-runtime.ts](src/core/compaction-runtime.ts)：摘要调用与结算。
 - [src/core/session-runtime.ts](src/core/session-runtime.ts) 与 [src/core/event-store.ts](src/core/event-store.ts)：JSONL 事件、恢复和统计重建。

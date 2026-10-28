@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "phase": "development",
+  "workflows": [
+    { "id": "W01", "category": "knowledge_reuse", "initialFiles": { "docs/VERIFY.md": "Checks: node check.mjs. No package test script exists.\n", "src/value.mjs": "export const value = 1\n" }, "targetFiles": {}, "target": "Identify the relevant validation entry and module before proposing a change. Cite evidence from this project and the shared preparation data." },
+    { "id": "W02", "category": "stale_knowledge", "initialFiles": { "docs/ENTRY.md": "Entry: src/old.mjs\n", "src/old.mjs": "export const entry = 'old'\n", "src/new.mjs": "export const entry = 'new'\n" }, "targetFiles": { "docs/ENTRY.md": "Entry: src/new.mjs\n" }, "target": "Locate the current entry. Explain whether historical entry-path knowledge is still applicable and cite the current file version." },
+    { "id": "W03", "category": "parallel_investigation", "initialFiles": { "docs/MODULES.md": "Parsing: src/parse.mjs. Formatting: src/format.mjs.\n", "src/parse.mjs": "export const parse = text => text.trim()\n", "src/format.mjs": "export const format = value => String(value)\n" }, "targetFiles": {}, "target": "Investigate parser and formatter contracts independently, identify boundary cases, and give a bounded evidence-based plan. Do not claim tests ran." },
+    { "id": "W04", "category": "negative_control", "initialFiles": { "docs/NOTES.md": "Historical note: investigate rounding. This is not proof about current behavior.\n", "src/input.mjs": "export const valid = value => typeof value === 'number'\n" }, "targetFiles": {}, "target": "Explain whether NaN is accepted by valid, identify the smallest relevant check, and assess whether the historical rounding attempt helps. Avoid unnecessary delegation." }
+  ]
+}

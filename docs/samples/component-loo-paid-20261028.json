@@ -1,0 +1,2067 @@
+{
+  "protocol": "NX-51-component-loo-v1",
+  "gateVersion": "nx51-component-loo-descriptive-v1",
+  "createdAt": "2026-10-28T01:18:13.701Z",
+  "interpretation": "development-only-descriptive",
+  "significanceClaim": false,
+  "reference": {
+    "variant": "full",
+    "sourceBaseCommit": "0b8b9736b7da181ade20d7a33dea480bd985aa46",
+    "evaluationCommit": "54a1921962e42be5fd4e7dab23e71c02be0edf8b",
+    "manifestDigest": "31b9b58387c32fe17ddb5d0657fd52266a2bd6b7db83b9eaa350e637bbebd2cb",
+    "observationsDigest": "81a6053b9f3f6b6d090de7401507d8d6e1432db1ce9eb70055f52e7ecfc1027b",
+    "startedAt": "2026-10-27T13:01:10.115Z",
+    "finishedAt": "2026-10-27T13:21:45.907Z",
+    "spentUsdEstimate": 1.2843152399999995,
+    "metrics": {
+      "planned": 12,
+      "executed": 12,
+      "reliableSuccesses": 11,
+      "artifactAccepted": 12,
+      "tokens": 3837343,
+      "inputTokens": 3693306,
+      "outputTokens": 144037,
+      "cacheReadTokens": 55040,
+      "providerTokens": 3837343,
+      "estimatedTokens": 0,
+      "activeDurationMs": 1159847.9699999993,
+      "modelActiveDurationMs": 962670,
+      "nonModelActiveDurationMs": 197177.96999999927,
+      "requests": 187,
+      "summaryRequests": 4,
+      "summaryDurationMs": 37535,
+      "toolCalls": 360,
+      "toolErrors": 24,
+      "previewTruncations": 18,
+      "pressureCompactions": 4,
+      "timeouts": 0
+    }
+  },
+  "variants": {
+    "no-preview": {
+      "variant": "no-preview",
+      "sourceBaseCommit": "38b4730315bdc93fe116a8e817d6ef0eac5627f3",
+      "evaluationCommit": "d27a016a39ad3139aa57912087c4bab069dc498c",
+      "manifestDigest": "22359059357399c196e40114682276f204334409a5c8cee04cba491621a91250",
+      "observationsDigest": "2017c7a92c6c075733b684ab8f8183d688692c13606c3da6008a27ab13afdcb8",
+      "startedAt": "2026-10-27T13:23:16.086Z",
+      "finishedAt": "2026-10-27T13:43:00.219Z",
+      "spentUsdEstimate": 1.3347831240000008,
+      "metrics": {
+        "reference": {
+          "planned": 12,
+          "executed": 12,
+          "reliableSuccesses": 11,
+          "artifactAccepted": 12,
+          "tokens": 3837343,
+          "inputTokens": 3693306,
+          "outputTokens": 144037,
+          "cacheReadTokens": 55040,
+          "providerTokens": 3837343,
+          "estimatedTokens": 0,
+          "activeDurationMs": 1159847.9699999993,
+          "modelActiveDurationMs": 962670,
+          "nonModelActiveDurationMs": 197177.96999999927,
+          "requests": 187,
+          "summaryRequests": 4,
+          "summaryDurationMs": 37535,
+          "toolCalls": 360,
+          "toolErrors": 24,
+          "previewTruncations": 18,
+          "pressureCompactions": 4,
+          "timeouts": 0
+        },
+        "variant": {
+          "planned": 12,
+          "executed": 12,
+          "reliableSuccesses": 12,
+          "artifactAccepted": 12,
+          "tokens": 4034789,
+          "inputTokens": 3898903,
+          "outputTokens": 135886,
+          "cacheReadTokens": 59904,
+          "providerTokens": 4034789,
+          "estimatedTokens": 0,
+          "activeDurationMs": 1113724.9546,
+          "modelActiveDurationMs": 921470,
+          "nonModelActiveDurationMs": 192254.95460000006,
+          "requests": 206,
+          "summaryRequests": 4,
+          "summaryDurationMs": 46558,
+          "toolCalls": 351,
+          "toolErrors": 28,
+          "previewTruncations": 22,
+          "pressureCompactions": 4,
+          "timeouts": 0
+        }
+      },
+      "resources": {
+        "tokens": {
+          "reference": 3837343,
+          "variant": 4034789,
+          "fullMinusVariant": -197446,
+          "percentVsFull": 0.0514538314661994,
+          "worseWhenRemoved": true,
+          "betterWhenRemoved": false
+        },
+        "outputTokens": {
+          "reference": 144037,
+          "variant": 135886,
+          "fullMinusVariant": 8151,
+          "percentVsFull": -0.05658962627658171,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": true
+        },
+        "cacheReadTokens": {
+          "reference": 55040,
+          "variant": 59904,
+          "fullMinusVariant": -4864,
+          "percentVsFull": 0.08837209302325581,
+          "worseWhenRemoved": true,
+          "betterWhenRemoved": false
+        },
+        "activeDurationMs": {
+          "reference": 1159847.9699999993,
+          "variant": 1113724.9546,
+          "fullMinusVariant": 46123.01539999922,
+          "percentVsFull": -0.03976643197470031,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": false
+        },
+        "modelActiveDurationMs": {
+          "reference": 962670,
+          "variant": 921470,
+          "fullMinusVariant": 41200,
+          "percentVsFull": -0.04279763574225851,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": false
+        },
+        "nonModelActiveDurationMs": {
+          "reference": 197177.96999999927,
+          "variant": 192254.95460000006,
+          "fullMinusVariant": 4923.015399999218,
+          "percentVsFull": -0.024967370340607708,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": false
+        },
+        "requests": {
+          "reference": 187,
+          "variant": 206,
+          "fullMinusVariant": -19,
+          "percentVsFull": 0.10160427807486631,
+          "worseWhenRemoved": true,
+          "betterWhenRemoved": false
+        },
+        "summaryRequests": {
+          "reference": 4,
+          "variant": 4,
+          "fullMinusVariant": 0,
+          "percentVsFull": 0,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": false
+        },
+        "summaryDurationMs": {
+          "reference": 37535,
+          "variant": 46558,
+          "fullMinusVariant": -9023,
+          "percentVsFull": 0.2403889702943919,
+          "worseWhenRemoved": true,
+          "betterWhenRemoved": false
+        },
+        "toolCalls": {
+          "reference": 360,
+          "variant": 351,
+          "fullMinusVariant": 9,
+          "percentVsFull": -0.025,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": false
+        },
+        "toolErrors": {
+          "reference": 24,
+          "variant": 28,
+          "fullMinusVariant": -4,
+          "percentVsFull": 0.16666666666666666,
+          "worseWhenRemoved": true,
+          "betterWhenRemoved": false
+        },
+        "previewTruncations": {
+          "reference": 18,
+          "variant": 22,
+          "fullMinusVariant": -4,
+          "percentVsFull": 0.2222222222222222,
+          "worseWhenRemoved": true,
+          "betterWhenRemoved": false
+        },
+        "pressureCompactions": {
+          "reference": 4,
+          "variant": 4,
+          "fullMinusVariant": 0,
+          "percentVsFull": 0,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": false
+        }
+      },
+      "quality": {
+        "reliableCompletion": {
+          "reference": 11,
+          "variant": 12,
+          "fullMinusVariant": -1,
+          "tolerance": 1
+        },
+        "artifactAcceptance": {
+          "reference": 12,
+          "variant": 12,
+          "fullMinusVariant": 0,
+          "tolerance": 1
+        }
+      },
+      "tasks": [
+        {
+          "taskId": "U02",
+          "family": "comprehension",
+          "shape": "cross-module",
+          "reference": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 305348,
+              "outputTokens": 15529,
+              "activeDurationMs": 128439.2188,
+              "nonModelActiveDurationMs": 24552.218800000002,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 86347,
+              "outputTokens": 5314,
+              "activeDurationMs": 45686.98509999993,
+              "nonModelActiveDurationMs": 7667.985099999933,
+              "summaryRequests": 0
+            }
+          ],
+          "variant": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 522779,
+              "outputTokens": 19581,
+              "activeDurationMs": 176130.50879999998,
+              "nonModelActiveDurationMs": 33730.50879999998,
+              "summaryRequests": 1
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 243130,
+              "outputTokens": 15601,
+              "activeDurationMs": 113166.91029999999,
+              "nonModelActiveDurationMs": 13343.910299999989,
+              "summaryRequests": 0
+            }
+          ],
+          "fullMinusVariant": {
+            "tokens": -374214,
+            "outputTokens": -14339,
+            "activeDurationMs": -115171.2152,
+            "nonModelActiveDurationMs": -14854.215200000035,
+            "reliableSuccesses": 0,
+            "artifactAccepted": 0
+          }
+        },
+        {
+          "taskId": "B03",
+          "family": "bugfix",
+          "shape": "information",
+          "reference": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 153190,
+              "outputTokens": 7525,
+              "activeDurationMs": 61536.232800000005,
+              "nonModelActiveDurationMs": 11916.232800000005,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 149545,
+              "outputTokens": 7832,
+              "activeDurationMs": 64860.61549999984,
+              "nonModelActiveDurationMs": 12049.61549999984,
+              "summaryRequests": 0
+            }
+          ],
+          "variant": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 94836,
+              "outputTokens": 5405,
+              "activeDurationMs": 47045.2044,
+              "nonModelActiveDurationMs": 9911.204400000002,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 97613,
+              "outputTokens": 5314,
+              "activeDurationMs": 42004.95110000018,
+              "nonModelActiveDurationMs": 6030.95110000018,
+              "summaryRequests": 0
+            }
+          ],
+          "fullMinusVariant": {
+            "tokens": 110286,
+            "outputTokens": 4638,
+            "activeDurationMs": 37346.692799999655,
+            "nonModelActiveDurationMs": 8023.692799999662,
+            "reliableSuccesses": 0,
+            "artifactAccepted": 0
+          }
+        },
+        {
+          "taskId": "F01",
+          "family": "feature",
+          "shape": "single",
+          "reference": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 73647,
+              "outputTokens": 3554,
+              "activeDurationMs": 32386.33750000001,
+              "nonModelActiveDurationMs": 6597.337500000009,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 32079,
+              "outputTokens": 2111,
+              "activeDurationMs": 17797.479799999855,
+              "nonModelActiveDurationMs": 2339.4797999998555,
+              "summaryRequests": 0
+            }
+          ],
+          "variant": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 234388,
+              "outputTokens": 9574,
+              "activeDurationMs": 80986.95369999998,
+              "nonModelActiveDurationMs": 17870.953699999984,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 36970,
+              "outputTokens": 2121,
+              "activeDurationMs": 17590.589099999983,
+              "nonModelActiveDurationMs": 1880.5890999999829,
+              "summaryRequests": 0
+            }
+          ],
+          "fullMinusVariant": {
+            "tokens": -165632,
+            "outputTokens": -6030,
+            "activeDurationMs": -48393.7255000001,
+            "nonModelActiveDurationMs": -10814.725500000102,
+            "reliableSuccesses": 0,
+            "artifactAccepted": 0
+          }
+        },
+        {
+          "taskId": "F02",
+          "family": "feature",
+          "shape": "cross-module",
+          "reference": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 99013,
+              "outputTokens": 5718,
+              "activeDurationMs": 41591.91590000001,
+              "nonModelActiveDurationMs": 5337.915900000007,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 43710,
+              "outputTokens": 3453,
+              "activeDurationMs": 28225.92339999997,
+              "nonModelActiveDurationMs": 6023.923399999971,
+              "summaryRequests": 0
+            }
+          ],
+          "variant": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 44510,
+              "outputTokens": 3129,
+              "activeDurationMs": 20932.3718,
+              "nonModelActiveDurationMs": 2826.371800000001,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 104814,
+              "outputTokens": 8067,
+              "activeDurationMs": 54535.841000000015,
+              "nonModelActiveDurationMs": 3688.841000000015,
+              "summaryRequests": 0
+            }
+          ],
+          "fullMinusVariant": {
+            "tokens": -6601,
+            "outputTokens": -2025,
+            "activeDurationMs": -5650.373500000031,
+            "nonModelActiveDurationMs": 4846.626499999962,
+            "reliableSuccesses": 0,
+            "artifactAccepted": 0
+          }
+        },
+        {
+          "taskId": "R04",
+          "family": "refactor",
+          "shape": "multi-stage",
+          "reference": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 755800,
+              "outputTokens": 29182,
+              "activeDurationMs": 223489.3008000002,
+              "nonModelActiveDurationMs": 33220.3008000002,
+              "summaryRequests": 1
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 659792,
+              "outputTokens": 14704,
+              "activeDurationMs": 120777.05329999968,
+              "nonModelActiveDurationMs": 20054.05329999968,
+              "summaryRequests": 1
+            }
+          ],
+          "variant": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 344112,
+              "outputTokens": 10653,
+              "activeDurationMs": 98396.71250000002,
+              "nonModelActiveDurationMs": 22834.712500000023,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 810637,
+              "outputTokens": 16369,
+              "activeDurationMs": 135558.47349999996,
+              "nonModelActiveDurationMs": 29483.473499999964,
+              "summaryRequests": 1
+            }
+          ],
+          "fullMinusVariant": {
+            "tokens": 260843,
+            "outputTokens": 16864,
+            "activeDurationMs": 110311.1680999999,
+            "nonModelActiveDurationMs": 956.1680999998935,
+            "reliableSuccesses": 0,
+            "artifactAccepted": 0
+          }
+        },
+        {
+          "taskId": "T04",
+          "family": "mutation",
+          "shape": "multi-stage",
+          "reference": [
+            {
+              "repeat": 0,
+              "reliableSuccess": false,
+              "artifactAccepted": true,
+              "status": "token_budget",
+              "tokens": 993452,
+              "outputTokens": 28372,
+              "activeDurationMs": 226756.58509999997,
+              "nonModelActiveDurationMs": 40072.58509999997,
+              "summaryRequests": 2
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 485420,
+              "outputTokens": 20743,
+              "activeDurationMs": 168300.3219999998,
+              "nonModelActiveDurationMs": 27346.32199999981,
+              "summaryRequests": 0
+            }
+          ],
+          "variant": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 637332,
+              "outputTokens": 15704,
+              "activeDurationMs": 134354.73339999997,
+              "nonModelActiveDurationMs": 20356.73339999997,
+              "summaryRequests": 1
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 863668,
+              "outputTokens": 24368,
+              "activeDurationMs": 193021.70499999996,
+              "nonModelActiveDurationMs": 30296.704999999958,
+              "summaryRequests": 1
+            }
+          ],
+          "fullMinusVariant": {
+            "tokens": -22128,
+            "outputTokens": 9043,
+            "activeDurationMs": 67680.46869999985,
+            "nonModelActiveDurationMs": 16765.468699999852,
+            "reliableSuccesses": -1,
+            "artifactAccepted": 0
+          }
+        }
+      ],
+      "source": {
+        "changed": [
+          "src/core/tool-result-store.ts",
+          "src/plugins/tool-results.ts"
+        ],
+        "expected": [
+          "src/core/tool-result-store.ts",
+          "src/plugins/tool-results.ts"
+        ]
+      },
+      "offline": {
+        "status": "confirmed-adverse",
+        "readings": {
+          "suiteSha256": "34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28",
+          "tools": {
+            "cases": 12,
+            "referencePassed": 12,
+            "variantPassed": 0,
+            "referenceFullRecall": 12,
+            "variantFullRecall": 12,
+            "variantVisibleBytes": 531,
+            "variantOriginalBytes": 1945
+          },
+          "compaction": {
+            "cases": 3,
+            "referencePropertyReads": 32982,
+            "variantPropertyReads": 32982,
+            "referenceMedianMs": 7.627100000000013,
+            "variantMedianMs": 7.017400000000009,
+            "outputHashesMatch": true
+          },
+          "reports": {
+            "cases": 3,
+            "referenceSnapshotOpens": 6,
+            "variantSnapshotOpens": 6,
+            "outputHashesMatch": true
+          }
+        },
+        "probeSha256": "2bc349d71c1888b9eedf2b9c22b0439466399732c85521bde0ea665ff1ba0779",
+        "suiteSha256": "34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28"
+      },
+      "attribution": {
+        "status": "inconclusive",
+        "reasons": [
+          "repeat-directions-conflict",
+          "paid-direction-opposes-offline-mechanism"
+        ],
+        "thresholdPct": 5,
+        "qualityLoss": 0,
+        "qualityDifference": 1,
+        "qualityWithinTolerance": true,
+        "reviewRequired": false,
+        "repeatConsistent": false,
+        "deltaBasis": "full - no-X; positive means full consumed more or scored higher",
+        "resources": {
+          "outputTokens": {
+            "reference": 144037,
+            "variant": 135886,
+            "fullMinusVariant": 8151,
+            "percentVsFull": -0.05658962627658171,
+            "worseWhenRemoved": false,
+            "betterWhenRemoved": true
+          },
+          "activeDurationMs": {
+            "reference": 1159847.9699999993,
+            "variant": 1113724.9546,
+            "fullMinusVariant": 46123.01539999922,
+            "percentVsFull": -0.03976643197470031,
+            "worseWhenRemoved": false,
+            "betterWhenRemoved": false
+          },
+          "nonModelActiveDurationMs": {
+            "reference": 197177.96999999927,
+            "variant": 192254.95460000006,
+            "fullMinusVariant": 4923.015399999218,
+            "percentVsFull": -0.024967370340607708,
+            "worseWhenRemoved": false,
+            "betterWhenRemoved": false
+          }
+        },
+        "repeats": {
+          "outputTokens": {
+            "0": {
+              "reference": 89880,
+              "variant": 64046,
+              "percentVsFull": -0.287427681352915
+            },
+            "1": {
+              "reference": 54157,
+              "variant": 71840,
+              "percentVsFull": 0.32651365474453903
+            }
+          },
+          "activeDurationMs": {
+            "0": {
+              "reference": 714199.5909000002,
+              "variant": 557846.4846,
+              "percentVsFull": -0.21892074469403086
+            },
+            "1": {
+              "reference": 445648.3790999991,
+              "variant": 555878.4700000001,
+              "percentVsFull": 0.24734767603691082
+            }
+          },
+          "nonModelActiveDurationMs": {
+            "0": {
+              "reference": 121696.59090000018,
+              "variant": 107530.48459999997,
+              "percentVsFull": -0.11640512026865821
+            },
+            "1": {
+              "reference": 75481.37909999909,
+              "variant": 84724.47000000009,
+              "percentVsFull": 0.12245524671396885
+            }
+          }
+        },
+        "mechanism": "confirmed-adverse"
+      },
+      "reviewRequired": false
+    },
+    "no-projection": {
+      "variant": "no-projection",
+      "sourceBaseCommit": "de7558cb95f7ca98d5d3497f6293ed2371fb6c5d",
+      "evaluationCommit": "8a9f5c2310b9228253708b8470f1b0fab5c152fc",
+      "manifestDigest": "8c54ba9dac165e2c833afae2db0db3fd2ed3420f376aaad1862f191f5844b313",
+      "observationsDigest": "4cacd97e9c6bf8b912a137c220162dbd82fc533e69e3e38105cf889ee9566890",
+      "startedAt": "2026-10-27T13:43:54.912Z",
+      "finishedAt": "2026-10-27T14:01:57.415Z",
+      "spentUsdEstimate": 1.354099452,
+      "metrics": {
+        "reference": {
+          "planned": 12,
+          "executed": 12,
+          "reliableSuccesses": 11,
+          "artifactAccepted": 12,
+          "tokens": 3837343,
+          "inputTokens": 3693306,
+          "outputTokens": 144037,
+          "cacheReadTokens": 55040,
+          "providerTokens": 3837343,
+          "estimatedTokens": 0,
+          "activeDurationMs": 1159847.9699999993,
+          "modelActiveDurationMs": 962670,
+          "nonModelActiveDurationMs": 197177.96999999927,
+          "requests": 187,
+          "summaryRequests": 4,
+          "summaryDurationMs": 37535,
+          "toolCalls": 360,
+          "toolErrors": 24,
+          "previewTruncations": 18,
+          "pressureCompactions": 4,
+          "timeouts": 0
+        },
+        "variant": {
+          "planned": 12,
+          "executed": 12,
+          "reliableSuccesses": 12,
+          "artifactAccepted": 12,
+          "tokens": 4104495,
+          "inputTokens": 3970549,
+          "outputTokens": 133946,
+          "cacheReadTokens": 59392,
+          "providerTokens": 4104495,
+          "estimatedTokens": 0,
+          "activeDurationMs": 1033367.5398000001,
+          "modelActiveDurationMs": 932509,
+          "nonModelActiveDurationMs": 100858.53980000006,
+          "requests": 204,
+          "summaryRequests": 4,
+          "summaryDurationMs": 51446,
+          "toolCalls": 376,
+          "toolErrors": 28,
+          "previewTruncations": 21,
+          "pressureCompactions": 4,
+          "timeouts": 0
+        }
+      },
+      "resources": {
+        "tokens": {
+          "reference": 3837343,
+          "variant": 4104495,
+          "fullMinusVariant": -267152,
+          "percentVsFull": 0.06961900460813641,
+          "worseWhenRemoved": true,
+          "betterWhenRemoved": false
+        },
+        "outputTokens": {
+          "reference": 144037,
+          "variant": 133946,
+          "fullMinusVariant": 10091,
+          "percentVsFull": -0.07005838777536327,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": true
+        },
+        "cacheReadTokens": {
+          "reference": 55040,
+          "variant": 59392,
+          "fullMinusVariant": -4352,
+          "percentVsFull": 0.07906976744186046,
+          "worseWhenRemoved": true,
+          "betterWhenRemoved": false
+        },
+        "activeDurationMs": {
+          "reference": 1159847.9699999993,
+          "variant": 1033367.5398000001,
+          "fullMinusVariant": 126480.43019999913,
+          "percentVsFull": -0.10904914563931961,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": true
+        },
+        "modelActiveDurationMs": {
+          "reference": 962670,
+          "variant": 932509,
+          "fullMinusVariant": 30161,
+          "percentVsFull": -0.03133057018500628,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": false
+        },
+        "nonModelActiveDurationMs": {
+          "reference": 197177.96999999927,
+          "variant": 100858.53980000006,
+          "fullMinusVariant": 96319.43019999922,
+          "percentVsFull": -0.48848981557117954,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": true
+        },
+        "requests": {
+          "reference": 187,
+          "variant": 204,
+          "fullMinusVariant": -17,
+          "percentVsFull": 0.09090909090909091,
+          "worseWhenRemoved": true,
+          "betterWhenRemoved": false
+        },
+        "summaryRequests": {
+          "reference": 4,
+          "variant": 4,
+          "fullMinusVariant": 0,
+          "percentVsFull": 0,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": false
+        },
+        "summaryDurationMs": {
+          "reference": 37535,
+          "variant": 51446,
+          "fullMinusVariant": -13911,
+          "percentVsFull": 0.37061409351272145,
+          "worseWhenRemoved": true,
+          "betterWhenRemoved": false
+        },
+        "toolCalls": {
+          "reference": 360,
+          "variant": 376,
+          "fullMinusVariant": -16,
+          "percentVsFull": 0.044444444444444446,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": false
+        },
+        "toolErrors": {
+          "reference": 24,
+          "variant": 28,
+          "fullMinusVariant": -4,
+          "percentVsFull": 0.16666666666666666,
+          "worseWhenRemoved": true,
+          "betterWhenRemoved": false
+        },
+        "previewTruncations": {
+          "reference": 18,
+          "variant": 21,
+          "fullMinusVariant": -3,
+          "percentVsFull": 0.16666666666666666,
+          "worseWhenRemoved": true,
+          "betterWhenRemoved": false
+        },
+        "pressureCompactions": {
+          "reference": 4,
+          "variant": 4,
+          "fullMinusVariant": 0,
+          "percentVsFull": 0,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": false
+        }
+      },
+      "quality": {
+        "reliableCompletion": {
+          "reference": 11,
+          "variant": 12,
+          "fullMinusVariant": -1,
+          "tolerance": 1
+        },
+        "artifactAcceptance": {
+          "reference": 12,
+          "variant": 12,
+          "fullMinusVariant": 0,
+          "tolerance": 1
+        }
+      },
+      "tasks": [
+        {
+          "taskId": "U02",
+          "family": "comprehension",
+          "shape": "cross-module",
+          "reference": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 305348,
+              "outputTokens": 15529,
+              "activeDurationMs": 128439.2188,
+              "nonModelActiveDurationMs": 24552.218800000002,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 86347,
+              "outputTokens": 5314,
+              "activeDurationMs": 45686.98509999993,
+              "nonModelActiveDurationMs": 7667.985099999933,
+              "summaryRequests": 0
+            }
+          ],
+          "variant": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 423790,
+              "outputTokens": 17305,
+              "activeDurationMs": 118539.5552,
+              "nonModelActiveDurationMs": 9626.555200000003,
+              "summaryRequests": 1
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 207770,
+              "outputTokens": 9306,
+              "activeDurationMs": 80359.11249999993,
+              "nonModelActiveDurationMs": 11545.11249999993,
+              "summaryRequests": 0
+            }
+          ],
+          "fullMinusVariant": {
+            "tokens": -239865,
+            "outputTokens": -5768,
+            "activeDurationMs": -24772.463799999998,
+            "nonModelActiveDurationMs": 11048.536200000002,
+            "reliableSuccesses": 0,
+            "artifactAccepted": 0
+          }
+        },
+        {
+          "taskId": "B03",
+          "family": "bugfix",
+          "shape": "information",
+          "reference": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 153190,
+              "outputTokens": 7525,
+              "activeDurationMs": 61536.232800000005,
+              "nonModelActiveDurationMs": 11916.232800000005,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 149545,
+              "outputTokens": 7832,
+              "activeDurationMs": 64860.61549999984,
+              "nonModelActiveDurationMs": 12049.61549999984,
+              "summaryRequests": 0
+            }
+          ],
+          "variant": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 196898,
+              "outputTokens": 7313,
+              "activeDurationMs": 56931.906200000005,
+              "nonModelActiveDurationMs": 4611.906200000005,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 256596,
+              "outputTokens": 10746,
+              "activeDurationMs": 82696.93110000005,
+              "nonModelActiveDurationMs": 9676.931100000045,
+              "summaryRequests": 0
+            }
+          ],
+          "fullMinusVariant": {
+            "tokens": -150759,
+            "outputTokens": -2702,
+            "activeDurationMs": -13231.989000000205,
+            "nonModelActiveDurationMs": 9677.010999999795,
+            "reliableSuccesses": 0,
+            "artifactAccepted": 0
+          }
+        },
+        {
+          "taskId": "F01",
+          "family": "feature",
+          "shape": "single",
+          "reference": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 73647,
+              "outputTokens": 3554,
+              "activeDurationMs": 32386.33750000001,
+              "nonModelActiveDurationMs": 6597.337500000009,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 32079,
+              "outputTokens": 2111,
+              "activeDurationMs": 17797.479799999855,
+              "nonModelActiveDurationMs": 2339.4797999998555,
+              "summaryRequests": 0
+            }
+          ],
+          "variant": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 30602,
+              "outputTokens": 2555,
+              "activeDurationMs": 19075.675499999998,
+              "nonModelActiveDurationMs": 1102.6754999999976,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 85145,
+              "outputTokens": 2772,
+              "activeDurationMs": 27110.38439999998,
+              "nonModelActiveDurationMs": 2784.384399999981,
+              "summaryRequests": 0
+            }
+          ],
+          "fullMinusVariant": {
+            "tokens": -10021,
+            "outputTokens": 338,
+            "activeDurationMs": 3997.757399999886,
+            "nonModelActiveDurationMs": 5049.757399999886,
+            "reliableSuccesses": 0,
+            "artifactAccepted": 0
+          }
+        },
+        {
+          "taskId": "F02",
+          "family": "feature",
+          "shape": "cross-module",
+          "reference": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 99013,
+              "outputTokens": 5718,
+              "activeDurationMs": 41591.91590000001,
+              "nonModelActiveDurationMs": 5337.915900000007,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 43710,
+              "outputTokens": 3453,
+              "activeDurationMs": 28225.92339999997,
+              "nonModelActiveDurationMs": 6023.923399999971,
+              "summaryRequests": 0
+            }
+          ],
+          "variant": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 55940,
+              "outputTokens": 4679,
+              "activeDurationMs": 33177.424399999996,
+              "nonModelActiveDurationMs": 3862.4243999999962,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 168901,
+              "outputTokens": 8644,
+              "activeDurationMs": 60968.588200000115,
+              "nonModelActiveDurationMs": 4155.588200000115,
+              "summaryRequests": 0
+            }
+          ],
+          "fullMinusVariant": {
+            "tokens": -82118,
+            "outputTokens": -4152,
+            "activeDurationMs": -24328.173300000126,
+            "nonModelActiveDurationMs": 3343.826699999867,
+            "reliableSuccesses": 0,
+            "artifactAccepted": 0
+          }
+        },
+        {
+          "taskId": "R04",
+          "family": "refactor",
+          "shape": "multi-stage",
+          "reference": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 755800,
+              "outputTokens": 29182,
+              "activeDurationMs": 223489.3008000002,
+              "nonModelActiveDurationMs": 33220.3008000002,
+              "summaryRequests": 1
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 659792,
+              "outputTokens": 14704,
+              "activeDurationMs": 120777.05329999968,
+              "nonModelActiveDurationMs": 20054.05329999968,
+              "summaryRequests": 1
+            }
+          ],
+          "variant": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 743909,
+              "outputTokens": 17339,
+              "activeDurationMs": 132674.08379999996,
+              "nonModelActiveDurationMs": 14015.083799999964,
+              "summaryRequests": 1
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 599373,
+              "outputTokens": 15489,
+              "activeDurationMs": 132357.635,
+              "nonModelActiveDurationMs": 14935.63500000001,
+              "summaryRequests": 1
+            }
+          ],
+          "fullMinusVariant": {
+            "tokens": 72310,
+            "outputTokens": 11058,
+            "activeDurationMs": 79234.6352999999,
+            "nonModelActiveDurationMs": 24323.635299999907,
+            "reliableSuccesses": 0,
+            "artifactAccepted": 0
+          }
+        },
+        {
+          "taskId": "T04",
+          "family": "mutation",
+          "shape": "multi-stage",
+          "reference": [
+            {
+              "repeat": 0,
+              "reliableSuccess": false,
+              "artifactAccepted": true,
+              "status": "token_budget",
+              "tokens": 993452,
+              "outputTokens": 28372,
+              "activeDurationMs": 226756.58509999997,
+              "nonModelActiveDurationMs": 40072.58509999997,
+              "summaryRequests": 2
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 485420,
+              "outputTokens": 20743,
+              "activeDurationMs": 168300.3219999998,
+              "nonModelActiveDurationMs": 27346.32199999981,
+              "summaryRequests": 0
+            }
+          ],
+          "variant": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 837010,
+              "outputTokens": 26625,
+              "activeDurationMs": 193865.98509999996,
+              "nonModelActiveDurationMs": 14805.985099999962,
+              "summaryRequests": 1
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 498561,
+              "outputTokens": 11173,
+              "activeDurationMs": 95610.25840000005,
+              "nonModelActiveDurationMs": 9736.25840000005,
+              "summaryRequests": 0
+            }
+          ],
+          "fullMinusVariant": {
+            "tokens": 143301,
+            "outputTokens": 11317,
+            "activeDurationMs": 105580.6635999998,
+            "nonModelActiveDurationMs": 42876.66359999977,
+            "reliableSuccesses": -1,
+            "artifactAccepted": 0
+          }
+        }
+      ],
+      "source": {
+        "changed": [
+          "src/core/compaction-plan.ts"
+        ],
+        "expected": [
+          "src/core/compaction-plan.ts"
+        ]
+      },
+      "offline": {
+        "status": "confirmed-adverse",
+        "readings": {
+          "suiteSha256": "34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28",
+          "tools": {
+            "cases": 12,
+            "referencePassed": 12,
+            "variantPassed": 12,
+            "referenceFullRecall": 12,
+            "variantFullRecall": 12,
+            "variantVisibleBytes": 507,
+            "variantOriginalBytes": 1945
+          },
+          "compaction": {
+            "cases": 3,
+            "referencePropertyReads": 32982,
+            "variantPropertyReads": 2284323,
+            "referenceMedianMs": 7.627100000000013,
+            "variantMedianMs": 15.603800000000007,
+            "outputHashesMatch": true
+          },
+          "reports": {
+            "cases": 3,
+            "referenceSnapshotOpens": 6,
+            "variantSnapshotOpens": 6,
+            "outputHashesMatch": true
+          }
+        },
+        "probeSha256": "bed70a1ed0a94dc7d18cbeeab25ea81e760431807bfa430f3e6263f2b87a3ccc",
+        "suiteSha256": "34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28"
+      },
+      "attribution": {
+        "status": "inconclusive",
+        "reasons": [
+          "paid-direction-opposes-offline-mechanism"
+        ],
+        "thresholdPct": 5,
+        "qualityLoss": 0,
+        "qualityDifference": 1,
+        "qualityWithinTolerance": true,
+        "reviewRequired": false,
+        "repeatConsistent": true,
+        "deltaBasis": "full - no-X; positive means full consumed more or scored higher",
+        "resources": {
+          "outputTokens": {
+            "reference": 144037,
+            "variant": 133946,
+            "fullMinusVariant": 10091,
+            "percentVsFull": -0.07005838777536327,
+            "worseWhenRemoved": false,
+            "betterWhenRemoved": true
+          },
+          "activeDurationMs": {
+            "reference": 1159847.9699999993,
+            "variant": 1033367.5398000001,
+            "fullMinusVariant": 126480.43019999913,
+            "percentVsFull": -0.10904914563931961,
+            "worseWhenRemoved": false,
+            "betterWhenRemoved": true
+          },
+          "nonModelActiveDurationMs": {
+            "reference": 197177.96999999927,
+            "variant": 100858.53980000006,
+            "fullMinusVariant": 96319.43019999922,
+            "percentVsFull": -0.48848981557117954,
+            "worseWhenRemoved": false,
+            "betterWhenRemoved": true
+          }
+        },
+        "repeats": {
+          "outputTokens": {
+            "0": {
+              "reference": 89880,
+              "variant": 75816,
+              "percentVsFull": -0.15647530040053403
+            },
+            "1": {
+              "reference": 54157,
+              "variant": 58130,
+              "percentVsFull": 0.07336078438613661
+            }
+          },
+          "activeDurationMs": {
+            "0": {
+              "reference": 714199.5909000002,
+              "variant": 554264.6302,
+              "percentVsFull": -0.2239359455505397
+            },
+            "1": {
+              "reference": 445648.3790999991,
+              "variant": 479102.90960000013,
+              "percentVsFull": 0.07506934181509538
+            }
+          },
+          "nonModelActiveDurationMs": {
+            "0": {
+              "reference": 121696.59090000018,
+              "variant": 48024.63019999993,
+              "percentVsFull": -0.605374071329061
+            },
+            "1": {
+              "reference": 75481.37909999909,
+              "variant": 52833.90960000013,
+              "percentVsFull": -0.30004048375951353
+            }
+          }
+        },
+        "mechanism": "confirmed-adverse"
+      },
+      "reviewRequired": false
+    },
+    "no-report": {
+      "variant": "no-report",
+      "sourceBaseCommit": "ddc04fc951edf3b567d9b19405e52f9b85a5aecd",
+      "evaluationCommit": "d3a8429cad3b3d306ac7fa04df21694c69fb4d46",
+      "manifestDigest": "5627852b418a0857291c4e27e654f51736f4c8347c454214064711457b841688",
+      "observationsDigest": "f7b789779b2bf4fa972cce396fcf3c3aa81066407c426e794d37ecaa14d69ee8",
+      "startedAt": "2026-10-28T00:49:51.272Z",
+      "finishedAt": "2026-10-28T01:08:41.932Z",
+      "spentUsdEstimate": 1.3351972679999993,
+      "metrics": {
+        "reference": {
+          "planned": 12,
+          "executed": 12,
+          "reliableSuccesses": 11,
+          "artifactAccepted": 12,
+          "tokens": 3837343,
+          "inputTokens": 3693306,
+          "outputTokens": 144037,
+          "cacheReadTokens": 55040,
+          "providerTokens": 3837343,
+          "estimatedTokens": 0,
+          "activeDurationMs": 1159847.9699999993,
+          "modelActiveDurationMs": 962670,
+          "nonModelActiveDurationMs": 197177.96999999927,
+          "requests": 187,
+          "summaryRequests": 4,
+          "summaryDurationMs": 37535,
+          "toolCalls": 360,
+          "toolErrors": 24,
+          "previewTruncations": 18,
+          "pressureCompactions": 4,
+          "timeouts": 0
+        },
+        "variant": {
+          "planned": 12,
+          "executed": 12,
+          "reliableSuccesses": 11,
+          "artifactAccepted": 12,
+          "tokens": 3991581,
+          "inputTokens": 3841543,
+          "outputTokens": 150038,
+          "cacheReadTokens": 57728,
+          "providerTokens": 3991581,
+          "estimatedTokens": 0,
+          "activeDurationMs": 1071807.0061000003,
+          "modelActiveDurationMs": 962446,
+          "nonModelActiveDurationMs": 109361.00610000026,
+          "requests": 189,
+          "summaryRequests": 5,
+          "summaryDurationMs": 89496,
+          "toolCalls": 338,
+          "toolErrors": 27,
+          "previewTruncations": 23,
+          "pressureCompactions": 5,
+          "timeouts": 0
+        }
+      },
+      "resources": {
+        "tokens": {
+          "reference": 3837343,
+          "variant": 3991581,
+          "fullMinusVariant": -154238,
+          "percentVsFull": 0.04019395712085159,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": false
+        },
+        "outputTokens": {
+          "reference": 144037,
+          "variant": 150038,
+          "fullMinusVariant": -6001,
+          "percentVsFull": 0.041662906058859875,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": false
+        },
+        "cacheReadTokens": {
+          "reference": 55040,
+          "variant": 57728,
+          "fullMinusVariant": -2688,
+          "percentVsFull": 0.04883720930232558,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": false
+        },
+        "activeDurationMs": {
+          "reference": 1159847.9699999993,
+          "variant": 1071807.0061000003,
+          "fullMinusVariant": 88040.96389999893,
+          "percentVsFull": -0.07590733111340357,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": true
+        },
+        "modelActiveDurationMs": {
+          "reference": 962670,
+          "variant": 962446,
+          "fullMinusVariant": 224,
+          "percentVsFull": -0.00023268617490936665,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": false
+        },
+        "nonModelActiveDurationMs": {
+          "reference": 197177.96999999927,
+          "variant": 109361.00610000026,
+          "fullMinusVariant": 87816.96389999901,
+          "percentVsFull": -0.445369043509269,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": true
+        },
+        "requests": {
+          "reference": 187,
+          "variant": 189,
+          "fullMinusVariant": -2,
+          "percentVsFull": 0.0106951871657754,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": false
+        },
+        "summaryRequests": {
+          "reference": 4,
+          "variant": 5,
+          "fullMinusVariant": -1,
+          "percentVsFull": 0.25,
+          "worseWhenRemoved": true,
+          "betterWhenRemoved": false
+        },
+        "summaryDurationMs": {
+          "reference": 37535,
+          "variant": 89496,
+          "fullMinusVariant": -51961,
+          "percentVsFull": 1.384334621020381,
+          "worseWhenRemoved": true,
+          "betterWhenRemoved": false
+        },
+        "toolCalls": {
+          "reference": 360,
+          "variant": 338,
+          "fullMinusVariant": 22,
+          "percentVsFull": -0.06111111111111111,
+          "worseWhenRemoved": false,
+          "betterWhenRemoved": true
+        },
+        "toolErrors": {
+          "reference": 24,
+          "variant": 27,
+          "fullMinusVariant": -3,
+          "percentVsFull": 0.125,
+          "worseWhenRemoved": true,
+          "betterWhenRemoved": false
+        },
+        "previewTruncations": {
+          "reference": 18,
+          "variant": 23,
+          "fullMinusVariant": -5,
+          "percentVsFull": 0.2777777777777778,
+          "worseWhenRemoved": true,
+          "betterWhenRemoved": false
+        },
+        "pressureCompactions": {
+          "reference": 4,
+          "variant": 5,
+          "fullMinusVariant": -1,
+          "percentVsFull": 0.25,
+          "worseWhenRemoved": true,
+          "betterWhenRemoved": false
+        }
+      },
+      "quality": {
+        "reliableCompletion": {
+          "reference": 11,
+          "variant": 11,
+          "fullMinusVariant": 0,
+          "tolerance": 1
+        },
+        "artifactAcceptance": {
+          "reference": 12,
+          "variant": 12,
+          "fullMinusVariant": 0,
+          "tolerance": 1
+        }
+      },
+      "tasks": [
+        {
+          "taskId": "U02",
+          "family": "comprehension",
+          "shape": "cross-module",
+          "reference": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 305348,
+              "outputTokens": 15529,
+              "activeDurationMs": 128439.2188,
+              "nonModelActiveDurationMs": 24552.218800000002,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 86347,
+              "outputTokens": 5314,
+              "activeDurationMs": 45686.98509999993,
+              "nonModelActiveDurationMs": 7667.985099999933,
+              "summaryRequests": 0
+            }
+          ],
+          "variant": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 432671,
+              "outputTokens": 30815,
+              "activeDurationMs": 205642.96160000004,
+              "nonModelActiveDurationMs": 11327.961600000039,
+              "summaryRequests": 1
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 154216,
+              "outputTokens": 9617,
+              "activeDurationMs": 66852.5872999999,
+              "nonModelActiveDurationMs": 7542.587299999897,
+              "summaryRequests": 0
+            }
+          ],
+          "fullMinusVariant": {
+            "tokens": -195192,
+            "outputTokens": -19589,
+            "activeDurationMs": -98369.345,
+            "nonModelActiveDurationMs": 13349.654999999999,
+            "reliableSuccesses": 0,
+            "artifactAccepted": 0
+          }
+        },
+        {
+          "taskId": "B03",
+          "family": "bugfix",
+          "shape": "information",
+          "reference": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 153190,
+              "outputTokens": 7525,
+              "activeDurationMs": 61536.232800000005,
+              "nonModelActiveDurationMs": 11916.232800000005,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 149545,
+              "outputTokens": 7832,
+              "activeDurationMs": 64860.61549999984,
+              "nonModelActiveDurationMs": 12049.61549999984,
+              "summaryRequests": 0
+            }
+          ],
+          "variant": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 165070,
+              "outputTokens": 7847,
+              "activeDurationMs": 53171.0976,
+              "nonModelActiveDurationMs": 4856.097600000001,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 122053,
+              "outputTokens": 5189,
+              "activeDurationMs": 41729.98989999993,
+              "nonModelActiveDurationMs": 5869.989899999928,
+              "summaryRequests": 0
+            }
+          ],
+          "fullMinusVariant": {
+            "tokens": 15612,
+            "outputTokens": 2321,
+            "activeDurationMs": 31495.7607999999,
+            "nonModelActiveDurationMs": 13239.760799999916,
+            "reliableSuccesses": 0,
+            "artifactAccepted": 0
+          }
+        },
+        {
+          "taskId": "F01",
+          "family": "feature",
+          "shape": "single",
+          "reference": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 73647,
+              "outputTokens": 3554,
+              "activeDurationMs": 32386.33750000001,
+              "nonModelActiveDurationMs": 6597.337500000009,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 32079,
+              "outputTokens": 2111,
+              "activeDurationMs": 17797.479799999855,
+              "nonModelActiveDurationMs": 2339.4797999998555,
+              "summaryRequests": 0
+            }
+          ],
+          "variant": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 34387,
+              "outputTokens": 1596,
+              "activeDurationMs": 13157.217399999994,
+              "nonModelActiveDurationMs": 1584.217399999994,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 35408,
+              "outputTokens": 1683,
+              "activeDurationMs": 13003.228200000012,
+              "nonModelActiveDurationMs": 1157.2282000000123,
+              "summaryRequests": 0
+            }
+          ],
+          "fullMinusVariant": {
+            "tokens": 35931,
+            "outputTokens": 2386,
+            "activeDurationMs": 24023.371699999858,
+            "nonModelActiveDurationMs": 6195.371699999858,
+            "reliableSuccesses": 0,
+            "artifactAccepted": 0
+          }
+        },
+        {
+          "taskId": "F02",
+          "family": "feature",
+          "shape": "cross-module",
+          "reference": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 99013,
+              "outputTokens": 5718,
+              "activeDurationMs": 41591.91590000001,
+              "nonModelActiveDurationMs": 5337.915900000007,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 43710,
+              "outputTokens": 3453,
+              "activeDurationMs": 28225.92339999997,
+              "nonModelActiveDurationMs": 6023.923399999971,
+              "summaryRequests": 0
+            }
+          ],
+          "variant": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 48499,
+              "outputTokens": 3803,
+              "activeDurationMs": 26659.919499999996,
+              "nonModelActiveDurationMs": 3632.9194999999963,
+              "summaryRequests": 0
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 62896,
+              "outputTokens": 5321,
+              "activeDurationMs": 35320.48250000016,
+              "nonModelActiveDurationMs": 3528.4825000001583,
+              "summaryRequests": 0
+            }
+          ],
+          "fullMinusVariant": {
+            "tokens": 31328,
+            "outputTokens": 47,
+            "activeDurationMs": 7837.437299999823,
+            "nonModelActiveDurationMs": 4200.437299999823,
+            "reliableSuccesses": 0,
+            "artifactAccepted": 0
+          }
+        },
+        {
+          "taskId": "R04",
+          "family": "refactor",
+          "shape": "multi-stage",
+          "reference": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 755800,
+              "outputTokens": 29182,
+              "activeDurationMs": 223489.3008000002,
+              "nonModelActiveDurationMs": 33220.3008000002,
+              "summaryRequests": 1
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 659792,
+              "outputTokens": 14704,
+              "activeDurationMs": 120777.05329999968,
+              "nonModelActiveDurationMs": 20054.05329999968,
+              "summaryRequests": 1
+            }
+          ],
+          "variant": [
+            {
+              "repeat": 0,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 587012,
+              "outputTokens": 15643,
+              "activeDurationMs": 115973.01090000011,
+              "nonModelActiveDurationMs": 12557.01090000011,
+              "summaryRequests": 1
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 545692,
+              "outputTokens": 11422,
+              "activeDurationMs": 91038.24280000024,
+              "nonModelActiveDurationMs": 9578.24280000024,
+              "summaryRequests": 0
+            }
+          ],
+          "fullMinusVariant": {
+            "tokens": 282888,
+            "outputTokens": 16821,
+            "activeDurationMs": 137255.10039999953,
+            "nonModelActiveDurationMs": 31139.10039999953,
+            "reliableSuccesses": 0,
+            "artifactAccepted": 0
+          }
+        },
+        {
+          "taskId": "T04",
+          "family": "mutation",
+          "shape": "multi-stage",
+          "reference": [
+            {
+              "repeat": 0,
+              "reliableSuccess": false,
+              "artifactAccepted": true,
+              "status": "token_budget",
+              "tokens": 993452,
+              "outputTokens": 28372,
+              "activeDurationMs": 226756.58509999997,
+              "nonModelActiveDurationMs": 40072.58509999997,
+              "summaryRequests": 2
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 485420,
+              "outputTokens": 20743,
+              "activeDurationMs": 168300.3219999998,
+              "nonModelActiveDurationMs": 27346.32199999981,
+              "summaryRequests": 0
+            }
+          ],
+          "variant": [
+            {
+              "repeat": 0,
+              "reliableSuccess": false,
+              "artifactAccepted": true,
+              "status": "token_budget",
+              "tokens": 990146,
+              "outputTokens": 30562,
+              "activeDurationMs": 208570.45040000003,
+              "nonModelActiveDurationMs": 22442.45040000003,
+              "summaryRequests": 2
+            },
+            {
+              "repeat": 1,
+              "reliableSuccess": true,
+              "artifactAccepted": true,
+              "status": "completed",
+              "tokens": 813531,
+              "outputTokens": 26540,
+              "activeDurationMs": 200687.81799999985,
+              "nonModelActiveDurationMs": 25283.817999999854,
+              "summaryRequests": 1
+            }
+          ],
+          "fullMinusVariant": {
+            "tokens": -324805,
+            "outputTokens": -7987,
+            "activeDurationMs": -14201.361300000106,
+            "nonModelActiveDurationMs": 19692.638699999894,
+            "reliableSuccesses": 0,
+            "artifactAccepted": 0
+          }
+        }
+      ],
+      "source": {
+        "changed": [
+          "src/core/file-edit.ts",
+          "src/core/task-changes.ts",
+          "src/core/task-verification.ts"
+        ],
+        "expected": [
+          "src/core/file-edit.ts",
+          "src/core/task-changes.ts",
+          "src/core/task-verification.ts"
+        ]
+      },
+      "offline": {
+        "status": "confirmed-adverse",
+        "readings": {
+          "suiteSha256": "34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28",
+          "tools": {
+            "cases": 12,
+            "referencePassed": 12,
+            "variantPassed": 12,
+            "referenceFullRecall": 12,
+            "variantFullRecall": 12,
+            "variantVisibleBytes": 507,
+            "variantOriginalBytes": 1945
+          },
+          "compaction": {
+            "cases": 3,
+            "referencePropertyReads": 32982,
+            "variantPropertyReads": 32982,
+            "referenceMedianMs": 7.627100000000013,
+            "variantMedianMs": 7.531099999999952,
+            "outputHashesMatch": true
+          },
+          "reports": {
+            "cases": 3,
+            "referenceSnapshotOpens": 6,
+            "variantSnapshotOpens": 91,
+            "outputHashesMatch": true
+          }
+        },
+        "probeSha256": "5ddee78b413895e23e2bc96e4aa7a2fe03495f1f437eedb793ad722f3a2eb62a",
+        "suiteSha256": "34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28"
+      },
+      "attribution": {
+        "status": "inconclusive",
+        "reasons": [
+          "paid-direction-opposes-offline-mechanism"
+        ],
+        "thresholdPct": 5,
+        "qualityLoss": 0,
+        "qualityDifference": 0,
+        "qualityWithinTolerance": true,
+        "reviewRequired": false,
+        "repeatConsistent": true,
+        "deltaBasis": "full - no-X; positive means full consumed more or scored higher",
+        "resources": {
+          "outputTokens": {
+            "reference": 144037,
+            "variant": 150038,
+            "fullMinusVariant": -6001,
+            "percentVsFull": 0.041662906058859875,
+            "worseWhenRemoved": false,
+            "betterWhenRemoved": false
+          },
+          "activeDurationMs": {
+            "reference": 1159847.9699999993,
+            "variant": 1071807.0061000003,
+            "fullMinusVariant": 88040.96389999893,
+            "percentVsFull": -0.07590733111340357,
+            "worseWhenRemoved": false,
+            "betterWhenRemoved": true
+          },
+          "nonModelActiveDurationMs": {
+            "reference": 197177.96999999927,
+            "variant": 109361.00610000026,
+            "fullMinusVariant": 87816.96389999901,
+            "percentVsFull": -0.445369043509269,
+            "worseWhenRemoved": false,
+            "betterWhenRemoved": true
+          }
+        },
+        "repeats": {
+          "outputTokens": {
+            "0": {
+              "reference": 89880,
+              "variant": 90266,
+              "percentVsFull": 0.004294615042278594
+            },
+            "1": {
+              "reference": 54157,
+              "variant": 59772,
+              "percentVsFull": 0.10368004136122755
+            }
+          },
+          "activeDurationMs": {
+            "0": {
+              "reference": 714199.5909000002,
+              "variant": 623174.6574000001,
+              "percentVsFull": -0.12745027392874136
+            },
+            "1": {
+              "reference": 445648.3790999991,
+              "variant": 448632.3487000001,
+              "percentVsFull": 0.006695793679373907
+            }
+          },
+          "nonModelActiveDurationMs": {
+            "0": {
+              "reference": 121696.59090000018,
+              "variant": 56400.65740000017,
+              "percentVsFull": -0.536546940362977
+            },
+            "1": {
+              "reference": 75481.37909999909,
+              "variant": 52960.34870000009,
+              "percentVsFull": -0.298365380555153
+            }
+          }
+        },
+        "mechanism": "confirmed-adverse"
+      },
+      "reviewRequired": false
+    }
+  },
+  "checks": {
+    "protocol": true,
+    "split": true,
+    "tasks": true,
+    "episodes": true,
+    "arms": true,
+    "seed": true,
+    "tierWindow": true,
+    "model": true,
+    "priceSnapshot": true,
+    "toolSchema": true,
+    "environment": true,
+    "packageJson": true,
+    "complete": true,
+    "providerCoverage": true,
+    "batchOrder": true,
+    "sourcePaths": true,
+    "probes": true
+  },
+  "measurementLimits": [
+    "Six tasks x two repeats per arm; this is a development-only descriptive attribution, not a significance test or a generalization claim.",
+    "The four batches ran sequentially; provider prompt cache may be shared and no causal latency claim is made.",
+    "Token totals are input + output from provider usage; cache-hit savings are reported separately and are not treated as total-token reductions.",
+    "nonModelActiveDurationMs = activeDurationMs - sum(requestDurationsMs), clipped at zero. It includes tool execution, isolation and local I/O; it is a proxy, not CPU time.",
+    "Offline probes measure mechanism cost and information retention, not model behavior. They do not upgrade a paid result to a signal by themselves."
+  ]
+}

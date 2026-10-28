@@ -1,0 +1,4023 @@
+{
+  "old-c17145a-context-12": {
+    "episodes": [
+      {
+        "episode": "000-R04-0-context",
+        "wallMs": 67138,
+        "requests": {
+          "main": 23,
+          "summary": 0,
+          "mainMs": 60391,
+          "summaryMs": 0,
+          "modelMs": 60391,
+          "inputTokens": 330280,
+          "outputTokens": 9410,
+          "reasoningTokens": 2404,
+          "summaryOutputTokens": 0,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 0,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 716,
+              "out": 78,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 935,
+              "out": 141,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1376,
+              "out": 267,
+              "reasoning": 19
+            },
+            {
+              "kind": "main",
+              "ms": 1292,
+              "out": 173,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 3769,
+              "out": 642,
+              "reasoning": 460
+            },
+            {
+              "kind": "main",
+              "ms": 2050,
+              "out": 436,
+              "reasoning": 76
+            },
+            {
+              "kind": "main",
+              "ms": 638,
+              "out": 65,
+              "reasoning": 13
+            },
+            {
+              "kind": "main",
+              "ms": 3040,
+              "out": 454,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 4715,
+              "out": 1072,
+              "reasoning": 245
+            },
+            {
+              "kind": "main",
+              "ms": 3615,
+              "out": 698,
+              "reasoning": 77
+            },
+            {
+              "kind": "main",
+              "ms": 2038,
+              "out": 83,
+              "reasoning": 26
+            },
+            {
+              "kind": "main",
+              "ms": 879,
+              "out": 78,
+              "reasoning": 26
+            },
+            {
+              "kind": "main",
+              "ms": 3162,
+              "out": 541,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 3357,
+              "out": 354,
+              "reasoning": 310
+            },
+            {
+              "kind": "main",
+              "ms": 1502,
+              "out": 189,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 4897,
+              "out": 945,
+              "reasoning": 200
+            },
+            {
+              "kind": "main",
+              "ms": 1213,
+              "out": 105,
+              "reasoning": 53
+            },
+            {
+              "kind": "main",
+              "ms": 3716,
+              "out": 561,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 4054,
+              "out": 486,
+              "reasoning": 441
+            },
+            {
+              "kind": "main",
+              "ms": 1497,
+              "out": 141,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 3953,
+              "out": 823,
+              "reasoning": 77
+            },
+            {
+              "kind": "main",
+              "ms": 2898,
+              "out": 318,
+              "reasoning": 222
+            },
+            {
+              "kind": "main",
+              "ms": 5079,
+              "out": 760,
+              "reasoning": 159
+            }
+          ]
+        },
+        "tools": {
+          "calls": 47,
+          "errors": 1,
+          "toolMs": 6490,
+          "byName": {
+            "glob": {
+              "calls": 1,
+              "durationMs": 11,
+              "errors": 0,
+              "resultBytes": 548
+            },
+            "project_context": {
+              "calls": 1,
+              "durationMs": 3,
+              "errors": 0,
+              "resultBytes": 385
+            },
+            "read_file": {
+              "calls": 18,
+              "durationMs": 123,
+              "errors": 0,
+              "resultBytes": 6017
+            },
+            "write_file": {
+              "calls": 3,
+              "durationMs": 46,
+              "errors": 0,
+              "resultBytes": 2774
+            },
+            "bash": {
+              "calls": 4,
+              "durationMs": 6090,
+              "errors": 0,
+              "resultBytes": 6479
+            },
+            "task_changes": {
+              "calls": 4,
+              "durationMs": 29,
+              "errors": 0,
+              "resultBytes": 9778
+            },
+            "task_report": {
+              "calls": 4,
+              "durationMs": 65,
+              "errors": 0,
+              "resultBytes": 12682
+            },
+            "edit_file": {
+              "calls": 6,
+              "durationMs": 59,
+              "errors": 0,
+              "resultBytes": 2475
+            },
+            "grep": {
+              "calls": 6,
+              "durationMs": 64,
+              "errors": 1,
+              "resultBytes": 1246
+            }
+          }
+        },
+        "overheadMs": 257,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "001-U02-0-context",
+        "wallMs": 160140,
+        "requests": {
+          "main": 21,
+          "summary": 1,
+          "mainMs": 137057,
+          "summaryMs": 12472,
+          "modelMs": 149529,
+          "inputTokens": 490173,
+          "outputTokens": 25740,
+          "reasoningTokens": 17561,
+          "summaryOutputTokens": 2427,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 4,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 655,
+              "out": 81,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 713,
+              "out": 50,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 876,
+              "out": 59,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 946,
+              "out": 85,
+              "reasoning": 14
+            },
+            {
+              "kind": "main",
+              "ms": 55479,
+              "out": 11034,
+              "reasoning": 8613
+            },
+            {
+              "kind": "main",
+              "ms": 2224,
+              "out": 302,
+              "reasoning": 247
+            },
+            {
+              "kind": "main",
+              "ms": 1292,
+              "out": 151,
+              "reasoning": 25
+            },
+            {
+              "kind": "main",
+              "ms": 15168,
+              "out": 2625,
+              "reasoning": 2486
+            },
+            {
+              "kind": "main",
+              "ms": 3334,
+              "out": 457,
+              "reasoning": 365
+            },
+            {
+              "kind": "main",
+              "ms": 2158,
+              "out": 200,
+              "reasoning": 107
+            },
+            {
+              "kind": "main",
+              "ms": 2503,
+              "out": 284,
+              "reasoning": 124
+            },
+            {
+              "kind": "main",
+              "ms": 3980,
+              "out": 669,
+              "reasoning": 462
+            },
+            {
+              "kind": "main",
+              "ms": 4964,
+              "out": 690,
+              "reasoning": 612
+            },
+            {
+              "kind": "main",
+              "ms": 10111,
+              "out": 1582,
+              "reasoning": 1500
+            },
+            {
+              "kind": "main",
+              "ms": 6200,
+              "out": 990,
+              "reasoning": 776
+            },
+            {
+              "kind": "main",
+              "ms": 9224,
+              "out": 1641,
+              "reasoning": 1368
+            },
+            {
+              "kind": "main",
+              "ms": 3729,
+              "out": 568,
+              "reasoning": 155
+            },
+            {
+              "kind": "main",
+              "ms": 3498,
+              "out": 469,
+              "reasoning": 381
+            },
+            {
+              "kind": "main",
+              "ms": 1324,
+              "out": 32,
+              "reasoning": 10
+            },
+            {
+              "kind": "main",
+              "ms": 1635,
+              "out": 67,
+              "reasoning": 10
+            },
+            {
+              "kind": "summary",
+              "ms": 12472,
+              "out": 2427,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 7044,
+              "out": 1277,
+              "reasoning": 306
+            }
+          ]
+        },
+        "tools": {
+          "calls": 23,
+          "errors": 1,
+          "toolMs": 10460,
+          "byName": {
+            "bash": {
+              "calls": 17,
+              "durationMs": 10366,
+              "errors": 1,
+              "resultBytes": 20608
+            },
+            "read_file": {
+              "calls": 2,
+              "durationMs": 19,
+              "errors": 0,
+              "resultBytes": 3758
+            },
+            "write_file": {
+              "calls": 1,
+              "durationMs": 24,
+              "errors": 0,
+              "resultBytes": 9413
+            },
+            "task_changes": {
+              "calls": 1,
+              "durationMs": 2,
+              "errors": 0,
+              "resultBytes": 10043
+            },
+            "task_report": {
+              "calls": 2,
+              "durationMs": 49,
+              "errors": 0,
+              "resultBytes": 21545
+            }
+          }
+        },
+        "overheadMs": 151,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "002-F01-0-context",
+        "wallMs": 36223,
+        "requests": {
+          "main": 14,
+          "summary": 0,
+          "mainMs": 32991,
+          "summaryMs": 0,
+          "modelMs": 32991,
+          "inputTokens": 173292,
+          "outputTokens": 4641,
+          "reasoningTokens": 2222,
+          "summaryOutputTokens": 0,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 0,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 1144,
+              "out": 53,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1121,
+              "out": 58,
+              "reasoning": 6
+            },
+            {
+              "kind": "main",
+              "ms": 3455,
+              "out": 547,
+              "reasoning": 505
+            },
+            {
+              "kind": "main",
+              "ms": 1103,
+              "out": 191,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 2325,
+              "out": 466,
+              "reasoning": 93
+            },
+            {
+              "kind": "main",
+              "ms": 1866,
+              "out": 454,
+              "reasoning": 35
+            },
+            {
+              "kind": "main",
+              "ms": 1426,
+              "out": 80,
+              "reasoning": 11
+            },
+            {
+              "kind": "main",
+              "ms": 3982,
+              "out": 582,
+              "reasoning": 428
+            },
+            {
+              "kind": "main",
+              "ms": 2175,
+              "out": 495,
+              "reasoning": 15
+            },
+            {
+              "kind": "main",
+              "ms": 1337,
+              "out": 95,
+              "reasoning": 43
+            },
+            {
+              "kind": "main",
+              "ms": 4041,
+              "out": 534,
+              "reasoning": 492
+            },
+            {
+              "kind": "main",
+              "ms": 1794,
+              "out": 202,
+              "reasoning": 17
+            },
+            {
+              "kind": "main",
+              "ms": 2553,
+              "out": 284,
+              "reasoning": 232
+            },
+            {
+              "kind": "main",
+              "ms": 4669,
+              "out": 600,
+              "reasoning": 345
+            }
+          ]
+        },
+        "tools": {
+          "calls": 16,
+          "errors": 1,
+          "toolMs": 3155,
+          "byName": {
+            "bash": {
+              "calls": 5,
+              "durationMs": 3021,
+              "errors": 1,
+              "resultBytes": 6970
+            },
+            "read_file": {
+              "calls": 2,
+              "durationMs": 20,
+              "errors": 0,
+              "resultBytes": 736
+            },
+            "write_file": {
+              "calls": 2,
+              "durationMs": 28,
+              "errors": 0,
+              "resultBytes": 1038
+            },
+            "task_changes": {
+              "calls": 3,
+              "durationMs": 18,
+              "errors": 0,
+              "resultBytes": 4667
+            },
+            "task_report": {
+              "calls": 3,
+              "durationMs": 48,
+              "errors": 0,
+              "resultBytes": 54079
+            },
+            "edit_file": {
+              "calls": 1,
+              "durationMs": 20,
+              "errors": 0,
+              "resultBytes": 416
+            }
+          }
+        },
+        "overheadMs": 77,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "003-F02-0-context",
+        "wallMs": 24922,
+        "requests": {
+          "main": 7,
+          "summary": 0,
+          "mainMs": 21639,
+          "summaryMs": 0,
+          "modelMs": 21639,
+          "inputTokens": 46499,
+          "outputTokens": 3248,
+          "reasoningTokens": 1459,
+          "summaryOutputTokens": 0,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 0,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 1065,
+              "out": 89,
+              "reasoning": 7
+            },
+            {
+              "kind": "main",
+              "ms": 1524,
+              "out": 246,
+              "reasoning": 10
+            },
+            {
+              "kind": "main",
+              "ms": 1845,
+              "out": 211,
+              "reasoning": 155
+            },
+            {
+              "kind": "main",
+              "ms": 7356,
+              "out": 1299,
+              "reasoning": 818
+            },
+            {
+              "kind": "main",
+              "ms": 5743,
+              "out": 1045,
+              "reasoning": 430
+            },
+            {
+              "kind": "main",
+              "ms": 1455,
+              "out": 80,
+              "reasoning": 11
+            },
+            {
+              "kind": "main",
+              "ms": 2651,
+              "out": 278,
+              "reasoning": 28
+            }
+          ]
+        },
+        "tools": {
+          "calls": 16,
+          "errors": 0,
+          "toolMs": 3242,
+          "byName": {
+            "bash": {
+              "calls": 2,
+              "durationMs": 3132,
+              "errors": 0,
+              "resultBytes": 2824
+            },
+            "read_file": {
+              "calls": 8,
+              "durationMs": 52,
+              "errors": 0,
+              "resultBytes": 1996
+            },
+            "glob": {
+              "calls": 1,
+              "durationMs": 7,
+              "errors": 0,
+              "resultBytes": 348
+            },
+            "write_file": {
+              "calls": 3,
+              "durationMs": 34,
+              "errors": 0,
+              "resultBytes": 2681
+            },
+            "task_changes": {
+              "calls": 1,
+              "durationMs": 7,
+              "errors": 0,
+              "resultBytes": 4117
+            },
+            "task_report": {
+              "calls": 1,
+              "durationMs": 10,
+              "errors": 0,
+              "resultBytes": 15714
+            }
+          }
+        },
+        "overheadMs": 41,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "004-T04-0-context",
+        "wallMs": 143354,
+        "requests": {
+          "main": 29,
+          "summary": 1,
+          "mainMs": 119273,
+          "summaryMs": 9936,
+          "modelMs": 129209,
+          "inputTokens": 855355,
+          "outputTokens": 18907,
+          "reasoningTokens": 9845,
+          "summaryOutputTokens": 1612,
+          "summaryReasoningTokens": 753,
+          "longOver10s": 0,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 748,
+              "out": 91,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1229,
+              "out": 137,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1783,
+              "out": 362,
+              "reasoning": 12
+            },
+            {
+              "kind": "main",
+              "ms": 6615,
+              "out": 1370,
+              "reasoning": 606
+            },
+            {
+              "kind": "main",
+              "ms": 1439,
+              "out": 206,
+              "reasoning": 27
+            },
+            {
+              "kind": "main",
+              "ms": 1373,
+              "out": 168,
+              "reasoning": 16
+            },
+            {
+              "kind": "main",
+              "ms": 1239,
+              "out": 69,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 2331,
+              "out": 148,
+              "reasoning": 74
+            },
+            {
+              "kind": "main",
+              "ms": 3550,
+              "out": 443,
+              "reasoning": 53
+            },
+            {
+              "kind": "main",
+              "ms": 4060,
+              "out": 489,
+              "reasoning": 449
+            },
+            {
+              "kind": "main",
+              "ms": 4541,
+              "out": 933,
+              "reasoning": 163
+            },
+            {
+              "kind": "main",
+              "ms": 3991,
+              "out": 496,
+              "reasoning": 325
+            },
+            {
+              "kind": "main",
+              "ms": 3478,
+              "out": 451,
+              "reasoning": 311
+            },
+            {
+              "kind": "main",
+              "ms": 3584,
+              "out": 551,
+              "reasoning": 315
+            },
+            {
+              "kind": "main",
+              "ms": 1749,
+              "out": 132,
+              "reasoning": 46
+            },
+            {
+              "kind": "main",
+              "ms": 4561,
+              "out": 637,
+              "reasoning": 219
+            },
+            {
+              "kind": "main",
+              "ms": 8695,
+              "out": 1194,
+              "reasoning": 1154
+            },
+            {
+              "kind": "main",
+              "ms": 3871,
+              "out": 466,
+              "reasoning": 265
+            },
+            {
+              "kind": "main",
+              "ms": 2221,
+              "out": 285,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 3405,
+              "out": 603,
+              "reasoning": 193
+            },
+            {
+              "kind": "main",
+              "ms": 2159,
+              "out": 104,
+              "reasoning": 18
+            },
+            {
+              "kind": "main",
+              "ms": 4076,
+              "out": 550,
+              "reasoning": 121
+            },
+            {
+              "kind": "main",
+              "ms": 7687,
+              "out": 1058,
+              "reasoning": 1018
+            },
+            {
+              "kind": "main",
+              "ms": 6725,
+              "out": 1430,
+              "reasoning": 645
+            },
+            {
+              "kind": "summary",
+              "ms": 9936,
+              "out": 1612,
+              "reasoning": 753
+            },
+            {
+              "kind": "main",
+              "ms": 8868,
+              "out": 1153,
+              "reasoning": 1113
+            },
+            {
+              "kind": "main",
+              "ms": 6836,
+              "out": 1152,
+              "reasoning": 545
+            },
+            {
+              "kind": "main",
+              "ms": 4370,
+              "out": 701,
+              "reasoning": 158
+            },
+            {
+              "kind": "main",
+              "ms": 6068,
+              "out": 678,
+              "reasoning": 575
+            },
+            {
+              "kind": "main",
+              "ms": 8021,
+              "out": 1238,
+              "reasoning": 671
+            }
+          ]
+        },
+        "tools": {
+          "calls": 46,
+          "errors": 7,
+          "toolMs": 13871,
+          "byName": {
+            "bash": {
+              "calls": 13,
+              "durationMs": 13490,
+              "errors": 7,
+              "resultBytes": 11769
+            },
+            "glob": {
+              "calls": 1,
+              "durationMs": 6,
+              "errors": 0,
+              "resultBytes": 527
+            },
+            "read_file": {
+              "calls": 18,
+              "durationMs": 131,
+              "errors": 0,
+              "resultBytes": 13878
+            },
+            "write_file": {
+              "calls": 3,
+              "durationMs": 50,
+              "errors": 0,
+              "resultBytes": 10713
+            },
+            "task_changes": {
+              "calls": 4,
+              "durationMs": 32,
+              "errors": 0,
+              "resultBytes": 6759
+            },
+            "task_report": {
+              "calls": 5,
+              "durationMs": 125,
+              "errors": 0,
+              "resultBytes": 89458
+            },
+            "edit_file": {
+              "calls": 2,
+              "durationMs": 37,
+              "errors": 0,
+              "resultBytes": 1193
+            }
+          }
+        },
+        "overheadMs": 274,
+        "removedTaskIds": [
+          "b90a4e83-1f19-4b16-b642-24e496e52d6a"
+        ]
+      },
+      {
+        "episode": "005-B03-0-context",
+        "wallMs": 53112,
+        "requests": {
+          "main": 13,
+          "summary": 0,
+          "mainMs": 47211,
+          "summaryMs": 0,
+          "modelMs": 47211,
+          "inputTokens": 150719,
+          "outputTokens": 7402,
+          "reasoningTokens": 4269,
+          "summaryOutputTokens": 0,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 0,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 1097,
+              "out": 120,
+              "reasoning": 8
+            },
+            {
+              "kind": "main",
+              "ms": 1387,
+              "out": 222,
+              "reasoning": 33
+            },
+            {
+              "kind": "main",
+              "ms": 1972,
+              "out": 462,
+              "reasoning": 19
+            },
+            {
+              "kind": "main",
+              "ms": 5884,
+              "out": 970,
+              "reasoning": 652
+            },
+            {
+              "kind": "main",
+              "ms": 5253,
+              "out": 824,
+              "reasoning": 625
+            },
+            {
+              "kind": "main",
+              "ms": 2417,
+              "out": 325,
+              "reasoning": 125
+            },
+            {
+              "kind": "main",
+              "ms": 2304,
+              "out": 227,
+              "reasoning": 113
+            },
+            {
+              "kind": "main",
+              "ms": 6875,
+              "out": 1051,
+              "reasoning": 845
+            },
+            {
+              "kind": "main",
+              "ms": 2127,
+              "out": 193,
+              "reasoning": 147
+            },
+            {
+              "kind": "main",
+              "ms": 2441,
+              "out": 383,
+              "reasoning": 178
+            },
+            {
+              "kind": "main",
+              "ms": 7759,
+              "out": 1656,
+              "reasoning": 949
+            },
+            {
+              "kind": "main",
+              "ms": 1652,
+              "out": 117,
+              "reasoning": 48
+            },
+            {
+              "kind": "main",
+              "ms": 6043,
+              "out": 852,
+              "reasoning": 527
+            }
+          ]
+        },
+        "tools": {
+          "calls": 29,
+          "errors": 3,
+          "toolMs": 5805,
+          "byName": {
+            "bash": {
+              "calls": 9,
+              "durationMs": 5653,
+              "errors": 2,
+              "resultBytes": 16687
+            },
+            "read_file": {
+              "calls": 16,
+              "durationMs": 90,
+              "errors": 0,
+              "resultBytes": 4481
+            },
+            "edit_file": {
+              "calls": 2,
+              "durationMs": 27,
+              "errors": 1,
+              "resultBytes": 607
+            },
+            "task_changes": {
+              "calls": 1,
+              "durationMs": 6,
+              "errors": 0,
+              "resultBytes": 1391
+            },
+            "task_report": {
+              "calls": 1,
+              "durationMs": 29,
+              "errors": 0,
+              "resultBytes": 18822
+            }
+          }
+        },
+        "overheadMs": 96,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "006-F02-1-context",
+        "wallMs": 15100,
+        "requests": {
+          "main": 6,
+          "summary": 0,
+          "mainMs": 13885,
+          "summaryMs": 0,
+          "modelMs": 13885,
+          "inputTokens": 39460,
+          "outputTokens": 2219,
+          "reasoningTokens": 455,
+          "summaryOutputTokens": 0,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 0,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 858,
+              "out": 96,
+              "reasoning": 6
+            },
+            {
+              "kind": "main",
+              "ms": 1444,
+              "out": 299,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 6071,
+              "out": 957,
+              "reasoning": 387
+            },
+            {
+              "kind": "main",
+              "ms": 2494,
+              "out": 594,
+              "reasoning": 54
+            },
+            {
+              "kind": "main",
+              "ms": 943,
+              "out": 77,
+              "reasoning": 8
+            },
+            {
+              "kind": "main",
+              "ms": 2075,
+              "out": 196,
+              "reasoning": 0
+            }
+          ]
+        },
+        "tools": {
+          "calls": 17,
+          "errors": 0,
+          "toolMs": 1183,
+          "byName": {
+            "bash": {
+              "calls": 2,
+              "durationMs": 1092,
+              "errors": 0,
+              "resultBytes": 2530
+            },
+            "project_context": {
+              "calls": 1,
+              "durationMs": 4,
+              "errors": 0,
+              "resultBytes": 385
+            },
+            "read_file": {
+              "calls": 9,
+              "durationMs": 42,
+              "errors": 0,
+              "resultBytes": 2178
+            },
+            "write_file": {
+              "calls": 3,
+              "durationMs": 29,
+              "errors": 0,
+              "resultBytes": 2390
+            },
+            "task_report": {
+              "calls": 1,
+              "durationMs": 14,
+              "errors": 0,
+              "resultBytes": 15755
+            },
+            "task_changes": {
+              "calls": 1,
+              "durationMs": 2,
+              "errors": 0,
+              "resultBytes": 3826
+            }
+          }
+        },
+        "overheadMs": 32,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "007-B03-1-context",
+        "wallMs": 39220,
+        "requests": {
+          "main": 12,
+          "summary": 0,
+          "mainMs": 35317,
+          "summaryMs": 0,
+          "modelMs": 35317,
+          "inputTokens": 133430,
+          "outputTokens": 5367,
+          "reasoningTokens": 2699,
+          "summaryOutputTokens": 0,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 0,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 931,
+              "out": 73,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1220,
+              "out": 158,
+              "reasoning": 18
+            },
+            {
+              "kind": "main",
+              "ms": 1666,
+              "out": 352,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 894,
+              "out": 92,
+              "reasoning": 50
+            },
+            {
+              "kind": "main",
+              "ms": 2395,
+              "out": 378,
+              "reasoning": 204
+            },
+            {
+              "kind": "main",
+              "ms": 4223,
+              "out": 604,
+              "reasoning": 401
+            },
+            {
+              "kind": "main",
+              "ms": 3810,
+              "out": 544,
+              "reasoning": 431
+            },
+            {
+              "kind": "main",
+              "ms": 7708,
+              "out": 1237,
+              "reasoning": 966
+            },
+            {
+              "kind": "main",
+              "ms": 2952,
+              "out": 434,
+              "reasoning": 154
+            },
+            {
+              "kind": "main",
+              "ms": 5351,
+              "out": 981,
+              "reasoning": 377
+            },
+            {
+              "kind": "main",
+              "ms": 1038,
+              "out": 94,
+              "reasoning": 25
+            },
+            {
+              "kind": "main",
+              "ms": 3129,
+              "out": 420,
+              "reasoning": 73
+            }
+          ]
+        },
+        "tools": {
+          "calls": 25,
+          "errors": 0,
+          "toolMs": 3824,
+          "byName": {
+            "bash": {
+              "calls": 7,
+              "durationMs": 3691,
+              "errors": 0,
+              "resultBytes": 20108
+            },
+            "read_file": {
+              "calls": 15,
+              "durationMs": 90,
+              "errors": 0,
+              "resultBytes": 4184
+            },
+            "edit_file": {
+              "calls": 1,
+              "durationMs": 20,
+              "errors": 0,
+              "resultBytes": 868
+            },
+            "task_changes": {
+              "calls": 1,
+              "durationMs": 7,
+              "errors": 0,
+              "resultBytes": 1497
+            },
+            "task_report": {
+              "calls": 1,
+              "durationMs": 16,
+              "errors": 0,
+              "resultBytes": 16543
+            }
+          }
+        },
+        "overheadMs": 79,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "008-R04-1-context",
+        "wallMs": 160752,
+        "requests": {
+          "main": 29,
+          "summary": 1,
+          "mainMs": 127724,
+          "summaryMs": 16071,
+          "modelMs": 143795,
+          "inputTokens": 945058,
+          "outputTokens": 23583,
+          "reasoningTokens": 8624,
+          "summaryOutputTokens": 3356,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 3,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 809,
+              "out": 98,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 968,
+              "out": 141,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1785,
+              "out": 391,
+              "reasoning": 9
+            },
+            {
+              "kind": "main",
+              "ms": 6139,
+              "out": 1045,
+              "reasoning": 818
+            },
+            {
+              "kind": "main",
+              "ms": 3426,
+              "out": 893,
+              "reasoning": 7
+            },
+            {
+              "kind": "main",
+              "ms": 2820,
+              "out": 452,
+              "reasoning": 234
+            },
+            {
+              "kind": "main",
+              "ms": 2797,
+              "out": 602,
+              "reasoning": 79
+            },
+            {
+              "kind": "main",
+              "ms": 902,
+              "out": 88,
+              "reasoning": 19
+            },
+            {
+              "kind": "main",
+              "ms": 4416,
+              "out": 699,
+              "reasoning": 232
+            },
+            {
+              "kind": "main",
+              "ms": 3057,
+              "out": 388,
+              "reasoning": 92
+            },
+            {
+              "kind": "main",
+              "ms": 5497,
+              "out": 910,
+              "reasoning": 369
+            },
+            {
+              "kind": "main",
+              "ms": 2607,
+              "out": 127,
+              "reasoning": 88
+            },
+            {
+              "kind": "main",
+              "ms": 4023,
+              "out": 583,
+              "reasoning": 82
+            },
+            {
+              "kind": "main",
+              "ms": 9220,
+              "out": 1325,
+              "reasoning": 1092
+            },
+            {
+              "kind": "main",
+              "ms": 4942,
+              "out": 924,
+              "reasoning": 77
+            },
+            {
+              "kind": "main",
+              "ms": 1584,
+              "out": 126,
+              "reasoning": 57
+            },
+            {
+              "kind": "main",
+              "ms": 5055,
+              "out": 788,
+              "reasoning": 87
+            },
+            {
+              "kind": "main",
+              "ms": 14435,
+              "out": 2095,
+              "reasoning": 1925
+            },
+            {
+              "kind": "main",
+              "ms": 5167,
+              "out": 1113,
+              "reasoning": 76
+            },
+            {
+              "kind": "main",
+              "ms": 6353,
+              "out": 1347,
+              "reasoning": 376
+            },
+            {
+              "kind": "summary",
+              "ms": 16071,
+              "out": 3356,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 3086,
+              "out": 504,
+              "reasoning": 135
+            },
+            {
+              "kind": "main",
+              "ms": 4308,
+              "out": 516,
+              "reasoning": 431
+            },
+            {
+              "kind": "main",
+              "ms": 10324,
+              "out": 1663,
+              "reasoning": 1393
+            },
+            {
+              "kind": "main",
+              "ms": 7724,
+              "out": 1709,
+              "reasoning": 248
+            },
+            {
+              "kind": "main",
+              "ms": 1874,
+              "out": 107,
+              "reasoning": 38
+            },
+            {
+              "kind": "main",
+              "ms": 3575,
+              "out": 327,
+              "reasoning": 270
+            },
+            {
+              "kind": "main",
+              "ms": 2114,
+              "out": 146,
+              "reasoning": 89
+            },
+            {
+              "kind": "main",
+              "ms": 2520,
+              "out": 179,
+              "reasoning": 122
+            },
+            {
+              "kind": "main",
+              "ms": 6197,
+              "out": 941,
+              "reasoning": 179
+            }
+          ]
+        },
+        "tools": {
+          "calls": 64,
+          "errors": 2,
+          "toolMs": 16669,
+          "byName": {
+            "bash": {
+              "calls": 9,
+              "durationMs": 16039,
+              "errors": 2,
+              "resultBytes": 20827
+            },
+            "read_file": {
+              "calls": 33,
+              "durationMs": 192,
+              "errors": 0,
+              "resultBytes": 10508
+            },
+            "write_file": {
+              "calls": 3,
+              "durationMs": 60,
+              "errors": 0,
+              "resultBytes": 2871
+            },
+            "edit_file": {
+              "calls": 7,
+              "durationMs": 130,
+              "errors": 0,
+              "resultBytes": 2970
+            },
+            "grep": {
+              "calls": 2,
+              "durationMs": 22,
+              "errors": 0,
+              "resultBytes": 1091
+            },
+            "task_report": {
+              "calls": 7,
+              "durationMs": 209,
+              "errors": 0,
+              "resultBytes": 129547
+            },
+            "task_changes": {
+              "calls": 3,
+              "durationMs": 17,
+              "errors": 0,
+              "resultBytes": 10545
+            }
+          }
+        },
+        "overheadMs": 288,
+        "removedTaskIds": [
+          "1c01f258-b2f9-47e6-97df-8883a698c4ba",
+          "dfbce35c-82c4-4741-9c35-d5b113f9c893"
+        ]
+      },
+      {
+        "episode": "009-T04-1-context",
+        "wallMs": 102956,
+        "requests": {
+          "main": 26,
+          "summary": 0,
+          "mainMs": 92396,
+          "summaryMs": 0,
+          "modelMs": 92396,
+          "inputTokens": 490628,
+          "outputTokens": 12953,
+          "reasoningTokens": 7278,
+          "summaryOutputTokens": 0,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 1,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 845,
+              "out": 77,
+              "reasoning": 6
+            },
+            {
+              "kind": "main",
+              "ms": 1317,
+              "out": 153,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 2313,
+              "out": 482,
+              "reasoning": 67
+            },
+            {
+              "kind": "main",
+              "ms": 6274,
+              "out": 1095,
+              "reasoning": 630
+            },
+            {
+              "kind": "main",
+              "ms": 1045,
+              "out": 159,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1292,
+              "out": 43,
+              "reasoning": 8
+            },
+            {
+              "kind": "main",
+              "ms": 1665,
+              "out": 236,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 5363,
+              "out": 1000,
+              "reasoning": 469
+            },
+            {
+              "kind": "main",
+              "ms": 3079,
+              "out": 398,
+              "reasoning": 239
+            },
+            {
+              "kind": "main",
+              "ms": 4636,
+              "out": 634,
+              "reasoning": 582
+            },
+            {
+              "kind": "main",
+              "ms": 4230,
+              "out": 562,
+              "reasoning": 286
+            },
+            {
+              "kind": "main",
+              "ms": 5565,
+              "out": 808,
+              "reasoning": 628
+            },
+            {
+              "kind": "main",
+              "ms": 2182,
+              "out": 357,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 2158,
+              "out": 229,
+              "reasoning": 70
+            },
+            {
+              "kind": "main",
+              "ms": 2125,
+              "out": 198,
+              "reasoning": 163
+            },
+            {
+              "kind": "main",
+              "ms": 3400,
+              "out": 359,
+              "reasoning": 100
+            },
+            {
+              "kind": "main",
+              "ms": 14480,
+              "out": 2324,
+              "reasoning": 2067
+            },
+            {
+              "kind": "main",
+              "ms": 1608,
+              "out": 185,
+              "reasoning": 26
+            },
+            {
+              "kind": "main",
+              "ms": 2417,
+              "out": 266,
+              "reasoning": 88
+            },
+            {
+              "kind": "main",
+              "ms": 4757,
+              "out": 728,
+              "reasoning": 337
+            },
+            {
+              "kind": "main",
+              "ms": 2029,
+              "out": 276,
+              "reasoning": 84
+            },
+            {
+              "kind": "main",
+              "ms": 5737,
+              "out": 642,
+              "reasoning": 577
+            },
+            {
+              "kind": "main",
+              "ms": 2090,
+              "out": 230,
+              "reasoning": 80
+            },
+            {
+              "kind": "main",
+              "ms": 2151,
+              "out": 202,
+              "reasoning": 43
+            },
+            {
+              "kind": "main",
+              "ms": 2125,
+              "out": 199,
+              "reasoning": 11
+            },
+            {
+              "kind": "main",
+              "ms": 7513,
+              "out": 1111,
+              "reasoning": 717
+            }
+          ]
+        },
+        "tools": {
+          "calls": 40,
+          "errors": 5,
+          "toolMs": 10302,
+          "byName": {
+            "bash": {
+              "calls": 12,
+              "durationMs": 10051,
+              "errors": 5,
+              "resultBytes": 28531
+            },
+            "glob": {
+              "calls": 1,
+              "durationMs": 5,
+              "errors": 0,
+              "resultBytes": 527
+            },
+            "read_file": {
+              "calls": 14,
+              "durationMs": 81,
+              "errors": 0,
+              "resultBytes": 6331
+            },
+            "write_file": {
+              "calls": 2,
+              "durationMs": 38,
+              "errors": 0,
+              "resultBytes": 4737
+            },
+            "task_report": {
+              "calls": 4,
+              "durationMs": 48,
+              "errors": 0,
+              "resultBytes": 10568
+            },
+            "task_changes": {
+              "calls": 3,
+              "durationMs": 5,
+              "errors": 0,
+              "resultBytes": 6720
+            },
+            "edit_file": {
+              "calls": 4,
+              "durationMs": 74,
+              "errors": 0,
+              "resultBytes": 2148
+            }
+          }
+        },
+        "overheadMs": 258,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "010-U02-1-context",
+        "wallMs": 81516,
+        "requests": {
+          "main": 17,
+          "summary": 0,
+          "mainMs": 73397,
+          "summaryMs": 0,
+          "modelMs": 73397,
+          "inputTokens": 255045,
+          "outputTokens": 12052,
+          "reasoningTokens": 7265,
+          "summaryOutputTokens": 0,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 1,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 804,
+              "out": 81,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 918,
+              "out": 61,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1094,
+              "out": 170,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 2290,
+              "out": 73,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 29604,
+              "out": 6058,
+              "reasoning": 3990
+            },
+            {
+              "kind": "main",
+              "ms": 5339,
+              "out": 791,
+              "reasoning": 744
+            },
+            {
+              "kind": "main",
+              "ms": 3468,
+              "out": 395,
+              "reasoning": 317
+            },
+            {
+              "kind": "main",
+              "ms": 1653,
+              "out": 188,
+              "reasoning": 143
+            },
+            {
+              "kind": "main",
+              "ms": 1582,
+              "out": 155,
+              "reasoning": 97
+            },
+            {
+              "kind": "main",
+              "ms": 2783,
+              "out": 482,
+              "reasoning": 313
+            },
+            {
+              "kind": "main",
+              "ms": 5548,
+              "out": 970,
+              "reasoning": 603
+            },
+            {
+              "kind": "main",
+              "ms": 4011,
+              "out": 864,
+              "reasoning": 466
+            },
+            {
+              "kind": "main",
+              "ms": 3923,
+              "out": 538,
+              "reasoning": 398
+            },
+            {
+              "kind": "main",
+              "ms": 1603,
+              "out": 221,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1466,
+              "out": 52,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1142,
+              "out": 48,
+              "reasoning": 9
+            },
+            {
+              "kind": "main",
+              "ms": 6169,
+              "out": 905,
+              "reasoning": 185
+            }
+          ]
+        },
+        "tools": {
+          "calls": 24,
+          "errors": 3,
+          "toolMs": 7997,
+          "byName": {
+            "bash": {
+              "calls": 12,
+              "durationMs": 7862,
+              "errors": 3,
+              "resultBytes": 15128
+            },
+            "read_file": {
+              "calls": 8,
+              "durationMs": 70,
+              "errors": 0,
+              "resultBytes": 2638
+            },
+            "write_file": {
+              "calls": 1,
+              "durationMs": 18,
+              "errors": 0,
+              "resultBytes": 7641
+            },
+            "task_changes": {
+              "calls": 1,
+              "durationMs": 9,
+              "errors": 0,
+              "resultBytes": 784
+            },
+            "task_report": {
+              "calls": 2,
+              "durationMs": 38,
+              "errors": 0,
+              "resultBytes": 21426
+            }
+          }
+        },
+        "overheadMs": 122,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "011-F01-1-context",
+        "wallMs": 14854,
+        "requests": {
+          "main": 6,
+          "summary": 0,
+          "mainMs": 13815,
+          "summaryMs": 0,
+          "modelMs": 13815,
+          "inputTokens": 27779,
+          "outputTokens": 2179,
+          "reasoningTokens": 1194,
+          "summaryOutputTokens": 0,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 0,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 994,
+              "out": 108,
+              "reasoning": 6
+            },
+            {
+              "kind": "main",
+              "ms": 926,
+              "out": 118,
+              "reasoning": 16
+            },
+            {
+              "kind": "main",
+              "ms": 5352,
+              "out": 944,
+              "reasoning": 751
+            },
+            {
+              "kind": "main",
+              "ms": 3395,
+              "out": 677,
+              "reasoning": 364
+            },
+            {
+              "kind": "main",
+              "ms": 1072,
+              "out": 43,
+              "reasoning": 8
+            },
+            {
+              "kind": "main",
+              "ms": 2076,
+              "out": 289,
+              "reasoning": 49
+            }
+          ]
+        },
+        "tools": {
+          "calls": 10,
+          "errors": 0,
+          "toolMs": 1003,
+          "byName": {
+            "read_file": {
+              "calls": 5,
+              "durationMs": 35,
+              "errors": 0,
+              "resultBytes": 1131
+            },
+            "glob": {
+              "calls": 1,
+              "durationMs": 7,
+              "errors": 0,
+              "resultBytes": 231
+            },
+            "write_file": {
+              "calls": 1,
+              "durationMs": 20,
+              "errors": 0,
+              "resultBytes": 812
+            },
+            "bash": {
+              "calls": 1,
+              "durationMs": 928,
+              "errors": 0,
+              "resultBytes": 1205
+            },
+            "task_report": {
+              "calls": 1,
+              "durationMs": 11,
+              "errors": 0,
+              "resultBytes": 2639
+            },
+            "task_changes": {
+              "calls": 1,
+              "durationMs": 2,
+              "errors": 0,
+              "resultBytes": 1442
+            }
+          }
+        },
+        "overheadMs": 36,
+        "removedTaskIds": []
+      }
+    ],
+    "aggregate": {
+      "episodes": 12,
+      "wallMs": 899287,
+      "mainMs": 775096,
+      "summaryMs": 38479,
+      "toolMs": 84001,
+      "overheadMs": 1711,
+      "mainRequests": 203,
+      "summaryRequests": 3,
+      "inputTokens": 3937718,
+      "outputTokens": 127701,
+      "reasoningTokens": 65275,
+      "summaryOutputTokens": 7395,
+      "summaryReasoningTokens": 753,
+      "toolCalls": 357,
+      "toolErrors": 23,
+      "longOver10s": 9,
+      "msPerOutputToken": 7.04212966225793,
+      "wallVsOutput": {
+        "slope": 6.6112503358383545,
+        "r2": 0.9815698256685119,
+        "count": 12
+      }
+    }
+  },
+  "new-adabea5-context-12": {
+    "episodes": [
+      {
+        "episode": "000-R04-0-context",
+        "wallMs": 155431,
+        "requests": {
+          "main": 28,
+          "summary": 1,
+          "mainMs": 109443,
+          "summaryMs": 29120,
+          "modelMs": 138563,
+          "inputTokens": 819068,
+          "outputTokens": 24234,
+          "reasoningTokens": 11051,
+          "summaryOutputTokens": 5511,
+          "summaryReasoningTokens": 4301,
+          "longOver10s": 1,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 701,
+              "out": 90,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 822,
+              "out": 141,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1605,
+              "out": 277,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1063,
+              "out": 150,
+              "reasoning": 6
+            },
+            {
+              "kind": "main",
+              "ms": 8618,
+              "out": 1542,
+              "reasoning": 1266
+            },
+            {
+              "kind": "main",
+              "ms": 3031,
+              "out": 881,
+              "reasoning": 4
+            },
+            {
+              "kind": "main",
+              "ms": 3758,
+              "out": 874,
+              "reasoning": 203
+            },
+            {
+              "kind": "main",
+              "ms": 976,
+              "out": 134,
+              "reasoning": 24
+            },
+            {
+              "kind": "main",
+              "ms": 1397,
+              "out": 57,
+              "reasoning": 18
+            },
+            {
+              "kind": "main",
+              "ms": 4097,
+              "out": 677,
+              "reasoning": 189
+            },
+            {
+              "kind": "main",
+              "ms": 4453,
+              "out": 730,
+              "reasoning": 405
+            },
+            {
+              "kind": "main",
+              "ms": 4899,
+              "out": 1000,
+              "reasoning": 219
+            },
+            {
+              "kind": "main",
+              "ms": 1235,
+              "out": 39,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 4820,
+              "out": 642,
+              "reasoning": 159
+            },
+            {
+              "kind": "main",
+              "ms": 5979,
+              "out": 933,
+              "reasoning": 713
+            },
+            {
+              "kind": "main",
+              "ms": 4453,
+              "out": 1028,
+              "reasoning": 28
+            },
+            {
+              "kind": "main",
+              "ms": 1993,
+              "out": 80,
+              "reasoning": 11
+            },
+            {
+              "kind": "main",
+              "ms": 3716,
+              "out": 567,
+              "reasoning": 29
+            },
+            {
+              "kind": "main",
+              "ms": 7419,
+              "out": 1119,
+              "reasoning": 931
+            },
+            {
+              "kind": "main",
+              "ms": 4434,
+              "out": 962,
+              "reasoning": 47
+            },
+            {
+              "kind": "main",
+              "ms": 4992,
+              "out": 1156,
+              "reasoning": 104
+            },
+            {
+              "kind": "main",
+              "ms": 2014,
+              "out": 121,
+              "reasoning": 52
+            },
+            {
+              "kind": "summary",
+              "ms": 29120,
+              "out": 5511,
+              "reasoning": 4301
+            },
+            {
+              "kind": "main",
+              "ms": 4503,
+              "out": 603,
+              "reasoning": 403
+            },
+            {
+              "kind": "main",
+              "ms": 5963,
+              "out": 1088,
+              "reasoning": 224
+            },
+            {
+              "kind": "main",
+              "ms": 7158,
+              "out": 1428,
+              "reasoning": 594
+            },
+            {
+              "kind": "main",
+              "ms": 2130,
+              "out": 249,
+              "reasoning": 62
+            },
+            {
+              "kind": "main",
+              "ms": 7349,
+              "out": 1241,
+              "reasoning": 772
+            },
+            {
+              "kind": "main",
+              "ms": 5865,
+              "out": 914,
+              "reasoning": 287
+            }
+          ]
+        },
+        "tools": {
+          "calls": 62,
+          "errors": 3,
+          "toolMs": 16562,
+          "byName": {
+            "glob": {
+              "calls": 1,
+              "durationMs": 9,
+              "errors": 0,
+              "resultBytes": 548
+            },
+            "project_context": {
+              "calls": 1,
+              "durationMs": 4,
+              "errors": 0,
+              "resultBytes": 385
+            },
+            "read_file": {
+              "calls": 25,
+              "durationMs": 173,
+              "errors": 0,
+              "resultBytes": 8006
+            },
+            "write_file": {
+              "calls": 3,
+              "durationMs": 62,
+              "errors": 0,
+              "resultBytes": 2991
+            },
+            "edit_file": {
+              "calls": 6,
+              "durationMs": 58,
+              "errors": 0,
+              "resultBytes": 2475
+            },
+            "bash": {
+              "calls": 8,
+              "durationMs": 16059,
+              "errors": 1,
+              "resultBytes": 19375
+            },
+            "grep": {
+              "calls": 9,
+              "durationMs": 64,
+              "errors": 2,
+              "resultBytes": 1078
+            },
+            "task_changes": {
+              "calls": 4,
+              "durationMs": 20,
+              "errors": 0,
+              "resultBytes": 11272
+            },
+            "task_report": {
+              "calls": 5,
+              "durationMs": 113,
+              "errors": 0,
+              "resultBytes": 83866
+            }
+          }
+        },
+        "overheadMs": 306,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "001-U02-0-context",
+        "wallMs": 82117,
+        "requests": {
+          "main": 10,
+          "summary": 0,
+          "mainMs": 76923,
+          "summaryMs": 0,
+          "modelMs": 76923,
+          "inputTokens": 148708,
+          "outputTokens": 13325,
+          "reasoningTokens": 10599,
+          "summaryOutputTokens": 0,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 3,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 723,
+              "out": 77,
+              "reasoning": 6
+            },
+            {
+              "kind": "main",
+              "ms": 995,
+              "out": 78,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 29547,
+              "out": 5333,
+              "reasoning": 4652
+            },
+            {
+              "kind": "main",
+              "ms": 6139,
+              "out": 1067,
+              "reasoning": 828
+            },
+            {
+              "kind": "main",
+              "ms": 2072,
+              "out": 400,
+              "reasoning": 178
+            },
+            {
+              "kind": "main",
+              "ms": 14015,
+              "out": 2641,
+              "reasoning": 2277
+            },
+            {
+              "kind": "main",
+              "ms": 3914,
+              "out": 766,
+              "reasoning": 331
+            },
+            {
+              "kind": "main",
+              "ms": 1726,
+              "out": 227,
+              "reasoning": 158
+            },
+            {
+              "kind": "main",
+              "ms": 3910,
+              "out": 523,
+              "reasoning": 325
+            },
+            {
+              "kind": "main",
+              "ms": 13882,
+              "out": 2213,
+              "reasoning": 1844
+            }
+          ]
+        },
+        "tools": {
+          "calls": 16,
+          "errors": 3,
+          "toolMs": 5120,
+          "byName": {
+            "bash": {
+              "calls": 8,
+              "durationMs": 5044,
+              "errors": 3,
+              "resultBytes": 10641
+            },
+            "glob": {
+              "calls": 1,
+              "durationMs": 4,
+              "errors": 0,
+              "resultBytes": 342
+            },
+            "write_file": {
+              "calls": 1,
+              "durationMs": 16,
+              "errors": 0,
+              "resultBytes": 2868
+            },
+            "task_changes": {
+              "calls": 1,
+              "durationMs": 6,
+              "errors": 0,
+              "resultBytes": 3498
+            },
+            "task_report": {
+              "calls": 5,
+              "durationMs": 50,
+              "errors": 0,
+              "resultBytes": 64612
+            }
+          }
+        },
+        "overheadMs": 74,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "002-F01-0-context",
+        "wallMs": 20677,
+        "requests": {
+          "main": 8,
+          "summary": 0,
+          "mainMs": 18840,
+          "summaryMs": 0,
+          "modelMs": 18840,
+          "inputTokens": 50531,
+          "outputTokens": 2891,
+          "reasoningTokens": 1406,
+          "summaryOutputTokens": 0,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 0,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 747,
+              "out": 73,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1324,
+              "out": 119,
+              "reasoning": 17
+            },
+            {
+              "kind": "main",
+              "ms": 3097,
+              "out": 592,
+              "reasoning": 392
+            },
+            {
+              "kind": "main",
+              "ms": 1834,
+              "out": 325,
+              "reasoning": 25
+            },
+            {
+              "kind": "main",
+              "ms": 2642,
+              "out": 389,
+              "reasoning": 89
+            },
+            {
+              "kind": "main",
+              "ms": 1227,
+              "out": 80,
+              "reasoning": 11
+            },
+            {
+              "kind": "main",
+              "ms": 4994,
+              "out": 873,
+              "reasoning": 671
+            },
+            {
+              "kind": "main",
+              "ms": 2975,
+              "out": 440,
+              "reasoning": 201
+            }
+          ]
+        },
+        "tools": {
+          "calls": 11,
+          "errors": 1,
+          "toolMs": 1795,
+          "byName": {
+            "read_file": {
+              "calls": 4,
+              "durationMs": 32,
+              "errors": 0,
+              "resultBytes": 949
+            },
+            "glob": {
+              "calls": 1,
+              "durationMs": 2,
+              "errors": 0,
+              "resultBytes": 231
+            },
+            "write_file": {
+              "calls": 2,
+              "durationMs": 31,
+              "errors": 0,
+              "resultBytes": 1090
+            },
+            "bash": {
+              "calls": 2,
+              "durationMs": 1716,
+              "errors": 1,
+              "resultBytes": 2995
+            },
+            "task_report": {
+              "calls": 1,
+              "durationMs": 13,
+              "errors": 0,
+              "resultBytes": 15816
+            },
+            "task_changes": {
+              "calls": 1,
+              "durationMs": 1,
+              "errors": 0,
+              "resultBytes": 1486
+            }
+          }
+        },
+        "overheadMs": 42,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "003-F02-0-context",
+        "wallMs": 22778,
+        "requests": {
+          "main": 6,
+          "summary": 0,
+          "mainMs": 20397,
+          "summaryMs": 0,
+          "modelMs": 20397,
+          "inputTokens": 45574,
+          "outputTokens": 4335,
+          "reasoningTokens": 1582,
+          "summaryOutputTokens": 0,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 0,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 1056,
+              "out": 96,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1205,
+              "out": 270,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 9060,
+              "out": 2060,
+              "reasoning": 1292
+            },
+            {
+              "kind": "main",
+              "ms": 3940,
+              "out": 1037,
+              "reasoning": 131
+            },
+            {
+              "kind": "main",
+              "ms": 1314,
+              "out": 198,
+              "reasoning": 129
+            },
+            {
+              "kind": "main",
+              "ms": 3822,
+              "out": 674,
+              "reasoning": 30
+            }
+          ]
+        },
+        "tools": {
+          "calls": 17,
+          "errors": 0,
+          "toolMs": 2337,
+          "byName": {
+            "bash": {
+              "calls": 3,
+              "durationMs": 2215,
+              "errors": 0,
+              "resultBytes": 3851
+            },
+            "glob": {
+              "calls": 1,
+              "durationMs": 5,
+              "errors": 0,
+              "resultBytes": 348
+            },
+            "read_file": {
+              "calls": 8,
+              "durationMs": 66,
+              "errors": 0,
+              "resultBytes": 1996
+            },
+            "write_file": {
+              "calls": 3,
+              "durationMs": 31,
+              "errors": 0,
+              "resultBytes": 3132
+            },
+            "task_changes": {
+              "calls": 1,
+              "durationMs": 8,
+              "errors": 0,
+              "resultBytes": 4568
+            },
+            "task_report": {
+              "calls": 1,
+              "durationMs": 12,
+              "errors": 0,
+              "resultBytes": 16859
+            }
+          }
+        },
+        "overheadMs": 44,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "004-T04-0-context",
+        "wallMs": 187204,
+        "requests": {
+          "main": 31,
+          "summary": 3,
+          "mainMs": 134892,
+          "summaryMs": 40432,
+          "modelMs": 175324,
+          "inputTokens": 944751,
+          "outputTokens": 27958,
+          "reasoningTokens": 16193,
+          "summaryOutputTokens": 8499,
+          "summaryReasoningTokens": 3020,
+          "longOver10s": 4,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 563,
+              "out": 83,
+              "reasoning": 6
+            },
+            {
+              "kind": "main",
+              "ms": 1250,
+              "out": 143,
+              "reasoning": 5
+            },
+            {
+              "kind": "main",
+              "ms": 1039,
+              "out": 162,
+              "reasoning": 20
+            },
+            {
+              "kind": "main",
+              "ms": 9521,
+              "out": 1836,
+              "reasoning": 1174
+            },
+            {
+              "kind": "main",
+              "ms": 1340,
+              "out": 168,
+              "reasoning": 5
+            },
+            {
+              "kind": "main",
+              "ms": 845,
+              "out": 74,
+              "reasoning": 5
+            },
+            {
+              "kind": "main",
+              "ms": 2094,
+              "out": 160,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 2533,
+              "out": 284,
+              "reasoning": 244
+            },
+            {
+              "kind": "main",
+              "ms": 5091,
+              "out": 1071,
+              "reasoning": 357
+            },
+            {
+              "kind": "main",
+              "ms": 1673,
+              "out": 203,
+              "reasoning": 40
+            },
+            {
+              "kind": "main",
+              "ms": 3313,
+              "out": 493,
+              "reasoning": 424
+            },
+            {
+              "kind": "main",
+              "ms": 3396,
+              "out": 440,
+              "reasoning": 204
+            },
+            {
+              "kind": "main",
+              "ms": 9174,
+              "out": 1355,
+              "reasoning": 1281
+            },
+            {
+              "kind": "main",
+              "ms": 4422,
+              "out": 628,
+              "reasoning": 380
+            },
+            {
+              "kind": "main",
+              "ms": 1761,
+              "out": 169,
+              "reasoning": 6
+            },
+            {
+              "kind": "main",
+              "ms": 1215,
+              "out": 75,
+              "reasoning": 6
+            },
+            {
+              "kind": "main",
+              "ms": 7137,
+              "out": 862,
+              "reasoning": 607
+            },
+            {
+              "kind": "main",
+              "ms": 5493,
+              "out": 867,
+              "reasoning": 827
+            },
+            {
+              "kind": "main",
+              "ms": 5610,
+              "out": 1170,
+              "reasoning": 450
+            },
+            {
+              "kind": "main",
+              "ms": 17443,
+              "out": 2897,
+              "reasoning": 2734
+            },
+            {
+              "kind": "main",
+              "ms": 1766,
+              "out": 67,
+              "reasoning": 14
+            },
+            {
+              "kind": "main",
+              "ms": 3532,
+              "out": 584,
+              "reasoning": 322
+            },
+            {
+              "kind": "main",
+              "ms": 5997,
+              "out": 817,
+              "reasoning": 555
+            },
+            {
+              "kind": "main",
+              "ms": 1983,
+              "out": 243,
+              "reasoning": 11
+            },
+            {
+              "kind": "main",
+              "ms": 2629,
+              "out": 229,
+              "reasoning": 160
+            },
+            {
+              "kind": "summary",
+              "ms": 18566,
+              "out": 3523,
+              "reasoning": 1950
+            },
+            {
+              "kind": "main",
+              "ms": 2827,
+              "out": 242,
+              "reasoning": 143
+            },
+            {
+              "kind": "main",
+              "ms": 18439,
+              "out": 2747,
+              "reasoning": 2596
+            },
+            {
+              "kind": "summary",
+              "ms": 9248,
+              "out": 2145,
+              "reasoning": 310
+            },
+            {
+              "kind": "main",
+              "ms": 2413,
+              "out": 183,
+              "reasoning": 84
+            },
+            {
+              "kind": "main",
+              "ms": 2750,
+              "out": 264,
+              "reasoning": 168
+            },
+            {
+              "kind": "summary",
+              "ms": 12618,
+              "out": 2831,
+              "reasoning": 760
+            },
+            {
+              "kind": "main",
+              "ms": 2617,
+              "out": 233,
+              "reasoning": 117
+            },
+            {
+              "kind": "main",
+              "ms": 5026,
+              "out": 710,
+              "reasoning": 228
+            }
+          ]
+        },
+        "tools": {
+          "calls": 38,
+          "errors": 5,
+          "toolMs": 11599,
+          "byName": {
+            "bash": {
+              "calls": 12,
+              "durationMs": 11304,
+              "errors": 5,
+              "resultBytes": 15724
+            },
+            "glob": {
+              "calls": 1,
+              "durationMs": 6,
+              "errors": 0,
+              "resultBytes": 527
+            },
+            "write_file": {
+              "calls": 3,
+              "durationMs": 52,
+              "errors": 0,
+              "resultBytes": 10401
+            },
+            "task_changes": {
+              "calls": 7,
+              "durationMs": 32,
+              "errors": 0,
+              "resultBytes": 17594
+            },
+            "task_report": {
+              "calls": 7,
+              "durationMs": 112,
+              "errors": 0,
+              "resultBytes": 111673
+            },
+            "read_file": {
+              "calls": 6,
+              "durationMs": 61,
+              "errors": 0,
+              "resultBytes": 13965
+            },
+            "edit_file": {
+              "calls": 1,
+              "durationMs": 21,
+              "errors": 0,
+              "resultBytes": 443
+            },
+            "read_tool_result": {
+              "calls": 1,
+              "durationMs": 11,
+              "errors": 0,
+              "resultBytes": 18664
+            }
+          }
+        },
+        "overheadMs": 281,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "005-B03-0-context",
+        "wallMs": 64637,
+        "requests": {
+          "main": 12,
+          "summary": 0,
+          "mainMs": 55782,
+          "summaryMs": 0,
+          "modelMs": 55782,
+          "inputTokens": 154604,
+          "outputTokens": 8834,
+          "reasoningTokens": 5151,
+          "summaryOutputTokens": 0,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 1,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 1125,
+              "out": 83,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1447,
+              "out": 154,
+              "reasoning": 6
+            },
+            {
+              "kind": "main",
+              "ms": 1864,
+              "out": 329,
+              "reasoning": 48
+            },
+            {
+              "kind": "main",
+              "ms": 1924,
+              "out": 216,
+              "reasoning": 97
+            },
+            {
+              "kind": "main",
+              "ms": 9713,
+              "out": 1694,
+              "reasoning": 1458
+            },
+            {
+              "kind": "main",
+              "ms": 3817,
+              "out": 475,
+              "reasoning": 348
+            },
+            {
+              "kind": "main",
+              "ms": 17225,
+              "out": 2839,
+              "reasoning": 2570
+            },
+            {
+              "kind": "main",
+              "ms": 2275,
+              "out": 324,
+              "reasoning": 76
+            },
+            {
+              "kind": "main",
+              "ms": 4628,
+              "out": 704,
+              "reasoning": 281
+            },
+            {
+              "kind": "main",
+              "ms": 5858,
+              "out": 1230,
+              "reasoning": 173
+            },
+            {
+              "kind": "main",
+              "ms": 1439,
+              "out": 119,
+              "reasoning": 38
+            },
+            {
+              "kind": "main",
+              "ms": 4467,
+              "out": 667,
+              "reasoning": 56
+            }
+          ]
+        },
+        "tools": {
+          "calls": 26,
+          "errors": 0,
+          "toolMs": 8721,
+          "byName": {
+            "glob": {
+              "calls": 1,
+              "durationMs": 14,
+              "errors": 0,
+              "resultBytes": 547
+            },
+            "read_file": {
+              "calls": 16,
+              "durationMs": 186,
+              "errors": 0,
+              "resultBytes": 18596
+            },
+            "bash": {
+              "calls": 6,
+              "durationMs": 8472,
+              "errors": 0,
+              "resultBytes": 9068
+            },
+            "edit_file": {
+              "calls": 1,
+              "durationMs": 10,
+              "errors": 0,
+              "resultBytes": 1006
+            },
+            "task_changes": {
+              "calls": 1,
+              "durationMs": 5,
+              "errors": 0,
+              "resultBytes": 1635
+            },
+            "task_report": {
+              "calls": 1,
+              "durationMs": 34,
+              "errors": 0,
+              "resultBytes": 16909
+            }
+          }
+        },
+        "overheadMs": 134,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "006-F02-1-context",
+        "wallMs": 41055,
+        "requests": {
+          "main": 8,
+          "summary": 0,
+          "mainMs": 35839,
+          "summaryMs": 0,
+          "modelMs": 35839,
+          "inputTokens": 63102,
+          "outputTokens": 6650,
+          "reasoningTokens": 3784,
+          "summaryOutputTokens": 0,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 1,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 734,
+              "out": 94,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 986,
+              "out": 143,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1279,
+              "out": 194,
+              "reasoning": 28
+            },
+            {
+              "kind": "main",
+              "ms": 14537,
+              "out": 2840,
+              "reasoning": 2241
+            },
+            {
+              "kind": "main",
+              "ms": 2756,
+              "out": 221,
+              "reasoning": 41
+            },
+            {
+              "kind": "main",
+              "ms": 9189,
+              "out": 2325,
+              "reasoning": 1274
+            },
+            {
+              "kind": "main",
+              "ms": 2211,
+              "out": 245,
+              "reasoning": 176
+            },
+            {
+              "kind": "main",
+              "ms": 4147,
+              "out": 588,
+              "reasoning": 24
+            }
+          ]
+        },
+        "tools": {
+          "calls": 18,
+          "errors": 0,
+          "toolMs": 5133,
+          "byName": {
+            "glob": {
+              "calls": 1,
+              "durationMs": 19,
+              "errors": 0,
+              "resultBytes": 348
+            },
+            "project_context": {
+              "calls": 1,
+              "durationMs": 12,
+              "errors": 0,
+              "resultBytes": 385
+            },
+            "read_file": {
+              "calls": 9,
+              "durationMs": 84,
+              "errors": 0,
+              "resultBytes": 2178
+            },
+            "write_file": {
+              "calls": 3,
+              "durationMs": 40,
+              "errors": 0,
+              "resultBytes": 3108
+            },
+            "bash": {
+              "calls": 2,
+              "durationMs": 4945,
+              "errors": 0,
+              "resultBytes": 3435
+            },
+            "task_changes": {
+              "calls": 1,
+              "durationMs": 8,
+              "errors": 0,
+              "resultBytes": 4544
+            },
+            "task_report": {
+              "calls": 1,
+              "durationMs": 25,
+              "errors": 0,
+              "resultBytes": 16687
+            }
+          }
+        },
+        "overheadMs": 83,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "007-B03-1-context",
+        "wallMs": 52537,
+        "requests": {
+          "main": 13,
+          "summary": 0,
+          "mainMs": 45472,
+          "summaryMs": 0,
+          "modelMs": 45472,
+          "inputTokens": 185171,
+          "outputTokens": 6227,
+          "reasoningTokens": 3456,
+          "summaryOutputTokens": 0,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 0,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 878,
+              "out": 118,
+              "reasoning": 6
+            },
+            {
+              "kind": "main",
+              "ms": 1097,
+              "out": 149,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1710,
+              "out": 212,
+              "reasoning": 19
+            },
+            {
+              "kind": "main",
+              "ms": 3792,
+              "out": 587,
+              "reasoning": 330
+            },
+            {
+              "kind": "main",
+              "ms": 3395,
+              "out": 447,
+              "reasoning": 207
+            },
+            {
+              "kind": "main",
+              "ms": 8138,
+              "out": 1205,
+              "reasoning": 1055
+            },
+            {
+              "kind": "main",
+              "ms": 4713,
+              "out": 432,
+              "reasoning": 386
+            },
+            {
+              "kind": "main",
+              "ms": 2251,
+              "out": 207,
+              "reasoning": 2
+            },
+            {
+              "kind": "main",
+              "ms": 4143,
+              "out": 821,
+              "reasoning": 136
+            },
+            {
+              "kind": "main",
+              "ms": 3274,
+              "out": 438,
+              "reasoning": 272
+            },
+            {
+              "kind": "main",
+              "ms": 1510,
+              "out": 28,
+              "reasoning": 6
+            },
+            {
+              "kind": "main",
+              "ms": 1311,
+              "out": 68,
+              "reasoning": 11
+            },
+            {
+              "kind": "main",
+              "ms": 9260,
+              "out": 1515,
+              "reasoning": 1026
+            }
+          ]
+        },
+        "tools": {
+          "calls": 19,
+          "errors": 2,
+          "toolMs": 6931,
+          "byName": {
+            "bash": {
+              "calls": 14,
+              "durationMs": 6848,
+              "errors": 2,
+              "resultBytes": 32078
+            },
+            "read_file": {
+              "calls": 1,
+              "durationMs": 10,
+              "errors": 0,
+              "resultBytes": 297
+            },
+            "edit_file": {
+              "calls": 1,
+              "durationMs": 25,
+              "errors": 0,
+              "resultBytes": 557
+            },
+            "task_changes": {
+              "calls": 1,
+              "durationMs": 3,
+              "errors": 0,
+              "resultBytes": 1186
+            },
+            "task_report": {
+              "calls": 2,
+              "durationMs": 45,
+              "errors": 0,
+              "resultBytes": 19778
+            }
+          }
+        },
+        "overheadMs": 134,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "008-R04-1-context",
+        "wallMs": 108833,
+        "requests": {
+          "main": 22,
+          "summary": 0,
+          "mainMs": 94775,
+          "summaryMs": 0,
+          "modelMs": 94775,
+          "inputTokens": 398064,
+          "outputTokens": 15802,
+          "reasoningTokens": 7090,
+          "summaryOutputTokens": 0,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 3,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 1027,
+              "out": 101,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 998,
+              "out": 146,
+              "reasoning": 7
+            },
+            {
+              "kind": "main",
+              "ms": 1323,
+              "out": 217,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1609,
+              "out": 231,
+              "reasoning": 25
+            },
+            {
+              "kind": "main",
+              "ms": 13842,
+              "out": 2712,
+              "reasoning": 1634
+            },
+            {
+              "kind": "main",
+              "ms": 3276,
+              "out": 711,
+              "reasoning": 123
+            },
+            {
+              "kind": "main",
+              "ms": 812,
+              "out": 40,
+              "reasoning": 18
+            },
+            {
+              "kind": "main",
+              "ms": 948,
+              "out": 52,
+              "reasoning": 12
+            },
+            {
+              "kind": "main",
+              "ms": 4087,
+              "out": 616,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 2473,
+              "out": 336,
+              "reasoning": 153
+            },
+            {
+              "kind": "main",
+              "ms": 2167,
+              "out": 408,
+              "reasoning": 111
+            },
+            {
+              "kind": "main",
+              "ms": 6459,
+              "out": 1316,
+              "reasoning": 558
+            },
+            {
+              "kind": "main",
+              "ms": 1120,
+              "out": 83,
+              "reasoning": 61
+            },
+            {
+              "kind": "main",
+              "ms": 3459,
+              "out": 571,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 11164,
+              "out": 2064,
+              "reasoning": 915
+            },
+            {
+              "kind": "main",
+              "ms": 1550,
+              "out": 61,
+              "reasoning": 39
+            },
+            {
+              "kind": "main",
+              "ms": 3861,
+              "out": 539,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 18503,
+              "out": 2977,
+              "reasoning": 2837
+            },
+            {
+              "kind": "main",
+              "ms": 3692,
+              "out": 451,
+              "reasoning": 278
+            },
+            {
+              "kind": "main",
+              "ms": 6575,
+              "out": 1381,
+              "reasoning": 303
+            },
+            {
+              "kind": "main",
+              "ms": 1807,
+              "out": 68,
+              "reasoning": 16
+            },
+            {
+              "kind": "main",
+              "ms": 4023,
+              "out": 721,
+              "reasoning": 0
+            }
+          ]
+        },
+        "tools": {
+          "calls": 50,
+          "errors": 1,
+          "toolMs": 13679,
+          "byName": {
+            "bash": {
+              "calls": 6,
+              "durationMs": 13048,
+              "errors": 1,
+              "resultBytes": 12219
+            },
+            "project_context": {
+              "calls": 1,
+              "durationMs": 5,
+              "errors": 0,
+              "resultBytes": 385
+            },
+            "read_file": {
+              "calls": 25,
+              "durationMs": 263,
+              "errors": 0,
+              "resultBytes": 8246
+            },
+            "write_file": {
+              "calls": 2,
+              "durationMs": 58,
+              "errors": 0,
+              "resultBytes": 1949
+            },
+            "edit_file": {
+              "calls": 6,
+              "durationMs": 107,
+              "errors": 0,
+              "resultBytes": 2475
+            },
+            "grep": {
+              "calls": 4,
+              "durationMs": 70,
+              "errors": 0,
+              "resultBytes": 520
+            },
+            "task_report": {
+              "calls": 4,
+              "durationMs": 110,
+              "errors": 0,
+              "resultBytes": 12606
+            },
+            "task_changes": {
+              "calls": 2,
+              "durationMs": 18,
+              "errors": 0,
+              "resultBytes": 8096
+            }
+          }
+        },
+        "overheadMs": 379,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "009-T04-1-context",
+        "wallMs": 141593,
+        "requests": {
+          "main": 29,
+          "summary": 1,
+          "mainMs": 115581,
+          "summaryMs": 13931,
+          "modelMs": 129512,
+          "inputTokens": 691705,
+          "outputTokens": 19700,
+          "reasoningTokens": 11713,
+          "summaryOutputTokens": 2431,
+          "summaryReasoningTokens": 1197,
+          "longOver10s": 5,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 742,
+              "out": 95,
+              "reasoning": 6
+            },
+            {
+              "kind": "main",
+              "ms": 873,
+              "out": 136,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1365,
+              "out": 132,
+              "reasoning": 26
+            },
+            {
+              "kind": "main",
+              "ms": 1787,
+              "out": 350,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 5782,
+              "out": 1217,
+              "reasoning": 666
+            },
+            {
+              "kind": "main",
+              "ms": 1429,
+              "out": 163,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1423,
+              "out": 41,
+              "reasoning": 6
+            },
+            {
+              "kind": "main",
+              "ms": 1975,
+              "out": 167,
+              "reasoning": 12
+            },
+            {
+              "kind": "main",
+              "ms": 6205,
+              "out": 1339,
+              "reasoning": 578
+            },
+            {
+              "kind": "main",
+              "ms": 2278,
+              "out": 299,
+              "reasoning": 102
+            },
+            {
+              "kind": "main",
+              "ms": 1230,
+              "out": 38,
+              "reasoning": 3
+            },
+            {
+              "kind": "main",
+              "ms": 1582,
+              "out": 70,
+              "reasoning": 13
+            },
+            {
+              "kind": "main",
+              "ms": 2365,
+              "out": 245,
+              "reasoning": 46
+            },
+            {
+              "kind": "main",
+              "ms": 10738,
+              "out": 1589,
+              "reasoning": 1549
+            },
+            {
+              "kind": "main",
+              "ms": 10579,
+              "out": 2007,
+              "reasoning": 1169
+            },
+            {
+              "kind": "main",
+              "ms": 2047,
+              "out": 243,
+              "reasoning": 46
+            },
+            {
+              "kind": "main",
+              "ms": 1094,
+              "out": 39,
+              "reasoning": 4
+            },
+            {
+              "kind": "main",
+              "ms": 1599,
+              "out": 78,
+              "reasoning": 21
+            },
+            {
+              "kind": "main",
+              "ms": 3640,
+              "out": 460,
+              "reasoning": 190
+            },
+            {
+              "kind": "main",
+              "ms": 20395,
+              "out": 3558,
+              "reasoning": 2968
+            },
+            {
+              "kind": "main",
+              "ms": 1941,
+              "out": 220,
+              "reasoning": 23
+            },
+            {
+              "kind": "main",
+              "ms": 7305,
+              "out": 1391,
+              "reasoning": 778
+            },
+            {
+              "kind": "main",
+              "ms": 12658,
+              "out": 2375,
+              "reasoning": 1835
+            },
+            {
+              "kind": "main",
+              "ms": 1767,
+              "out": 46,
+              "reasoning": 11
+            },
+            {
+              "kind": "main",
+              "ms": 1672,
+              "out": 92,
+              "reasoning": 35
+            },
+            {
+              "kind": "summary",
+              "ms": 13931,
+              "out": 2431,
+              "reasoning": 1197
+            },
+            {
+              "kind": "main",
+              "ms": 1817,
+              "out": 138,
+              "reasoning": 85
+            },
+            {
+              "kind": "main",
+              "ms": 1374,
+              "out": 58,
+              "reasoning": 19
+            },
+            {
+              "kind": "main",
+              "ms": 3814,
+              "out": 144,
+              "reasoning": 87
+            },
+            {
+              "kind": "main",
+              "ms": 4105,
+              "out": 539,
+              "reasoning": 238
+            }
+          ]
+        },
+        "tools": {
+          "calls": 45,
+          "errors": 4,
+          "toolMs": 11691,
+          "byName": {
+            "bash": {
+              "calls": 11,
+              "durationMs": 11278,
+              "errors": 4,
+              "resultBytes": 13823
+            },
+            "glob": {
+              "calls": 1,
+              "durationMs": 7,
+              "errors": 0,
+              "resultBytes": 527
+            },
+            "read_file": {
+              "calls": 15,
+              "durationMs": 179,
+              "errors": 0,
+              "resultBytes": 6705
+            },
+            "write_file": {
+              "calls": 2,
+              "durationMs": 46,
+              "errors": 0,
+              "resultBytes": 3157
+            },
+            "task_changes": {
+              "calls": 5,
+              "durationMs": 40,
+              "errors": 0,
+              "resultBytes": 12461
+            },
+            "task_report": {
+              "calls": 9,
+              "durationMs": 100,
+              "errors": 0,
+              "resultBytes": 83931
+            },
+            "edit_file": {
+              "calls": 2,
+              "durationMs": 41,
+              "errors": 0,
+              "resultBytes": 4905
+            }
+          }
+        },
+        "overheadMs": 390,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "010-U02-1-context",
+        "wallMs": 61985,
+        "requests": {
+          "main": 9,
+          "summary": 0,
+          "mainMs": 56719,
+          "summaryMs": 0,
+          "modelMs": 56719,
+          "inputTokens": 102271,
+          "outputTokens": 10217,
+          "reasoningTokens": 7348,
+          "summaryOutputTokens": 0,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 1,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 820,
+              "out": 76,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 1441,
+              "out": 299,
+              "reasoning": 6
+            },
+            {
+              "kind": "main",
+              "ms": 29024,
+              "out": 5632,
+              "reasoning": 4731
+            },
+            {
+              "kind": "main",
+              "ms": 1535,
+              "out": 266,
+              "reasoning": 23
+            },
+            {
+              "kind": "main",
+              "ms": 6245,
+              "out": 1016,
+              "reasoning": 860
+            },
+            {
+              "kind": "main",
+              "ms": 4708,
+              "out": 816,
+              "reasoning": 468
+            },
+            {
+              "kind": "main",
+              "ms": 5431,
+              "out": 1071,
+              "reasoning": 725
+            },
+            {
+              "kind": "main",
+              "ms": 1167,
+              "out": 103,
+              "reasoning": 9
+            },
+            {
+              "kind": "main",
+              "ms": 6348,
+              "out": 938,
+              "reasoning": 526
+            }
+          ]
+        },
+        "tools": {
+          "calls": 19,
+          "errors": 3,
+          "toolMs": 5161,
+          "byName": {
+            "glob": {
+              "calls": 1,
+              "durationMs": 10,
+              "errors": 0,
+              "resultBytes": 342
+            },
+            "read_file": {
+              "calls": 10,
+              "durationMs": 141,
+              "errors": 0,
+              "resultBytes": 3211
+            },
+            "write_file": {
+              "calls": 1,
+              "durationMs": 30,
+              "errors": 0,
+              "resultBytes": 3494
+            },
+            "bash": {
+              "calls": 5,
+              "durationMs": 4913,
+              "errors": 3,
+              "resultBytes": 5352
+            },
+            "task_changes": {
+              "calls": 1,
+              "durationMs": 15,
+              "errors": 0,
+              "resultBytes": 4124
+            },
+            "task_report": {
+              "calls": 1,
+              "durationMs": 52,
+              "errors": 0,
+              "resultBytes": 16805
+            }
+          }
+        },
+        "overheadMs": 105,
+        "removedTaskIds": []
+      },
+      {
+        "episode": "011-F01-1-context",
+        "wallMs": 20456,
+        "requests": {
+          "main": 8,
+          "summary": 0,
+          "mainMs": 19025,
+          "summaryMs": 0,
+          "modelMs": 19025,
+          "inputTokens": 44332,
+          "outputTokens": 3149,
+          "reasoningTokens": 1609,
+          "summaryOutputTokens": 0,
+          "summaryReasoningTokens": 0,
+          "longOver10s": 0,
+          "durationsMs": [
+            {
+              "kind": "main",
+              "ms": 796,
+              "out": 109,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 775,
+              "out": 62,
+              "reasoning": 24
+            },
+            {
+              "kind": "main",
+              "ms": 532,
+              "out": 74,
+              "reasoning": 0
+            },
+            {
+              "kind": "main",
+              "ms": 5573,
+              "out": 986,
+              "reasoning": 785
+            },
+            {
+              "kind": "main",
+              "ms": 3217,
+              "out": 646,
+              "reasoning": 263
+            },
+            {
+              "kind": "main",
+              "ms": 952,
+              "out": 77,
+              "reasoning": 8
+            },
+            {
+              "kind": "main",
+              "ms": 3308,
+              "out": 560,
+              "reasoning": 342
+            },
+            {
+              "kind": "main",
+              "ms": 3872,
+              "out": 635,
+              "reasoning": 187
+            }
+          ]
+        },
+        "tools": {
+          "calls": 11,
+          "errors": 0,
+          "toolMs": 1343,
+          "byName": {
+            "read_file": {
+              "calls": 5,
+              "durationMs": 76,
+              "errors": 0,
+              "resultBytes": 1131
+            },
+            "glob": {
+              "calls": 1,
+              "durationMs": 12,
+              "errors": 0,
+              "resultBytes": 231
+            },
+            "write_file": {
+              "calls": 2,
+              "durationMs": 53,
+              "errors": 0,
+              "resultBytes": 1008
+            },
+            "bash": {
+              "calls": 1,
+              "durationMs": 1168,
+              "errors": 0,
+              "resultBytes": 1351
+            },
+            "task_changes": {
+              "calls": 1,
+              "durationMs": 13,
+              "errors": 0,
+              "resultBytes": 1404
+            },
+            "task_report": {
+              "calls": 1,
+              "durationMs": 21,
+              "errors": 0,
+              "resultBytes": 9509
+            }
+          }
+        },
+        "overheadMs": 88,
+        "removedTaskIds": []
+      }
+    ],
+    "aggregate": {
+      "episodes": 12,
+      "wallMs": 959303,
+      "mainMs": 783688,
+      "summaryMs": 83483,
+      "toolMs": 90072,
+      "overheadMs": 2060,
+      "mainRequests": 184,
+      "summaryRequests": 5,
+      "inputTokens": 3647881,
+      "outputTokens": 143322,
+      "reasoningTokens": 80982,
+      "summaryOutputTokens": 16441,
+      "summaryReasoningTokens": 8518,
+      "toolCalls": 332,
+      "toolErrors": 22,
+      "longOver10s": 19,
+      "msPerOutputToken": 6.693340868812883,
+      "wallVsOutput": {
+        "slope": 6.675916924883434,
+        "r2": 0.9873644044892406,
+        "count": 12
+      }
+    }
+  }
+}

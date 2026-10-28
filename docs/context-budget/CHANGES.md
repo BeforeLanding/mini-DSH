@@ -1,5 +1,138 @@
 # 改动与验收证据
 
+### CE-P2 四臂开发批结果与中断边界（2026-10-28）
+
+四份完整付费批次按 `full → no-preview → no-projection → no-report` 顺序分别授权，每批 12/12，价格峰值估价分别 $1.28431524、$1.334783124、$1.354099452、$1.335197268，合计 $5.308395084（含探针储备，不是账单）。首次 no-report 在第五条中断，4/12 条完整，1 个模型请求缺 provider usage，原始证据保留并排除；新目录的完整重跑另获授权。比较器按源码提交、manifest、观察 digest、tool schema、共同配置、批次顺序、provider usage 和离线探针验证，17 项检查全部 true；可靠完成 11/12、12/12、12/12、11/12，产物验收四臂均 12/12。三项归因均 `inconclusive`，不改变组件默认行为或摘要后裁剪默认关闭。逐题逐重复读数、费用边界和完整文件哈希见 [开发批结果](COMPONENT-LOO-PAID-RESULT.md) 与 [机器比较记录](../samples/component-loo-paid-20261028.json)。公开记录不含原始 prompt 或工具正文，报告与 JSON 对照验证通过，文档步骤模型请求 0。
+
+### CE-P1 消融比较器后处理读数修正（2026-10-28）
+
+四批付费执行完成后复核发现，原比较器仅在“去掉组件后资源变差”时计算重复方向：当去掉组件后资源变好，`repeatConsistent` 可对空集合返回 true，掩盖两次重复相反；离线机制变差而付费读数反向时，也误写为“未达阈值”。现在对超过 5% 的任一方向都检查两次重复，冲突写 `repeat-directions-conflict`；付费方向与离线机制相反时写 `paid-direction-opposes-offline-mechanism`。这只修正归因解释，三项 `inconclusive` 结论与原始批次证据不变。新增双重复反例，覆盖预览臂冲突与投影/报告臂反向。
+
+`pnpm check` 因 pnpm 引导访问 npm registry 失败；按 AGENTS 允许的等价命令运行 `node scripts/build.js`（exit 0）、`node scripts/check-syntax.js`（226 files）、定向测试 11/11、设置固定 WSL runtime 后 `node --test dist/test/*.test.js`（579/579，0 fail，0 skipped）；Biome 257 files、0 诊断，`git diff --check` 通过。修正后的四臂比较器全部 16 项协议检查通过，三臂仍为 `inconclusive`，但原因字段现与实测方向一致；后处理额外模型请求 0。
+
+
+### CE-F1 PR #8 合并后的四臂零付费重冻（2026-10-27）
+
+PR #8 merge commit `54a1921` 的六项 CI 全绿。full 评测 HEAD 固定为该 merge；三个回退臂各自应用两项审查修复后重新运行 `pnpm check` 和定向测试（14/14、14/14、15/15、15/15）。官方 DeepSeek 模型版本、thinking、1M 窗口和峰值单价仍与协议一致，新快照时间 `2026-10-27T12:51:07Z`。四臂重新 `eval-v2-freeze`、`--validate-only` 全过，独立审计确认共同字段/非组件文件逐字相同、源码精确差异、tool schema、源码身份与探针输出一致；每臂 12 条计划、实际运行/付费请求 0。按峰值价机械储备每批 $21.1355904，拟定每批 $22、四批 $88 硬上限，尚未执行任何付费批次。提交号、digest、日志哈希、复现与后续授权边界见 [合并后冻结](COMPONENT-LOO-POSTMERGE-FREEZE.md) 和 [机器记录](../samples/component-loo-postmerge-freeze-20261027.json)。
+
+### CE-R2 消融归因双向质量差异（2026-10-27）
+
+PR #8 审查发现，`qualityLoss` 只检查“去掉组件后变差”，若回退臂可靠完成或产物验收比 full 明显更好，仍可能把资源方向和离线探针组成 `signal`。现在保留单向 `qualityLoss` 用于效率权衡，另以双向最大绝对差定义 `qualityDifference`；任一质量读数超过 1 条时 `reviewRequired=true`、归因为 `inconclusive`，先读逐题轨迹。新增 full 质量下降 2 条而 no-preview 资源变差/离线机制变差的反例，断言不能标为组件收益。`pnpm check` syntax 226 files；相关 25/25 测试、`pnpm lint` 256 files 0 诊断，和 CE-R1 同一完整工作树验收。历史付费证据未改写。
+
+### CE-R1 评测提交与源码提交身份一致（2026-10-27）
+
+PR #8 审查发现冻结器此前只验 `sourceBaseCommit` 为评测 HEAD 的祖先，无法拒绝两次提交之间修改产品源码。冻结与运行入口现用 `git diff --quiet SOURCE EVAL -- src` 检查，任何产品源码差异在模型请求前报错；比较器及 manifest 冻结清单纳入该检查文件。临时 Git 仓库正反例验证文档变更通过、`src/**` 变更拒绝。`pnpm check` syntax 226 files，相关 25/25 测试、`pnpm lint` 256 files 0 诊断（CE-R2 的未提交测试也在同一工作树中通过）。原 2026-10-27 四份零付费证据保留为当时固定 HEAD 的结果；合并后按新代码重新冻结。
+
+### CE-2 证据换行修正（2026-10-27）
+
+CE-1 `4251382`、CE-2 `6bbc1de` 分别对应计划中的协议收口与冻结验收；随后单独修正新增机器记录的换行。`.gitattributes` 对 docs/samples/** 设置 -text，首次写入 CRLF 导致 git diff --check 报行尾空白；改为 LF 后复检通过。JSON 解析值及四份 manifest/probe 原始文件、digest 均不变，不改写已有提交。最终 lint 254 files、0 诊断。
+
+### CE-2 四臂重新冻结与零付费验收（2026-10-27，完成）
+
+CE-1 提交 `4251382` 已推送。从最新 main `0b8b973` 重新派生三个独立回退源码提交，分别 check/针对性测试通过后，再应用相同评测代码。源码变体源提交与评测 HEAD 的 `src/**` 一致；四份 manifest 各 12 条，合计 48 条计划，全部 `--validate-only` 通过（wsl-bwrap、paidRequests=0）。规范化共同字段及非组件文件逐字相同，精确源码路径审计通过，四臂显式 prune=false、tool schema 一致。
+
+离线预览通过 12→0（fullRecall 全部 12/12），投影 propertyReads 32,982→2,284,323，报告 snapshotOpens 6→91；投影/报告输出哈希一致。源码定向测试 no-preview 14/14、no-projection 机制 4/4＋实际 compaction 四文件 46/46、no-report 6/6，三臂 check 与应用评测代码后的 check 全过。full 另从干净源码 HEAD 运行探针；没有伪造 sourceCommit。新证据根 `D:\Agent\outputs\component-eval-closure-20261027\`，evidence/ 为空，真实 episode 0、provider 请求 0。
+
+实际命令：各评测工作树 `pnpm check`、`node dist/scripts/eval-v2-freeze.js --config CONFIG --output MANIFEST`、设置 MINI_DSH_V2_RUNTIME 后 `node dist/scripts/eval-v2-run.js --manifest MANIFEST --validate-only`；各源码工作树 `node scripts/benchmark-components.mjs --out PROBE`；`node D:/Agent/outputs/component-eval-closure-20261027/audit.mjs` 检查四份实际材料，全项通过。提交号/digest/哈希/复现与边界见 [冻结验收](COMPONENT-EVAL-CLOSURE.md) 和 [机器记录](../samples/component-eval-closure-20261027.json)。CE-2 不修改冻结输入；付费执行与实时价格核对/重冻仍需另行安排，未授权。
+
+### CE-1 组件评测协议收口（2026-10-27，完成）
+
+从 main `0b8b973` 复用未合并的 `3752ca4`（原实现作者与提交记录保留），引入独立 `component-loo` 与四臂比较器。NX-50 的比较器/历史门槛不变；LOO 的包文件必须完全相等，源码仅允许精确组件路径差异。`scripts/eval-v2-component-protocol.ts` 集中维护新协议的调度、裁剪开关、允许路径与诊断阈值。
+
+补齐原准备代码的校验缺口：四臂预算显式冻结 `postCompactionPrune=false`；全部四批严格按预注册顺序、不重叠；比较器重新验证 manifest 与每条 observation，核对汇总 digest 和 provenance，拒绝共同配置漂移、重复/伪造观察和源码路径新增/删除。离线机制与付费归因分开，5% 仅为诊断阈值，不输出 mergeEligible 或显著性结论。
+
+本轮实测：`pnpm check` → syntax 224 files；设置 `MINI_DSH_V2_RUNTIME=D:\Agent\tmp\nx42-runtime\unpack` 后 `pnpm test` → **576/576，0 fail，0 skipped**（包含隔离验收）；复核发现可选源码 pin 的空配置被误拒绝，修复后重新 `pnpm check` 与五个 eval-v2 相关测试文件 → **26/26**；`pnpm lint` → 253 files，0 诊断。`node dist/scripts/check-coding-fixtures.js` → 25 项 expected=true；`node dist/scripts/eval-offline.js` → 12/12 completed/accepted；`node scripts/benchmark-components.mjs --compare docs/samples/components-baseline.json` → tools/compaction/reports 全过、providerRequests=0。
+
+初次沙箱 pnpm 引导因无法联网校验签名失败；正常用户环境 `pnpm install --frozen-lockfile --offline` 与以上检查使用固定 pnpm 11.22.0 通过，未修改锁文件、未跳过签名。本轮完整日志在仓库外 `D:\Agent\outputs\component-eval-{test,targeted,fixtures,offline}-20261027.log`；真实 provider 请求 0。NX-50 历史源码比较器的三条回归用例保持不变并通过。
+
+### NX-51 24 条 prune 开/关结果：摘要下降假设未获支持（2026-10-25）
+
+两臂各 12/12 执行，`incomplete=false`；manifest 除 `sourceBaseCommit`、`gitCommit` 与 `src/**` 外逐字相同，均通过 `--validate-only`。实际 usage 估价 on `$1.734961`、off `$1.352154`，合计 `$3.087115`，低于 $44 上限。
+
+读数：摘要次数 3→**7**、摘要耗时 43,249→**105,394 ms（+143.7%）**、主动耗时 967,446→**1,332,173 ms（+37.7%）**、输出 token 127,305→**188,915（+48.4%）**、provider token 4,115,550→**5,224,805（+27.0%）**；可靠完成 11→**10**（新增失败为 R04/1 的 `token_budget`），产物验收 12→12。`context/prune` 在 R04/0、R04/1、T04/0、T04/1 共 5 条，行为确实触发，但没有带来摘要下降。逐题差值在重复间方向不一致（U02/0 摘要 1→0，U02/1 0→1；B03、F02 两重复方向相反），24 条不足以区分采样方差与机制效应。
+
+结论：离线反事实（T04/0 后两次摘要本可避免）**没有在真实轨迹上复现**；按预注册规则不把“摘要后裁剪”作为默认行为推广。完整表、逐题配对与复现见 [NX-51-PRUNE-RESULT](NX-51-PRUNE-RESULT.md)。
+
+决策回填：新增 `postCompactionPrune` 策略开关并**默认关闭**；两条持久化回归测试显式开启，另增默认关闭用例，默认投影回到 main。验收：隔离完整 `pnpm test` **526/526，0 fail，0 skipped**；定向 `budget`／`context`／`compaction-recovery`／`nx38-covenant` 28/28；`pnpm check` 197 files、`pnpm lint` 224 files 0 诊断、`pnpm fixtures:check` 25 项 `expected=true`、`pnpm eval:offline` 12/12 accepted、`pnpm bench:components` 三项比较全过。真实模型请求 0（本段只回填开关与测试）。
+
+### NX-51 变慢任务离线诊断、摘要后裁剪与持久化（2026-10-25）
+
+只读复用 NX-50 两批 24 个 episode 的 `events.jsonl`，把墙钟拆成模型等待、摘要、工具与投影开销。新增 `scripts/analyze-eval-timing.mjs` 与 `docs/samples/nx51-timing.json`（不含 prompt/模型正文/工具正文）；口径与逐题归因见 [NX-51-TIMING-DIAGNOSIS](NX-51-TIMING-DIAGNOSIS.md)。
+
+读数：旧/新主动耗时 899,287→959,303 ms（+60,016），其中主请求模型等待 775,096→783,688（+8,592）、摘要 38,479→83,483（**+45,004**）、工具 84,001→90,072（+6,071）、投影/循环约 1.7～2.1 s。输入 token 3,937,718→3,647,881，输出 token **127,701→143,322（+12.2%）**；逐 episode 墙钟与输出 token 的 R²=0.983，>10 s 请求 9→19 次。F02 的 +23.8 s 集中在 repeat 1（输出 2.2k→6.7k，含一次 3.6 s 命令冷启动）；T04 的 +82.5 s 中 44.4 s 是摘要次数 1→3；R04 两 repeat 方向相反（+88.3 s / -51.9 s）。`read_file` 与 `task_report` 合计不足 0.4 s，报告正文会进入上下文但直接墙钟可忽略。
+
+根因：`project()` 只在输入超过硬目标 65,536 时裁剪，而压力线是 52,428；压力摘要只压当前 task，已结束旧任务仍占 35,765～41,127 token，摘要后几次请求又越线。修改 `ContextBudgetRuntime.project()` 增加可选 `pruneTargetTokens`，主循环在压力摘要 applied 后按 `postCompactionTargetRatio × compactionBudget` 重投影并裁掉已结束旧任务。摘要仍先发生，保留 NX-38 covenant 的“模型摘要可带下旧知识”路径；单任务、显式 `/compact`、摘要失败/拒绝不改变。
+
+**持久化**：裁剪决定写成 `context/prune` 事件（`targetTokens`、`removedTaskIds`、可选 `summarySeq`），`project()` 读取日志里全部 prune 的并集并在后续轮次、`/continue` 与重启恢复中继续排除。原始事件一条不删，`read_history` 仍按 seq 回读旧阶段；`context/prune` 也计入崩溃折叠，决定先于请求额度检查落盘。没有 `context/prune` 的旧日志行为不变。
+
+验收：新增 `compaction-trigger` 两条回归——目标案例确实裁掉旧任务；后续轮次、`/continue`、重启恢复都不带回它们，且 `read_history` 仍读得到旧阶段原文。原“不可约前缀”与“溢出兜底”用例改用当前 task 自身构造（旧任务在摘要后可裁，不再构成不可约前缀），语义不变。定向 `budget`／`context`／`compaction-recovery`／`nx38-covenant` 28/28（covenant 4/4）；`MINI_DSH_V2_RUNTIME='D:\Agent\tmp\nx42-runtime\unpack' pnpm test` **525/525，0 fail，0 skipped**；`pnpm check` 197 files，`pnpm lint` 223 files 0 诊断；`pnpm fixtures:check` 25 项 `expected=true`、`pnpm eval:offline` 12/12 completed/accepted、`pnpm bench:components` 三项比较全过，均 exit 0。**真实 provider 请求 0**；真实收益与三项组件归因需按 [NX-51 消融设计](NX-51-COMPONENT-ABLATION.md) 另行授权。
+
+### NX-50 PR5 组件版本对照：两批执行与门槛结果（2026-10-25）
+
+旧版 manifest `6d50a359…`（被测 `74f8e89`，评测 `c17145a`）与优化版 `9746c90f…`（被测 `0b24b32`，评测 `adabea5`）分别在干净工作树冻结并通过 `--validate-only`；两批各 12/12 执行、无 missing/invalid、provider usage 全覆盖、estimated=0。预注册顺序先优化版（03:52–04:09 UTC）后旧版（05:55–06:10 UTC），中间等待旧版单独授权。
+
+结果：旧/新可靠完成 **12/12 对 12/12**、产物验收 **12/12 对 12/12**；token **4,065,419→3,791,203（-6.75%）**，主动耗时 **898,977→958,913 ms（+6.67%）**，模型请求 206→189、工具调用 357→332、工具错误 23→22、预览截断 19→18、压力压缩 3→5、cache-read 两版均 57,728。比较器 `gate.status=pass`、`mergeEligible=true`、`reasons=[]`，无单题双退步。峰时价 usage 估价旧版 `$1.337245368`、新版 `$1.269039468`，均低于单批 $22 授权上限；这是估价，不是供应商账单。
+
+逐题 token 变化不均：U02 -65.0%、F01 -51.5%、R04 -3.9%，而 B03 +19.5%、F02 +30.9%、T04 +22.2%；主动耗时在 B03/F02/R04/T04 上升，其中 F02/R04/T04 单题升幅超过 15%，但预注册门槛按两批总量判定。完整表、证据路径与解释边界见 [NX-50-RESULT](NX-50-RESULT.md)。两批串行且时间窗不同，cache 可能跨会话共享；不作显著性、泛化或单项组件归因。证据在 `D:\Agent\outputs\nx50-component-ab-20261025\`，原始 prompt/输出未进仓库。main 合并待用户确认。
+
+### NX-50 PR5 组件版本对照的零付费准备（2026-10-25）
+
+新增独立 `component` split 与 `NX-50-component-ab-v1` 协议，固定 `U02`、`B03`、`F01`、`F02`、`R04`、`T04` 六道此前无真实模型曝光的 formal fixture，只跑 `context` 臂，每题两次；每版 12 条 episode，整题预算与 NX-45 相同（1M token / 64 请求 / 128 工具 / 600 秒）。旧版 `74f8e89` 与优化版 `0b24b32` 各自在干净树上冻结，manifest 同时记录被测 `sourceBaseCommit` 与实际评测 `gitCommit`；比较器只允许 `src/**` 与已知 `package.json` 脚本差异。
+
+提交边界：`f3aab1f` 协议/冻结/单臂报告与文档；`5665293` runner 单臂 block、严格守卫与 provenance；`e4dfe4b` 离线比较器与门槛；本条目所在提交只回填状态。`developmentReserveUsd` 由固定 24 条/baseline 参数化为可指定臂与 episode 数，默认值保持历史读数。比较门槛在开跑前固定：新版可靠完成/产物验收各允许 1 条 episode 容差；token 与主动耗时不得超过旧版 1.15 倍；单题两次都退步为 `review-required`，不自动合并。
+
+零付费实测（优化版 checkout）：`pnpm check` → syntax 197 files；`MINI_DSH_V2_RUNTIME='D:\Agent\tmp\nx42-runtime\unpack' pnpm test` → 523 tests / 523 pass / 0 fail / 0 skipped；`pnpm lint` → 221 files / 0 diagnostics；`pnpm fixtures:check`、`pnpm eval:offline`（12/12 completed/accepted）、`pnpm bench:components`（tools/compaction/reports 三 gate）均 exit 0。`eval:v2 --split component --plan-only` 输出 6 题、1 臂、12 episodes、12 blocks，caps 与预留一致；比较器定向 3/3。未读取 API key、未发 provider 请求、未创建付费证据目录、未合并 main。两版 manifest 的冻结、digest 与 `--validate-only` 及后续付费执行结果见上一条。
+
+### OPT-4 冻结对照门禁与最终交付（2026-10-25）
+
+新增 `pnpm bench:components`、`test/component-benchmark.test.ts`、最终 `components-optimized.json` 与 `docs/COMPONENT-OPTIMIZATION.md`。基线 `74f8e89`、候选生产源码 `14a0d1c6e8eb1519cd27e8cc61ce0011927536cd`；两版协议 SHA-256 为 `34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28`，冻结脚本未改。基线文件 SHA-256 与协议钉版并进入完整测试，另验证将已通过的工具探针当基线时不能报告空改进。`.gitattributes` 固定协议脚本 LF，避免 Windows checkout 改变字节指纹。
+
+结果：工具尾标记 3/12→12/12，正文额度 9/12→12/12，全文回读两版均 12/12；最大历史事件属性读取下降 98.82%，报告文件打开次数下降 97.01%，两类选定证据输出哈希相同。未测其他组件、真实模型成功率或泛化，不追溯修改 NX-45。独立功能提交为 `00c8e32`、`cd17cbc`、`fda47d0`，新增边界 `14a0d1c`；基线提交 `c2ee97b`。原计划五步因复核发现独立失败边界增加 OPT-1b，六个步骤均可单独回退，没有 squash/amend/rebase。
+
+最终实际检查：正常用户权限 `pnpm test` → 517 tests / 487 pass / 0 fail / 30 skipped；`pnpm check` → syntax 195 files；`pnpm lint` → 219 files / 0 diagnostics；`pnpm bench:components` → 三 gate 通过；`node dist/scripts/check-coding-fixtures.js` exit 0；`node dist/scripts/eval-offline.js` → 12 planned / 12 executed / 12 completed / 12 accepted；`node dist/scripts/eval-estimate.js` → exit 0（估算器/语料哈希保持）；`node dist/scripts/recompute-report.js docs/samples --check` → 两条报告和 RESULTS 均一致。原始本地输出在 `D:\Agent\outputs\mini-dsh-components-20261025`，公开合成测量随仓库提交。30 项隔离测试由 Linux CI 实测，本机不计为通过。无真实 provider 请求、新模型费用、npm 发布或部署。
+
+### OPT-1b 极小命令额度的失败边界（2026-10-25）
+
+独立提交 `14a0d1c`。最终复核发现：即使裁剪 helper 返回空尾部，展开原始 `stream` 仍可能保留采集的 tail；同时两流各 `max(1, floor(limit/2))` 在总额度为 1 时会分配 2 字节。现明确覆盖原 tail（无完整字符时 undefined），并按 stdout ceil/stderr floor 分配。新增 1/2 字节双流、中文字符放不下和 sparse ref 全文回读用例；18 个冻结对照探针未改。含待提交 OPT-4 门禁的完整工作区回归 517 tests / 487 pass / 0 fail / 30 skipped；lint 无诊断，语法 195 files。OPT-4 的门禁/最终证据另提交；没有合并或改写已有提交。
+
+### OPT-3 报告查询内复用文件版本（2026-10-25）
+
+`fileVersionQuery` 只缓存本次查询的 hash/location 或读取失败；`taskReport` 的变更、检查与覆盖视图共享读取器，独立查询/分页各自重新读盘。文件正文不进入缓存，取消命中前仍检查；Bash 验证前后的读取不共享。PLAN 明确报告不是文件系统原子快照，`acceptance: not_asserted` 与失败/过期/未知、声明覆盖边界不变。
+
+固定报告探针 1/8/32 条检查均输出与基线相同的证据哈希；文件打开次数从 5/19/67 降到 2/2/2，最大案例下降 97.01%。新增真实查询断言：变更文件和配置各读一次，失败检查仍在；修改配置后下一次查询变 stale，已取消查询拒绝。定向 task-report/task-verification/task-changes 8/8。
+
+完整 `pnpm test` 首次仅决策文档源码锚点失败：新增函数插入中间移动了编辑器锚点；现把函数移至文件末尾，保留原行号。复跑 513 tests / 483 pass / 0 fail / 30 skipped；strict build、语法 194 files、lint 无诊断。真实 provider 请求 0。
+
+### OPT-2 摘要投影索引（2026-10-25）
+
+`surfaceSeqs` 建立事件 seq 和可见位置索引，不再对每个 shadowed seq 扫描全事件；只按事件类型选初始可见集，不在选择阶段序列化所有未被遮蔽工具的参数。摘要替换顺序、协议闭合、unknown 与原始用户请求保护规则不变，没有缓存跨请求或改写日志。
+
+固定对照脚本的 compaction gate 通过，三个输出 SHA-256 与基线完全一致。64/256/1024 工具组的事件 `seq/type` 读取为 10,529→1,610、140,225→6,302、2,133,569→25,070，最大案例下降 98.82%；该指标不等同于时间复杂度或模型 token。5 次计时中位数仅作环境相关观测，不作 CI 门槛。新增冻结旧实现 oracle，80 个 seed 各 12 次比较嵌套、缺失、不连续、协议不闭合、unknown/用户请求保护，并确认不修改事件；另测选择阶段不序列化未遮蔽参数。
+
+验收：定向 surface/context/compaction-plan/compaction-runtime 37/37；完整 `pnpm test` 513 tests / 483 pass / 0 fail / 30 skipped；build 严格类型通过，`node scripts/check-syntax.js` 194 files，`pnpm lint` 无诊断。构建清理 dist 与第一次语法检查并发造成文件暂缺，该检查已在构建结束后重跑通过；后续避免并发构建与 dist 读取。真实 provider 请求 0。
+
+### OPT-1 预览头尾共享额度（2026-10-25）
+
+`previewWindow` 从同一正文额度分配头尾，保留阈值边界的尾部信息与中段游标；普通结果推荐从中段偏移回读。Bash 两流各分一半；合法的采集头尾重叠先去重再存储，避免 quota/integrity 误报。PLAN/REQUIREMENTS 显式修订 D-20；历史 JSONL 与 NX-45 结论未改。
+
+固定脚本未改：`node scripts/benchmark-components.mjs --compare docs/samples/components-baseline.json --component tools --out <output>` 通过，12/12 同时满足尾部可见、头尾合计不超正文额度、完整 ref 回读；基线为 0/12 同时满足。两个新增回归覆盖 1～64 字节 ASCII/Unicode 额度及重叠稀疏命令结果；定向 tool-results 13/13。
+
+完整回归首次 511 tests / 480 pass / 1 fail / 30 skipped：旧压力探针只有 stdout，依赖超额尾部达到压缩阈值。现改为同时填满 stdout/stderr，共享原 16 KiB 正文额度，不改阈值、预算和断言、不改 fixture 或冻结对照集；复跑 511 tests / 481 pass / 0 fail / 30 skipped。`pnpm check` 193 files、`pnpm lint` 无诊断。真实 provider 请求 0。新请求指纹与旧录制可能不同，不把本次结果追溯套用旧实验。
+
+### OPT-0 组件对照基线（2026-10-25）
+
+基于远端 main `74f8e89721820ef514e26df71cbb05e0c69683c7`，冻结 `scripts/benchmark-components.mjs` 与 `docs/samples/components-baseline.json`。12 个工具输出边界/Unicode/长输出探针、3 个嵌套摘要历史（64/256/1024 工具组）、3 个重复检查报告（1/8/32 条检查、2 个文件）。脚本使用实际生产组件、真实临时文件与结果存储；不装配 provider、不运行模型或 Bash。机制断言与原文回读均成功，工具预览的问题作为测量结果保留：9/12 丢失尾标记，3/12 头尾合计超正文额度；最大历史投影事件属性读取 2,133,569 次，32 检查报告打开文件 67 次。
+
+验证：`pnpm check` → 193 files；正常权限 `pnpm test` → 509 tests / 479 pass / 0 fail / 30 skipped；`node scripts/benchmark-components.mjs --root .eval-evidence/components-baseline --out docs/samples/components-baseline.json` → exit 0；`pnpm lint` → 无诊断。基线编译产物副本位于忽略目录 `.eval-evidence/components-baseline`；JSON 记录源提交、脚本和模块哈希，不依赖本机目录发布原始日志。改动前已列明独立提交边界。后续不得重写本基线或为获得分数修改脚本/题目。
+
+### SWE-bench Verified 正式四臂执行与评分恢复（2026-10-24）
+
+用户分别授权共享 token 上限开发复跑（配置上限 $10）和正式 50 题 × 4 臂（配置上限 $100）。正式执行源码 `8b3047c`；50/50 钉版镜像零模型预检通过，200/200 episode 保存，0 基础设施故障。第 164 次的瞬时模型重试缺精确 provider usage，运行器按预注册停止；从保存记录续跑剩余 36 次，未重跑既有 episode。已知费用估算 $3.618705108，未知用量 episode 1，不能把估算当发票。
+
+首轮及第二轮独立评分因 Docker Desktop/WSL 环境中断，`score2` 的另外三臂错误记录仅是故障证据。恢复 Docker 后用 systemd 用户服务托管 `score3`，脚本先断言已保存日程为 200 条唯一记录，然后只评分补丁，未调用模型。官方 SWE-bench v3.0.17 最终四臂各 50 条、总计 200 条评分，0 error；candidate 26/50、baseline 27/50、context-reference 28/50、context-proposed 27/50。candidate/baseline 配对 24/2/3/21，精确 McNemar p=1；两个 context 臂配对 26/2/1/21，p=1。baseline 22 条超过名义 416,666 token，上限敏感性剔除其 1 条越额成功后 candidate/baseline 均为 26/50，不能作干净的能力差异断言。
+
+验收：四份 `score3` 官方报告与 `scores.json` 逐臂 resolved 数吻合，官方日志均记录错误 0；核心 `SHA256SUMS` 六项通过，最终 `report.json` 的 planned/executed/scored 为 200/200/200、无 stopReason。冻结前脚本 `token_sensitivity.py` SHA-256 `e95fdab630af9c1988b7b8a04d60fc68423b96622ea13033b32fa8f8fceedc6e`，最终敏感性文件 `D:\Agent\outputs\mini-dsh-swebench-formal-20261022\formal-token-sensitivity.json`。精简归档 `formal-evidence-final.tar.gz` SHA-256 `fb58277adf09d9f303b80d23a811a0e24ccbae5d499a0e734da57122c52b40bd`；完整原件在 WSL，评分隐藏行未公开。详见 [正式结果](../EVALUATION-SWEBENCH.md#formal-four-arm-result-2026-10-24-50-tasks-per-arm)。
+
 ### R10 后续：接入 mini-SWE-agent 同模型外部基线（2026-10-21，零付费）
 
 **目标。** 正式 4 臂批次被 `external` 臂阻塞：旧 runner 在 `run.ts` 直接拒绝 external，`adapterFor` 只能注入模型适配器，仍跑 mini-DSH 的 agent loop。本步接入**未修改的 mini-SWE-agent v2.4.6**（commit `a83fcae82d2a08f0ee0c688f9d137b3566c097f8`），使用用户选定的**与 candidate 同构的沙箱**。
@@ -4513,12 +4646,3 @@ NX-07 最终验收：a 5ef5b2e、b 21ee528、c 04f5c4b、d dd45f75、e 6c03300�
 README 增加无 key 的 inspect 文本、`--json`、`--trace` 示例和退出码 0/1/2；说明 `integrity.complete` 只表示读到的 JSONL 完整，不代表任务或产物成功。由当前源码 `pnpm pack --pack-destination D:/Agent/outputs/nx49-inspect-validation-20261018/package-final` 得到 `mini-DSH-0.0.1.tgz`（SHA256 `07FC27637BEC9F11ED1FEFEAC88AE967902CC25A9D4644B73C5E666781D4F84B`），仓库外 `consumer space` 用 `pnpm --dir ... add --offline --ignore-scripts` 安装。109 个包成员，全部在白名单内，含 inspect 与入口 JS，无 `.env`、会话日志、原始实验及审计文件。安装后在 `sample project` 含空格目录，Windows `mini-dsh.cmd inspect <synthetic session.jsonl>`、`--json`、`--trace` 均退出 0；截断文件退出 2，缺失文件退出 1。输入 SHA256 前后相同，未创建指定会话目录，DEEPSEEK_API_KEY 为空。真实模型请求 0。
 
 最终检查：正常权限 `pnpm check`（syntax 158 文件）、`pnpm test`（435 项、405 通过、30 跳过、0 失败）、`pnpm lint`（172 文件、0 诊断），另核对 `git diff --check`。tarball 仅作本地安装验收，未发布 npm；只在 Windows `.cmd` 路径验证安装，不推断其他平台结果。
-
-
-# SWE-bench Verified 正式四臂执行与评分恢复（2026-10-24）
-
-用户分别授权共享 token 上限开发复跑（配置上限 $10）和正式 50 题 × 4 臂（配置上限 $100）。正式执行源码 `8b3047c`；50/50 钉版镜像零模型预检通过，200/200 episode 保存，0 基础设施故障。第 164 次的瞬时模型重试缺精确 provider usage，运行器按预注册停止；从保存记录续跑剩余 36 次，未重跑既有 episode。已知费用估算 $3.618705108，未知用量 episode 1，不能把估算当发票。
-
-首轮及第二轮独立评分因 Docker Desktop/WSL 环境中断，`score2` 的另外三臂错误记录仅是故障证据。恢复 Docker 后用 systemd 用户服务托管 `score3`，脚本先断言已保存日程为 200 条唯一记录，然后只评分补丁，未调用模型。官方 SWE-bench v3.0.17 最终四臂各 50 条、总计 200 条评分，0 error；candidate 26/50、baseline 27/50、context-reference 28/50、context-proposed 27/50。candidate/baseline 配对 24/2/3/21，精确 McNemar p=1；两个 context 臂配对 26/2/1/21，p=1。baseline 22 条超过名义 416,666 token，上限敏感性剔除其 1 条越额成功后 candidate/baseline 均为 26/50，不能作干净的能力差异断言。
-
-验收：四份 `score3` 官方报告与 `scores.json` 逐臂 resolved 数吻合，官方日志均记录错误 0；核心 `SHA256SUMS` 六项通过，最终 `report.json` 的 planned/executed/scored 为 200/200/200、无 stopReason。冻结前脚本 `token_sensitivity.py` SHA-256 `e95fdab630af9c1988b7b8a04d60fc68423b96622ea13033b32fa8f8fceedc6e`，最终敏感性文件 `D:\Agent\outputs\mini-dsh-swebench-formal-20261022\formal-token-sensitivity.json`。精简归档 `formal-evidence-final.tar.gz` SHA-256 `fb58277adf09d9f303b80d23a811a0e24ccbae5d499a0e734da57122c52b40bd`；完整原件在 WSL，评分隐藏行未公开。详见 [正式结果](../EVALUATION-SWEBENCH.md#formal-four-arm-result-2026-10-24-50-tasks-per-arm)。
