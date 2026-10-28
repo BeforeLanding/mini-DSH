@@ -1,6 +1,6 @@
 # mini-DSH：五分钟项目讲解
 
-本页是讲解提纲，只讲工程线索与取舍，不展示模型评测结果；完整安装、配置和命令说明以 [README](../README.md) 为准。项目是单 Agent、单本地工作区的 TypeScript / Cordis 编程 Harness，目标是让编辑、验证、预算停止与恢复留下可检查的事件证据。
+本页是讲解提纲，只讲工程线索与取舍，不展示模型评测结果；项目介绍见 [README](../README.md)，完整安装、配置和命令说明见 [使用指南](USAGE.md)。项目默认以单 Agent 操作单个本地工作区，可按需启用只读子 Agent 协作；目标是让编辑、验证、预算停止与恢复留下可检查的事件证据。
 
 ## 五分钟演示顺序
 
@@ -13,13 +13,13 @@
 
 ## 三项有证据支持的工程贡献
 
-1. **可恢复事件链与只读检查。** [event-store.ts](../src/core/event-store.ts)、[session-runtime.ts](../src/core/session-runtime.ts) 保存并重建 JSONL 状态；[session-inspect.ts](../src/core/session-inspect.ts) 对已有日志做有界、脱敏的只读汇总。可用上面的 `inspect` 演示，故障边界见 [README](../README.md#只读检查会话日志)。
+1. **可恢复事件链与只读检查。** [event-store.ts](../src/core/event-store.ts)、[session-runtime.ts](../src/core/session-runtime.ts) 保存并重建 JSONL 状态；[session-inspect.ts](../src/core/session-inspect.ts) 对已有日志做有界、脱敏的只读汇总。可用上面的 `inspect` 演示，故障边界见 [使用指南](USAGE.md#只读检查会话日志)。
 2. **预算与上下文投影。** [agent-loop-runtime.ts](../src/core/agent-loop-runtime.ts)、[compaction-runtime.ts](../src/core/compaction-runtime.ts) 管理请求前预留、主动摘要和停止；[history-read.ts](../src/core/history-read.ts) 从原始事件回读。`demo:compact` 可直接展示投影变小而历史未删除。
 3. **有界工具和版本化验证。** [files.ts](../src/tools/files.ts)、[bash.ts](../src/tools/bash.ts) 实现文件/命令闸门；[task-verification.ts](../src/core/task-verification.ts) 将公开检查证据绑定到候选文件版本。`demo:fix` 展示顺利路径；更多失败边界见[设计取舍](context-budget/DECISIONS.md)。
 
 ## 三个关键取舍
 
-- **稳定前缀与规则新鲜度：** frozen 会话复用保存的时间及规则快照，帮助保持提示前缀稳定；磁盘规则更新需新会话或 `/reset` 才进入系统提示，`project_context` 仍读取当前文件。生产默认是项目上下文 `live`、运行时钟 `frozen`，两者不是同一个开关。见 [README](../README.md#生产配置与-v21-对照)。
+- **稳定前缀与规则新鲜度：** frozen 会话复用保存的时间及规则快照，帮助保持提示前缀稳定；磁盘规则更新需新会话或 `/reset` 才进入系统提示，`project_context` 仍读取当前文件。生产默认是项目上下文 `live`、运行时钟 `frozen`，两者不是同一个开关。见 [使用指南](USAGE.md#生产配置与-v21-对照)。
 - **预算停止与产物验收：** token 等预算触顶会停止调度，即使退出候选通过独立验收，也不记为“可靠完成”。[NX-45 公开证据摘要](context-budget/NX-45-PUBLIC-EVIDENCE.md)分别列出两种口径。
 - **严格回放与环境动态字段：** 原录制请求和回放请求做指纹比较；限定的 Bash 工作区根和 `durationMs` 可在比较副本中归一化，命令与输出等仍严格比较。原录制保持不变。见 [NX-44 回放复盘](context-budget/NX-44-REPAIR-REPLAY.md)。
 

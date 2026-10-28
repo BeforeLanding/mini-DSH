@@ -1,6 +1,7 @@
 # 文档索引
 
-- [README](../README.md) — 项目定位、架构、五分钟上手与能力边界。
+- [README](../README.md) — 项目用途、任务体验、快速开始与能力边界。
+- [USAGE](USAGE.md) — CLI 命令、预算与恢复、配置来源、日志检查及本地安装。
 - [RECRUITER_WALKTHROUGH](RECRUITER_WALKTHROUGH.md) — 面向招聘者的五分钟讲解顺序与工程取舍。
 - [ARCHITECTURE](ARCHITECTURE.md) — 事件溯源、请求投影、压缩、工具、MCP 与隔离。
 - [DECISIONS](context-budget/DECISIONS.md) — 五条核心选择的替代方案、代码锚点与测试锚点。

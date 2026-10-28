@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### DOC-R1 README 产品介绍与使用入口（2026-10-28）
+
+以当前主仓 `5579b82` 为基线重组 README：首屏说明用途和适用人群，用一个编程任务串起规则读取、审批、编辑、检查与交付；核心能力按使用收益介绍，快速开始提供源码构建、免密钥修复演示及真实模型接入，日常命令按使用场景组织。架构图和源码入口后移；保留权限、恢复、预算、发布与评测展示边界。新增 [使用指南](../USAGE.md) 承接完整 CLI、预算续跑、会话恢复、日志检查、配置来源、记忆/协作及本地 tarball 安装；修正旧 inspect 示例依赖尚未定义的 `$miniDsh` 的问题，同步文档索引与讲解页链接。产品源码、模型适配器、默认配置和评测结果未改动。
+
+采用 AGENTS 允许的直接 Node 等价命令验收：`node scripts/build.js` 通过 strict 类型检查和构建，`node scripts/check-syntax.js` 通过 227 文件语法检查。受限环境的完整回归停在超时命令的进程树清理环节，未将该次运行记为通过；正常用户权限运行 `node --test dist/test/*.test.js` 完成 584 项（554 通过、30 平台条件跳过、0 失败），覆盖已有 Markdown 锚点及展示边界回归。`node dist/src/index.js demo fix` 输出 `demo result: PASS`，`--help` 与 `--show-config` 正常；`node node_modules/@biomejs/biome/bin/biome check .` 检查 259 文件、0 诊断。另对四份入口文档的 72 个本地文件/图片链接逐项检查存在性，README/使用指南中所有 PowerShell 代码块通过语法解析；`git diff --check` 通过。真实模型请求 0。
+
 ### SW-R1 撤回 main 中的 SWE 正式实验（2026-10-28）
 
 按用户确认，以 PR #12 merge `94d1728` 的第一父提交为撤回基准，恢复其引入前的代码、测试和 package.json；不重写 Git 历史。完整四臂外部适配器和正式结果保留在 `feat/swebench-formal-results@dc7e659`，不重新合并 main。保留后续 README 展示面护栏、中文文档及其它非 SWE 改动；处理四份翻译文档的撤回冲突，并将 README、文档索引和进度中的结果入口指向独立分支。
