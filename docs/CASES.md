@@ -1,39 +1,39 @@
-# Engineering cases
+# 工程案例
 
-Three decisions that are easy to get wrong, with the test or evidence that keeps them honest.
+三个容易做错的决定，以及让它们保持诚实的测试或证据。
 
-## 1. A provider attempt is not a tool side effect
+## 1. provider 重试不是工具副作用
 
-**Problem.** A 429 or a dropped connection invites “just retry”. Retrying a request that already produced tool calls can execute a write twice. Retrying after a partial stream can also double-bill and change the next turn.
+**问题。** 429 或连接中断会诱使人“直接重试”。重试一个已经产生工具调用的请求，可能把写入执行两次；在部分流之后重试，还可能重复计费并改变下一轮。
 
-**Options.** Retry every failure uniformly; retry inside the adapter’s fetch loop; or retry only attempts that have not produced content or tool-call deltas, with each attempt separately gated and accounted.
+**选项。** 统一重试所有失败；在适配器的 fetch 循环内重试；或只重试尚未产生内容或工具调用增量的尝试，并让每次尝试单独经过闸门、单独计入预算。
 
-**Choice.** Only 429, retryable 5xx, and connection-establishment failures are retried. Every attempt gets its own request id, passes the dispatch gate, and is settled into the budget ledger. `Retry-After` is parsed and bounded by the remaining wall clock. A partial response is saved, the attempt is closed, and the run stops; it is not silently re-sent. Provider `context_overflow` uses the existing compaction fallback with a finite retry budget, not the HTTP retry loop.
+**选择。** 只重试 429、可重试的 5xx 和连接建立失败。每次尝试都有自己的 request id，经过派发闸门并结算进预算账本。`Retry-After` 会被解析，并受剩余 wall clock 限制。部分响应会被保存，该次尝试关闭，run 停止，不会静默重发。provider 的 `context_overflow` 走已有的压缩兜底和有限重试预算，不走 HTTP 重试循环。
 
-**Evidence.** `test/model-retry.test.ts` and `test/compaction-runtime.test.ts` cover 429→success, 503→success, 401 stop, timeout/cancel, retry-after over budget, and partial-stream stop. `provider-recovery` in `docs/samples/` shows a recorded retry and fully accounted attempts.
+**证据。** `test/model-retry.test.ts` 和 `test/compaction-runtime.test.ts` 覆盖 429→成功、503→成功、401 停止、超时/取消、retry-after 超出预算和部分流停止。`docs/samples/` 的 `provider-recovery` 展示了一次被记录的重试和完整计入的尝试。
 
-**Still fails.** The harness cannot prove that a provider did not execute something out of band. “Exactly once” is not claimed: there is no distributed transaction between a remote effect and the JSONL write.
+**仍然做不到。** Harness 无法证明 provider 没有在带外执行某些操作。这里不声称“恰好一次”：远端效果与 JSONL 写入之间没有分布式事务。
 
-## 2. Why a 9 MB output lost its last line
+## 2. 9 MB 输出为什么丢了最后一行
 
-**Problem.** The first implementation kept the first N bytes of stdout and then called the tail of that truncated text “the tail”. For a coding agent, the real error is usually the last line. Large stdout could also starve stderr of buffer space.
+**问题。** 第一版实现保留 stdout 的前 N 字节，然后把这段截断文本的尾部称为“结尾”。对编程 Agent 来说，真正的错误通常就在最后一行。大量 stdout 还可能挤占 stderr 的缓冲区。
 
-**Options.** Keep a larger prefix; keep only the tail; or keep a bounded head and a ring-buffer tail per stream, draining both pipes continuously, with the full result stored separately.
+**选项。** 保留更大的前缀；只保留尾部；或每路保留有界头部和环形缓冲尾部，持续排空两条管道，并把完整结果单独存储。
 
-**Choice.** Each stream has an 8 KiB head and an 8 KiB tail window; both pipes are drained even after the preview is full. The preview exposes the real end. Sparse storage records readable byte ranges and an explicit omitted middle. `read_tool_result` returns `unavailable` for a gap and points at the tail start; it never pretends the middle is retrievable.
+**选择。** 每路有 8 KiB 头部和 8 KiB 尾部窗口；即使预览已满，两条管道仍继续排空。预览暴露真实的结尾。稀疏存储记录可读字节区间，并显式标记被省略的中间段。`read_tool_result` 对缺口返回 `unavailable`，并指向尾部起点；绝不假装中间段可回读。
 
-**Evidence.** `test/tool-results.test.ts` generates >9 MB stdout with `FINAL_ERROR_MARKER` on the last line, plus a case with a large stdout and trailing stderr. The preview contains the real marker; memory remains bounded; the sparse ref reports the gap.
+**证据。** `test/tool-results.test.ts` 生成超过 9 MB 的 stdout，最后一行带 `FINAL_ERROR_MARKER`，另有一个大量 stdout 加尾部 stderr 的用例。预览包含真实标记；内存保持有界；稀疏引用报告缺口。
 
-**Still fails.** A result larger than the disk quota or a storage error can still lose data. The status is then explicit (`storageError`/`truncated`), not silently presented as complete.
+**仍然做不到。** 结果超过磁盘配额或存储出错时仍可能丢数据。此时状态是显式的（`storageError`/`truncated`），不会被静默呈现为完整。
 
-## 3. A lower cache bill is not automatically “more efficient”
+## 3. 缓存账单更低不自动等于“更高效”
 
-**Problem.** Freezing the time prefix reduced cache reads dramatically, but the same runs used more requests, more tools, and more wall-clock time. Reporting only the bill would turn a mixed result into a win.
+**问题。** 冻结时间前缀大幅减少了缓存读取，但同样的 run 用了更多请求、更多工具和更多 wall clock 时间。只报告账单会把一个混合结果说成胜利。
 
-**Options.** Report the bill; report the success rate; or report both plus requests, tool calls, tokens (including unknown), and active time, with the frozen/live distinction.
+**选项。** 只报告账单；只报告成功率；或同时报告账单、请求数、工具调用数、token（含未知）和主动时间，并区分 frozen/live。
 
-**Choice.** Cost is always reported with usage coverage. Provider cache-read tokens are read from usage; a missing cache field is “unknown”, not zero. Estimated attempts are excluded from the provider-cost sum and listed separately. The report keeps success, requests, tool calls, and time beside the cost.
+**选择。** 成本总是和 usage 覆盖率一起报告。provider 缓存读取 token 来自 usage；缺失的缓存字段记为“未知”，不是 0。估算的尝试不计入 provider 成本总和，单独列出。报告在成本旁边保留成功状态、请求数、工具调用数和时间。
 
-**Evidence.** `docs/RESULTS.md` uses the formula and lists unknown-cost counts. R06's `pnpm token:error` reports estimate error from provider usage only. The synthetic samples are explicitly not a capability score.
+**证据。** `docs/RESULTS.md` 使用该公式并列出未知成本计数。R06 的 `pnpm token:error` 只根据 provider usage 报告估算误差。合成样例明确不是能力分数。
 
-**Still fails.** Cache hit ratios depend on provider granularity, request shape, and session structure. A stable prefix is necessary but not sufficient for a cache hit; only provider usage can show the hit.
+**仍然做不到。** 缓存命中率取决于 provider 粒度、请求形状和会话结构。稳定前缀是命中的必要条件，但不是充分条件；只有 provider usage 能显示命中。

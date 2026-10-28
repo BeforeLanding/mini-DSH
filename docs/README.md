@@ -1,4 +1,4 @@
-# Documentation index
+# 文档索引
 
 - [README](../README.md) — 项目定位、架构、五分钟上手与能力边界。
 - [RECRUITER_WALKTHROUGH](RECRUITER_WALKTHROUGH.md) — 面向招聘者的五分钟讲解顺序与工程取舍。

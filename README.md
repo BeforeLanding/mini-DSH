@@ -6,8 +6,6 @@
 
 mini-DSH 用 TypeScript / Cordis 从零实现了一条单 Agent、单本地工作区的编程任务流程：读项目规则、定位代码、可靠编辑、运行公开检查、交付 diff 与验证证据。它不把 Harness 做成黑盒——每一步都落成 JSONL 事件，请求投影、上下文压缩、预算停止、工具审批和崩溃恢复都能从日志复核。路径与命令闸门是应用层策略，不是操作系统隔离。
 
-面向招聘者的五分钟讲解顺序见[项目展示提纲](docs/RECRUITER_WALKTHROUGH.md)。
-
 ## 工程亮点
 
 - **事件溯源会话。** [event-store.ts](src/core/event-store.ts) 把每条事件追加到 `events.jsonl` 并等待落盘；[session-runtime.ts](src/core/session-runtime.ts) 从日志重建可见状态。每个已记录的 `tool_call` 都有对应结果，包括取消或预算停止时的 `skipped`，以及开始过但结果不可知的 `unknown`；恢复只重建状态，不重放 `unknown` 工具。

@@ -131,7 +131,7 @@ CE-1 提交 `4251382` 已推送。从最新 main `0b8b973` 重新派生三个独
 
 首轮及第二轮独立评分因 Docker Desktop/WSL 环境中断，`score2` 的另外三臂错误记录仅是故障证据。恢复 Docker 后用 systemd 用户服务托管 `score3`，脚本先断言已保存日程为 200 条唯一记录，然后只评分补丁，未调用模型。官方 SWE-bench v3.0.17 最终四臂各 50 条、总计 200 条评分，0 error；candidate 26/50、baseline 27/50、context-reference 28/50、context-proposed 27/50。candidate/baseline 配对 24/2/3/21，精确 McNemar p=1；两个 context 臂配对 26/2/1/21，p=1。baseline 22 条超过名义 416,666 token，上限敏感性剔除其 1 条越额成功后 candidate/baseline 均为 26/50，不能作干净的能力差异断言。
 
-验收：四份 `score3` 官方报告与 `scores.json` 逐臂 resolved 数吻合，官方日志均记录错误 0；核心 `SHA256SUMS` 六项通过，最终 `report.json` 的 planned/executed/scored 为 200/200/200、无 stopReason。冻结前脚本 `token_sensitivity.py` SHA-256 `e95fdab630af9c1988b7b8a04d60fc68423b96622ea13033b32fa8f8fceedc6e`，最终敏感性文件 `D:\Agent\outputs\mini-dsh-swebench-formal-20261022\formal-token-sensitivity.json`。精简归档 `formal-evidence-final.tar.gz` SHA-256 `fb58277adf09d9f303b80d23a811a0e24ccbae5d499a0e734da57122c52b40bd`；完整原件在 WSL，评分隐藏行未公开。详见 [正式结果](../EVALUATION-SWEBENCH.md#formal-four-arm-result-2026-10-24-50-tasks-per-arm)。
+验收：四份 `score3` 官方报告与 `scores.json` 逐臂 resolved 数吻合，官方日志均记录错误 0；核心 `SHA256SUMS` 六项通过，最终 `report.json` 的 planned/executed/scored 为 200/200/200、无 stopReason。冻结前脚本 `token_sensitivity.py` SHA-256 `e95fdab630af9c1988b7b8a04d60fc68423b96622ea13033b32fa8f8fceedc6e`，最终敏感性文件 `D:\Agent\outputs\mini-dsh-swebench-formal-20261022\formal-token-sensitivity.json`。精简归档 `formal-evidence-final.tar.gz` SHA-256 `fb58277adf09d9f303b80d23a811a0e24ccbae5d499a0e734da57122c52b40bd`；完整原件在 WSL，评分隐藏行未公开。详见 [正式结果](../EVALUATION-SWEBENCH.md#正式四臂结果2026-10-24每臂-50-任务)。
 
 ### R10 后续：接入 mini-SWE-agent 同模型外部基线（2026-10-21，零付费）
 

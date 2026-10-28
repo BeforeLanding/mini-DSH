@@ -37,6 +37,6 @@ test('内部路线图不出现在 README 与文档索引的链接里', () => {
 })
 
 test('证据文档写明不是能力分数', () => {
-    assert.match(read('docs/EVALUATION-SWEBENCH.md'), /Showcase boundary|不展示模型评测结果|not a capability/i)
+    assert.match(read('docs/EVALUATION-SWEBENCH.md'), /展示边界|不展示模型评测结果|不是能力分数/)
     assert.match(read('docs/COMPONENT-OPTIMIZATION.md'), /不证明.*成功率|not a capability/i)
 })

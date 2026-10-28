@@ -85,7 +85,7 @@ OPT-0 与 OPT-4 属于各自独立的验收结论；OPT-1/2/3 分别独立提交
 | f | `run.ts`/`report.ts`：创建证据前 preflight；external 分支只取 `preds.json` patch；报告 external 元数据与系统级 caveat | done |
 | g | 零模型验收：`external-probe` 用真实 CLI + Docker + `DeterministicModel`，空 patch 与非空 patch 各一次；无残留容器、容器无 key | done（证据 `D:\Agent\outputs\mini-dsh-swebench-external-probe-20261021`） |
 | h | 4 臂 draft 清单：`D:\Agent\outputs\mini-dsh-swebench-4arm-20261021\manifest-draft.json`；外部字段齐备、`freezeStatus=draft`、付费请求 0 | done |
-| i | 4 臂开发复跑（20 episodes）与正式 50 题 × 4 臂（200 episodes）：均已分别获得金额授权、冻结清单并完成官方评分；正式候选 26/50、基线 27/50，22 次基线越额的敏感性读数为双方 26/50，见 [评测结果](../EVALUATION-SWEBENCH.md#formal-four-arm-result-2026-10-24-50-tasks-per-arm) | done（2026-10-24；源码 `8b3047c`，证据 6 项 SHA-256 通过） |
+| i | 4 臂开发复跑（20 episodes）与正式 50 题 × 4 臂（200 episodes）：均已分别获得金额授权、冻结清单并完成官方评分；正式候选 26/50、基线 27/50，22 次基线越额的敏感性读数为双方 26/50，见 [评测结果](../EVALUATION-SWEBENCH.md#正式四臂结果2026-10-24每臂-50-任务) | done（2026-10-24；源码 `8b3047c`，证据 6 项 SHA-256 通过） |
 
 **不做/边界**：不修改 mini-SWE-agent 源码；不把 provider key 放进容器；不把隐藏 `test_patch` 写进外部数据集；不把工作区 diff 冒充外部基线 patch；不称结果能归因到单个 prompt/上下文因子；本步不授权任何付费跑。
 
