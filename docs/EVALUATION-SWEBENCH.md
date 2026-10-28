@@ -1,6 +1,21 @@
 # SWE-bench Verified subset: pre-registration and execution adapter
 
-**Status (2026-10-22).** The official no-model adjudication channel and the candidate workspace path are verified. The batch runner, pre-registration and report path are implemented and pass a scripted, zero-model end-to-end test. The 5-task candidate and four-arm development batches, including a shared-token-cap rerun, have completed. The same-model mini-SWE-agent baseline passed a zero-model probe using the real CLI, a pinned Docker image and `DeterministicModel`; there is still **no formal 50-task result and no model-capability comparison**. The historical “50 tasks ≈ $2 / 10 minutes” figure from an external GPT-5 experiment is not a promise for this project.
+**Status (2026-10-24).** The pre-registered 50-task, four-arm formal batch has completed all 200 paid model episodes and all 200 official scores. The results and budget-parity limitation are recorded below. The historical “50 tasks ≈ $2 / 10 minutes” figure from an external GPT-5 experiment is not a promise for this project.
+
+## Formal four-arm result (2026-10-24, 50 tasks per arm)
+
+The frozen formal manifest used source commit `8b3047c`, SWE-bench Verified at revision `c104f840…`, the same `deepseek/deepseek-flash` model across four arms, and a nominal 416,666 input+output-token cap per episode. All 200 scheduled episodes ran. Official SWE-bench v3.0.17 scoring under the final `score3` run IDs returned 200 results, **0 scoring errors and 0 infrastructure failures**. The run statuses were 129 budget stops and 71 normal completions. Six core evidence checksums pass.
+
+- Candidate mini-DSH: **26/50 = 52%**, Wilson 95% interval 38.5%–65.2%; 37 budget stops.
+- External mini-SWE-agent 2.4.6 baseline: **27/50 = 54%**, Wilson 40.4%–67.0%; 22 budget stops.
+- Context-reference: **28/50 = 56%**, Wilson 42.3%–68.8%; 36 budget stops.
+- Context-proposed: **27/50 = 54%**, Wilson 40.4%–67.0%; 34 budget stops.
+
+The pre-declared paired candidate/baseline cells are both resolved 24, candidate-only 2, baseline-only 3, neither 21; rate difference −2 percentage points and exact two-sided McNemar p=1. The context-reference/context-proposed cells are both 26, reference-only 2, proposed-only 1, neither 21; difference +2 points and p=1. These small discordant counts do not establish a capability difference.
+
+The baseline's watchdog checks between model steps. **22/50 baseline episodes exceeded the shared nominal token cap** by one final response, compared with 0/50 in each mini-DSH arm; baseline maximum was 457,686 tokens, about 9.8% above the cap. One over-cap baseline episode resolved. The frozen sensitivity rule excludes over-cap resolutions while keeping all 50 tasks in the denominator: candidate **26/50**, baseline **26/50**, context-reference **28/50**, context-proposed **27/50**. This is a conservative sensitivity reading, not a replacement for official scores. Nominal cap configuration did not ensure exact consumed-token parity, so the 27/50 vs 26/50 primary comparison is not a clean capability claim.
+
+Provider-usage cost estimate at the frozen prices is **$3.618705108 known usage**, plus **one episode with unknown exact usage** after a transient model retry. It is not an invoice. The first official scoring attempts were interrupted by Docker Desktop; all paid episodes were already saved. Final `score3` rescored only those patches after the environment recovered and made no additional model requests. The final report is `D:\Agent\outputs\mini-dsh-swebench-formal-20261022\formal-report.json`; frozen sensitivity result is `formal-token-sensitivity.json`; compact final archive excluding workspaces is `formal-evidence-final.tar.gz` (SHA-256 `fb58277adf09d9f303b80d23a811a0e24ccbae5d499a0e734da57122c52b40bd`). Full original evidence remains at `/home/jeffery/swebench-evidence-4arm-formal-20261022`. Hidden scoring rows and score logs are local evidence, not for publication.
 
 ## Development observation (2026-10-21, n=5, candidate only)
 
@@ -91,7 +106,7 @@ A real dataset run of the pre-registration was produced without model calls or D
 - Sanitized dataset: `D:\Agent\outputs\mini-dsh-swebench-preregistration-20261020\verified-sanitized.json` (500 rows; `instance_id`, `repo`, `base_commit`, `version`, `environment_setup_commit`, `problem_statement` only; gold/hidden fields absent).
 - Candidate-only historical draft: `D:\Agent\outputs\mini-dsh-swebench-preregistration-20261020\manifest-draft.json`.
 - Frozen four-arm manifest: `D:\Agent\outputs\mini-dsh-swebench-4arm-20261021\manifest-frozen.json`, schema 3, `seed=20261020`, development 5, formal 50, 11 repositories, 4 arms, 200 formal episodes + 20 development episodes; all external fields present (`mini-swe-agent` 2.4.6, config/install hashes, model `deepseek/deepseek-flash`, `candidate-isolation-v1`); budget ceiling $110.00 at $0.50/task/arm. This is a configuration ceiling, not an expected spend.
-- `freezeStatus` is **frozen**, `paidRequests: 0`. The shared-cap four-arm development rerun is recorded above; formal execution uses the 2026-10-22 $100-cap manifest and needs separate authorization. If the per-task budget changes, re-freeze rather than editing the frozen file.
+- `freezeStatus` is **frozen**, `paidRequests: 0`. The shared-cap development rerun and separately authorized $100-cap formal batch are recorded above. The manifest itself did not grant authorization; the user separately authorized both paid batches. If the per-task budget changes in a future batch, re-freeze rather than editing the frozen file.
 
 The price snapshot shape is fixed but its values must come from an official source with a capture date:
 
@@ -102,7 +117,7 @@ The price snapshot shape is fixed but its values must come from an official sour
 
 Replace each `null` with the observed number; the validator rejects missing or non-USD prices.
 
-## Preconditions still blocking a real run
+## Historical execution preconditions (satisfied for the formal batch)
 
 - A frozen 50-task selection and per-instance image digests. The current `preregister` output lists the missing digests; it does not invent them.
 - The pinned mini-SWE-agent installation and every task image present locally. The external preflight recomputes the version/config/install fingerprint, checks the provider key's **name**, Docker/uid, and `docker image inspect` for the scheduled digests; it refuses before creating evidence. Images are not pulled implicitly by the preflight.
@@ -110,7 +125,7 @@ Replace each `null` with the observed number; the validator rejects missing or n
 - The shared-cap four-arm development observation is complete; its baseline one-response overshoot must remain visible in the formal report and sensitivity reading.
 - The official harness v3.0.17 must already be installed in the Python environment used by the runner (`python -m swebench.harness.run_evaluation`); the runner does not install or upgrade it.
 - A separate hidden-rows file with `test_patch` and `FAIL_TO_PASS`/`PASS_TO_PASS`, passed as `--scoring-dataset`. The 50 formal rows have been generated from the dataset with SHA-256 `a45b1fe4…` at `D:\Agent\outputs\mini-dsh-swebench-formal-20261022\scoring-rows-formal.hidden.json` (file SHA-256 `db26064f…`). The Agent dataset stays sanitized; the runner validates each scored row against the frozen repo/base and writes the hidden rows only to a temporary directory for the official scorer, never into the evidence tree.
-- Explicit user authorization for paid model calls and any new cloud/compute resources. The manifest records `paidRequests: 0`; it does not grant authorization.
+- Explicit user authorization for paid model calls and any new cloud/compute resources. The manifest records `paidRequests: 0`; it did not grant authorization. The user authorized the development rerun and the formal 200-episode batch separately.
 
 ## Commands
 

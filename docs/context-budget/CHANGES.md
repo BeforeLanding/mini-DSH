@@ -4514,3 +4514,11 @@ README 增加无 key 的 inspect 文本、`--json`、`--trace` 示例和退出�
 
 最终检查：正常权限 `pnpm check`（syntax 158 文件）、`pnpm test`（435 项、405 通过、30 跳过、0 失败）、`pnpm lint`（172 文件、0 诊断），另核对 `git diff --check`。tarball 仅作本地安装验收，未发布 npm；只在 Windows `.cmd` 路径验证安装，不推断其他平台结果。
 
+
+# SWE-bench Verified 正式四臂执行与评分恢复（2026-10-24）
+
+用户分别授权共享 token 上限开发复跑（配置上限 $10）和正式 50 题 × 4 臂（配置上限 $100）。正式执行源码 `8b3047c`；50/50 钉版镜像零模型预检通过，200/200 episode 保存，0 基础设施故障。第 164 次的瞬时模型重试缺精确 provider usage，运行器按预注册停止；从保存记录续跑剩余 36 次，未重跑既有 episode。已知费用估算 $3.618705108，未知用量 episode 1，不能把估算当发票。
+
+首轮及第二轮独立评分因 Docker Desktop/WSL 环境中断，`score2` 的另外三臂错误记录仅是故障证据。恢复 Docker 后用 systemd 用户服务托管 `score3`，脚本先断言已保存日程为 200 条唯一记录，然后只评分补丁，未调用模型。官方 SWE-bench v3.0.17 最终四臂各 50 条、总计 200 条评分，0 error；candidate 26/50、baseline 27/50、context-reference 28/50、context-proposed 27/50。candidate/baseline 配对 24/2/3/21，精确 McNemar p=1；两个 context 臂配对 26/2/1/21，p=1。baseline 22 条超过名义 416,666 token，上限敏感性剔除其 1 条越额成功后 candidate/baseline 均为 26/50，不能作干净的能力差异断言。
+
+验收：四份 `score3` 官方报告与 `scores.json` 逐臂 resolved 数吻合，官方日志均记录错误 0；核心 `SHA256SUMS` 六项通过，最终 `report.json` 的 planned/executed/scored 为 200/200/200、无 stopReason。冻结前脚本 `token_sensitivity.py` SHA-256 `e95fdab630af9c1988b7b8a04d60fc68423b96622ea13033b32fa8f8fceedc6e`，最终敏感性文件 `D:\Agent\outputs\mini-dsh-swebench-formal-20261022\formal-token-sensitivity.json`。精简归档 `formal-evidence-final.tar.gz` SHA-256 `fb58277adf09d9f303b80d23a811a0e24ccbae5d499a0e734da57122c52b40bd`；完整原件在 WSL，评分隐藏行未公开。详见 [正式结果](../EVALUATION-SWEBENCH.md#formal-four-arm-result-2026-10-24-50-tasks-per-arm)。
