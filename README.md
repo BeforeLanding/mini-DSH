@@ -1,3 +1,5 @@
+![mini-DSH 架构：入口、Agent Loop、模型、工具、事件与恢复](docs/images/architecture-v1.png)
+
 # mini-DSH
 
 [![CI](https://github.com/BeforeLanding/mini-DSH/actions/workflows/ci.yml/badge.svg)](https://github.com/BeforeLanding/mini-DSH/actions/workflows/ci.yml)
@@ -124,14 +126,25 @@ pnpm start
 
 CLI、模型、工具与 MCP 通过 Cordis 插件和服务契约装配；生产入口与评测入口共用 `createHarness`。JSONL 记录会话事实，上下文投影与统计从事件派生；裁剪和压缩保留原始事件。
 
-![mini-DSH 架构：入口、Agent Loop、模型、工具、事件与恢复](docs/images/architecture-v1.png)
-
 ### 实现入口
 
-- [create-harness.ts](src/app/create-harness.ts)：共用装配；[agent-loop-runtime.ts](src/core/agent-loop-runtime.ts)：模型请求、工具执行与停止调度。
-- [event-store.ts](src/core/event-store.ts)、[session-runtime.ts](src/core/session-runtime.ts)：持久化与状态重建；[session-inspect.ts](src/core/session-inspect.ts)：只读日志汇总。
-- [context-runtime.ts](src/core/context-runtime.ts)、[compaction-runtime.ts](src/core/compaction-runtime.ts)：请求投影与压缩。
-- [files.ts](src/tools/files.ts)、[bash.ts](src/tools/bash.ts)：文件与命令工具；[deepseek.ts](src/models/deepseek.ts)：模型适配器。
+```text
+mini-DSH/
+├── src/
+│   ├── index.ts       # CLI 启动入口
+│   ├── app/           # Harness 装配、生产配置、MCP 配置与离线演示
+│   ├── core/          # Agent Loop、事件日志、会话恢复、上下文与预算
+│   ├── plugins/       # 将运行能力注册为 Cordis 服务，接入 CLI、记忆与协作
+│   ├── models/        # 模型适配器：当前内置 DeepSeek 流式协议
+│   ├── tools/         # 文件读写、搜索、Bash 与任务变更/验证报告
+│   └── utils/         # 通用辅助函数
+├── plugins.config.ts  # 插件装配配置
+├── scripts/           # 构建、演示、评测与证据复算入口
+├── test/              # 核心与集成回归、编程任务夹具
+└── docs/              # 使用指南、架构设计与开发证据
+```
+
+从 [src/index.ts](src/index.ts) 进入，由 [create-harness.ts](src/app/create-harness.ts) 装配服务；[Agent Loop](src/core/agent-loop-runtime.ts) 协调模型请求、上下文、预算与工具执行，过程写入事件日志，供会话恢复和只读检查使用。
 
 详细设计见 [架构说明](docs/ARCHITECTURE.md)、[设计取舍](docs/context-budget/DECISIONS.md)和[工程案例](docs/CASES.md)。
 
