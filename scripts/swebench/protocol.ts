@@ -1,5 +1,7 @@
 import path from 'node:path'
 import type { Usage } from '../../src/core/budget.js'
+import { validateCommandEnvironment } from './command-environment.js'
+import type { CommandEnvironment } from './command-environment.js'
 import { EXTERNAL_CONTRACT_VERSION, validateExternalCommand } from './external-contract.js'
 
 // R10 的离线适配层。这里不运行 Docker、不下载数据集、不调用模型；它只固定正式实验需要的
@@ -232,7 +234,7 @@ export interface SwebenchRunManifest {
   }
   prices: PriceSnapshot | null
   scoring: Record<string, unknown>
-  environment: { imageDigests: Record<string, string> | null }
+  environment: { imageDigests: Record<string, string> | null; commandEnvironment?: CommandEnvironment }
   authorization: string
   missing: string[]
   createdAt: string
@@ -399,7 +401,8 @@ export function validateRunManifest(value: unknown): SwebenchRunManifest {
     caps: { perTask: perTask as SwebenchRunManifest['caps']['perTask'], developmentPerTask: dev as SwebenchRunManifest['caps']['developmentPerTask'], batch: batchCaps as SwebenchRunManifest['caps']['batch'] },
     prices: manifest.prices === null ? null : validatePriceSnapshot(manifest.prices),
     scoring: isRecord(manifest.scoring) ? manifest.scoring : {},
-    environment: { imageDigests: (manifest.environment as Record<string, unknown>).imageDigests as Record<string, string> | null ?? null },
+    environment: { imageDigests: (manifest.environment as Record<string, unknown>).imageDigests as Record<string, string> | null ?? null,
+      ...((manifest.environment as Record<string, unknown>).commandEnvironment === undefined ? {} : { commandEnvironment: validateCommandEnvironment((manifest.environment as Record<string, unknown>).commandEnvironment) }) },
     authorization: typeof manifest.authorization === 'string' ? manifest.authorization : '',
     missing: Array.isArray(manifest.missing) ? manifest.missing.map(item => String(item)) : [],
     createdAt: manifest.createdAt, paidRequests: manifest.paidRequests,

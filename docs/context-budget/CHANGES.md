@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### SWE-O1 版本化 task Python 环境与路径契约（2026-10-30）
+
+详见 [优化记录](SWE-COMPONENT-EFFECTS.md)。`node scripts/build.js` 通过；SWE 定向 38/38；完整 594 tests / 564 pass / 0 fail / 30 平台 skipped（`D:\Agent\tmp\swe-component-o1-20261030.log`）；语法 235、Biome 267 零诊断。使用模拟模型与真实 Bash 验证命令原文、激活失败及共享解释器。Docker Desktop 未响应，真实镜像环境探针待恢复；未发模型请求。
+
 ### CE-P2 四臂开发批结果与中断边界（2026-10-28）
 
 四份完整付费批次按 `full → no-preview → no-projection → no-report` 顺序分别授权，每批 12/12，价格峰值估价分别 $1.28431524、$1.334783124、$1.354099452、$1.335197268，合计 $5.308395084（含探针储备，不是账单）。首次 no-report 在第五条中断，4/12 条完整，1 个模型请求缺 provider usage，原始证据保留并排除；新目录的完整重跑另获授权。比较器按源码提交、manifest、观察 digest、tool schema、共同配置、批次顺序、provider usage 和离线探针验证，17 项检查全部 true；可靠完成 11/12、12/12、12/12、11/12，产物验收四臂均 12/12。三项归因均 `inconclusive`，不改变组件默认行为或摘要后裁剪默认关闭。逐题逐重复读数、费用边界和完整文件哈希见 [开发批结果](COMPONENT-LOO-PAID-RESULT.md) 与 [机器比较记录](../samples/component-loo-paid-20261028.json)。公开记录不含原始 prompt 或工具正文，报告与 JSON 对照验证通过，文档步骤模型请求 0。

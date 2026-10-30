@@ -22,6 +22,7 @@ import type { SwebenchEpisodeResult, SwebenchScoreResult, SwebenchScores } from 
 import { exportDockerWorkspace, exportPatch, prepareDockerWorkspace, prepareFixtureWorkspace, removeContainerIfPresent } from './workspace.js'
 import { preflightExternal, runExternalEpisode } from './external-run.js'
 import type { ExternalEpisodeOutcome, ExternalEpisodeRequest } from './external-run.js'
+import { CANDIDATE_PATH_GUIDANCE, probeCommandEnvironment, validateCommandEnvironment } from './command-environment.js'
 
 // R10 执行器：复用 createHarness、官方预测格式与独立判分通道。它不替用户决定模型、价格或授权；
 // 冻结文件里缺任何一项就拒绝执行。正式批次与开发批次共用同一实现，但题号、顺序与上限分别冻结。
@@ -140,6 +141,7 @@ async function officialScores(options: RunBatchOptions, arm: SwebenchArm, predic
 
 export async function runSwebenchBatch(options: RunBatchOptions) {
   const manifest = options.manifest
+  const commandEnvironment = validateCommandEnvironment(manifest.environment.commandEnvironment)
   if (manifest.freezeStatus !== 'frozen') throw new Error('refusing to execute a draft manifest; finalize the protocol first')
   if (manifest.paidRequests !== 0) throw new Error('manifest must start with paidRequests: 0')
   if (options.scoring === 'official' && !manifest.prices) throw new Error('official scoring requires a frozen price snapshot for cost accounting')
@@ -175,6 +177,14 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
   const scoringRows = options.scoring === 'official'
     ? await loadScoringRows(options.scoringDataset!, batchManifest.instances)
     : undefined
+  const environmentProbes: ReturnType<typeof probeCommandEnvironment>[] = []
+  if (options.backend === 'docker' && commandEnvironment === 'testbed-v1') {
+    const uid = process.getuid?.(), gid = process.getgid?.()
+    if (uid === undefined || gid === undefined) throw new Error('testbed environment requires a POSIX uid/gid')
+    for (const image of new Set(batchManifest.instances.map(instance => manifest.environment.imageDigests![instance.instance_id]!))) {
+      environmentProbes.push(probeCommandEnvironment(image, uid, gid))
+    }
+  }
   const now = options.now ?? (() => Date.now())
   let startedAt = new Date().toISOString()
   const records: SwebenchEpisodeResult[] = []
@@ -195,6 +205,7 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
     await fs.writeFile(path.join(options.evidenceRoot, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
     await fs.writeFile(path.join(options.evidenceRoot, 'dataset.json'), JSON.stringify(batchManifest.instances, null, 2) + '\n')
   }
+  if (environmentProbes.length) await fs.writeFile(path.join(options.evidenceRoot, 'environment-preflight.json'), JSON.stringify(environmentProbes, null, 2) + '\n')
   let stopReason: string | undefined
   let spentUsd = records.reduce((sum, record) => sum + (record.costUsd ?? 0), 0)
   let unknownCostEpisodes = records.filter(record => record.usageUnknown).length
@@ -248,6 +259,7 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
             model: externalPreflight?.model ?? `${arm.model.provider}/${arm.model.name ?? ''}`,
             apiKeyEnv: arm.external?.apiKeyEnv ?? 'DEEPSEEK_API_KEY',
             timeoutMs: perTask.wallClockMs + 120_000,
+            commandEnvironment,
           }
           const outcome = options.externalRunner ? await options.externalRunner(request) : await runExternalEpisode(request)
           status = outcome.status
@@ -278,8 +290,9 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
         }
         const harness = await createHarness({ workspace, profile: 'coding', autoApprove: true, projectContext: false,
           contextLayout: 'frozen', runtimeClockMode: 'frozen', toolOutput: true, adapter,
-          ...(dockerWorkspace ? { commandRunner: createDockerCandidateRunner(workspace, dockerWorkspace.containerName) } : {}) })
+          ...(dockerWorkspace ? { commandRunner: createDockerCandidateRunner(workspace, dockerWorkspace.containerName, { commandEnvironment }) } : {}) })
         try {
+          if (dockerWorkspace && commandEnvironment === 'testbed-v1') harness.root.systemPrompt.context({ name: 'swebench:environment', order: 110, text: CANDIDATE_PATH_GUIDANCE })
           const session = harness.root.sessions.create({ source: `swebench-${options.split}`, workspace })
           sessionId = session.id
           const store = await JsonlStore.open(path.join(episodeDirectory, 'session'), session.id)
@@ -386,6 +399,7 @@ async function fixtureScorer(root: string) {
 
 async function writeChecksums(root: string) {
   const names = ['manifest.json', 'dataset.json', 'runs.jsonl', 'scores.json', 'batch.json', 'report.json']
+  if (await fs.stat(path.join(root, 'environment-preflight.json')).then(() => true, () => false)) names.push('environment-preflight.json')
   const lines: string[] = []
   for (const name of names) {
     const bytes = await fs.readFile(path.join(root, name))

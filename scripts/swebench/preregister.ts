@@ -4,6 +4,7 @@ import { EXTERNAL_CONTRACT_VERSION, validateExternalCommand } from './external-c
 import { fingerprintBaseline } from './external-fingerprint.js'
 import { buildSchedule, estimateBudget, sanitizeInstanceRow, selectInstances, validatePriceSnapshot } from './protocol.js'
 import type { BatchInstanceList, SwebenchInstance } from './protocol.js'
+import { validateCommandEnvironment } from './command-environment.js'
 
 // 使用前必须给出真实 dataset revision、官方 harness commit 与预算参数。该脚本只冻结协议，
 // 不下载数据集、不构建镜像、不调用模型。它同时写出开发批次与正式批次的题号、排除规则和交错顺序；
@@ -124,6 +125,7 @@ async function main() {
   const promptTemplate = optionalArgument('--prompt-template') ? await fs.readFile(argument('--prompt-template'), 'utf8') : defaultPrompt
   if (!promptTemplate.includes('{problem_statement}')) throw new Error('prompt template must contain {problem_statement}')
   const imageDigests = optionalArgument('--image-digests') ? JSON.parse(await fs.readFile(argument('--image-digests'), 'utf8')) as Record<string, string> : undefined
+  const commandEnvironment = validateCommandEnvironment(optionalArgument('--command-environment'))
   if (imageDigests && (!Object.values(imageDigests).every(value => typeof value === 'string' && value.length > 0))) throw new Error('image digests must map instance ids to digest strings')
   const covered = (instances: readonly SwebenchInstance[]) => imageDigests !== undefined && instances.every(instance => typeof imageDigests[instance.instance_id] === 'string')
 
@@ -189,7 +191,7 @@ async function main() {
       failureTraces: 'first provider failure, first budget stop, first logically wrong completed episode with a non-empty patch; absent classes are reported as absent',
       newRunIdPerBatch: true,
     },
-    environment: { imageDigests: imageDigests ?? null },
+    environment: { imageDigests: imageDigests ?? null, commandEnvironment },
     authorization: 'not granted by this file; paid model calls require explicit user approval per batch',
     missing,
     createdAt: new Date().toISOString(),
