@@ -1,5 +1,15 @@
 # 改动与验收证据
 
+### PORT-3 当前源码交付验收与本地材料收尾（2026-10-30）
+
+新增 `docs/DELIVERY-20261030.md`，在文档索引提供入口；PROGRESS 将代码 CI 与交付状态更新为已核验。记录绑定生产代码/测试 `46b8fb196f2f6124fa742ba2193430b055311c8a` 与安装包来源 `14ec973919717a633180922db3b77ea399923070`。GitHub CI 41045952548 的 head_sha 与代码基线相同，整体 success；Ubuntu/Windows × Node 22/24、Linux isolation 与 Ubuntu package-install 六个必需 job 全绿，SWE PoC 按配置 skipped。
+
+Windows 正常用户环境通过 pnpm 11.22.0 的 Node 入口 pack，在新建 `consumer space` 目录 `add --ignore-scripts` 安装；另一个空白 `sample project` 中的已安装 CLI 通过 version/help/show-config/inspect，版本 0.1.0、日志 complete JSONL、无记忆/委派专属工具。tarball 124 个条目，无 .env/.git/测试/文档目录或专属产物。打包时仅 TASKS 状态页待提交且不进入包，包内输入未改动。安装包与 SHA256SUMS/verification.json 保存在本地 `D:\Agent\outputs\mini-dsh-portfolio-20261030`，包 SHA-256 为 `99259733b145d8b1c3154ead365a148d9a9929a925d166b73e1b5f339b60a74d`；独立重算 retainedTarball 哈希一致。不是 npm/Release 发布。
+
+本地 `mini-DSH-wrapup` 更新本版验收与展示面核对、工作索引、简历技术锚点与五题问答；旧验收与问答/锚点日期备份保留。核对 restore、unknown、settle、model/start 及 D-21/D-22、R-22/R-23 的现行行号与关键字。未读取/重写实际简历 docx，不以项目扩展或 Git 作者名替本人确认贡献；演示脚本、分镜与录制继续暂缓。
+
+最终验证：文档/展示/代码锚点回归 8/8；526 个本地链接 0 缺失；历史进度正文去除链接目标后与来源逐字相同；Biome 232 files、0 诊断；`git diff --exit-code 46b8fb1 -- src scripts test package.json pnpm-lock.yaml .github` 退出 0；`git diff --check` 通过。无新增代码，不重复完整功能测试，引用 PORT-1 的 546/516/0/30 结果和当前代码 CI。真实模型请求 0，未发布或部署。
+
 ### PORT-2 当前文档与历史状态分离（2026-10-30）
 
 架构页改为实际的 MCP stdio 薄启动器与 `childEnvironment` 行为，区分 SDK 协议职责、显式凭据转交及文件系统边界；讲解页统一 Windows 本地/Ubuntu CI/macOS 未验证的安装范围；AGENTS 的 lint 说明与当前四个 CI job 一致。文档索引将消融标为已执行并链接描述性结果，记忆/协作只链接分支。
