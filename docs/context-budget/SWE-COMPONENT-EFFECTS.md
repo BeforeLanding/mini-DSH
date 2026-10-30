@@ -34,3 +34,11 @@
 旧开发批只读复算：15/15 轨迹完整，摘要应用 0，预览截断 13，成功回读 0，验证结果 11。明细只存仓库外 `D:\Agent\outputs\swe-component-effects-20261030\development-diagnostics.json`，无新增模型请求。
 
 验收：SWE 定向 40/40；完整 596 tests / 566 pass / 0 fail / 30 平台 skipped（`D:\Agent\tmp\swe-component-o2-full-20261030.log`）。脚本化端到端实际经过 createHarness、AGENTS.md 注入、大结果存储/回读、真实 Bash 检查、task_report 和独立 mock 判分；同时验证去除臂差异和零摘要的未覆盖结论。这是机制测试，不是模型成功率提升。
+
+## SWE-O3：在累计预算耗尽前压缩
+
+仅调整新组件实验协议，不改生产 CLI 默认值或旧 manifest：五个同源臂统一冻结 compactionBudgetTokens=16,384、compactionMaxTokens=2,048；自动摘要开关是逐项去除的唯一上下文差异。硬输入目标仍 65,536，累计 token/请求/工具/时间上限不增加，摘要请求与 usage 全额计入同一预算；postCompactionPrune 仍显式关闭。
+
+复现故障的零模型长任务包含 24 次大结果检查与最后一次修复。在相同 416,666 累计 token 限额下，原 65,536 压缩预算在第 16 次检查后停于 token_budget，摘要 0 次、未修复；新策略使用 5 次短摘要后完成全部检查与修复，总合成 usage 约 251k，未超预算。这里的 usage 由实际请求长度确定性生成，不能当作真实 provider usage、SWE 得分或因果收益。无效摘要反例验证两次失败后关闭自动尝试，仍按原 token_budget 停止，不会把失败摘要算为应用。全部原始工具事件保留，用户请求与工具调用/结果协议均验证完整。
+
+验收：SWE 与全部 compaction 定向 91/91；完整 598 tests / 568 pass / 0 fail / 30 平台 skipped（`D:\Agent\tmp\swe-component-o3-full-20261030.log`）；构建通过。尚未跑新策略的真实模型开发批，不宣称成功率提升。

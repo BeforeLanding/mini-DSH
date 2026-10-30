@@ -5,7 +5,11 @@ import type { SwebenchRunManifest } from './protocol.js'
 export const COMPONENT_PROTOCOL = 'swe-components-v1'
 
 export function componentArmDefinitions() {
-  const budget = { inputTargetTokens: 65_536, auto: true, postCompactionPrune: false }
+  // The historical 52k pressure line was never reached before the cumulative
+  // 416k episode limit. Separate the compaction trigger from the hard input
+  // target, leaving room to amortize a short summary over later requests.
+  const budget = { inputTargetTokens: 65_536, compactionBudgetTokens: 16_384, compactionMaxTokens: 2_048,
+    auto: true, postCompactionPrune: false }
   const harness = { toolOutput: true, toolOutputMaxPreviewBytes: 16_384, projectContext: true }
   return [
     { id: 'full', system: 'mini-dsh' as const, role: 'full same-source harness', budget, harness },
