@@ -20,6 +20,10 @@ on:
         description: Run the pinned public SWE-bench gold adjudication probe without a model
         type: boolean
         default: false
+      component_environment_probe:
+        description: Verify the five frozen SWE task images without a model or credentials
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -200,6 +204,130 @@ jobs:
             echo 'tarball contains files outside the runtime package'
             exit 1
           fi
+
+  component-environment:
+    name: Frozen SWE component environment (no model)
+    if: github.event_name == 'workflow_dispatch' && inputs.component_environment_probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+        with:
+          standalone: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Build the frozen product source
+        run: pnpm install --frozen-lockfile && pnpm check
+
+      - name: Pull pinned public images and verify both command environments
+        env:
+          PROBE_DIRECTORY: ${{ runner.temp }}/swe-component-environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs/promises';
+          import path from 'node:path';
+          import { spawnSync } from 'node:child_process';
+          import { createHash } from 'node:crypto';
+          import { probeCommandEnvironment, TESTBED_PROBE } from './dist/scripts/swebench/command-environment.js';
+          import { prepareDockerWorkspace } from './dist/scripts/swebench/workspace.js';
+          import { createDockerCandidateRunner } from './dist/scripts/swebench/docker-candidate.js';
+          const inputBytes = await fs.readFile('docs/samples/swe-component-environment-20261030.json');
+          const input = JSON.parse(inputBytes.toString('utf8'));
+          if (input.schemaVersion !== 1 || input.kind !== 'swe-component-environment-probe' || !/^[a-f0-9]{40}$/.test(input.sourceCommit) || input.images.length !== 5 || new Set(input.images.map(image => image.instanceId)).size !== 5) throw new Error('invalid five-image probe contract');
+          const output = process.env.PROBE_DIRECTORY;
+          await fs.mkdir(output, { recursive: true });
+          const identity = spawnSync('git', ['diff', '--quiet', input.sourceCommit, 'HEAD', '--', 'src', 'scripts', 'package.json', 'pnpm-lock.yaml', 'tsconfig.json', 'plugins.config.ts']);
+          if (identity.status !== 0) throw new Error('probe product source differs from the frozen paid source');
+          const result = { kind: input.kind, sourceCommit: input.sourceCommit, workflowCommit: spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim(), inputSha256: createHash('sha256').update(inputBytes).digest('hex'), checkedAt: new Date().toISOString(), paidRequests: 0, images: [] };
+          const run = (args, timeout = 60_000) => spawnSync('docker', args, { encoding: 'utf8', timeout, maxBuffer: 32 * 1024 * 1024 });
+          let failed = false;
+          for (const [index, image] of input.images.entries()) {
+            if (!/^swebench\/[a-z0-9_.-]+$/.test(image.repository) || !/^sha256:[a-f0-9]{64}$/.test(image.digest) || !/^[\w-]+$/.test(image.instanceId)) throw new Error('invalid pinned image identity');
+            const reference = `${image.repository}@${image.digest}`;
+            const record = { instanceId: image.instanceId, reference };
+            const workspace = path.join(output, 'workspaces', image.instanceId);
+            let candidate;
+            try {
+              const pull = run(['pull', reference], 900_000);
+              await fs.writeFile(path.join(output, `${image.instanceId}.pull.log`), `${pull.stdout ?? ''}\n${pull.stderr ?? ''}`);
+              if (pull.status !== 0) throw new Error(`image pull failed: ${pull.error?.message ?? pull.status}`);
+              const inspect = run(['image', 'inspect', reference]);
+              if (inspect.status !== 0) throw new Error('pinned image inspection failed');
+              const metadata = JSON.parse(inspect.stdout)[0];
+              if (!metadata.RepoDigests.includes(reference)) throw new Error('registry digest changed');
+              record.imageId = metadata.Id;
+              record.testbed = probeCommandEnvironment(metadata.Id, process.getuid(), process.getgid());
+              if (!/^[a-f0-9]{40}$/.test(image.baseCommit)) throw new Error('invalid task base commit');
+              const name = `mini-dsh-env-${process.env.GITHUB_RUN_ID}-${index}`;
+              candidate = await prepareDockerWorkspace({ image: metadata.Id, baseCommit: image.baseCommit, target: workspace, exportName: `${name}-export`, containerName: name });
+              const legacyRunner = createDockerCandidateRunner(workspace, name);
+              const activeRunner = createDockerCandidateRunner(workspace, name, { commandEnvironment: 'testbed-v1' });
+              const options = command => ({ executable: 'bash', args: ['-lc', command], command, cwd: workspace, signal: new AbortController().signal, timeoutMs: 30_000, maxCaptureBytes: 64 * 1024 });
+              const legacy = await legacyRunner(options(TESTBED_PROBE));
+              record.legacy = { status: legacy.status, exitCode: legacy.exitCode, probePassed: legacy.status === 'exited' && legacy.exitCode === 0 };
+              await fs.writeFile(path.join(output, `${image.instanceId}.legacy.log`), JSON.stringify(legacy, null, 2));
+              const active = await activeRunner(options(TESTBED_PROBE));
+              if (active.status !== 'exited' || active.exitCode !== 0) throw new Error('candidate did not enter testbed');
+              record.candidate = JSON.parse(active.stdout.text.trim().split('\n').at(-1));
+              record.isolation = candidate.evidence;
+              if (!Array.isArray(image.imports) || image.imports.some(name => !/^[a-z_]+$/.test(name))) throw new Error('invalid dependency import list');
+              const command = `python -c 'import ${image.imports.join(', ')}; print("dependency-imports-ok")'`;
+              const imports = await activeRunner(options(command));
+              await fs.writeFile(path.join(output, `${image.instanceId}.imports.log`), JSON.stringify(imports, null, 2));
+              if (imports.status !== 'exited' || imports.exitCode !== 0) throw new Error('testbed task dependencies could not import');
+              record.dependenciesPassed = true;
+              await fs.writeFile(path.join(workspace, 'mini_dsh_environment_canary'), 'host-visible\n');
+              const visibility = await activeRunner(options('test "$(cat mini_dsh_environment_canary)" = "host-visible" && printf "container-visible\\n" > mini_dsh_environment_canary'));
+              if (visibility.exitCode !== 0 || await fs.readFile(path.join(workspace, 'mini_dsh_environment_canary'), 'utf8') !== 'container-visible\n') throw new Error('host/container files are not bidirectionally visible');
+              record.bidirectionalFiles = true;
+              record.status = 'passed';
+            } catch (error) {
+              failed = true;
+              record.status = 'failed';
+              record.error = String(error);
+            } finally {
+              try {
+                if (candidate) candidate.cleanup();
+                await fs.rm(workspace, { recursive: true, force: true });
+              } catch (error) {
+                failed = true;
+                record.status = 'failed';
+                record.cleanupError = String(error);
+              }
+              result.images.push(record);
+              await fs.writeFile(path.join(output, 'result.json'), JSON.stringify(result, null, 2) + '\n');
+              run(['image', 'rm', reference]);
+            }
+            console.log(JSON.stringify(record));
+          }
+          if (failed) process.exitCode = 1;
+          NODE
+
+      - name: Upload zero-model environment evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: swe-component-environment
+          path: |
+            ${{ runner.temp }}/swe-component-environment/result.json
+            ${{ runner.temp }}/swe-component-environment/*.log
+          if-no-files-found: warn
+          retention-days: 7
 
   swebench-poc:
     name: Official SWE-bench no-model PoC

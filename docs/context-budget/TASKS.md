@@ -981,3 +981,10 @@ NX-08h-1／NX-08h-2 的全部内容是从 `pipeline` 机械复制后的改写，
 - **CB-18 实习导向评估与后续规划 — done（评估）**：[CI 36514313704](https://github.com/BeforeLanding/mini-DSH/actions/runs/36514313704)；[详细证据](CHANGES.md#cb-18-实习导向评估与后续规划)。
 - **CB-19 按 mini coding agent harness 定位修订路线 — done（文档）**：[详细证据](CHANGES.md#cb-19-按-mini-coding-agent-harness-定位修订路线)。
 - **NX-07 有界代码读取、搜索与大结果回读 — done**：提交 [6c03300](https://github.com/BeforeLanding/mini-DSH/commit/6c03300)、[CI 36538591870](https://github.com/BeforeLanding/mini-DSH/actions/runs/36538591870)；[详细证据](CHANGES.md#nx-07-有界代码读取搜索与大结果回读)。
+
+### SWE-O5 远端零模型环境验证（进行中）
+
+本地 Docker socket 1920 暂不可恢复；现有公开仓库 GitHub Actions 可运行 Docker。使用已冻结的五个公开镜像和相同源码，在现有 CI 增加仅手动开启的 testbed/pytest/项目依赖导入探针，上传公开机制证据；不上传 key、不调用模型、不修改 30 条付费清单。
+
+- O5-1（静态验收完成，独立提交；实际镜像见 O5-2）：公开镜像输入、可手动派发的无模型 job，精确固定 registry digest、核验旧/新解释器与依赖，匹配源码。静态解析和本地 manifest 对照后提交推送。
+- O5-2（待做，独立验收）：手动派发该分支现有 CI，按实际 run 终态审计并下载探针证据。通过只能证明远端镜像/环境机制，不表示本地 Docker 已恢复或 SWE 成功率提升。现有 repo 无模型 secret，付费模型批仍等待可用执行环境；不上传本机密钥。
