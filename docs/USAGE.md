@@ -23,7 +23,7 @@
 
 默认每段运行最多 64 次模型请求、128 次工具调用、10 分钟主动执行时间和累计 2M token，输入目标 65,536 token。用 `MINI_DSH_BUDGET` JSON 或 CLI `/budget` 调整；当前有效配置和停止原因以 `/budget` 为准。token 估算不构成供应商计费硬上限。
 
-普通单 Agent 模式在预算停止后可用 `/continue` 开始同一任务的新一段运行，保留已有事件与任务累计用量。已完成工具不会重新执行；已完成任务不能继续，`context_overflow` 需先调整上下文配置。工具结果为 `unknown` 时须人工核验副作用，自动续跑会拒绝。启用只读协作时，根任务共享额度和 wall deadline，`/continue` 不刷新这些上限。
+预算停止后可用 `/continue` 开始同一任务的新一段运行，保留已有事件与任务累计用量。已完成工具不会重新执行；已完成任务不能继续，`context_overflow` 需先调整上下文配置。工具结果为 `unknown` 时须人工核验副作用，自动续跑会拒绝。
 
 ## 保存与恢复会话
 
@@ -104,11 +104,9 @@ node dist/src/index.js --show-config
 
 v2.1 的 Full/Baseline 是冻结开发协议里的两条实验臂，不是生产默认；完整配置、冻结代码与变更边界见 [NX-45 开发协议](context-budget/NX-45-DEVELOPMENT.md)。
 
-## 记忆与只读协作
+## 扩展分支
 
-项目记忆默认关闭，设 `MINI_DSH_MEMORY=assist` 可启用候选提案与按需检索，`recall` 只给模型检索工具。存储默认在 `~/.mini-dsh/memory/<projectId>/`；projectId 按真实工作区路径隔离，跨 worktree 需显式设置 `MINI_DSH_MEMORY_PROJECT_ID`。用 `/memory review [offset]` 检视来源、有效性、revision 和 digest，再用 `/memory approve <id> <revision> <digest>` 批准；模型没有批准工具。`/memory forget <id> <revision>` 撤销未来召回资格，已进入上下文和 JSONL 的内容仍保留。文件变化、来源不可达、过期和撤销都会拒绝回读。`pnpm demo:memory` 为零模型机制演示；实现状态见 [专题任务](memory-team/TASKS.md)。
-
-只读协作默认关闭，设 `MINI_DSH_DELEGATION=read-only` 后，主 Agent 可通过 `delegate_tasks` 调度 analyst/test_designer/reviewer。第一版同时最多两个子 Agent、每任务累计最多四个，子角色禁止写入、Bash、MCP 和递归委派。主/子/摘要/重试共用持久化根预算，`/continue` 不刷新额度和 wall deadline；`/budget` 显示根组统计，`mini-dsh inspect <root-events.jsonl> --tree` 展示子会话状态。审查结果绑定候选版本，后续编辑使其失效，可用 `review_status` 复核。`MINI_DSH_TEAM_LIMITS` 和 `MINI_DSH_TASK_GROUP_BUDGET` 接受有界配置，`--show-config` 显示实际值。`pnpm demo:team` 是脚本化机制演示，usage 为合成账本数据，不是供应商消费；真实效果尚未评测。
+本指南对应 main 的单 Agent CLI。项目记忆、只读协作及专属配置/命令仅保留在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2)，不在 main 启用。扩展分支的会话包含专属事件，切换分支时使用独立会话目录，不把扩展会话当作 main 日志恢复；原始日志保持不变。
 
 ## 本地打包与安装
 

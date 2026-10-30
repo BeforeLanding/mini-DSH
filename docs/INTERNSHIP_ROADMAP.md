@@ -1,6 +1,6 @@
 # mini coding agent harness：完成度评估与开发路线
 
-> 2026-10-26 新阶段：项目记忆与只读 Multi-Agent 协作已在独立分支立项，见 [新阶段需求](memory-team/REQUIREMENTS.md) 与 [实施任务](memory-team/TASKS.md)。本文旧阶段的暂缓结论保留其历史语义。
+> 2026-10-26 新阶段：项目记忆与只读 Multi-Agent 协作已在独立分支立项，见 [新阶段需求](https://github.com/BeforeLanding/mini-DSH/blob/2f2dca9f4f968485d9eb5f950f2accf173ce4539/docs/memory-team/REQUIREMENTS.md) 与 [实施任务](https://github.com/BeforeLanding/mini-DSH/blob/2f2dca9f4f968485d9eb5f950f2accf173ce4539/docs/memory-team/TASKS.md)。本文旧阶段的暂缓结论保留其历史语义。
 
 > **状态修订（2026-10-02）：本文正文保留为 2026-09-29 的带日期记录，一字未改；其中「未实现／待开发」与各处数字指评估时点。** 截至本注记，§5 的交付线已全部走完，以下四类需按新口径阅读：
 >

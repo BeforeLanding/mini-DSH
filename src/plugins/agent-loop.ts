@@ -20,9 +20,6 @@ class AgentLoopService extends Service {
     run(...args: Parameters<AgentLoopRuntime['run']>) {
         return this.runtime.run(...args)
     }
-    setRunGuard(...args: Parameters<AgentLoopRuntime['setRunGuard']>) {
-        return this.runtime.setRunGuard(...args)
-    }
     compact(...args: Parameters<AgentLoopRuntime['compact']>) {
         return this.runtime.compact(...args)
     }

@@ -15,6 +15,9 @@ test('production and all four v2 arms expose the same tool schemas', async () =>
     const base = { workspace, profile: 'coding' as const, adapter, autoApprove: true }
     const production = await createHarness({ workspace, profile: 'coding' })
     instances.push(production)
+    assert.equal(production.capabilityManifest.tools.some(name => /^(memory_|delegate_tasks$|review_status$)/.test(name)), false,
+      'main must not expose the memory/team feature-branch tools')
+    for (const key of ['memory', 'delegation', 'taskGroups']) assert.equal(Object.hasOwn(production, key), false)
     for (const [bounded, frozen] of [[false, false], [true, false], [false, true], [true, true]]) {
       const instance = await createHarness({ ...base, contextLayout: frozen ? 'frozen' : 'live', toolOutputMaxPreviewBytes: bounded ? undefined : 64 * 1024 * 1024 })
       instances.push(instance)

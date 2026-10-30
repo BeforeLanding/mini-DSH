@@ -20,17 +20,6 @@ export class ToolRuntime {
     #projection?: (name: string, result: ToolResult, execution: Execution) => Promise<ToolResult>
     #authorize?: (tool: ToolDefinition, args: Arguments, execution: Execution) => Promise<void>
     #authorizationConfigured = false
-    #capabilities?: ReadonlySet<string>
-    #admission?: (execution: Execution) => Promise<void>
-    setAdmission(admit: (execution: Execution) => Promise<void>) {
-        if (this.#admission) throw new Error('tool admission already configured')
-        this.#admission = admit
-    }
-    setCapabilities(names: readonly string[]) {
-        if (this.#capabilities) throw new Error('tool capabilities already fixed')
-        this.#capabilities = new Set(names)
-    }
-    #permitted(tool: ToolDefinition) { return !this.#capabilities || (this.#capabilities.has(tool.name) && tool.origin === 'builtin' && tool.effect === 'read') }
 
     setAuthorization(authorize: (tool: ToolDefinition, args: Arguments, execution: Execution) => Promise<void>) {
         if (this.#authorize) throw new Error('tool authorization already configured')
@@ -67,7 +56,7 @@ export class ToolRuntime {
     }
 
     list() {
-        return [...this.#tools.values()].filter(tool => this.#permitted(tool))
+        return [...this.#tools.values()]
     }
 
     schemas() {
@@ -84,9 +73,6 @@ export class ToolRuntime {
     async execute(name: string, args: Arguments = {}, exec: Partial<Execution> = {}): Promise<ToolResult> {
         const tool = this.get(name)
         if (!tool) {
-            if (this.#admission) try {
-                await this.#admission({ ...exec, signal: exec.signal ?? new AbortController().signal })
-            } catch { return { value: null, content: [{ type: 'text', text: 'ToolError: group admission rejected' }], isError: true } }
             return {
                 value: null,
                 content: [{ type: 'text', text: `Unknown tool: ${name}` }],
@@ -99,14 +85,11 @@ export class ToolRuntime {
             signal: exec.signal ?? new AbortController().signal,
             sessionId: exec.sessionId,
             toolCallId: exec.toolCallId,
-            toolSequence: exec.toolSequence,
             agent: exec.agent,
         }
 
         let result: ToolResult
         try {
-            await this.#admission?.(execution)
-            if (!this.#permitted(tool)) throw new Error('tool is forbidden by immutable role capabilities')
             if (this.#authorizationConfigured && !this.#authorize) throw new Error('tool authorization unavailable')
             await this.#authorize?.(tool, args, execution)
             execution.signal.throwIfAborted()

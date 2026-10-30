@@ -11,13 +11,7 @@ import type { Arguments, EventData, Session, SessionEvent } from './contracts.js
 import { randomUUID } from 'node:crypto'
 import { deriveEventMessage, surfaceSeqs } from './compaction-plan.js'
 
-export type DelegationRecovery = (sessionId: string, call: import('./contracts.js').ToolCall, scope: SessionEvent) => Promise<{ content: string; isError: boolean } | undefined>
 export class SessionRuntime {
-    #delegationRecovery?: DelegationRecovery
-    setDelegationRecovery(handler: DelegationRecovery) {
-        if (this.#delegationRecovery) throw new Error('delegation recovery already fixed')
-        this.#delegationRecovery = handler
-    }
     #stores = new Map<string, EventStore>()
     #confirmed = new Map<string, number>()
     #storeErrors = new Map<string, unknown>()
@@ -53,13 +47,6 @@ export class SessionRuntime {
         this.attachStore(id, store, true)
         const visible = this.visibleEvents(id)
         for (const { call, scope, started } of pendingTools(visible)) {
-            if (started && call.name === 'delegate_tasks' && this.#delegationRecovery) {
-                const result = await this.#delegationRecovery(id, call, scope)
-                if (result && this.get(id).events.some(event => event.type === 'delegation/finish' && event.runId === scope.runId && event.data.toolCallId === call.id && event.data.toolSequence === scope.seq && event.data.result === result.content)) {
-                    this.append(id, 'tool/result', { toolCallId: call.id, name: call.name, status: 'completed', ...result }, scope)
-                    continue
-                }
-            }
             this.append(id, 'tool/result', { toolCallId: call.id, name: call.name, isError: true,
                 status: started ? 'unknown' : 'skipped', content: started ? 'ToolError: unknown outcome after recovery; verify side effects before continuing' : 'ToolError: skipped before execution after recovery' }, scope)
         }

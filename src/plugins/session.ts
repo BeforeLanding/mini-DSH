@@ -10,7 +10,6 @@ class SessionsService extends Service {
     }
 
     restore(...args: Parameters<SessionRuntime['restore']>) { return this.runtime.restore(...args) }
-    setDelegationRecovery(...args: Parameters<SessionRuntime['setDelegationRecovery']>) { return this.runtime.setDelegationRecovery(...args) }
     attachStore(...args: Parameters<SessionRuntime['attachStore']>) { return this.runtime.attachStore(...args) }
     flush(...args: Parameters<SessionRuntime['flush']>) { return this.runtime.flush(...args) }
     close() { return this.runtime.close() }

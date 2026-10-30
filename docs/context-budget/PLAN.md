@@ -1,8 +1,10 @@
 # 上下文与执行预算管理：计划与设计
 
+当前交付范围（2026-10-30）：main 保持单 Agent 本地 Harness；记忆与只读协作的代码、专属协议和证据只保留在独立分支 `feat/memory-team-eval-v2`。本轮撤回 main 中的 PR #7 集成，保留其它组件和历史证据，不重写 Git 历史。演示录制暂缓；付费评测、发布与部署不在本轮范围。
+
 组件评测收口（2026-10-27）：新增独立 `component-loo` 协议；配置与允许变化由 `scripts/eval-v2-component-protocol.ts` 维护，四臂明确冻结 `postCompactionPrune=false`，顺序 full → no-preview → no-projection → no-report。package 与评测代码必须相同，产品代码仅允许精确组件路径差异。NX-50 历史门槛保持原样；验收见 NX-51-COMPONENT-ABLATION。
 
-新阶段（2026-10-26）：见 [项目记忆与只读协作计划](../memory-team/PLAN.md)。默认关闭的新功能在独立分支实施，不改写下文历史协议、证据或 PR #6 的消融准备。
+新阶段（2026-10-26）：见 [项目记忆与只读协作计划](https://github.com/BeforeLanding/mini-DSH/blob/2f2dca9f4f968485d9eb5f950f2accf173ce4539/docs/memory-team/PLAN.md)。默认关闭的新功能在独立分支实施，不改写下文历史协议、证据或 PR #6 的消融准备。
 
 ## OPT-1 工具预览额度修订（2026-10-25）
 

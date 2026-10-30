@@ -15,10 +15,10 @@ try {
   }
   if (args[0] === 'inspect') {
     const options = args.slice(1)
-    if (!options.length || options.length > 4 || options.slice(1).some(option => !['--json', '--trace', '--tree'].includes(option)) || new Set(options.slice(1)).size !== options.length - 1)
-      throw new Error('usage: mini-dsh inspect <session-jsonl-path> [--json] [--trace] [--tree]')
+    if (!options.length || options.length > 3 || options.slice(1).some(option => !['--json', '--trace'].includes(option)) || new Set(options.slice(1)).size !== options.length - 1)
+      throw new Error('usage: mini-dsh inspect <session-jsonl-path> [--json] [--trace]')
     const { inspectSession, formatInspect } = await import('./core/session-inspect.js')
-    const report = await inspectSession(options[0]!, { trace: options.includes('--trace'), tree: options.includes('--tree') })
+    const report = await inspectSession(options[0]!, { trace: options.includes('--trace') })
     console.log(options.includes('--json') ? JSON.stringify(report, null, 2) : formatInspect(report))
     if (!report.integrity.complete) process.exitCode = 2
   } else if (args[0] === 'demo') {
@@ -27,9 +27,9 @@ try {
     const result = await runDemo()
     if (!result.passed) process.exitCode = 1
   } else if (args.length > 1 || (args.length === 1 && !['--help', '--version', '--show-config', 'demo'].includes(args[0]!))) {
-    throw new Error('usage: mini-dsh [--help|--version|--show-config|demo [fix]] | inspect <session-jsonl-path> [--json] [--trace] [--tree]')
+    throw new Error('usage: mini-dsh [--help|--version|--show-config|demo [fix]] | inspect <session-jsonl-path> [--json] [--trace]')
   } else if (args[0] === '--help') {
-    console.log('Usage: mini-dsh [--help|--version|--show-config|demo [fix]] [--mcp-config <path>]\n       mini-dsh inspect <session-jsonl-path> [--json] [--trace] [--tree]\nRun in the target workspace directory. --show-config, inspect, and demo need no API key; interactive use requires DEEPSEEK_API_KEY in the environment or current directory .env.\nMCP defaults to no servers; user config: ~/.mini-dsh/mcp.json (override with MINI_DSH_MCP_CONFIG or --mcp-config). Workspace mcp.json is not auto-loaded. Set MINI_DSH_MCP=0 to disable.\nSession logs: ~/.mini-dsh/sessions (override with MINI_DSH_SESSION_DIR).')
+    console.log('Usage: mini-dsh [--help|--version|--show-config|demo [fix]] [--mcp-config <path>]\n       mini-dsh inspect <session-jsonl-path> [--json] [--trace]\nRun in the target workspace directory. --show-config, inspect, and demo need no API key; interactive use requires DEEPSEEK_API_KEY in the environment or current directory .env.\nMCP defaults to no servers; user config: ~/.mini-dsh/mcp.json (override with MINI_DSH_MCP_CONFIG or --mcp-config). Workspace mcp.json is not auto-loaded. Set MINI_DSH_MCP=0 to disable.\nSession logs: ~/.mini-dsh/sessions (override with MINI_DSH_SESSION_DIR).')
   } else if (args[0] === '--version') {
     const metadata: unknown = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
     if (!metadata || typeof metadata !== 'object' || !('version' in metadata) || typeof metadata.version !== 'string') throw new Error('package version is unavailable')
@@ -39,7 +39,7 @@ try {
     const { productionHarnessConfig } = await import('./app/production-config.js')
     const initiallySet = new Set(['MINI_DSH_SESSION_ID', 'MINI_DSH_MODEL', 'MINI_DSH_WORKSPACE', 'MINI_DSH_PROFILE',
       'MINI_DSH_CONTEXT_LAYOUT', 'MINI_DSH_RUNTIME_TIME_MODE', 'MINI_DSH_PROJECT_DIRECTORY', 'MINI_DSH_TOOL_PREVIEW_BYTES', 'MINI_DSH_BUDGET',
-      'MINI_DSH_AUTO_APPROVE', 'MINI_DSH_MEMORY', 'MINI_DSH_MEMORY_DIR', 'MINI_DSH_MEMORY_PROJECT_ID', 'MINI_DSH_MEMORY_LIMITS', 'MINI_DSH_DELEGATION', 'MINI_DSH_TEAM_DIR', 'MINI_DSH_TEAM_LIMITS', 'MINI_DSH_TASK_GROUP_BUDGET'].filter(key => process.env[key] !== undefined))
+      'MINI_DSH_AUTO_APPROVE'].filter(key => process.env[key] !== undefined))
     const dotenvResult = dotenv.config({ quiet: true })
     if (args[0] === '--show-config') {
     const { inspectProductionConfig } = await import('./app/config-inspection.js')
@@ -56,7 +56,7 @@ try {
       harness = await createHarness({ ...productionConfig, ...(mcp.servers.length ? { mcpServers: mcp.servers } : {}) })
       const { root } = harness
       await root.plugin(deepseek)
-      await root.plugin(cli, { model: process.env.MINI_DSH_MODEL, contextLayout: productionConfig.contextLayout ?? 'live', runtimeClockMode: productionConfig.runtimeClockMode, ...(harness.memory ? { memory: harness.memory } : {}), ...(harness.taskGroups ? { taskGroups: harness.taskGroups } : {}) })
+      await root.plugin(cli, { model: process.env.MINI_DSH_MODEL, contextLayout: productionConfig.contextLayout ?? 'live', runtimeClockMode: productionConfig.runtimeClockMode })
     }
   }
 } catch (error) {

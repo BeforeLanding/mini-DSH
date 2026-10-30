@@ -1,8 +1,10 @@
 # 开发进度
 
-更新：2026-10-28。历史逐步记录已整体迁入 [2026-09-28 至 2026-09-30 归档](docs/history/PROGRESS-2026-09-28--2026-09-30.md)；本文件只维护当前状态、阻塞和下一步。
+更新：2026-10-30。历史逐步记录已整体迁入 [2026-09-28 至 2026-09-30 归档](docs/history/PROGRESS-2026-09-28--2026-09-30.md)；本文件只维护当前状态、阻塞和下一步。
 
 ## 当前状态
+
+- **main 单 Agent 范围恢复（2026-10-30）**：按用户要求撤回 PR #7 集成；记忆与只读协作仅保留在远端 `feat/memory-team-eval-v2@2f2dca9`，包含 PR #7 四项修复及后续评测实现。main 不再提供相关配置、CLI、工具与事件。下文带日期的记录描述当时状态；演示录制暂缓。本轮收尾步骤见 TASKS 的 PORT-1—3。
 
 - **SWE 实验隔离（2026-10-28）**：按用户要求撤回 PR #12 对 main 的变更。完整四臂实现和结果保留在 `feat/swebench-formal-results@dc7e659`，后续不合并 main；后续 README 与中文文档整理保留。
 
@@ -10,9 +12,9 @@
 - **组件 LOO 开发批收口（2026-10-28）**：PR #8 的独立协议与 PR #9 的零付费重冻已合并；四批分别获授权执行，full/no-preview/no-projection/no-report 重跑各 12/12 条完整，17 项可比性检查通过。可靠完成分别 11/12、12/12、12/12、11/12；产物验收均 12/12；三项归因均 `inconclusive`，维持现有组件行为与摘要后裁剪默认关闭。四份完整批次峰值价估价合计 $5.3084，不含首次 no-report 中断批次的未知总费用；中断证据保留且排除。比较器后处理修正 `3f95703` 通过完整 579/579 测试；[描述性结果与边界](docs/context-budget/COMPONENT-LOO-PAID-RESULT.md)。下一步若需泛化判断，先设计未曝光题库并单独冻结/授权。
 
 
-- **PR #7 独立核心复核（2026-10-27）**：共享 deadline 未覆盖工具/审批、worker 失败清理、提案批次身份及跨会话撤销四项已分别修复推送（`afdaca5` / `bc4ef50` / `9750558` / `525ecc9`）。本地 check 222 / lint 251 零诊断，完整 564 tests / 534 pass / 0 fail / 30 平台 skipped；两个零 provider 演示通过。默认关闭、人工批准及项目隔离复核未发现其它阻塞；最终 head 六项 CI 全绿后以 merge commit 收口，见 [审查记录](docs/memory-team/REVIEW-PR7.md)。
+- **PR #7 独立核心复核（2026-10-27）**：共享 deadline 未覆盖工具/审批、worker 失败清理、提案批次身份及跨会话撤销四项已分别修复推送（`afdaca5` / `bc4ef50` / `9750558` / `525ecc9`）。本地 check 222 / lint 251 零诊断，完整 564 tests / 534 pass / 0 fail / 30 平台 skipped；两个零 provider 演示通过。默认关闭、人工批准及项目隔离复核未发现其它阻塞；最终 head 六项 CI 全绿后以 merge commit 收口，见 [审查记录](https://github.com/BeforeLanding/mini-DSH/blob/2f2dca9f4f968485d9eb5f950f2accf173ce4539/docs/memory-team/REVIEW-PR7.md)。
 
-- **项目记忆与只读协作核心在独立分支完成（2026-10-26）**：`feat/memory-team` 始于 `main@cc2b769`，现已合入 PR #6 的 `a5d9191`，保留负结果与默认关闭裁剪。MM-01—03、MA-01—05 及边界修复已提交，所有新功能默认关闭。合并后 558 tests / 528 pass / 0 fail / 30 平台条件跳过，零 provider 演示覆盖记忆过期、协作成功/失败/取消及四崩溃窗口。EV-02 只有独立开发蓝图、共同预算和 validate-only 准备；独立验收/两阶段真实评测执行器及付费实验尚未实施。未改 Claude 的 48 条消融、比较器或负结果，本功能未合并 main/部署。实时状态与证据见 [专题任务](docs/memory-team/TASKS.md)。
+- **项目记忆与只读协作核心在独立分支完成（2026-10-26）**：`feat/memory-team` 始于 `main@cc2b769`，现已合入 PR #6 的 `a5d9191`，保留负结果与默认关闭裁剪。MM-01—03、MA-01—05 及边界修复已提交，所有新功能默认关闭。合并后 558 tests / 528 pass / 0 fail / 30 平台条件跳过，零 provider 演示覆盖记忆过期、协作成功/失败/取消及四崩溃窗口。EV-02 只有独立开发蓝图、共同预算和 validate-only 准备；独立验收/两阶段真实评测执行器及付费实验尚未实施。未改 Claude 的 48 条消融、比较器或负结果，本功能未合并 main/部署。实时状态与证据见 [专题任务](https://github.com/BeforeLanding/mini-DSH/blob/2f2dca9f4f968485d9eb5f950f2accf173ce4539/docs/memory-team/TASKS.md)。
 
 - **NX-51 摘要后裁剪：机制已持久化，24 条真实对照未支持性能假设（2026-10-25）**：只读 NX-50 两批轨迹做耗时分解；净增 60.0 s 中摘要占 45.0 s，T04 的重复摘要来自“压力摘要只压当前 task、旧任务仍占 35～41k token”。压力摘要 applied 后按压缩后目标线裁掉已结束旧任务，并把决定写成 `context/prune` 事件；后续轮次、`/continue` 与重启恢复继续排除，原始事件不删、`read_history` 仍可回读。新增两条回归用例，原不可约前缀用例改用当前 task 构造；定向 28/28（covenant 4/4），隔离完整 525/525/0/0，check 197 / lint 223 / fixtures 25 / eval:offline 12/12 / bench:components 全过。提交 `9e30f5c`，PR [#6](https://github.com/BeforeLanding/mini-DSH/pull/6) 六 job 全绿。随后按 [24 条协议](docs/context-budget/NX-51-PRUNE-AB.md) 执行 on/off 各 12 条（usage 估价合计 $3.087115）：摘要 3→7、摘要耗时 43,249→105,394 ms、主动耗时 +37.7%、输出 token +48.4%，可靠完成 11→10、产物验收 12→12。**离线反事实未在真实轨迹复现**，按预注册规则改为显式 opt-in：`postCompactionPrune` 默认关闭，两条持久化回归测试显式开启，另增默认关闭用例；隔离完整 526/526/0/0，定向 28/28，check 197 / lint 224 / fixtures 25 / eval:offline 12/12 / bench:components 全过。完整读数见 [结果](docs/context-budget/NX-51-PRUNE-RESULT.md)。下一步是冻结 48 条三项组件消融（统一以默认背景运行）；复跑或新批次需重新授权。
 

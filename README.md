@@ -8,7 +8,7 @@
 
 用自然语言提出任务，让模型读取项目规则、定位代码、编辑文件并运行检查。你可以审批修改与命令执行，查看 diff 和验证记录，并在预算停止后继续任务。
 
-mini-DSH 使用 TypeScript / Cordis 构建，内置 DeepSeek 适配器，适合希望在本地使用、理解或扩展编程 Agent 的开发者。默认由一个 Agent 操作一个本地工作区，可按需启用项目记忆和只读子 Agent 协作。
+mini-DSH 使用 TypeScript / Cordis 构建，内置 DeepSeek 适配器，适合希望在本地使用、理解或扩展编程 Agent 的开发者。主分支由一个 Agent 操作一个本地工作区。
 
 [快速开始](#快速开始) · [日常使用](#日常使用) · [使用指南](docs/USAGE.md) · [架构](docs/ARCHITECTURE.md)
 
@@ -90,14 +90,6 @@ pnpm start
 
 完整命令、预算配置、同一会话的重启恢复与日志检查见 [使用指南](docs/USAGE.md)。`/compact` 可能请求模型；`/report` 的检查证据不自动构成任务验收。
 
-### 按需启用的能力
-
-**项目记忆**默认关闭。用 `MINI_DSH_MEMORY=assist` 开启候选提案与按需检索，候选须由人通过 `/memory` 审阅批准；变更、过期或撤销的记录会拒绝回读。
-
-**只读协作**默认关闭。用 `MINI_DSH_DELEGATION=read-only` 允许主 Agent 委派分析、测试设计或审查。子角色不写文件、不执行 Bash，主/子/摘要/重试共享根任务预算；续跑不刷新根额度和 deadline。
-
-配置、限制和机制演示见 [记忆与只读协作](docs/USAGE.md#记忆与只读协作)；真实效果尚未评测。
-
 ## 演示
 
 以下仓库脚本可单独运行，均不调用真实模型：
@@ -106,7 +98,6 @@ pnpm start
 - `pnpm demo:resume`：预算停止后在同一任务续跑。
 - `pnpm demo:compact`：单任务压缩、原始事件保留与按事件号回读。
 - `pnpm demo:unknown`：真实崩溃后的未知工具结果与陈旧锁处置。
-- `pnpm demo:memory`、`pnpm demo:team`：记忆审阅与只读协作机制。
 
 演示使用脚本化响应或合成账本，退出码 0 说明机制符合预期，不代表模型能力。
 
@@ -120,6 +111,7 @@ pnpm start
 - **恢复：** 恢复重建事件状态，不还原文件系统快照；结果未知的工具需人工核验，不自动重试。
 - **预算：** token 估算与供应商实际用量可能不同，执行预算不是费用硬上限；工具调用在单个会话内串行执行。
 - **发布：** 尚未发布 npm 或创建发布 Release；安装验证覆盖 Windows 含空格路径与 Ubuntu CI，macOS 未验证。ECS 部署仅保留[手动入口](docs/ECS_DEPLOYMENT.md)。
+- **扩展分支：** 项目记忆与只读协作仅保留在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2)，不属于主分支交付范围。
 - **证据：** 不展示模型评测结果，也不把离线回归作为能力分数。SWE-bench 正式实验与结果保留在[独立实验分支](https://github.com/BeforeLanding/mini-DSH/tree/feat/swebench-formal-results)，不合并 main。
 
 ## 架构与扩展

@@ -1,5 +1,13 @@
 # 改动与验收证据
 
+### PORT-1 main 撤回记忆与只读协作（2026-10-30）
+
+按用户范围，main 只交付单 Agent，记忆与只读协作仅保留在远端 `feat/memory-team-eval-v2@2f2dca9f4f968485d9eb5f950f2accf173ce4539`。开始前 `git ls-remote --heads origin` 核实分支仍在，`git merge-base --is-ancestor 5841f79 origin/feat/memory-team-eval-v2` 退出 0，确认包括 PR #7 的四项独立修复及后续分支工作。
+
+以 PR #7 第一父提交 `a5d9191` 为基准，只恢复该 PR 改动的生产源码、专属脚本/测试、package 命令、环境模板及代码锚点；专属需求、评测与历史证据移出 main 工作树，仍可从分支和 Git 历史读取。README、使用指南、讲解页与旧专题链接同步指向独立分支；提示扩展会话使用独立目录，不把专属事件日志混用于 main。保留后续组件 LOO 代码及原结果，没有重写历史或重跑付费实验。
+
+验收：`git diff --exit-code a5d9191 -- src` 退出 0；现有装配测试增加 main 不暴露 memory/delegation/taskGroups 服务与工具的断言。`node scripts/build.js` strict 类型/构建通过；`node scripts/check-syntax.js` 为 202 files；`node node_modules/@biomejs/biome/bin/biome check .` 为 232 files、0 诊断。正常用户权限 `node --test --test-reporter=tap dist/test/*.test.js` 为 546 tests / 516 pass / 0 fail / 30 skipped，日志 `D:\Agent\tmp\mini-dsh-port1-tests-20261030.log`；30 项为 Linux 隔离条件用例，未计为通过。`node dist/scripts/recompute-report.js docs/samples --check`、`node dist/scripts/check-coding-fixtures.js`、`node scripts/benchmark-components.mjs --compare docs/samples/components-baseline.json` 均退出 0；三组件比较通过。`git diff --check` 通过。真实模型请求 0；演示录制暂缓。
+
 ### DOC-R2 架构图置顶与目录职责介绍（2026-10-28）
 
 按用户要求将原有架构图移到 README 第一行、项目标题之前；后部“架构与扩展”改为目录树，说明 app/core/plugins/models/tools/utils、插件配置、脚本、测试及文档的职责，再用关键源码链接说明从入口到装配和 Agent Loop 的关系。保留“实现入口”标题，既有讲解页锚点继续有效；图片仅展示一次。

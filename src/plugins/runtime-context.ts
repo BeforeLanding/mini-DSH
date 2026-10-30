@@ -2,14 +2,12 @@ import type { Context } from '@deepseek-ai/cordis'
 import path from 'node:path'
 import os from 'node:os'
 import { sessionStableText } from '../core/system-prompt-runtime.js'
-import { roleIdentity } from '../core/agent-capabilities.js'
-import type { AgentRole } from '../core/agent-capabilities.js'
 
 export const name = 'mini-runtime-context'
 export const inject = ['systemPrompt', 'sessions']
 
 // layout 决定 runtime:environment 这一段是否在会话内定住，见下面的注册处。缺省 'live' 是历史行为。
-export interface RuntimeContextConfig { agentRole?: AgentRole; workspace?: string; profile?: 'general' | 'coding'; layout?: 'live' | 'frozen'; now?: () => string }
+export interface RuntimeContextConfig { workspace?: string; profile?: 'general' | 'coding'; layout?: 'live' | 'frozen'; now?: () => string }
 
 const codingIdentity = [
   'You are a coding agent running in a local Harness. Respond in the user\'s language.',
@@ -32,7 +30,7 @@ export function apply(ctx: Context, config: RuntimeContextConfig = {}) {
 
   ctx.effect(() => ctx.systemPrompt.section({
     name: 'agent:identity', order: 10,
-    text: config.agentRole && config.agentRole !== 'coordinator' ? roleIdentity(config.agentRole) : profile === 'coding' ? codingIdentity : 'You are a general-purpose agent running in a local Harness. Prefer tools to verify facts when possible. Use the tools provided in this request when asked about available tools. Reply in English by default.',
+    text: profile === 'coding' ? codingIdentity : 'You are a general-purpose agent running in a local Harness. Prefer tools to verify facts when possible. Use the tools provided in this request when asked about available tools. Reply in English by default.',
   }), 'register agent identity')
 
   // 这一段读时钟，且是**毫秒**精度：默认（live）每次 assemble 渲染的结果必然不同，系统提示从 Time 那一行
