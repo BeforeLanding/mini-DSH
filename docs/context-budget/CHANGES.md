@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### SWE-O5-2 五固定镜像真实环境通过（2026-10-30）
+
+run 41060962921 成功，五镜像的 registry digest、testbed prefix、项目依赖、候选隔离与双向文件可见全部通过；同容器旧环境探针 0/5、新环境 5/5，Django 合法无 pytest。公开 JSON 仅含机制证据，无任务正文/key；失败 run 41059541216 原样保留。修复后 manifest 源码 027236b、SHA b713df57…25f3e82，除 source/time 外配置完全相同，旧清单归档。真实模型请求 0，不宣称模型成功率提升。下一步是远端无 key 全链路准备，实际 key 的新目的地未授权。
+
 ### SWE-O5-2b 候选工作区探针父目录与修复后重冻（2026-10-30）
 
 首次远端 run 四个镜像已通过 testbed/pytest，但探针因未创建父目录失败。CI 现在先建立专属 workspaces 父目录，继续采用生产 prepareDockerWorkspace 与 Docker runner，不修改生产源码。静态 YAML/Node 语法与输入对照通过。以 `027236b` 修复后的原生 runner 预检重新冻结；旧 3b03f48 清单与授权记录原样归档，机器比较确认仅 sourceCommit/createdAt 改变，五题/六臂/模型/价格/预算逐字段相同。模型请求 0，沿用用户已授权批次范围；真实机制结果待新 run。

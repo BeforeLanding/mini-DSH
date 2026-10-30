@@ -74,3 +74,13 @@ WSL 中的 Node 24.16.0 导入新执行器成功，外部 mini-SWE-agent 2.4.6 �
 草稿 [PR #13](https://github.com/BeforeLanding/mini-DSH/pull/13) 以独立 `feat/swebench-formal-results` 为 base，代码 HEAD `b572596` 的 [CI 41057455030](https://github.com/BeforeLanding/mini-DSH/actions/runs/41057455030) 六项实际 job 全绿；Official SWE-bench no-model PoC 按普通 PR 配置 skipped。没有合并 main。
 
 恢复复核：Docker Desktop 的 start 命令返回 already running，但 status/engine/restart API 无响应；WSL 发行版列表显示 Docker 引擎停止，当前 backend 日志再次出现错误 1920/本地 socket 故障。2026-10-24 相同错误的历史记录说明 Windows 重启后曾恢复引擎，但本次尚未恢复。已停止本任务自己挂起的重启 CLI，未删除 Docker 数据。当前仍是实际 episode 0、模型请求 0、官方新评分 0；剩余前置条件仅为本地环境恢复及真实镜像预检通过。目标尚未达成，不能把机制测试写成 full 成功率提升。
+
+## 远端真实镜像环境验收（SWE-O5）
+
+本地 socket 故障仍在，现有公开仓库的 Actions Docker 可用。首次 run `41059541216` 失败证据保留：四镜像通过 testbed/pytest 后因探针父目录缺失退出，Django 被错误要求 pytest。`027236b` 修正合法原生 runner 的 pytest 可选观测，完整 602/572/0/30；`8b7427b` 修复探针目录。
+
+[第二次 run 41060962921](https://github.com/BeforeLanding/mini-DSH/actions/runs/41060962921) 实际五镜像全部通过：固定 registry digest 与对应 image ID 一致，testbed Python prefix 正确，各项目依赖导入成功，真实候选容器保持无网络/只读根/单一工作区挂载，宿主文件工具目录与容器 Bash 双向可见。同容器内旧 `bash -lc` 的环境探针 0/5 通过，新显式激活 5/5 通过；Django pytest 观测为 null 且原生依赖正常，不安装任何镜像外依赖。机读结果见 [公开环境证据](../samples/swe-component-environment-result-20261030.json)。原始 job artifact 已下载保存在仓库外。
+
+修复后源码 `027236b85573ac6cfdffae0fd09f9206ab975480` 的新开发 manifest SHA-256 为 `b713df5768dc816ae39a893e9aba3e73010ec102e8ab34b9426e6f54525f3e82`。旧清单/授权/校验和保存在 `frozen-source-3b03f48/`；机器比较确认只有 sourceCommit 与 createdAt 改变，五题/六臂/模型/价格/预算完全一致。用户的同批 30 条/$17 范围未扩大，实际模型请求仍为 0。
+
+既有 baseline venv 的 uv pip check 确认 123 个包兼容，config/install 指纹先前已匹配。现有 GitHub 仓库没有模型 secret；远端付费运行尚未具备凭证通道。下一步准备无 key 的全链路预检及加密原始证据交付，再就临时 secret 的具体目的地取得明确同意，不上传本机 key。
