@@ -177,7 +177,7 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
     if (!manifest.prices) throw new Error('external arms require a frozen price snapshot')
     if (!options.externalRunner) {
       externalPreflight = await preflightExternal({ manifest, split: options.split, instances: batchManifest.instances,
-        images: manifest.environment.imageDigests ?? {}, python: options.externalPython ?? process.env.MINI_DSH_EXTERNAL_PYTHON ?? 'python' })
+        images: manifest.environment.imageDigests ?? {}, python: options.externalPython ?? process.env.MINI_DSH_EXTERNAL_PYTHON ?? 'python', requireCredential: !options.validateOnly })
     }
   }
   const scoringRows = options.scoring === 'official'

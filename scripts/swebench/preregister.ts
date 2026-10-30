@@ -214,7 +214,7 @@ async function main() {
   await fs.mkdir(path.dirname(out), { recursive: true })
   await fs.writeFile(out, JSON.stringify(manifest, null, 2) + '\n')
   console.log(`wrote ${out}: development ${development.length}, formal ${formal.length}, arms ${configuredArms.length}, ` +
-    `budget ceiling $${budget.totalCeilingUsd.toFixed(2)}, freeze ${manifest.freezeStatus}${missing.length ? `, missing: ${missing.join('; ')}` : ''}, paid requests 0`)
+    `batch hard cap $${effectiveBatchCap.toFixed(2)}, scope ${executionScope}, freeze ${manifest.freezeStatus}${missing.length ? `, missing: ${missing.join('; ')}` : ''}, paid requests 0`)
 }
 
 main().catch(error => { console.error(error instanceof Error ? error.message : error); process.exitCode = 1 })

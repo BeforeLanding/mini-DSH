@@ -335,11 +335,13 @@ export async function preflightExternal(input: {
   instances: readonly SwebenchInstance[]
   images: Record<string, string>
   python: string
+  requireCredential?: boolean
 }): Promise<ExternalPreflight> {
   const arm = input.manifest.arms.find(value => value.system === 'external')
   if (!arm?.external) throw new Error('the split has an external arm but the manifest has no external contract')
   const external = arm.external
-  if (!external.apiKeyEnv || !process.env[external.apiKeyEnv]) throw new Error(`missing provider credential environment variable ${external.apiKeyEnv ?? '(unset)'}`)
+  if (!external.apiKeyEnv) throw new Error('external apiKeyEnv name is required')
+  if (input.requireCredential !== false && !process.env[external.apiKeyEnv]) throw new Error(`missing provider credential environment variable ${external.apiKeyEnv}`)
   if (process.getuid?.() === undefined || process.getgid?.() === undefined) throw new Error('external baseline requires a POSIX uid/gid')
   const docker = spawnSync('docker', ['version', '--format', '{{.Server.Version}}'], { encoding: 'utf8', timeout: 30_000 })
   if (docker.status !== 0) throw new Error(`Docker is not available: ${(docker.stderr ?? '').slice(-500)}`)
