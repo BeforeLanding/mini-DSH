@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "swe-component-environment-probe",
-  "sourceCommit": "3b03f48b39a25f0b78662e314c6b17d0857b4592",
+  "sourceCommit": "027236b85573ac6cfdffae0fd09f9206ab975480",
   "images": [
     {
       "instanceId": "astropy__astropy-14539",

@@ -274,6 +274,7 @@ jobs:
               record.testbed = probeCommandEnvironment(metadata.Id, process.getuid(), process.getgid());
               if (!/^[a-f0-9]{40}$/.test(image.baseCommit)) throw new Error('invalid task base commit');
               const name = `mini-dsh-env-${process.env.GITHUB_RUN_ID}-${index}`;
+              await fs.mkdir(path.dirname(workspace), { recursive: true });
               candidate = await prepareDockerWorkspace({ image: metadata.Id, baseCommit: image.baseCommit, target: workspace, exportName: `${name}-export`, containerName: name });
               const legacyRunner = createDockerCandidateRunner(workspace, name);
               const activeRunner = createDockerCandidateRunner(workspace, name, { commandEnvironment: 'testbed-v1' });

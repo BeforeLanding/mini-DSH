@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### SWE-O5-2b 候选工作区探针父目录与修复后重冻（2026-10-30）
+
+首次远端 run 四个镜像已通过 testbed/pytest，但探针因未创建父目录失败。CI 现在先建立专属 workspaces 父目录，继续采用生产 prepareDockerWorkspace 与 Docker runner，不修改生产源码。静态 YAML/Node 语法与输入对照通过。以 `027236b` 修复后的原生 runner 预检重新冻结；旧 3b03f48 清单与授权记录原样归档，机器比较确认仅 sourceCommit/createdAt 改变，五题/六臂/模型/价格/预算逐字段相同。模型请求 0，沿用用户已授权批次范围；真实机制结果待新 run。
+
 ### SWE-O5-2a 原生测试运行器的合法无 pytest 环境（2026-10-30）
 
 真实远端 run 41059541216 发现 Django 固定镜像的 testbed 无 pytest，但它使用 Django 原生 runner，不能据此阻止整批运行。预检现在仍强制正确 testbed prefix，pytest 有版本则记录版本、合法缺省记 null；不安装或修改镜像。路径指导补充使用项目原生 runner，真实项目依赖由镜像探针分别验证。新增合法无 pytest、错误 Python prefix 和缺失观测字段反例。构建、SWE 46/46、完整 602 tests / 572 pass / 0 fail / 30 平台 skipped、语法 238、Biome 271 通过。首次远端失败证据保留；付费模型请求 0。
