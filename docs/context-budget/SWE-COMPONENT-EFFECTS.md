@@ -84,3 +84,13 @@ WSL 中的 Node 24.16.0 导入新执行器成功，外部 mini-SWE-agent 2.4.6 �
 修复后源码 `027236b85573ac6cfdffae0fd09f9206ab975480` 的新开发 manifest SHA-256 为 `b713df5768dc816ae39a893e9aba3e73010ec102e8ab34b9426e6f54525f3e82`。旧清单/授权/校验和保存在 `frozen-source-3b03f48/`；机器比较确认只有 sourceCommit 与 createdAt 改变，五题/六臂/模型/价格/预算完全一致。用户的同批 30 条/$17 范围未扩大，实际模型请求仍为 0。
 
 既有 baseline venv 的 uv pip check 确认 123 个包兼容，config/install 指纹先前已匹配。现有 GitHub 仓库没有模型 secret；远端付费运行尚未具备凭证通道。下一步准备无 key 的全链路预检及加密原始证据交付，再就临时 secret 的具体目的地取得明确同意，不上传本机 key。
+
+## 远端全链路无 key 预检通过（SWE-O6）
+
+[run 41065536232](https://github.com/BeforeLanding/mini-DSH/actions/runs/41065536232) 已成功终态。实际从固定公共 Parquet（SHA a45b1fe4…9e6dcd）恢复完整 manifest SHA `b713df5768dc816ae39a893e9aba3e73010ec102e8ab34b9426e6f54525f3e82`；五道 agent 输入与评分行隔离。远端 Python 3.12.15、123 包版本、mini-SWE-agent 2.4.6 config/install 指纹与原基线相同，官方 scorer 从 commit 3f01bd6 安装；五镜像 digest/id 与冻结清单匹配，生产 validate-only 成功，planned=30、executed=0、paidRequests=0。一次性护栏实际读取 workflow history 并确认无既有同批 paid dispatch，executionRequested=false。机读审计见 [远端预检证据](../samples/swe-component-remote-preflight-20261030.json)。代码 HEAD 40fc4e0 的六项普通 PR 检查也全部通过。
+
+输入模板不含真实 issue 正文或评分数据；运行时恢复后必须完整 hash 匹配，既有目录与数据/身份漂移均拒绝。原始轨迹/工具正文只上传公钥加密归档，workspace 不打包；本机保留的对应私钥已用真实配对公钥做合成数据往返，确认可以解密。八项 helper 测试覆盖输入、一次性 gate、加密/篡改、公开聚合白名单与 workspace 排除，全部通过。没有真实模型评分或能力提升结论。
+
+**当前授权状态**：用户已授权同一 30 条开发批、总配置上限 $17；没有授权新增 GitHub 凭证目的地。可审阅的待批准动作是：将现有 DeepSeek API key 通过 stdin 暂存到目标仓库 Actions secret `MINI_DSH_SWE_DEV_API_KEY`，派发 execute=true、固定完整 manifest SHA 的首次 workflow，入队确认后删除该仓库 secret。按 [GitHub 官方读取规则](https://docs.github.com/en/actions/reference/security/secrets#when-github-actions-reads-secrets)，仓库 secret 在 workflow 入队时读取，该次 run 仍可使用本次快照。key 不进入代码、日志、agent 文件/Bash 环境或公开 artifact；模型 step 是唯一引用位置。此凭证传送需要用户明确同意后才执行，本阶段未复制 key。
+
+付费 workflow 的并发组固定到此批，后续 dispatch 不会取消它；任何非首次 run_attempt、错误 manifest SHA、既有同批 paid dispatch 都拒绝，不用空目录重跑掩盖已消耗的 attempt。只有明确开启 execute 才引用模型 secret；无 key preflight 不创建模型 evidence 目录。GitHub 公共 runner 最高 360 分钟是显式宿主期限，框架原每题 900 秒等上限保持不变；中断/不完整仍保留原分母和未知 usage，不自动补跑。

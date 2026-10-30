@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### SWE-O6-3b 真实远端完整预检通过（2026-10-30）
+
+run 41065536232 成功：恢复完整 manifest SHA b713df57…25f3e82，Python/123 包/官方 scorer、baseline 指纹、五镜像、生产 validate-only 与一次性 history gate 全部通过，30 计划/0 执行/0 provider。下载 artifact 后本地逐项比对，并验证实际公私钥配对可解密；公开 JSON 只含 metadata/聚合，无问题正文或 key。待用户明确同意新增 GitHub Actions secret 目的地后，才可临时复制 key 并运行已授权的同批；预算无需重复确认。
+
 ### SWE-O6-3 workflow context 语义修正（2026-10-30）
 
 首次 dispatch 在服务端解析即以 HTTP 422 拒绝：job-level env 不允许 runner.temp，未启动任何 job。将私有目录设置移至运行时 step，通过 GITHUB_ENV 传播，step-level artifact 路径仍用 runner.temp。YAML 静态检查通过；修复后重新派发无 key preflight，实际执行结果单独记录。此前本地 YAML 解析只证明语法，不把它称为 GitHub 服务端语义验证。

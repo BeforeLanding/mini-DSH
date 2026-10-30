@@ -1002,4 +1002,6 @@ O5-2 首次真实 run `41059541216` 为 failure，证据已下载，不重写失
 - O6-2（完成，独立提交；两项加密机制测试通过）：上传的原始轨迹须使用本机保留私钥对应的公钥加密，只公开聚合结果；自测往返和篡改失败边界。实际模型 key 不写仓库或日志。
 - O6-3a（静态验收完成，独立提交；八项 helper 测试通过）：验证远端无 key 全链路和一次性执行护栏；只有完成可审阅配置后，才询问是否允许将现有 API key 临时保存到指定 GitHub Actions secret。原预算授权保留；凭证目的地须另获明确同意，未同意前不复制 key、不执行模型批次。
 
-- O6-3b（进行中，独立验收）：派发 development_preflight=true / execute=false 的现有 CI，实测完整恢复/安装/镜像/validate-only/历史 gate；之后才具备询问凭证目的地的条件。
+- O6-3b（完成，独立验收；真实 run 41065536232 全链路通过）：派发 development_preflight=true / execute=false 的现有 CI，实测完整恢复/安装/镜像/validate-only/历史 gate；之后才具备询问凭证目的地的条件。
+
+- O6-4（等待凭证目的地明确同意）：全部代码/清单/预检已完成。若用户同意，仅将现有 key 通过 stdin 临时保存到 BeforeLanding/mini-DSH 的 Actions secret MINI_DSH_SWE_DEV_API_KEY，派发已授权的30条/$17/manifest b713...批次，确认排队后删除仓库 secret；该次 run 使用 GitHub 入队读取的快照。不给正式题/自动重跑扩权，原始轨迹只加密发布。未获同意前不复制 key、不执行付费模型。

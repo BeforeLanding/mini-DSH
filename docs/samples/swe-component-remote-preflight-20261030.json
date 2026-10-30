@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "kind": "swe-component-remote-preflight",
+  "workflowRunId": 41065536232,
+  "workflowCommit": "40fc4e0d1bac177257912db666a667f1cc76059a",
+  "manifestSha256": "b713df5768dc816ae39a893e9aba3e73010ec102e8ab34b9426e6f54525f3e82",
+  "sourceCommit": "027236b85573ac6cfdffae0fd09f9206ab975480",
+  "plannedEpisodes": 30,
+  "executedEpisodes": 0,
+  "providerRequests": 0,
+  "baselineFingerprintMatches": true,
+  "oneTimeGateReadOnlyPassed": true,
+  "actualEvidenceKeyRoundtripPassed": true,
+  "publicKeySha256": "0a261ad8390282cf97b41ce37ddfcd0cb10ca40c313feefb28687ae48672b89f",
+  "rawTracesEncrypted": true,
+  "baseline": {
+    "version": "2.4.6",
+    "upstreamConfigSha256": "9a9c86ac10428b86b932c972b15fefc2f7b6e92230bac5ebdc47e83232a8315e",
+    "installSha256": "c97453eb9d47e76674163654a17487ed85ddcb38d7aef6d120cd40370824b135",
+    "pythonVersion": "3.12.15",
+    "datasetsVersion": "5.1.0",
+    "pyarrowVersion": "26.0.0"
+  },
+  "paidGate": {
+    "manifestSha256": "b713df5768dc816ae39a893e9aba3e73010ec102e8ab34b9426e6f54525f3e82",
+    "batch": "SWE-dev-b713df5768dc816a-30-usd17",
+    "runId": "41065536232",
+    "firstAttempt": true,
+    "priorPaidDispatches": 0,
+    "executionRequested": false
+  },
+  "preflight": {
+    "split": "development",
+    "validationOnly": true,
+    "paidRequests": 0,
+    "executed": 0,
+    "planned": 30,
+    "stopReason": null,
+    "perArm": [
+      {
+        "armId": "full",
+        "resolved": 0,
+        "planned": 5,
+        "executed": 0
+      },
+      {
+        "armId": "harness-baseline",
+        "resolved": 0,
+        "planned": 5,
+        "executed": 0
+      },
+      {
+        "armId": "without-context",
+        "resolved": 0,
+        "planned": 5,
+        "executed": 0
+      },
+      {
+        "armId": "without-tool-output",
+        "resolved": 0,
+        "planned": 5,
+        "executed": 0
+      },
+      {
+        "armId": "without-project-context",
+        "resolved": 0,
+        "planned": 5,
+        "executed": 0
+      },
+      {
+        "armId": "baseline",
+        "resolved": 0,
+        "planned": 5,
+        "executed": 0
+      }
+    ]
+  },
+  "credentialDestinationAuthorization": "pending; no model key was copied"
+}

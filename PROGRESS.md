@@ -4,6 +4,8 @@
 
 ## 当前状态
 
+- **SWE 远端完整预检通过，等待凭证目的地同意（2026-10-30）**：run `41065536232` 实际恢复相同 manifest SHA b713…25f3e82，baseline/官方 scorer/五镜像/生产 validate-only/history gate 全过，30 计划、0 episode、0 模型请求；八项新 helper 测试与实际密钥配对往返通过。原 30条/$17预算授权有效。现有仓库无模型 secret，新增 GitHub 临时凭证目的地尚未同意；只有同意后才复制 key、派发一次并在入队后删除secret。本地 Docker 1920 不再阻止远端准备；模型成功率提升仍未实测。[完整预检与待批准动作](docs/context-budget/SWE-COMPONENT-EFFECTS.md)。
+
 - **SWE 远端环境机制实测通过（2026-10-30）**：本地 Docker 仍有 socket 1920，但 run `41060962921` 对已冻结五镜像的 testbed、项目依赖、真实候选隔离与双向文件可见全部通过，旧环境 0/5、新环境 5/5；原生 Django runner 无 pytest 属合法环境。源码 `027236b` 修复后完整 602/572/0/30。开发清单任务/臂/模型/价格/预算不变，仅更新 source/time 并保留旧快照；30 条/$17 已获授权，实际模型请求仍为 0。准备远端无 key 全链路及加密轨迹交付；向 GitHub 临时复制 key 尚未授权。[真实环境证据与后续边界](docs/context-budget/SWE-COMPONENT-EFFECTS.md)。
 
 - **SWE 组件优化：代码与冻结准备完成，真实运行待续（2026-10-30）**：独立分支 `improve/swe-component-effects-20261030` 修复候选/外部基线的 testbed Python 环境、候选相对路径说明；新增六臂同源消融、实际触发指标、早期短摘要、开发专用冻结、零模型预检和 Windows/WSL 源码身份验证。最终完整 601 tests / 571 pass / 0 fail / 30 平台 skipped，构建/语法/lint/fixtures/offline/组件基准通过。源码 `3b03f48` 冻结 30 条开发计划、$17 batch cap，模型请求 0；validate-only 停在 Docker/WSL 连接，真实镜像探针待环境恢复；用户已明确授权仅本批 30 条/$17，无需重复询问。未声称成功率提升、未合并 main；[代码、证据及续跑条件](docs/context-budget/SWE-COMPONENT-EFFECTS.md)。
