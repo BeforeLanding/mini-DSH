@@ -4,7 +4,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { commandInterpreter } from '../scripts/swebench/command-environment.js'
+import { commandInterpreter, probeCommandEnvironment } from '../scripts/swebench/command-environment.js'
 import { externalOverrideConfig } from '../scripts/swebench/external.js'
 
 test('activation failures never dispatch actions; activated actions preserve quotes and exit status', async () => {
@@ -40,4 +40,14 @@ test('external baseline uses the identical opt-in shell and keeps legacy configu
     assert.deepEqual((config.environment as Record<string, unknown>).interpreter, commandInterpreter(environment))
     assert.deepEqual((config.environment as Record<string, unknown>).forward_env, [])
   }
+})
+
+test('a native test runner may omit pytest while the testbed prefix remains mandatory', () => {
+  const image = `sha256:${'a'.repeat(64)}`
+  const response = (reading: Record<string, unknown>) => ({ status: 0, stdout: JSON.stringify(reading), stderr: '' })
+  const base = { python: '/opt/miniconda3/envs/testbed/bin/python', prefix: '/opt/miniconda3/envs/testbed' }
+  assert.equal(probeCommandEnvironment(image, 1000, 1000, { run: () => response({ ...base, pytest: null }) }).pytest, null)
+  assert.equal(probeCommandEnvironment(image, 1000, 1000, { run: () => response({ ...base, pytest: '7.4.0' }) }).pytest, '7.4.0')
+  assert.throws(() => probeCommandEnvironment(image, 1000, 1000, { run: () => response({ ...base, prefix: '/opt/miniconda3', pytest: null }) }), /invalid testbed/)
+  assert.throws(() => probeCommandEnvironment(image, 1000, 1000, { run: () => response(base) }), /invalid testbed/)
 })

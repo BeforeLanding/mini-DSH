@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### SWE-O5-2a 原生测试运行器的合法无 pytest 环境（2026-10-30）
+
+真实远端 run 41059541216 发现 Django 固定镜像的 testbed 无 pytest，但它使用 Django 原生 runner，不能据此阻止整批运行。预检现在仍强制正确 testbed prefix，pytest 有版本则记录版本、合法缺省记 null；不安装或修改镜像。路径指导补充使用项目原生 runner，真实项目依赖由镜像探针分别验证。新增合法无 pytest、错误 Python prefix 和缺失观测字段反例。构建、SWE 46/46、完整 602 tests / 572 pass / 0 fail / 30 平台 skipped、语法 238、Biome 271 通过。首次远端失败证据保留；付费模型请求 0。
+
 ### SWE-O5-1 现有 CI 的远端零模型环境探针（2026-10-30）
 
 本地 Docker 仍不可用，在现有 CI 增加显式手动开启的 component_environment_probe。输入只含已冻结五个公开镜像的 registry digest/base commit 与依赖模块名；核验相同产品源码、testbed/pytest、实际候选容器隔离、旧/新解释器、项目依赖以及宿主/容器双向文件可见。job 不接收模型 key、不调用模型或评分器，结果上传为机制证据。YAML 解析、嵌入 Node 语法、五镜像/base 与原 manifest 精确对照、无 secret 引用及 diff 检查通过；实际镜像结果待手动 run。未改产品源码或 30 条已授权冻结文件。

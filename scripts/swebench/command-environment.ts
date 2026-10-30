@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import type { SpawnSyncReturns } from 'node:child_process'
 
 export type CommandEnvironment = 'legacy' | 'testbed-v1'
 
@@ -16,20 +17,24 @@ export function commandInterpreter(environment: CommandEnvironment = 'legacy'): 
     'source /opt/miniconda3/etc/profile.d/conda.sh && conda activate testbed && exec bash -c "$1"', 'mini-dsh-testbed']
 }
 
-export const TESTBED_PROBE = `python -c 'import json, sys, pytest; assert sys.prefix == "/opt/miniconda3/envs/testbed", sys.prefix; print(json.dumps({"python": sys.executable, "prefix": sys.prefix, "pytest": pytest.__version__}))'`
+export const TESTBED_PROBE = `python -c 'import importlib.util, json, sys; assert sys.prefix == "/opt/miniconda3/envs/testbed", sys.prefix; pytest_version = __import__("pytest").__version__ if importlib.util.find_spec("pytest") else None; print(json.dumps({"python": sys.executable, "prefix": sys.prefix, "pytest": pytest_version}))'`
 
 // A zero-model probe of the pinned image, with the same user/isolation and
 // interpreter as both execution arms. Never falls back to the base Python.
-export function probeCommandEnvironment(image: string, uid: number, gid: number) {
+export function probeCommandEnvironment(image: string, uid: number, gid: number,
+  dependencies: { run?: (args: string[]) => Pick<SpawnSyncReturns<string>, 'status' | 'stdout' | 'stderr' | 'error'> } = {}) {
   if (!/^sha256:[0-9a-f]{64}$/.test(image)) throw new Error('environment probe requires a pinned image digest')
-  const result = spawnSync('docker', ['run', '--rm', '--network', 'none', '--read-only', '--cap-drop', 'ALL',
+  const run = dependencies.run ?? ((args: string[]) => spawnSync('docker', args, { encoding: 'utf8', timeout: 60_000, maxBuffer: 1024 * 1024 }))
+  const result = run(['run', '--rm', '--network', 'none', '--read-only', '--cap-drop', 'ALL',
     '--security-opt', 'no-new-privileges', '--tmpfs', '/tmp:rw,nosuid,nodev', '--user', `${uid}:${gid}`,
     '--env', 'HOME=/tmp', '--env', 'BASH_ENV=', '--workdir', '/testbed', image,
-    ...commandInterpreter('testbed-v1'), TESTBED_PROBE], { encoding: 'utf8', timeout: 60_000, maxBuffer: 1024 * 1024 })
+    ...commandInterpreter('testbed-v1'), TESTBED_PROBE])
   if (result.status !== 0) throw new Error(`testbed environment preflight failed for ${image}: ${result.error?.message ?? result.stderr.slice(-1000)}`)
   const line = result.stdout.trim().split('\n').at(-1)!
-  const reading = JSON.parse(line) as { python: string; prefix: string; pytest: string }
-  if (reading.prefix !== '/opt/miniconda3/envs/testbed' || typeof reading.python !== 'string' || typeof reading.pytest !== 'string') throw new Error('invalid testbed environment probe')
+  const reading = JSON.parse(line) as { python: string; prefix: string; pytest: string | null }
+  // Django's pinned task environment uses its own runner and intentionally has
+  // no pytest. Record absence explicitly while still requiring the task Python.
+  if (reading.prefix !== '/opt/miniconda3/envs/testbed' || typeof reading.python !== 'string' || (reading.pytest !== null && typeof reading.pytest !== 'string')) throw new Error('invalid testbed environment probe')
   return { image, commandEnvironment: 'testbed-v1' as const, ...reading }
 }
 
@@ -39,4 +44,5 @@ export const CANDIDATE_PATH_GUIDANCE = [
   'File tools operate on the corresponding host checkout. Use workspace-relative paths for read_file, edit_file, write_file, grep, glob, bash cwd, and verification.files; omit bash cwd to use the repository root.',
   'A traceback path such as /testbed/pkg/file.py corresponds to pkg/file.py for file tools. Do not pass /testbed or /opt paths as tool cwd.',
   'Use the installed task dependencies. Keep checks focused and read_file pages at most 200 lines. Do not spend the run reinstalling the environment.',
+  'Use the repository native test runner. Some task images do not include pytest.',
 ].join('\n')
