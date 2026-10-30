@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### SWE-O6-3 workflow context 语义修正（2026-10-30）
+
+首次 dispatch 在服务端解析即以 HTTP 422 拒绝：job-level env 不允许 runner.temp，未启动任何 job。将私有目录设置移至运行时 step，通过 GITHUB_ENV 传播，step-level artifact 路径仍用 runner.temp。YAML 静态检查通过；修复后重新派发无 key preflight，实际执行结果单独记录。此前本地 YAML 解析只证明语法，不把它称为 GitHub 服务端语义验证。
+
 ### SWE-O6-3 远端完整预检及一次性执行接口（2026-10-30，静态验收）
 
 现有 CI 新增显式手动的 development preflight/execute 两条路径：固定 Python/123 包版本与官方 scorer commit、公开数据 SHA、完整 manifest SHA、baseline 指纹、五镜像 id、source pin，之后调用生产 validate-only。模型 key 仅在另行开启的 execute step 引用指定 temporary secret，当前未设置。固定批次 concurrency 不被新 dispatch 取消，拒绝 run_attempt>1、错误 hash，以及任何已有同批付费 dispatch，防止自动重跑。仅公开白名单聚合，原始模型事件/工具正文与执行日志加密，workspace 不归档。新增一次性 gate 和 artifact 边界测试，全部八项 helper 测试、Biome、YAML/嵌入 Node/Python 语法、模型 key 单 step 引用检查通过；真实远端全链预检待派发，模型请求 0。
