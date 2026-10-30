@@ -11,7 +11,7 @@
 - SWE-O4a（完成，独立提交）：开发批专用冻结 `--scope development`，执行器机械拒绝 formal；新增 `--validate-only`，完成真实预检后在创建证据/调用 adapter 前返回。定向 43/43、完整 599/569/0/30。
 - SWE-O4b（代码验收完成，独立提交）：零模型预检不要求真实 key，付费运行保留 key 检查；冻结 CLI 显示当前批 hard cap 与范围，避免把未来正式选择的预算当成本次费用。
 - SWE-O4d（代码验收完成，独立提交）：兼容 WSL 对 Windows worktree 指针及 CRLF 的只读源码身份查询；适配仅限源码查询 argv，不向候选 Git 操作泄漏 GIT_DIR。构建、SWE 45/45。
-- SWE-O4c（冻结完成；Docker 预检与付费执行待续，独立验收）：冻结可审阅的开发批配置、预算与运行前检查；真实 provider 评测按本仓库协议另获具体批次/金额授权。旧正式 50 题已曝光，后续只作回归，成功率提升须在新留出题独立评分后判断。
+- SWE-O4c（冻结完成；Docker 预检与付费执行待续，独立验收）：冻结可审阅的开发批配置、预算与运行前检查；用户已授权仅本次 30 条开发/$17；真实 provider 评测待 Docker 恢复并通过镜像预检，后续不重复询问此批授权。旧正式 50 题已曝光，后续只作回归，成功率提升须在新留出题独立评分后判断。
 
 基线 `node scripts/build.js` 通过；正常权限完整测试 591 tests / 561 pass / 0 fail / 30 平台 skipped（`D:\Agent\tmp\swe-component-baseline-normal-20261030.log`）。沙箱内 Bash 超时不作为产品回归。
 

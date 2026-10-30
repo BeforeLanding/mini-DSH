@@ -66,3 +66,11 @@ WSL 中的 Node 24.16.0 导入新执行器成功，外部 mini-SWE-agent 2.4.6 �
 恢复 Docker Linux 引擎和 Ubuntu WSL 集成后，先执行零模型 `validate-development.sh`。只有该预检成功且用户按 [原 SWE 付费授权要求](../EVALUATION-SWEBENCH.md) 授权本批 30 条及 $17 配置上限后，才执行 `run-development.sh`；脚本先核验 SHA256SUMS 并拒绝覆盖已有证据。中断证据保留，不自动重跑。基线 watchdog 的最后一步可能越过名义 token cap，仍须保留主评分、超限计数和限额内敏感性读数，不把名义限额当作精确消耗相等。
 
 最终本地验收：构建通过，语法 238 文件、Biome 270 文件零诊断；完整 601 tests / 571 pass / 0 fail / 30 平台 skipped（`D:\Agent\tmp\swe-component-portable-final-20261030.log`）；fixtures、12/12 离线任务与 tools/compaction/reports 三项基准通过。没有新增真实 SWE 得分，不能宣称 full 成功率已经提升。按原分支边界保留独立实验，不合并 main。
+
+## 用户授权与环境恢复复核
+
+用户已在本次对话明确授权**仅本批 30 条开发 episode、配置总上限 $17**，并说明暂时无法恢复 Docker。授权摘要保存在仓库外 `authorization.json`，绑定上述 manifest SHA-256；没有修改冻结文件或校验和，也不覆盖正式题、自动复跑或新增资源。后续无需重复询问该批预算，但运行前仍须通过零模型预检。
+
+草稿 [PR #13](https://github.com/BeforeLanding/mini-DSH/pull/13) 以独立 `feat/swebench-formal-results` 为 base，代码 HEAD `b572596` 的 [CI 41057455030](https://github.com/BeforeLanding/mini-DSH/actions/runs/41057455030) 六项实际 job 全绿；Official SWE-bench no-model PoC 按普通 PR 配置 skipped。没有合并 main。
+
+恢复复核：Docker Desktop 的 start 命令返回 already running，但 status/engine/restart API 无响应；WSL 发行版列表显示 Docker 引擎停止，当前 backend 日志再次出现错误 1920/本地 socket 故障。2026-10-24 相同错误的历史记录说明 Windows 重启后曾恢复引擎，但本次尚未恢复。已停止本任务自己挂起的重启 CLI，未删除 Docker 数据。当前仍是实际 episode 0、模型请求 0、官方新评分 0；剩余前置条件仅为本地环境恢复及真实镜像预检通过。目标尚未达成，不能把机制测试写成 full 成功率提升。

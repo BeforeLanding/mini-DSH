@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- **SWE 组件优化：代码与冻结准备完成，真实运行待续（2026-10-30）**：独立分支 `improve/swe-component-effects-20261030` 修复候选/外部基线的 testbed Python 环境、候选相对路径说明；新增六臂同源消融、实际触发指标、早期短摘要、开发专用冻结、零模型预检和 Windows/WSL 源码身份验证。最终完整 601 tests / 571 pass / 0 fail / 30 平台 skipped，构建/语法/lint/fixtures/offline/组件基准通过。源码 `3b03f48` 冻结 30 条开发计划、$17 batch cap，模型请求 0；validate-only 停在 Docker/WSL 连接，真实镜像探针与付费授权尚缺。未声称成功率提升、未合并 main；[代码、证据及续跑条件](docs/context-budget/SWE-COMPONENT-EFFECTS.md)。
+- **SWE 组件优化：代码与冻结准备完成，真实运行待续（2026-10-30）**：独立分支 `improve/swe-component-effects-20261030` 修复候选/外部基线的 testbed Python 环境、候选相对路径说明；新增六臂同源消融、实际触发指标、早期短摘要、开发专用冻结、零模型预检和 Windows/WSL 源码身份验证。最终完整 601 tests / 571 pass / 0 fail / 30 平台 skipped，构建/语法/lint/fixtures/offline/组件基准通过。源码 `3b03f48` 冻结 30 条开发计划、$17 batch cap，模型请求 0；validate-only 停在 Docker/WSL 连接，真实镜像探针待环境恢复；用户已明确授权仅本批 30 条/$17，无需重复询问。未声称成功率提升、未合并 main；[代码、证据及续跑条件](docs/context-budget/SWE-COMPONENT-EFFECTS.md)。
 
 - **组件 LOO 开发批收口（2026-10-28）**：PR #8 的独立协议与 PR #9 的零付费重冻已合并；四批分别获授权执行，full/no-preview/no-projection/no-report 重跑各 12/12 条完整，17 项可比性检查通过。可靠完成分别 11/12、12/12、12/12、11/12；产物验收均 12/12；三项归因均 `inconclusive`，维持现有组件行为与摘要后裁剪默认关闭。四份完整批次峰值价估价合计 $5.3084，不含首次 no-report 中断批次的未知总费用；中断证据保留且排除。比较器后处理修正 `3f95703` 通过完整 579/579 测试；[描述性结果与边界](docs/context-budget/COMPONENT-LOO-PAID-RESULT.md)。下一步若需泛化判断，先设计未曝光题库并单独冻结/授权。
 

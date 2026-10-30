@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### SWE 用户授权与 Docker 当前阻塞（2026-10-30）
+
+用户明确授权绑定冻结 manifest 的 30 条开发评测、$17 配置上限；预算不再待确认。六项代码 CI 通过（run 41057455030）；本地恢复复核重现 Docker socket 1920，启动/重启接口无响应，真实模型请求仍为 0。已清理本任务挂起 CLI；等待环境恢复和零模型预检，不自动重跑、不合并 main。
+
 ### SWE-O4c 冻结、最终检查与剩余执行边界（2026-10-30）
 
 源码 `3b03f48` 冻结 development-only 六臂 30 条，manifest SHA-256 `d7991e5f…1c5ee6b`，批次配置上限 $17，provider 请求 0。WSL 执行器导入/基线指纹/源码漂移反例和八项校验和通过；真实 validate-only 停在 Docker 连接预检，未创建 episode。构建、语法 238、lint 270、完整 601/571/0/30、fixtures、offline 12/12、组件三基准通过。真实镜像探针及付费运行未验收；详见 [冻结与阻塞](SWE-COMPONENT-EFFECTS.md)。
