@@ -17,4 +17,6 @@
 - [context-budget/NX-51-TIMING-DIAGNOSIS](context-budget/NX-51-TIMING-DIAGNOSIS.md) — NX-50 的离线耗时分解与摘要后裁剪修复。
 - [context-budget/NX-51-PRUNE-AB](context-budget/NX-51-PRUNE-AB.md) — 24 条裁剪开关协议与预注册读数。
 - [context-budget/NX-51-PRUNE-RESULT](context-budget/NX-51-PRUNE-RESULT.md) — 已执行 24/24；摘要缩减假设未获支持。
-- [context-budget/NX-51-COMPONENT-ABLATION](context-budget/NX-51-COMPONENT-ABLATION.md) — 计划的逐项消融；尚未执行或授权。
+- [context-budget/NX-51-COMPONENT-ABLATION](context-budget/NX-51-COMPONENT-ABLATION.md) — 历史逐项消融协议；对应开发批已经执行。
+- [context-budget/COMPONENT-LOO-PAID-RESULT](context-budget/COMPONENT-LOO-PAID-RESULT.md) — 已完成开发批的描述性结果与限制；三项归因均 inconclusive。
+- 项目记忆与只读协作仅在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2) 保留，不属于 main 的可选功能或交付待办。

@@ -33,7 +33,7 @@ mini-DSH 是用 TypeScript ESM 编写、基于 Cordis 插件的编程 Agent Harn
 
 - MCP 默认关闭且为空（`src/app/mcp-config.ts`）。它只加载用户级配置或显式路径，密钥只接受 `${ENV_NAME}` 引用，绝不自动加载工作区配置。
 - MCP 工具以 `serverName` 命名空间区分，按未知效果工具处理，并通过同一个 `ToolRuntime` 注册。连接失败、超时和断连都局限在该 server 内。
-- stdio server 由 MCP SDK 启动，使用其共享的凭据名擦除规则（名称含 `KEY`/`PASSWORD`/`SECRET`/`TOKEN` 以及 `DSH_*`），而不是 Bash 的严格白名单；代理、SSH agent 变量、`NODE_OPTIONS` 和真实 HOME 仍可能被继承。配置一个 server 就是一次明确的信任决定。
+- stdio server 通过 [mcp-stdio-launcher.ts](../src/app/mcp-stdio-launcher.ts) 启动：SDK 拉起薄启动器，启动器复用 Bash 的 `childEnvironment` 白名单构造实际 server 环境并代理 stdio。真实 HOME、provider 密钥、代理、SSH agent 变量与 `NODE_OPTIONS` 不会自动传给 server；需要的凭据只能通过配置中的环境变量引用按名显式转交，值不进入 argv。HOME 相关变量与 `NODE_OPTIONS` 禁止显式覆盖；启动器自身的 `NODE_OPTIONS` 也置空。SDK 继续负责 MCP 协议与连接，显式配置 server 仍是信任决定，环境收窄不提供文件系统隔离。
 
 ## 隔离与证据
 

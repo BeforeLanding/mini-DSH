@@ -1,5 +1,13 @@
 # 改动与验收证据
 
+### PORT-2 当前文档与历史状态分离（2026-10-30）
+
+架构页改为实际的 MCP stdio 薄启动器与 `childEnvironment` 行为，区分 SDK 协议职责、显式凭据转交及文件系统边界；讲解页统一 Windows 本地/Ubuntu CI/macOS 未验证的安装范围；AGENTS 的 lint 说明与当前四个 CI job 一致。文档索引将消融标为已执行并链接描述性结果，记忆/协作只链接分支。
+
+将 `main@5ae84d1` 的 PROGRESS 正文归档到 [历史快照](../history/PROGRESS-2026-10-01--2026-10-28.md)，仅重定向相对链接与扩展分支文档；忽略 Markdown 目标地址后逐字比较原文与归档，完全相同。新的 PROGRESS 只维护当前单 Agent 状态、独立实验分支、实际验收、CI 与暂缓录制，不把过去的 R10 付费计划或已完成消融继续列为当前待办。链接扫描另发现本文件两条旧 fixture README 路径错误，已机械改为相对本文件的正确目标，历史事实不变。
+
+验收：`node --test --test-reporter=tap dist/test/docs-links.test.js dist/test/display-policy.test.js dist/test/decisions-doc.test.js` 为 8/8 pass、0 fail/skip；对 README、AGENTS、PROGRESS 与 docs 下 Markdown 的文件/图片/源码链接扫描（排除代码示例）520 个、0 缺失；`node node_modules/@biomejs/biome/bin/biome check .` 为 232 files、0 诊断；`git diff --check` 通过。产品源码、配置与模型实验未改动，未重复完整功能测试；延用 PORT-1 的当前代码基线完整回归，跨平台 CI 单独核验。
+
 ### PORT-1 main 撤回记忆与只读协作（2026-10-30）
 
 按用户范围，main 只交付单 Agent，记忆与只读协作仅保留在远端 `feat/memory-team-eval-v2@2f2dca9f4f968485d9eb5f950f2accf173ce4539`。开始前 `git ls-remote --heads origin` 核实分支仍在，`git merge-base --is-ancestor 5841f79 origin/feat/memory-team-eval-v2` 退出 0，确认包括 PR #7 的四项独立修复及后续分支工作。
@@ -1039,7 +1047,7 @@ PLAN 的 NX-39 节把 `ablationIds` 的前三类写成「bug 修复 4 ＋ 功能
 
 **一处执行失误，如实记。** 这四个 fixture 文件在跑反例时**还没进 git**（新文件、untracked），而我用 `git checkout -- <path>` 还原——它对未跟踪文件直接 `error: pathspec ... did not match`，**静默地什么都没做**，四处改动因此全部留在盘上。是「还原后应复绿」那次仍然 `pass 3 / fail 3` 才露出来的。改用 `Write` 逐份写回并复核（`grep -c` 计数归零、门禁复绿）。教训是直接的：**用版本控制还原，前提是目标已经被版本控制跟踪**；对新增文件应当先备份再改。
 
-**与设计的一处落差，如实记。** NX-39 的设计里这两类新任务要做成**多阶段**，理由是裁剪只移除「已结束且非当前」的 task（R-21），单任务会话永远不触发裁剪，于是上下文那一维在对照批次里只剩「压缩 + 有界」两半。这四份目前都是**单任务**（3a 的第一份就是，本步沿用了它）。处置：不在这一步凭推理改成多阶段，交给 NX-39-5 的离线因子预检按**实测**决定——R-21 的验收条款本来就写着「处理没真的发生就不得开跑对照」。这条同时写进 [fixture README](test/fixtures/coding/README.md)，并须在 NX-39-4 重写 R-21 条文时一并落定。
+**与设计的一处落差，如实记。** NX-39 的设计里这两类新任务要做成**多阶段**，理由是裁剪只移除「已结束且非当前」的 task（R-21），单任务会话永远不触发裁剪，于是上下文那一维在对照批次里只剩「压缩 + 有界」两半。这四份目前都是**单任务**（3a 的第一份就是，本步沿用了它）。处置：不在这一步凭推理改成多阶段，交给 NX-39-5 的离线因子预检按**实测**决定——R-21 的验收条款本来就写着「处理没真的发生就不得开跑对照」。这条同时写进 [fixture README](../../test/fixtures/coding/README.md)，并须在 NX-39-4 重写 R-21 条文时一并落定。
 
 提交：见本节对应的本地提交。
 
@@ -1067,7 +1075,7 @@ PLAN 的 NX-39 节把 `ablationIds` 的前三类写成「bug 修复 4 ＋ 功能
 1. **`applyReference()` 对新种类不能把 `reference/` 覆盖进工作区。** 第一版按 `edit` 的思路写了「覆盖 `reference/` + 放上参考产物」，结果 `fixtures:check` 报 reference 态 `initialExitCode=0` 且受保护文件被改——把源码修好之后，agent 的产物在「缺陷」上也照样通过，判据当场失效。新种类的参考态**只有产物这一半**：`reference/` 只被验收器用在工作区副本上。
 2. **前提自检不能共用一句「初始失败、参考通过」。** 对新种类那句话几乎恒真：初始态失败只是因为**产物还不存在**，与判据有没有分辨力无关。改成按种类分查：`repro` 要额外查两件事——**放上参考产物**（源码仍是缺陷）必须判过，**放上反例产物**必须判不过，且前者**读数里那一对退出码要显式成立**（缺陷上非零、参考实现上 0）。只看 `passed` 的话，「缺陷到底存不存在」没有任何证据。
 
-**已知可被绕过的一处，如实记。** 判据只看退出码，因此一份**比对源码文本**（在 `src/sessions.mjs` 里找某个运算符）而不真正调用实现的产物也能满足 FAIL_TO_PASS。TASK.md 明文禁止这么做，但**没有机械门禁**。要堵它需要「行为保持的改写」，而那正是 `mutation` 类 `equivalents/` 的机制——两类合并到同一份验收器之后可以顺带补上，本步不做。这条已写进 [fixture README](test/fixtures/coding/README.md) 而不只是留在这里。
+**已知可被绕过的一处，如实记。** 判据只看退出码，因此一份**比对源码文本**（在 `src/sessions.mjs` 里找某个运算符）而不真正调用实现的产物也能满足 FAIL_TO_PASS。TASK.md 明文禁止这么做，但**没有机械门禁**。要堵它需要「行为保持的改写」，而那正是 `mutation` 类 `equivalents/` 的机制——两类合并到同一份验收器之后可以顺带补上，本步不做。这条已写进 [fixture README](../../test/fixtures/coding/README.md) 而不只是留在这里。
 
 **验证**
 
