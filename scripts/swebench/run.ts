@@ -50,6 +50,7 @@ export interface RunBatchOptions {
   // 批次级恢复：跳过已经落盘终态的 episode，继续剩余计划；中断的 episode 保留为 infrastructure，
   // 不自动重跑（重跑会变成同一题 arm 的第二次正式 attempt）。
   resume?: boolean
+  validateOnly?: boolean
 }
 
 function sanitizeName(value: string) { return value.replace(/[^A-Za-z0-9_.-]/g, '-') }
@@ -144,6 +145,7 @@ async function officialScores(options: RunBatchOptions, arm: SwebenchArm, predic
 
 export async function runSwebenchBatch(options: RunBatchOptions) {
   const manifest = options.manifest
+  if (manifest.executionScope === 'development' && options.split !== 'development') throw new Error('manifest is frozen for development only; formal requires a new freeze')
   const commandEnvironment = validateCommandEnvironment(manifest.environment.commandEnvironment)
   assertComponentSource(manifest)
   if (manifest.freezeStatus !== 'frozen') throw new Error('refusing to execute a draft manifest; finalize the protocol first')
@@ -191,6 +193,8 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
   }
   const now = options.now ?? (() => Date.now())
   let startedAt = new Date().toISOString()
+  if (options.validateOnly) return { ...buildReport(manifest, options.split, [], { runIds: {}, results: [] }, { startedAt, finishedAt: startedAt }),
+    validationOnly: true, paidRequests: 0, environmentProbes }
   const records: SwebenchEpisodeResult[] = []
   if (options.resume) {
     const savedManifest = JSON.parse(await fs.readFile(path.join(options.evidenceRoot, 'manifest.json'), 'utf8')) as unknown
@@ -431,7 +435,8 @@ function optionalArgument(name: string) {
 
 async function cli() {
   const execute = process.argv.includes('--execute')
-  if (!execute) throw new Error('run requires --execute; a dry run would still be a paid operation in the official backend')
+  const validateOnly = process.argv.includes('--validate-only')
+  if (execute === validateOnly) throw new Error('choose exactly one of --execute or --validate-only (zero model calls)')
   const manifestPath = path.resolve(argument('--manifest'))
   const manifest = validateRunManifest(JSON.parse(await fs.readFile(manifestPath, 'utf8')))
   const split = argument('--split')
@@ -441,12 +446,12 @@ async function cli() {
   const scoring = argument('--scoring')
   if (scoring !== 'mock' && scoring !== 'official') throw new Error('--scoring must be mock or official')
   const report = await runSwebenchBatch({ manifest, manifestPath, datasetPath: path.resolve(argument('--dataset')),
-    evidenceRoot: path.resolve(argument('--evidence-root')), split, backend, scoring,
+    evidenceRoot: path.resolve(argument('--evidence-root')), split, backend, scoring, validateOnly,
     batchId: argument('--batch-id'), ...(optionalArgument('--fixtures') ? { fixtureRoot: path.resolve(argument('--fixtures')) } : {}),
     ...(optionalArgument('--scoring-dataset') ? { scoringDataset: path.resolve(argument('--scoring-dataset')) } : {}),
     ...(optionalArgument('--external-python') ? { externalPython: argument('--external-python') } : {}),
     ...(process.argv.includes('--resume') ? { resume: true } : {}) })
-  console.log(JSON.stringify({ split, executed: report.executedEpisodes, planned: report.plannedEpisodes,
+  console.log(JSON.stringify({ split, ...(validateOnly ? { validationOnly: true, paidRequests: 0 } : {}), executed: report.executedEpisodes, planned: report.plannedEpisodes,
     stopReason: report.batch.stopReason ?? null, perArm: report.perArm.map(arm => ({ armId: arm.armId, resolved: arm.resolved, planned: arm.planned, executed: arm.executed })) }))
 }
 

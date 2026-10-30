@@ -219,6 +219,27 @@ test('the same-source component contract rejects undeclared changes and incomple
   assert.throws(() => buildReport(manifest, 'formal', records, { ...scores, results: [...scores.results, ...scores.results] }, { startedAt: '', finishedAt: '' }), /duplicate/)
 })
 
+test('development-only freezes reject formal execution and validate-only cannot create evidence or call adapters', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-swe-preflight-'))
+  try {
+    const { root, instances } = await fixtures(directory, ['demo__fix-1'])
+    const datasetPath = await writeDataset(directory, instances)
+    const manifest = validateRunManifest(manifestFor(instances, { executionScope: 'development' }, [arms[0]!]))
+    let calls = 0
+    const options = { manifest, manifestPath: '', datasetPath, evidenceRoot: path.join(directory, 'evidence'),
+      split: 'development' as const, backend: 'fixture' as const, scoring: 'mock' as const, batchId: 'validate-only', fixtureRoot: root,
+      adapterFor: () => { calls++; return scripted({ solve: true }).adapter }, scoreMock: () => { calls++; return true } }
+    const report = await runSwebenchBatch({ ...options, validateOnly: true })
+    assert.equal('validationOnly' in report && report.validationOnly, true)
+    assert.equal(report.executedEpisodes, 0)
+    assert.equal(calls, 0)
+    assert.equal(await fs.stat(options.evidenceRoot).then(() => true, () => false), false)
+    await assert.rejects(runSwebenchBatch({ ...options, split: 'formal' }), /development only/)
+    assert.equal(calls, 0)
+    assert.throws(() => validateRunManifest({ ...manifest, executionScope: 'unexpected' }), /executionScope/)
+  } finally { await fs.rm(directory, { recursive: true, force: true }) }
+})
+
 test('an infrastructure failure stops the batch and leaves unexecuted episodes explicit', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-swebench-stop-'))
   try {

@@ -241,6 +241,7 @@ export interface SwebenchRunManifest {
   missing: string[]
   createdAt: string
   paidRequests: number
+  executionScope?: 'development' | 'all'
 }
 
 function positiveInteger(value: unknown, name: string): number {
@@ -344,6 +345,7 @@ export function validateRunManifest(value: unknown): SwebenchRunManifest {
   if (manifest.schemaVersion !== 3 || manifest.kind !== 'swebench-run-manifest') throw new Error('unsupported run manifest schema')
   if (manifest.freezeStatus !== 'draft' && manifest.freezeStatus !== 'frozen') throw new Error('run manifest freezeStatus must be draft or frozen')
   const frozen = manifest.freezeStatus === 'frozen'
+  if (manifest.executionScope !== undefined && manifest.executionScope !== 'development' && manifest.executionScope !== 'all') throw new Error('executionScope must be development or all')
   if (!Array.isArray(manifest.arms) || !manifest.arms.length) throw new Error('run manifest needs arms')
   const arms = manifest.arms.map((value, index) => {
     if (!value || typeof value !== 'object') throw new Error(`arms[${index}] must be an object`)
@@ -415,6 +417,7 @@ export function validateRunManifest(value: unknown): SwebenchRunManifest {
     authorization: typeof manifest.authorization === 'string' ? manifest.authorization : '',
     missing: Array.isArray(manifest.missing) ? manifest.missing.map(item => String(item)) : [],
     createdAt: manifest.createdAt, paidRequests: manifest.paidRequests,
+    ...(manifest.executionScope === undefined ? {} : { executionScope: manifest.executionScope }),
   }
   validateComponentProtocol(validated)
   return validated

@@ -42,3 +42,9 @@
 复现故障的零模型长任务包含 24 次大结果检查与最后一次修复。在相同 416,666 累计 token 限额下，原 65,536 压缩预算在第 16 次检查后停于 token_budget，摘要 0 次、未修复；新策略使用 5 次短摘要后完成全部检查与修复，总合成 usage 约 251k，未超预算。这里的 usage 由实际请求长度确定性生成，不能当作真实 provider usage、SWE 得分或因果收益。无效摘要反例验证两次失败后关闭自动尝试，仍按原 token_budget 停止，不会把失败摘要算为应用。全部原始工具事件保留，用户请求与工具调用/结果协议均验证完整。
 
 验收：SWE 与全部 compaction 定向 91/91；完整 598 tests / 568 pass / 0 fail / 30 平台 skipped（`D:\Agent\tmp\swe-component-o3-full-20261030.log`）；构建通过。尚未跑新策略的真实模型开发批，不宣称成功率提升。
+
+## SWE-O4a：开发批冻结与零模型预检
+
+`--scope development` 只要求开发题的镜像 digest 齐备；manifest 的 executionScope 阻止误执行 formal。正式留出题可以先选择，但该分割未冻结，不授予执行权限。省略 scope 的历史文件仍按原 all 行为读取。新增 `--validate-only`，执行源码/镜像/基线安装/隐藏评分行/环境预检后在创建证据目录、调用 adapter 或评分器之前返回；CLI 与 `--execute` 必须二选一。
+
+验收：SWE 定向 43/43，完整 599 tests / 569 pass / 0 fail / 30 平台 skipped（`D:\Agent\tmp\swe-component-o4-full-20261030.log`），构建通过。机制测试确认 validate-only 的 adapter/scorer 调用均为 0、证据目录不创建，开发专用 manifest 对 formal 的执行也在请求前拒绝。

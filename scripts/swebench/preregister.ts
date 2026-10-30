@@ -55,6 +55,8 @@ async function main() {
   const harnessCommit = argument('--harness-commit')
   if (!/^[0-9a-f]{7,40}$/.test(harnessCommit)) throw new Error('--harness-commit must be a git commit hash')
   const protocol = optionalArgument('--protocol') ?? 'legacy'
+  const executionScope = optionalArgument('--scope') ?? 'all'
+  if (executionScope !== 'development' && executionScope !== 'all') throw new Error('--scope must be development or all')
   if (protocol !== 'legacy' && protocol !== COMPONENT_PROTOCOL) throw new Error(`unsupported protocol ${protocol}`)
   const arms = protocol === COMPONENT_PROTOCOL ? 6 : numberArgument('--arms', 4)
   if (!Number.isSafeInteger(arms) || arms < 1 || (protocol === 'legacy' && arms > 4)) throw new Error('--arms must be 1..4 for legacy protocol')
@@ -152,7 +154,7 @@ async function main() {
     if (!baselineInstallSha) missing.push('baseline install fingerprint (--baseline-install-sha256 or --verify-baseline)')
     if (!baselineModelName) missing.push('baseline model id (--model/--baseline-model)')
   }
-  if (!covered(formal) || !covered(development)) missing.push('per-instance image digests for both batches (--image-digests)')
+  if (!covered(development) || (executionScope === 'all' && !covered(formal))) missing.push('per-instance image digests for the execution scope (--image-digests)')
   if (effectiveBatchCap <= 0) missing.push('positive batch hard cap (--batch-cap-usd)')
   const sourceCommit = protocol === COMPONENT_PROTOCOL ? spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim() : undefined
   if (protocol === COMPONENT_PROTOCOL && !/^[0-9a-f]{40}$/.test(sourceCommit ?? '')) missing.push('source checkout commit')
@@ -203,6 +205,7 @@ async function main() {
     missing,
     createdAt: new Date().toISOString(),
     paidRequests: 0,
+    executionScope,
   }
   if (protocol === COMPONENT_PROTOCOL) {
     const validated = validateRunManifest(manifest)
