@@ -23,6 +23,9 @@ import { exportDockerWorkspace, exportPatch, prepareDockerWorkspace, prepareFixt
 import { preflightExternal, runExternalEpisode } from './external-run.js'
 import type { ExternalEpisodeOutcome, ExternalEpisodeRequest } from './external-run.js'
 import { CANDIDATE_PATH_GUIDANCE, probeCommandEnvironment, validateCommandEnvironment } from './command-environment.js'
+import { assertComponentSource } from './component-protocol.js'
+import { componentMetrics, readComponentMetrics } from './component-metrics.js'
+import type { ComponentMetrics } from './component-metrics.js'
 
 // R10 执行器：复用 createHarness、官方预测格式与独立判分通道。它不替用户决定模型、价格或授权；
 // 冻结文件里缺任何一项就拒绝执行。正式批次与开发批次共用同一实现，但题号、顺序与上限分别冻结。
@@ -142,6 +145,7 @@ async function officialScores(options: RunBatchOptions, arm: SwebenchArm, predic
 export async function runSwebenchBatch(options: RunBatchOptions) {
   const manifest = options.manifest
   const commandEnvironment = validateCommandEnvironment(manifest.environment.commandEnvironment)
+  assertComponentSource(manifest)
   if (manifest.freezeStatus !== 'frozen') throw new Error('refusing to execute a draft manifest; finalize the protocol first')
   if (manifest.paidRequests !== 0) throw new Error('manifest must start with paidRequests: 0')
   if (options.scoring === 'official' && !manifest.prices) throw new Error('official scoring requires a frozen price snapshot for cost accounting')
@@ -223,6 +227,7 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
       await fs.mkdir(episodeDirectory, { recursive: true })
       const patchPath = path.join(episodeDirectory, 'patch.diff')
       let eventsPath: string | undefined, sessionId: string | undefined
+      let components: ComponentMetrics | undefined
       let status: EpisodeStatus = 'infrastructure', error: string | undefined
       let costUsd: number | undefined, usageUnknown = true
       let counters = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, modelRequests: 0, toolCalls: 0, activeDurationMs: 0 }
@@ -289,7 +294,7 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
           ...(prices ? { maxTotalTokens: tokenCapFromUsd(perTask.maxCostUsd, prices) } : {}),
         }
         const harness = await createHarness({ workspace, profile: 'coding', autoApprove: true, projectContext: false,
-          contextLayout: 'frozen', runtimeClockMode: 'frozen', toolOutput: true, adapter,
+          contextLayout: 'frozen', runtimeClockMode: 'frozen', toolOutput: true, ...arm.harness, adapter,
           ...(dockerWorkspace ? { commandRunner: createDockerCandidateRunner(workspace, dockerWorkspace.containerName, { commandEnvironment }) } : {}) })
         try {
           if (dockerWorkspace && commandEnvironment === 'testbed-v1') harness.root.systemPrompt.context({ name: 'swebench:environment', order: 110, text: CANDIDATE_PATH_GUIDANCE })
@@ -317,6 +322,7 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
           patch = exportPatch(workspace, baseCommit)
           await fs.writeFile(patchPath, patch)
           await harness.root.sessions.flush(session.id)
+          components = componentMetrics(harness.root.sessions.confirmedEvents(session.id))
         } finally {
           await harness.root.sessions.close().catch(cause => { status = 'infrastructure'; error = error ?? `session store close failed: ${String(cause)}` })
           await harness.dispose()
@@ -330,6 +336,7 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
         dockerWorkspace?.cleanup()
       }
       const record: SwebenchEpisodeResult = { instanceId: entry.instanceId, armId: arm.id, status, resolved: false, emptyPatch: patch.trim().length === 0,
+        ...(components ? { components } : {}),
         ...(costUsd === undefined ? {} : { costUsd }), usageUnknown, inputTokens: counters.inputTokens, outputTokens: counters.outputTokens,
         cacheReadTokens: counters.cacheReadTokens, durationMs: Math.max(0, now() - began), modelRequests: counters.modelRequests, toolCalls: counters.toolCalls,
         ...(sessionId ? { sessionId } : {}), ...(eventsPath ? { eventsPath } : {}), patchPath: path.relative(options.evidenceRoot, patchPath),
@@ -384,6 +391,7 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
   const finishedAt = new Date().toISOString()
   const batch = { split: options.split, ...(stopReason ? { stopReason } : {}), spentUsdEstimate: Number(spentUsd.toFixed(9)), unknownCostEpisodes, startedAt, finishedAt }
   await fs.writeFile(path.join(options.evidenceRoot, 'batch.json'), JSON.stringify(batch, null, 2) + '\n')
+  for (const record of records) if (record.eventsPath && record.sessionId) record.components = await readComponentMetrics(options.evidenceRoot, record)
   const report = buildReport(manifest, options.split, records, scores, batch)
   await writeReport(options.evidenceRoot, report)
   await writeChecksums(options.evidenceRoot)

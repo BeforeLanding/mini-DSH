@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### SWE-O2 同源组件消融与原始事件触发读数（2026-10-30）
+
+新增六臂组件协议、源码漂移检查、真实触发指标与完整分母配对；报告重读严格 JSONL，未知与零触发分开。开发批只读复算 15 条，摘要 0、预览 13、回读 0、验证 11。构建通过，SWE 40/40，完整 596/566/0/30；详见 [优化记录](SWE-COMPONENT-EFFECTS.md)。无模型请求，未声称能力提升。
+
 ### SWE-O1 版本化 task Python 环境与路径契约（2026-10-30）
 
 详见 [优化记录](SWE-COMPONENT-EFFECTS.md)。`node scripts/build.js` 通过；SWE 定向 38/38；完整 594 tests / 564 pass / 0 fail / 30 平台 skipped（`D:\Agent\tmp\swe-component-o1-20261030.log`）；语法 235、Biome 267 零诊断。使用模拟模型与真实 Bash 验证命令原文、激活失败及共享解释器。Docker Desktop 未响应，真实镜像环境探针待恢复；未发模型请求。

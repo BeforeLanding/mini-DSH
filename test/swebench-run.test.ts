@@ -8,6 +8,9 @@ import type { HarnessAdapter } from '../src/app/create-harness.js'
 import { buildSchedule, validateRunManifest } from '../scripts/swebench/protocol.js'
 import type { EpisodeStatus, PriceSnapshot, SwebenchArm, SwebenchInstance, SwebenchRunManifest } from '../scripts/swebench/protocol.js'
 import { runSwebenchBatch } from '../scripts/swebench/run.js'
+import { componentArmDefinitions, COMPONENT_PROTOCOL } from '../scripts/swebench/component-protocol.js'
+import { componentExposure, readComponentMetrics } from '../scripts/swebench/component-metrics.js'
+import { buildReport } from '../scripts/swebench/report.js'
 import type { ExternalEpisodeOutcome, ExternalEpisodeRequest } from '../scripts/swebench/external-run.js'
 
 const nowUsage = { inputTokens: 1_000, outputTokens: 500, totalTokens: 1_500, source: 'provider' as const, uncertain: false, cacheReadTokens: 0 }
@@ -136,6 +139,84 @@ test('the offline runner executes createHarness episodes, saves evidence, scores
     assert.ok(await fs.stat(path.join(directory, 'evidence', 'SHA256SUMS')))
     assert.equal(report.batch.stopReason, undefined)
   } finally { await fs.rm(directory, { recursive: true, force: true }) }
+})
+
+test('component arms expose real previews, recall, scoped rules and verification without claiming capability', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-swe-components-'))
+  try {
+    const { root, instances } = await fixtures(directory, ['demo__fix-1'])
+    await fs.writeFile(path.join(root, 'demo__fix-1', 'AGENTS.md'), '# Rules\nPreserve the COMPONENT_RULE_SENTINEL.\n')
+    await fs.writeFile(path.join(root, 'demo__fix-1', 'notes.txt'), ('payload ' + 'x'.repeat(1400) + '\n').repeat(30))
+    const armList: SwebenchArm[] = componentArmDefinitions().map(definition => ({ ...definition,
+      model: arms[0]!.model, ...(definition.system === 'external' ? { external: arms[1]!.external } : {}) }))
+    const datasetPath = await writeDataset(directory, instances)
+    // Exercise the execution knobs with a scripted adapter. Source identity of
+    // the paid protocol is tested separately; these are zero-model fixtures.
+    const manifest = validateRunManifest(manifestFor(instances, {}, armList))
+    const report = await runSwebenchBatch({ manifest, manifestPath: '', datasetPath, evidenceRoot: path.join(directory, 'evidence'),
+      split: 'formal', backend: 'fixture', scoring: 'mock', batchId: 'components', fixtureRoot: root,
+      externalRunner: async () => externalOutcome({ patch: fixPatch }),
+      adapterFor: arm => {
+        let step = 0
+        return { ...scripted({ solve: false }).adapter, chat: async request => {
+          step++
+          const call = (name: string, args: Record<string, unknown>) => ({ toolCalls: [{ id: randomUUID(), name, arguments: args }], usage: nowUsage })
+          assert.equal(request.system?.includes('COMPONENT_RULE_SENTINEL'), arm.harness?.projectContext)
+          if (step === 1) return call('read_file', { path: 'notes.txt' })
+          if (step === 2 && arm.harness?.toolOutput) {
+            const text = JSON.stringify(request.messages)
+            const ref = text.match(/ref\\?"\s*:\s*\\?"([^"\\]+)/)?.[1]
+            assert.ok(ref, 'a real preview must expose its stored result reference')
+            return call('read_tool_result', { ref, offset: 100, maxBytes: 1024 })
+          }
+          const writeStep = arm.harness?.toolOutput ? 3 : 2
+          if (step === writeStep) return call('write_file', { path: 'input.txt', content: 'fixed\n' })
+          if (step === writeStep + 1) return call('bash', { command: 'cat input.txt', verification: { files: ['input.txt'] } })
+          if (step === writeStep + 2) return call('task_report', {})
+          return { content: 'done', usage: nowUsage }
+        } }
+      }, scoreMock: async (_instance, workspace) => (await fs.readFile(path.join(workspace, 'input.txt'), 'utf8')).trim() === 'fixed' })
+    const full = report.perArm.find(arm => arm.armId === 'full')!
+    const withoutOutput = report.perArm.find(arm => arm.armId === 'without-tool-output')!
+    assert.equal(full.components?.toolOutput.triggeredEpisodes, 1)
+    assert.equal(full.components?.successfulRecalls, 1)
+    assert.equal(withoutOutput.components?.previewTruncations, 0)
+    assert.equal(full.components?.projectContext.triggeredEpisodes, 1)
+    assert.equal(report.perArm.find(arm => arm.armId === 'without-project-context')?.components?.projectContext.triggeredEpisodes, 0)
+    assert.equal(full.components?.checks, 1)
+    assert.equal(full.components?.reportReads, 1)
+    assert.equal(full.components?.context.coverage, 'not-exercised')
+    const rows = (await fs.readFile(path.join(directory, 'evidence', 'runs.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line))
+    const row = rows.find(record => record.armId === 'full')!
+    assert.deepEqual(await readComponentMetrics(path.join(directory, 'evidence'), row), row.components)
+    assert.equal(componentExposure([row.components, undefined], 'context').coverage, 'unknown')
+    await assert.rejects(readComponentMetrics(directory, { sessionId: row.sessionId, eventsPath: '../outside.jsonl' }), /escapes/)
+    assert.equal(report.perArm.every(arm => arm.resolvedOverPlanned === 1), true)
+  } finally { await fs.rm(directory, { recursive: true, force: true }) }
+})
+
+test('the same-source component contract rejects undeclared changes and incomplete comparisons keep the planned denominator', () => {
+  const instance: SwebenchInstance = { instance_id: 'demo__fix-1', repo: 'demo/fix', base_commit: 'a1', problem_statement: 'Fix' }
+  const armList: SwebenchArm[] = componentArmDefinitions().map(definition => ({ ...definition, model: arms[0]!.model,
+    ...(definition.system === 'external' ? { external: arms[1]!.external } : {}) }))
+  const manifest = manifestFor([instance], { selection: { protocol: COMPONENT_PROTOCOL, sourceCommit: 'a'.repeat(40) },
+    environment: { imageDigests: null, commandEnvironment: 'testbed-v1' } }, armList)
+  assert.equal(validateRunManifest(manifest).arms.length, 6)
+  const mutated = structuredClone(manifest)
+  mutated.arms[2]!.budget.inputTargetTokens = 32_768
+  assert.throws(() => validateRunManifest(mutated), /budget drift/)
+  mutated.arms[2]!.budget.inputTargetTokens = 65_536
+  mutated.arms[2]!.harness!.toolOutput = false
+  assert.throws(() => validateRunManifest(mutated), /harness drift/)
+  assert.throws(() => validateRunManifest({ ...manifest, environment: { imageDigests: null } }), /testbed-v1/)
+  const records = [{ instanceId: instance.instance_id, armId: 'full', status: 'completed' as const, resolved: true, emptyPatch: false, patchPath: 'x' }]
+  const scores = { runIds: {}, results: [{ instanceId: instance.instance_id, armId: 'full', resolved: true, classification: 'resolved' as const, scoreRunId: 's' }] }
+  const report = buildReport(manifest, 'formal', records, scores, { stopReason: 'incomplete', startedAt: '', finishedAt: '' })
+  const pair = report.paired.find(pair => pair.arms[1] === 'harness-baseline')!
+  assert.equal(pair.total, 1)
+  assert.equal(pair.complete, false)
+  assert.equal(report.componentComparisons?.[0]?.interpretation, 'incomplete-evidence')
+  assert.throws(() => buildReport(manifest, 'formal', records, { ...scores, results: [...scores.results, ...scores.results] }, { startedAt: '', finishedAt: '' }), /duplicate/)
 })
 
 test('an infrastructure failure stops the batch and leaves unexecuted episodes explicit', async () => {

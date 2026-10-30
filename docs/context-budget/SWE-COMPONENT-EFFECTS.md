@@ -24,3 +24,13 @@
 新组件开发批要有 full、同源基线与逐项去除臂；外部 mini-SWE-agent 另作产品比较，不能代替同源归因。所有触发均从原始事件复算，缺失事件记未知；零触发只能判未覆盖。旧 50 题已曝光，后续复用只作回归；任何泛化结论需新留出题、独立评分与全部计划任务分母。
 
 真实模型执行仍须冻结具体配置、当前价格和每批金额授权；不得自动重跑已执行 episode 或改写历史证据。
+
+## SWE-O2：组件实际触发与同源消融
+
+新增 `--protocol swe-components-v1`：六臂为 full、harness-baseline、without-context、without-tool-output、without-project-context、外部 baseline。同源五臂共享源码、模型、固定系统布局与总预算；各去除臂只改变声明的组件，最小基线同时关闭三项。预览额度统一 16 KiB。新协议强制 testbed-v1、六臂顺序与完整配置，冻结 sourceCommit；执行前拒绝产品/脚本/配置的已跟踪或未跟踪源码漂移。旧协议的默认臂不变。
+
+每条 mini-DSH episode 从已确认原始事件派生摘要尝试/应用、预览截断/回读、实际注入的非空项目规则、验证/报告查询与峰值估算输入。报告 CLI 用严格 JSONL 校验重新读取轨迹，不信任缓存指标。报告区分 observed / not-exercised / unknown；缺失轨迹不补零，不把触发当收益。五组配对均保留计划任务分母，缺评分的比较标 incomplete；重复/计划外记录与评分拒绝。另自动报告 token 超限与限额内成功数，保留主要官方评分。
+
+旧开发批只读复算：15/15 轨迹完整，摘要应用 0，预览截断 13，成功回读 0，验证结果 11。明细只存仓库外 `D:\Agent\outputs\swe-component-effects-20261030\development-diagnostics.json`，无新增模型请求。
+
+验收：SWE 定向 40/40；完整 596 tests / 566 pass / 0 fail / 30 平台 skipped（`D:\Agent\tmp\swe-component-o2-full-20261030.log`）。脚本化端到端实际经过 createHarness、AGENTS.md 注入、大结果存储/回读、真实 Bash 检查、task_report 和独立 mock 判分；同时验证去除臂差异和零摘要的未覆盖结论。这是机制测试，不是模型成功率提升。

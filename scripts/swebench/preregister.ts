@@ -1,10 +1,12 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { EXTERNAL_CONTRACT_VERSION, validateExternalCommand } from './external-contract.js'
 import { fingerprintBaseline } from './external-fingerprint.js'
-import { buildSchedule, estimateBudget, sanitizeInstanceRow, selectInstances, validatePriceSnapshot } from './protocol.js'
+import { buildSchedule, estimateBudget, sanitizeInstanceRow, selectInstances, validatePriceSnapshot, validateRunManifest } from './protocol.js'
 import type { BatchInstanceList, SwebenchInstance } from './protocol.js'
 import { validateCommandEnvironment } from './command-environment.js'
+import { COMPONENT_PROTOCOL, componentArmDefinitions, assertComponentSource } from './component-protocol.js'
 
 // 使用前必须给出真实 dataset revision、官方 harness commit 与预算参数。该脚本只冻结协议，
 // 不下载数据集、不构建镜像、不调用模型。它同时写出开发批次与正式批次的题号、排除规则和交错顺序；
@@ -52,8 +54,10 @@ async function main() {
   const datasetRevision = argument('--dataset-revision')
   const harnessCommit = argument('--harness-commit')
   if (!/^[0-9a-f]{7,40}$/.test(harnessCommit)) throw new Error('--harness-commit must be a git commit hash')
-  const arms = numberArgument('--arms', 4)
-  if (!Number.isSafeInteger(arms) || arms < 1 || arms > 4) throw new Error('--arms must be 1..4')
+  const protocol = optionalArgument('--protocol') ?? 'legacy'
+  if (protocol !== 'legacy' && protocol !== COMPONENT_PROTOCOL) throw new Error(`unsupported protocol ${protocol}`)
+  const arms = protocol === COMPONENT_PROTOCOL ? 6 : numberArgument('--arms', 4)
+  if (!Number.isSafeInteger(arms) || arms < 1 || (protocol === 'legacy' && arms > 4)) throw new Error('--arms must be 1..4 for legacy protocol')
   const perTaskCapUsd = numberArgument('--per-task-cap-usd', 0.5)
   const devTasks = numberArgument('--dev-tasks', 5)
   const devSeed = numberArgument('--dev-seed', seed + 1)
@@ -72,7 +76,7 @@ async function main() {
   const formal = selectInstances(sanitized, { tasks, seed, exclude: [...exclusions, ...development.map(instance => instance.instance_id)] })
 
   // 同题两臂只改变声明的维度：context 两臂都保留 65,536 输入目标，reference 仅关掉自动/溢出摘要。
-  const armDefinitions = [
+  const armDefinitions = protocol === COMPONENT_PROTOCOL ? componentArmDefinitions() : [
     { id: 'candidate', system: 'mini-dsh', role: 'capability candidate', budget: { inputTargetTokens: 65_536 } },
     { id: 'baseline', system: 'external', role: 'same-model capability baseline (mini-SWE-agent)', budget: {} },
     { id: 'context-reference', system: 'mini-dsh', role: 'context strategy reference: no active or overflow summary', budget: { inputTargetTokens: 65_536, auto: false } },
@@ -125,13 +129,13 @@ async function main() {
   const promptTemplate = optionalArgument('--prompt-template') ? await fs.readFile(argument('--prompt-template'), 'utf8') : defaultPrompt
   if (!promptTemplate.includes('{problem_statement}')) throw new Error('prompt template must contain {problem_statement}')
   const imageDigests = optionalArgument('--image-digests') ? JSON.parse(await fs.readFile(argument('--image-digests'), 'utf8')) as Record<string, string> : undefined
-  const commandEnvironment = validateCommandEnvironment(optionalArgument('--command-environment'))
+  const commandEnvironment = validateCommandEnvironment(optionalArgument('--command-environment') ?? (protocol === COMPONENT_PROTOCOL ? 'testbed-v1' : undefined))
   if (imageDigests && (!Object.values(imageDigests).every(value => typeof value === 'string' && value.length > 0))) throw new Error('image digests must map instance ids to digest strings')
   const covered = (instances: readonly SwebenchInstance[]) => imageDigests !== undefined && instances.every(instance => typeof imageDigests[instance.instance_id] === 'string')
 
   const configuredArms = armDefinitions.map(arm => ({
     ...arm,
-    model: { provider: modelProvider, name: arm.id === 'baseline' ? baselineModel : model, contextWindowTokens },
+    model: { provider: modelProvider, name: (arm.id === 'baseline' ? baselineModel : model) ?? null, contextWindowTokens },
     ...(arm.id === 'baseline' ? { external: baselineExternal } : {}),
     budget: { ...arm.budget, maxModelRequests: maxRequests, maxToolCalls, maxActiveDurationMs: wallClockMs, maxOutputTokens },
   }))
@@ -150,6 +154,8 @@ async function main() {
   }
   if (!covered(formal) || !covered(development)) missing.push('per-instance image digests for both batches (--image-digests)')
   if (effectiveBatchCap <= 0) missing.push('positive batch hard cap (--batch-cap-usd)')
+  const sourceCommit = protocol === COMPONENT_PROTOCOL ? spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim() : undefined
+  if (protocol === COMPONENT_PROTOCOL && !/^[0-9a-f]{40}$/.test(sourceCommit ?? '')) missing.push('source checkout commit')
   const finalized = process.argv.includes('--finalize')
 
   const developmentBatch: BatchInstanceList & { arms: string[]; schedule: ReturnType<typeof buildSchedule> } = {
@@ -168,6 +174,7 @@ async function main() {
     dataset: { name: 'SWE-bench Verified', revision: datasetRevision },
     harnessCommit,
     selection: {
+      ...(protocol === COMPONENT_PROTOCOL ? { protocol, sourceCommit } : {}),
       development: { tasks: devTasks, seed: devSeed, rule: 'repository-stratified round robin after a seeded within-repo shuffle; selected first and excluded from the formal batch' },
       formal: { tasks, seed, exclusions: formalBatch.exclusions, rule: 'repository-stratified round robin after a seeded within-repo shuffle; no difficulty stratification, no result-based selection' },
       scheduleSeed,
@@ -196,6 +203,10 @@ async function main() {
     missing,
     createdAt: new Date().toISOString(),
     paidRequests: 0,
+  }
+  if (protocol === COMPONENT_PROTOCOL) {
+    const validated = validateRunManifest(manifest)
+    if (validated.freezeStatus === 'frozen') assertComponentSource(validated)
   }
   await fs.mkdir(path.dirname(out), { recursive: true })
   await fs.writeFile(out, JSON.stringify(manifest, null, 2) + '\n')
