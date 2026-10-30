@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### SWE-O6-3 远端完整预检及一次性执行接口（2026-10-30，静态验收）
+
+现有 CI 新增显式手动的 development preflight/execute 两条路径：固定 Python/123 包版本与官方 scorer commit、公开数据 SHA、完整 manifest SHA、baseline 指纹、五镜像 id、source pin，之后调用生产 validate-only。模型 key 仅在另行开启的 execute step 引用指定 temporary secret，当前未设置。固定批次 concurrency 不被新 dispatch 取消，拒绝 run_attempt>1、错误 hash，以及任何已有同批付费 dispatch，防止自动重跑。仅公开白名单聚合，原始模型事件/工具正文与执行日志加密，workspace 不归档。新增一次性 gate 和 artifact 边界测试，全部八项 helper 测试、Biome、YAML/嵌入 Node/Python 语法、模型 key 单 step 引用检查通过；真实远端全链预检待派发，模型请求 0。
+
 ### SWE-O6-2 原始轨迹的公钥加密交付（2026-10-30）
 
 新增流式 AES-256-GCM + RSA-OAEP-SHA256 证据封装/本地解密。CI 仅持有已提交公钥，3072-bit 对应私钥只保存在仓库外本机输出目录；原始轨迹不以明文 artifact 发布。batch context 进入认证数据，解密须验证 tag/完整 archive SHA 后才生成最终输出，拒绝覆盖既有文件。两项机制测试覆盖往返、错误私钥、篡改 ciphertext/context、缺失输入与不留失败明文，Biome/diff 通过。此项不处理模型 key，也未发生凭证传送或模型请求。

@@ -1,4 +1,5 @@
 name: CI
+run-name: ${{ inputs.component_development_execute && 'SWE-dev-b713df5768dc816a-30-usd17' || 'CI' }}
 
 on:
   push:
@@ -24,13 +25,25 @@ on:
         description: Verify the five frozen SWE task images without a model or credentials
         type: boolean
         default: false
+      component_development_preflight:
+        description: Restore and validate the reviewed development batch without a model key
+        type: boolean
+        default: false
+      component_development_execute:
+        description: Execute only the separately authorized 30-episode $17 development batch
+        type: boolean
+        default: false
+      authorized_manifest_sha256:
+        description: Required reviewed manifest SHA-256 for a paid first dispatch
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ inputs.component_development_execute && 'SWE-dev-b713df5768dc816a-30-usd17' || format('{0}-{1}', github.workflow, github.event.pull_request.number || github.ref) }}
+  cancel-in-progress: ${{ !inputs.component_development_execute }}
 
 jobs:
   test:
@@ -204,6 +217,159 @@ jobs:
             echo 'tarball contains files outside the runtime package'
             exit 1
           fi
+
+  component-development:
+    name: Reviewed SWE development batch
+    if: github.event_name == 'workflow_dispatch' && (inputs.component_development_preflight || inputs.component_development_execute)
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.component_development_execute && 360 || 60 }}
+    permissions:
+      contents: read
+      actions: read
+    env:
+      SWE_INPUT_ROOT: ${{ runner.temp }}/swe-development-inputs
+      SWE_EVIDENCE_ROOT: ${{ runner.temp }}/swe-development-evidence
+      SWE_PUBLIC_ROOT: ${{ runner.temp }}/swe-development-public
+      SWE_EXECUTION_LOG: ${{ runner.temp }}/swe-development-execution.log
+      SWE_EXPECTED_SHA256: b713df5768dc816ae39a893e9aba3e73010ec102e8ab34b9426e6f54525f3e82
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+        with:
+          standalone: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Set up pinned Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12.15'
+
+      - name: Build and test input, evidence and first-attempt guards
+        run: pnpm install --frozen-lockfile && pnpm check && node --test .github/scripts/*.test.mjs
+
+      - name: Restore the compatible pinned baseline and official scorer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/swe-python"
+          "$RUNNER_TEMP/swe-python/bin/python" -m pip install --requirement docs/samples/swe-component-python-20261030.txt
+          git clone --depth 1 --branch v3.0.17 https://github.com/SWE-bench/SWE-bench.git "$RUNNER_TEMP/swe-official"
+          test "$(git -C "$RUNNER_TEMP/swe-official" rev-parse HEAD)" = 3f01bd622c0a22c00406139f69a234ef08225f22
+          "$RUNNER_TEMP/swe-python/bin/python" -m pip install --constraint docs/samples/swe-component-python-20261030.txt --editable "$RUNNER_TEMP/swe-official"
+          "$RUNNER_TEMP/swe-python/bin/python" -m pip check
+          echo "$RUNNER_TEMP/swe-python/bin" >> "$GITHUB_PATH"
+
+      - name: Restore the exact reviewed manifest and separate scoring inputs
+        id: inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/swe-public-dataset" "$SWE_PUBLIC_ROOT"
+          curl --fail --location --retry 2 \
+            'https://huggingface.co/datasets/princeton-nlp/SWE-bench_Verified/resolve/c104f840cc67f8b6eec6f759ebc8b2693d585d4a/data/test-00000-of-00001.parquet' \
+            --output "$RUNNER_TEMP/swe-public-dataset/verified.parquet"
+          echo "a45b1fe4e2f0c8390b2b2938ac83e92ed5979000856808f3679c07812e9e6dcd  $RUNNER_TEMP/swe-public-dataset/verified.parquet" | sha256sum --check
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import pyarrow.parquet as pq
+          root = Path(os.environ['RUNNER_TEMP']) / 'swe-public-dataset'
+          rows = pq.read_table(root / 'verified.parquet').to_pylist()
+          (root / 'rows.json').write_text(json.dumps(rows, default=str), encoding='utf-8')
+          PY
+          node .github/scripts/swe-development-inputs.mjs \
+            --template docs/samples/swe-component-development-template-20261030.json \
+            --rows "$RUNNER_TEMP/swe-public-dataset/rows.json" \
+            --expected-sha256 "$SWE_EXPECTED_SHA256" --output "$SWE_INPUT_ROOT"
+
+      - name: Verify the external baseline fingerprint and pull the five pinned images
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs/promises';
+          import { spawnSync } from 'node:child_process';
+          import { fingerprintBaseline } from './dist/scripts/swebench/external-fingerprint.js';
+          const manifest = JSON.parse(await fs.readFile(process.env.SWE_INPUT_ROOT + '/manifest.json', 'utf8'));
+          const expected = manifest.arms.find(arm => arm.system === 'external').external;
+          const fingerprint = fingerprintBaseline(process.env.RUNNER_TEMP + '/swe-python/bin/python');
+          if (fingerprint.version !== expected.version || fingerprint.upstreamConfigSha256 !== expected.upstreamConfigSha256 || fingerprint.installSha256 !== expected.installSha256) throw new Error('remote baseline install differs from frozen baseline');
+          await fs.writeFile(process.env.SWE_PUBLIC_ROOT + '/baseline-fingerprint.json', JSON.stringify(fingerprint, null, 2) + '\n');
+          const config = JSON.parse(await fs.readFile('docs/samples/swe-component-environment-20261030.json', 'utf8'));
+          for (const image of config.images) {
+            const reference = image.repository + '@' + image.digest;
+            const pull = spawnSync('docker', ['pull', reference], { stdio: 'inherit', timeout: 900_000 });
+            if (pull.status !== 0) throw new Error('frozen image pull failed');
+            const inspect = spawnSync('docker', ['image', 'inspect', reference], { encoding: 'utf8', timeout: 60_000 });
+            const metadata = JSON.parse(inspect.stdout)[0];
+            if (metadata.Id !== manifest.environment.imageDigests[image.instanceId]) throw new Error('image id differs from the reviewed manifest');
+            const tag = spawnSync('docker', ['tag', reference, image.repository + ':latest'], { stdio: 'inherit', timeout: 60_000 });
+            if (tag.status !== 0) throw new Error('could not bind scorer image tag to frozen digest');
+          }
+          NODE
+          python -m swebench.harness.run_evaluation --help >/dev/null
+
+      - name: Validate the complete development path without a model key
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${DEEPSEEK_API_KEY:-}" ]]; then echo 'unexpected model key in preflight stage' >&2; exit 2; fi
+          node dist/scripts/swebench/run.js --manifest "$SWE_INPUT_ROOT/manifest.json" \
+            --dataset "$SWE_INPUT_ROOT/dataset.agent.json" --scoring-dataset "$SWE_INPUT_ROOT/dataset.scoring.json" \
+            --external-python "$RUNNER_TEMP/swe-python/bin/python" --evidence-root "$SWE_EVIDENCE_ROOT" \
+            --split development --backend docker --scoring official --batch-id swe-components-dev-20261030 --validate-only \
+            | tee "$SWE_PUBLIC_ROOT/preflight.json"
+          test ! -e "$SWE_EVIDENCE_ROOT"
+
+      - name: Verify one-time paid dispatch authorization
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SWE_APPROVED_MANIFEST: ${{ inputs.authorized_manifest_sha256 }}
+          SWE_GATE_OUTPUT: ${{ runner.temp }}/swe-development-public/paid-gate.json
+          SWE_EXECUTE_REQUESTED: ${{ inputs.component_development_execute }}
+        run: node .github/scripts/swe-development-gate.mjs
+
+      - name: Execute the separately authorized development batch
+        if: inputs.component_development_execute
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.MINI_DSH_SWE_DEV_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then echo 'authorized temporary model credential is absent' >&2; exit 2; fi
+          test ! -e "$SWE_EVIDENCE_ROOT"
+          node dist/scripts/swebench/run.js --manifest "$SWE_INPUT_ROOT/manifest.json" \
+            --dataset "$SWE_INPUT_ROOT/dataset.agent.json" --scoring-dataset "$SWE_INPUT_ROOT/dataset.scoring.json" \
+            --external-python "$RUNNER_TEMP/swe-python/bin/python" --evidence-root "$SWE_EVIDENCE_ROOT" \
+            --split development --backend docker --scoring official --batch-id swe-components-dev-20261030 --execute \
+            > "$SWE_EXECUTION_LOG" 2>&1
+
+      - name: Prepare public aggregates and encrypted raw evidence
+        if: always() && steps.inputs.outcome == 'success'
+        run: node .github/scripts/swe-development-artifact.mjs
+
+      - name: Upload scoped development evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: swe-component-development
+          path: ${{ runner.temp }}/swe-development-public/
+          if-no-files-found: warn
+          retention-days: 7
 
   component-environment:
     name: Frozen SWE component environment (no model)
