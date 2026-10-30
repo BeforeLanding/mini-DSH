@@ -6,7 +6,7 @@ import { fingerprintBaseline } from './external-fingerprint.js'
 import { buildSchedule, estimateBudget, sanitizeInstanceRow, selectInstances, validatePriceSnapshot, validateRunManifest } from './protocol.js'
 import type { BatchInstanceList, SwebenchInstance } from './protocol.js'
 import { validateCommandEnvironment } from './command-environment.js'
-import { COMPONENT_PROTOCOL, componentArmDefinitions, assertComponentSource } from './component-protocol.js'
+import { COMPONENT_PROTOCOL, componentArmDefinitions, assertComponentSource, sourceGitArgs } from './component-protocol.js'
 
 // 使用前必须给出真实 dataset revision、官方 harness commit 与预算参数。该脚本只冻结协议，
 // 不下载数据集、不构建镜像、不调用模型。它同时写出开发批次与正式批次的题号、排除规则和交错顺序；
@@ -156,7 +156,7 @@ async function main() {
   }
   if (!covered(development) || (executionScope === 'all' && !covered(formal))) missing.push('per-instance image digests for the execution scope (--image-digests)')
   if (effectiveBatchCap <= 0) missing.push('positive batch hard cap (--batch-cap-usd)')
-  const sourceCommit = protocol === COMPONENT_PROTOCOL ? spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim() : undefined
+  const sourceCommit = protocol === COMPONENT_PROTOCOL ? spawnSync('git', [...sourceGitArgs(), 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim() : undefined
   if (protocol === COMPONENT_PROTOCOL && !/^[0-9a-f]{40}$/.test(sourceCommit ?? '')) missing.push('source checkout commit')
   const finalized = process.argv.includes('--finalize')
 

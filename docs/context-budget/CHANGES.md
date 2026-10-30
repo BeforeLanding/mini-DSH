@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### SWE-O4d Windows worktree 的 WSL 源码核验（2026-10-30）
+
+真实预检发现 WSL Git 无法读取 Windows 绝对 worktree 指针，且 CRLF 被当作全量 diff。只在源码身份查询中转译 metadata 路径并按 Windows Git blob 规范化行尾；不设置全局 GIT_DIR/GIT_WORK_TREE，避免干扰后续候选 Git 操作。构建、SWE 45/45 通过，真实源码漂移与未跟踪文件仍拒绝。后续使用最终源码提交重冻。
+
 ### SWE-O4b 零模型预检的凭证边界与批次预算展示（2026-10-30）
 
 预检不要求真实模型凭证，仅正式执行保留 presence 检查；冻结 CLI 显示实际 batch hard cap 与 execution scope，避免 development-only 清单把未来正式题预算展示为本次金额。新增 $17/development 的 CLI 反例，构建通过，完整测试见最终验收记录。

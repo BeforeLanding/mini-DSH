@@ -5,7 +5,7 @@ import { structuredSummary } from './structured-summary.js'
 import { estimateInput, estimateUsage } from '../src/core/token-estimator.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
 import type { ChatRequest, ChatResponse } from '../src/core/contracts.js'
-import { componentArmDefinitions } from '../scripts/swebench/component-protocol.js'
+import { componentArmDefinitions, sourceGitPrefix } from '../scripts/swebench/component-protocol.js'
 import { componentMetrics, componentExposure } from '../scripts/swebench/component-metrics.js'
 
 // Reproduce the observed failure mode, not the private tasks: many useful
@@ -78,4 +78,15 @@ test('unreadable project snapshots are unknown evidence rather than zero rule ex
   assert.equal(reading.projectContext.snapshotParseErrors, 1)
   assert.equal(componentExposure([reading], 'projectContext').coverage, 'unknown')
   assert.equal(componentExposure([reading], 'context').coverage, 'not-exercised')
+})
+
+test('WSL source queries adapt Windows worktree metadata without setting process-wide Git variables', () => {
+  const before = { dir: process.env.GIT_DIR, tree: process.env.GIT_WORK_TREE }
+  const pointer = 'gitdir: D:\\Agent\\a repo\\.git\\worktrees\\eval\r\n'
+  assert.deepEqual(sourceGitPrefix(pointer, '/mnt/d/Agent/a checkout', 'linux'), [
+    '--git-dir', '/mnt/d/Agent/a repo/.git/worktrees/eval', '--work-tree', '/mnt/d/Agent/a checkout', '-c', 'core.autocrlf=true',
+  ])
+  assert.deepEqual(sourceGitPrefix(pointer, 'D:/Agent/a checkout', 'win32'), [])
+  assert.deepEqual(sourceGitPrefix('gitdir: /home/user/repo/.git/worktrees/eval\n', '/home/user/eval', 'linux'), [])
+  assert.deepEqual({ dir: process.env.GIT_DIR, tree: process.env.GIT_WORK_TREE }, before)
 })

@@ -1,8 +1,29 @@
 import { isDeepStrictEqual } from 'node:util'
 import { spawnSync } from 'node:child_process'
+import fs from 'node:fs'
+import path from 'node:path'
 import type { SwebenchRunManifest } from './protocol.js'
 
 export const COMPONENT_PROTOCOL = 'swe-components-v1'
+
+// WSL can execute the Windows checkout, but Git cannot follow a Windows
+// absolute worktree pointer. Confine the adaptation to these source queries;
+// exporting GIT_DIR would redirect later candidate-workspace Git operations.
+export function sourceGitPrefix(pointer: string, directory: string, platform: string): string[] {
+  if (platform !== 'linux' || !/^\/mnt\/[a-z]\//.test(directory)) return []
+  const match = /^gitdir: ([A-Za-z]):[\\/]([^\r\n]+)\r?\n?$/.exec(pointer)
+  if (!match) return []
+  return ['--git-dir', `/mnt/${match[1]!.toLowerCase()}/${match[2]!.replaceAll('\\', '/')}`, '--work-tree', directory,
+    '-c', 'core.autocrlf=true']
+}
+
+export function sourceGitArgs() {
+  try { return sourceGitPrefix(fs.readFileSync(path.join(process.cwd(), '.git'), 'utf8'), process.cwd(), process.platform) }
+  catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && (error.code === 'EISDIR' || error.code === 'ENOENT')) return []
+    throw error
+  }
+}
 
 export function componentArmDefinitions() {
   // The historical 52k pressure line was never reached before the cumulative
@@ -50,7 +71,8 @@ export function assertComponentSource(manifest: SwebenchRunManifest) {
   // Also reject untracked source files: a clean tracked diff alone does not pin
   // the code being executed. Documentation-only follow-up commits are allowed.
   const paths = ['src', 'scripts', 'package.json', 'pnpm-lock.yaml', 'tsconfig.json', 'plugins.config.ts']
-  const diff = spawnSync('git', ['diff', '--quiet', selection.sourceCommit, '--', ...paths])
-  const untracked = spawnSync('git', ['ls-files', '--others', '--exclude-standard', '--', ...paths], { encoding: 'utf8' })
+  const prefix = sourceGitArgs()
+  const diff = spawnSync('git', [...prefix, 'diff', '--quiet', selection.sourceCommit, '--', ...paths])
+  const untracked = spawnSync('git', [...prefix, 'ls-files', '--others', '--exclude-standard', '--', ...paths], { encoding: 'utf8' })
   if (diff.status !== 0 || untracked.status !== 0 || untracked.stdout.trim()) throw new Error('component source differs from frozen sourceCommit; rebuild and refreeze')
 }
