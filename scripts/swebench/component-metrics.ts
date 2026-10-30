@@ -13,14 +13,16 @@ export function componentMetrics(events: readonly SessionEvent[]) {
   const projections = events.filter(event => event.type === 'context/projection')
   const checks = events.filter(event => event.type === 'verification/result')
   const seen = new Set<string>()
+  let snapshotParseErrors = 0
   for (const event of events) if (event.type === 'context/snapshot' && event.data.name === 'project:context') {
     // The snapshot always exists even when no AGENTS.md applies. Count actual
     // nonempty rules, not the presence of a context plugin or its schema.
     const start = event.data.text.indexOf('{')
     try {
       const context = JSON.parse(event.data.text.slice(start)) as { rules?: { path?: string; content?: string }[] }
-      for (const rule of context.rules ?? []) if (rule.content?.trim()) seen.add(rule.path ?? rule.content)
-    } catch { /* Older snapshot layouts may not expose a parseable rules list. */ }
+      if (start < 0 || !Array.isArray(context.rules)) throw new Error('missing rules list')
+      for (const rule of context.rules) if (rule.content?.trim()) seen.add(rule.path ?? rule.content)
+    } catch { snapshotParseErrors++ }
   }
   const successful = (name: string) => results.filter(event => event.data.name === name && event.data.status === 'completed' && !event.data.isError).length
   return {
@@ -33,7 +35,7 @@ export function componentMetrics(events: readonly SessionEvent[]) {
     toolOutput: { previewTruncations: results.filter(event => event.data.previewTruncated).length,
       recallAttempts: calls.filter(call => call.name === 'read_tool_result').length, successfulRecalls: successful('read_tool_result'),
       errors: results.filter(event => event.data.isError).length },
-    projectContext: { ruleVersions: count('context/project-version'), injectedRuleFiles: seen.size, queries: successful('project_context') },
+    projectContext: { ruleVersions: count('context/project-version'), injectedRuleFiles: seen.size, queries: successful('project_context'), snapshotParseErrors },
     verification: { started: count('verification/start'), finished: checks.length,
       passed: checks.filter(event => event.data.commandResult.status === 'exited' && event.data.commandResult.exitCode === 0).length,
       failed: checks.filter(event => event.data.commandResult.status !== 'exited' || event.data.commandResult.exitCode !== 0).length,
@@ -53,9 +55,10 @@ export async function readComponentMetrics(root: string, record: { sessionId?: s
 }
 
 export function componentExposure(readings: readonly (ComponentMetrics | undefined)[], component: 'context' | 'toolOutput' | 'projectContext') {
-  const available = readings.filter((reading): reading is ComponentMetrics => !!reading?.complete)
+  const available = readings.filter((reading): reading is ComponentMetrics => !!reading?.complete && (component !== 'projectContext' || reading.projectContext.snapshotParseErrors === 0))
   const triggered = available.filter(reading => component === 'context' ? reading.context.applied > 0
     : component === 'toolOutput' ? reading.toolOutput.previewTruncations > 0 : reading.projectContext.injectedRuleFiles > 0).length
   return { observedEpisodes: available.length, missingOrIncompleteEpisodes: readings.length - available.length, triggeredEpisodes: triggered,
+    criterion: component === 'context' ? 'applied-summary' : component === 'toolOutput' ? 'bounded-preview' : 'nonempty-injected-scoped-rules',
     coverage: available.length !== readings.length ? 'unknown' as const : triggered > 0 ? 'observed' as const : 'not-exercised' as const }
 }

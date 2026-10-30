@@ -6,7 +6,7 @@ import { estimateInput, estimateUsage } from '../src/core/token-estimator.js'
 import { assertToolProtocol } from '../src/core/context-runtime.js'
 import type { ChatRequest, ChatResponse } from '../src/core/contracts.js'
 import { componentArmDefinitions } from '../scripts/swebench/component-protocol.js'
-import { componentMetrics } from '../scripts/swebench/component-metrics.js'
+import { componentMetrics, componentExposure } from '../scripts/swebench/component-metrics.js'
 
 // Reproduce the observed failure mode, not the private tasks: many useful
 // inspections, one final repair, a 416,666-token cumulative limit. All usage
@@ -67,4 +67,15 @@ test('invalid early summaries remain bounded and cannot be counted as an applied
   assert.equal(run.metrics.context.applied, 0)
   assert.equal(run.fixed, false)
   assert.ok(run.state.counters.totalTokens <= 416_666)
+})
+
+test('unreadable project snapshots are unknown evidence rather than zero rule exposure', () => {
+  const h = harness(async () => ({ content: 'unused' }))
+  const state = h.sessions.beginRun(h.session.id, {}, 'mock/test')
+  h.sessions.append(h.session.id, 'context/snapshot', { name: 'project:context', text: 'older incompatible format', source: 'legacy-current' }, state)
+  h.sessions.finishRun(state, 'completed')
+  const reading = componentMetrics(h.sessions.confirmedEvents(h.session.id))
+  assert.equal(reading.projectContext.snapshotParseErrors, 1)
+  assert.equal(componentExposure([reading], 'projectContext').coverage, 'unknown')
+  assert.equal(componentExposure([reading], 'context').coverage, 'not-exercised')
 })
