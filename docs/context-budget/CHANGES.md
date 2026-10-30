@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### SWE-O4c 冻结、最终检查与剩余执行边界（2026-10-30）
+
+源码 `3b03f48` 冻结 development-only 六臂 30 条，manifest SHA-256 `d7991e5f…1c5ee6b`，批次配置上限 $17，provider 请求 0。WSL 执行器导入/基线指纹/源码漂移反例和八项校验和通过；真实 validate-only 停在 Docker 连接预检，未创建 episode。构建、语法 238、lint 270、完整 601/571/0/30、fixtures、offline 12/12、组件三基准通过。真实镜像探针及付费运行未验收；详见 [冻结与阻塞](SWE-COMPONENT-EFFECTS.md)。
+
 ### SWE-O4d Windows worktree 的 WSL 源码核验（2026-10-30）
 
 真实预检发现 WSL Git 无法读取 Windows 绝对 worktree 指针，且 CRLF 被当作全量 diff。只在源码身份查询中转译 metadata 路径并按 Windows Git blob 规范化行尾；不设置全局 GIT_DIR/GIT_WORK_TREE，避免干扰后续候选 Git 操作。构建、SWE 45/45 通过，真实源码漂移与未跟踪文件仍拒绝。后续使用最终源码提交重冻。

@@ -48,3 +48,21 @@
 `--scope development` 只要求开发题的镜像 digest 齐备；manifest 的 executionScope 阻止误执行 formal。正式留出题可以先选择，但该分割未冻结，不授予执行权限。省略 scope 的历史文件仍按原 all 行为读取。新增 `--validate-only`，执行源码/镜像/基线安装/隐藏评分行/环境预检后在创建证据目录、调用 adapter 或评分器之前返回；CLI 与 `--execute` 必须二选一。
 
 验收：SWE 定向 43/43，完整 599 tests / 569 pass / 0 fail / 30 平台 skipped（`D:\Agent\tmp\swe-component-o4-full-20261030.log`），构建通过。机制测试确认 validate-only 的 adapter/scorer 调用均为 0、证据目录不创建，开发专用 manifest 对 formal 的执行也在请求前拒绝。
+
+## 最终冻结与当前阻塞（SWE-O4c）
+
+被测源码提交 `3b03f48b39a25f0b78662e314c6b17d0857b4592`；后续只有证据文档提交。开发清单 SHA-256 为 `d7991e5f6a68f2eda273d71bf59e8ba68ca34b8f2e4e4687e3e07c1441c5ee6b`，完整准备材料在仓库外 `D:\Agent\outputs\swe-component-effects-20261030\`。
+
+- `batch-plan.json`：可审阅的批次范围、开关、源码身份、预算与未执行状态。
+- `manifest-development.json`：`swe-components-v1`、development-only、5 题 × 6 臂 = 30 个计划 episode，实际执行 0、provider 请求 0。五题仍为已曝光开发题，不能作泛化结论。
+- 单题每臂配置 $0.50、名义累计 token 416,666、64 请求、128 工具、900 秒主动时间、单请求输出 16,384。30 条的配置储备 $15，另 $2 储备，总 batch cap $17。预检不发协议探测请求，不自动补跑。
+- `prices-20261030.json`：2026-10-30 按 [DeepSeek 官方价格页](https://api-docs.deepseek.com/quick_start/pricing/) 核对 DeepSeek-V4.1-Flash-1017；每百万 token 峰值输入 $0.30、缓存输入 $0.006、输出 $1.20。只是 usage 估价所用的价格上界，不是账单承诺。
+- 后续正式 50 题只完成不按结果挑题的选择，排除原开发 5 题与原正式 50 题；没有冻结其镜像、没有执行授权。`executionScope=development` 会机械拒绝 formal。
+
+WSL 中的 Node 24.16.0 导入新执行器成功，外部 mini-SWE-agent 2.4.6 的 config/install SHA-256 均与冻结值相同。真实源码探针确认：干净源码通过、跟踪文件临时改动拒绝、未跟踪源文件拒绝，探针结束后原字节恢复且工作区干净。这里的源码身份采用 Git blob 的行尾规范化，仅对 WSL 读取 Windows worktree metadata 做局部 argv 适配，不设置全局 GIT_DIR。
+
+最终 `validate-development.sh` 的 8 项不可变文件校验和全部通过；源码关卡通过后，在 Docker 连接预检失败并停止。`runtime-readiness.json` 记录 Ubuntu WSL 的 Docker 集成不可用；Docker Desktop 虽有进程但没有可操作窗口。未创建运行证据目录，未读取真实 key，未调用模型或官方评分器。真实镜像上的 testbed/pytest 探针尚未通过，不能宣称运行环境已验收。
+
+恢复 Docker Linux 引擎和 Ubuntu WSL 集成后，先执行零模型 `validate-development.sh`。只有该预检成功且用户按 [原 SWE 付费授权要求](../EVALUATION-SWEBENCH.md) 授权本批 30 条及 $17 配置上限后，才执行 `run-development.sh`；脚本先核验 SHA256SUMS 并拒绝覆盖已有证据。中断证据保留，不自动重跑。基线 watchdog 的最后一步可能越过名义 token cap，仍须保留主评分、超限计数和限额内敏感性读数，不把名义限额当作精确消耗相等。
+
+最终本地验收：构建通过，语法 238 文件、Biome 270 文件零诊断；完整 601 tests / 571 pass / 0 fail / 30 平台 skipped（`D:\Agent\tmp\swe-component-portable-final-20261030.log`）；fixtures、12/12 离线任务与 tools/compaction/reports 三项基准通过。没有新增真实 SWE 得分，不能宣称 full 成功率已经提升。按原分支边界保留独立实验，不合并 main。

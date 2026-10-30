@@ -1,5 +1,7 @@
 # SWE-bench Verified subset: pre-registration and execution adapter
 
+2026-10-30：新组件优化位于独立实验分支，新增同源 full/逐项消融、真实触发读数与 testbed 环境修复。[当前冻结与运行边界](context-budget/SWE-COMPONENT-EFFECTS.md) 记录 30 条开发计划及 Docker 阻塞；真实模型请求 0，以下历史正式结果不变。
+
 **Status (2026-10-24).** The pre-registered 50-task, four-arm formal batch has completed all 200 paid model episodes and all 200 official scores. The results and budget-parity limitation are recorded below. The historical “50 tasks ≈ $2 / 10 minutes” figure from an external GPT-5 experiment is not a promise for this project.
 
 ## Formal four-arm result (2026-10-24, 50 tasks per arm)
