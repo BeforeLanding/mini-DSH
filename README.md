@@ -1,10 +1,10 @@
-![预算停止后在同一任务续跑，没有工具被执行两次](docs/images/demo-resume.gif)
-
 # mini-DSH
 
 [![CI](https://github.com/BeforeLanding/mini-DSH/actions/workflows/ci.yml/badge.svg)](https://github.com/BeforeLanding/mini-DSH/actions/workflows/ci.yml)
 
 > 在本地代码仓库中运行的命令行编程 Agent，让修改、检查和任务恢复有据可查。
+
+![预算停止后在同一任务续跑，没有工具被执行两次](docs/images/demo-resume.gif)
 
 用自然语言提出任务，让模型读取项目规则、定位代码、编辑文件并运行检查。你可以审批修改与命令执行，查看 diff 和验证记录，并在预算停止后继续任务。
 
