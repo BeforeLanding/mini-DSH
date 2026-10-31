@@ -125,7 +125,7 @@ v2.1 的 Full/Baseline 是冻结开发协议里的两条实验臂，不是生产
 
 ## 本地打包与安装
 
-项目**尚未发布到 npm**，`private: true` 保留以防误发。下面从当前仓库生成 tarball，在仓库外的临时目录安装；已在 Windows 的含空格路径验证 `mini-dsh.cmd`。依赖首次安装可能需要访问包注册表；`--help`、`--version`、`--show-config`、`demo` 与 `inspect` 不需要 API key，也不会请求模型。PowerShell：
+项目**尚未发布到 npm**，`private: true` 保留以防误发。已发布版本可从 [Releases](https://github.com/BeforeLanding/mini-DSH/releases) 下载 tarball 与 `SHA256SUMS`，核对后跳过下面的 `pnpm pack`，把下载的文件作为 tarball 安装。下面从当前仓库生成 tarball，在仓库外的临时目录安装；已在 Windows 的含空格路径验证 `mini-dsh.cmd`。依赖首次安装可能需要访问包注册表；`--help`、`--version`、`--show-config`、`demo` 与 `inspect` 不需要 API key，也不会请求模型。PowerShell：
 
 ```powershell
 $packRoot = Join-Path $env:TEMP ("mini-dsh-local-" + [guid]::NewGuid().ToString('N'))
