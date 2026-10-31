@@ -25,12 +25,10 @@ mini-DSH 使用 TypeScript / Cordis 构建，内置 DeepSeek 适配器，适合�
 3. **修改与验证。** 执行编辑和检查，根据失败输出继续修复。
 4. **查看交付。** 用 `/diff` 查看文件工具修改，用 `/report` 查看检查结果、证据时效和未覆盖文件。
 
-模型是否能完成具体任务取决于模型与项目。mini-DSH 负责执行流程、权限检查和过程记录；检查通过与任务验收仍需结合实际需求判断。
-
 ## 能帮你做什么
 
 - **按项目约定工作。** 加载作用域内的 `AGENTS.md` 和项目检查入口，让模型在编辑前了解仓库规则。
-- **检查每次修改。** 文件编辑使用版本指纹检测冲突；任务保留文件工具变更清单和 diff，便于复核。Bash 与外部程序的修改需另外结合 Git 查看。
+- **检查每次修改。** 文件编辑使用版本指纹检测冲突；任务保留文件工具变更清单和 diff，便于复核。
 - **保留验证依据。** 检查记录关联文件版本；之后文件变化会使证据过期，报告区分通过、失败、过期和未知。
 - **管理长任务上下文。** 有界读取与搜索避免一次塞入全部内容，长输出可按引用回读；历史可裁剪、压缩，原始事件保留。
 - **控制执行规模。** 配置模型请求、工具次数、主动时间和 token 预算；触顶时停止调度，并报告原因。
@@ -55,7 +53,7 @@ pnpm build
 node dist/src/index.js demo fix
 ```
 
-演示在临时项目中运行“失败检查 → 读文件 → 修改 → 再检查”，结束时输出 `demo result: PASS`。它使用脚本化模型，不读取 `.env`，不请求真实模型；安装依赖需要网络。
+演示在临时项目中运行“失败检查 → 读文件 → 修改 → 再检查”，结束时输出 `demo result: PASS`。它使用脚本化模型，无需 API key。
 
 ### 3. 接入真实模型
 
@@ -88,31 +86,30 @@ pnpm start
 - **管理上下文：** `/compact` 请求压缩历史，原始事件仍可回读；`/reset` 清除可见历史并保留原始日志。
 - **切换与退出：** `/models` 查看模型，`/model provider/model` 切换；`/exit` 退出。
 
-完整命令、预算配置、同一会话的重启恢复与日志检查见 [使用指南](docs/USAGE.md)。`/compact` 可能请求模型；`/report` 的检查证据不自动构成任务验收。
+完整命令、预算配置、同一会话的重启恢复与日志检查见 [使用指南](docs/USAGE.md)。
 
 ## 演示
 
-以下仓库脚本可单独运行，均不调用真实模型：
+以下脚本用预设模型响应驱动真实的 Harness 路径，无需 API key：
 
 - `pnpm demo:fix`：项目规则、定位、编辑、失败检查、再修复、diff 与验证证据。
 - `pnpm demo:resume`：预算停止后在同一任务续跑。
 - `pnpm demo:compact`：单任务压缩、原始事件保留与按事件号回读。
 - `pnpm demo:unknown`：真实崩溃后的未知工具结果与陈旧锁处置。
 
-演示使用脚本化响应或合成账本，退出码 0 说明机制符合预期，不代表模型能力。
+## 当前状态
 
-## 当前状态与边界
+已实现源码 CLI、本地 tarball 安装、DeepSeek 适配器、文件/Bash 工具、上下文与预算管理、持久化恢复和只读日志检查。CI 覆盖 Ubuntu / Windows × Node.js 22 / 24，并包含 Linux bubblewrap 隔离测试和仓库外安装检查。
 
-当前提供源码 CLI、本地 tarball 安装、DeepSeek 适配器、文件/Bash 工具、上下文与预算管理、持久化恢复和只读日志检查。CI 覆盖 Ubuntu / Windows × Node.js 22 / 24，并包含 Linux 隔离测试和仓库外安装检查。
+### 已知边界
 
-使用时需要了解这些边界：
-
-- **权限：** 路径与命令闸门是应用层策略，不是操作系统隔离；Bash 与显式信任的 MCP server 仍能访问当前用户可读写范围内的文件。MCP 默认不加载 server。
-- **恢复：** 恢复重建事件状态，不还原文件系统快照；结果未知的工具需人工核验，不自动重试。
-- **预算：** token 估算与供应商实际用量可能不同，执行预算不是费用硬上限；工具调用在单个会话内串行执行。
-- **发布：** 尚未发布 npm 或创建发布 Release；安装验证覆盖 Windows 含空格路径与 Ubuntu CI，macOS 未验证。ECS 部署仅保留[手动入口](docs/ECS_DEPLOYMENT.md)。
-- **扩展分支：** 项目记忆与只读协作仅保留在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2)，不属于主分支交付范围。
-- **证据：** 不展示模型评测结果，也不把离线回归作为能力分数。SWE-bench 正式实验与结果保留在[独立实验分支](https://github.com/BeforeLanding/mini-DSH/tree/feat/swebench-formal-results)，不合并 main。
+- **权限：** 路径与命令闸门是应用层策略，不是操作系统隔离；Bash 与显式信任的 MCP server 可访问当前用户有权限的文件。MCP 默认不加载 server。
+- **改动追踪：** `/diff` 覆盖文件工具的修改；Bash 与外部程序的改动请结合 Git 查看。
+- **恢复：** 重建事件状态，不还原文件快照；结果未知的工具需人工核验，不自动重试。
+- **预算：** token 为估算值，执行预算不等于费用硬上限；`/compact` 可能请求模型。
+- **验收：** 任务能否完成取决于模型与项目；`/report` 记录检查证据，验收仍由使用者判断。
+- **发布：** 尚未发布 npm；macOS 安装未验证。ECS 部署仅保留[手动入口](docs/ECS_DEPLOYMENT.md)。
+- **范围：** 本仓库不展示模型评测结果，演示与离线回归验证的是机制而非模型能力。项目记忆与只读协作在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2)，SWE-bench 实验在[独立实验分支](https://github.com/BeforeLanding/mini-DSH/tree/feat/swebench-formal-results)，均不属于 main 交付范围。
 
 ## 架构与扩展
 
