@@ -21,6 +21,9 @@ import { buildReport, writeReport } from './report.js'
 import type { SwebenchEpisodeResult, SwebenchScoreResult, SwebenchScores } from './report.js'
 import { exportDockerWorkspace, exportPatch, prepareDockerWorkspace, prepareFixtureWorkspace, removeContainerIfPresent } from './workspace.js'
 import { preflightExternal, runExternalEpisode } from './external-run.js'
+import { probeCommandEnvironment } from './command-environment.js'
+import { HARNESS_ARTIFACTS } from './workspace.js'
+import { harnessOptions } from './harness-profile.js'
 import type { ExternalEpisodeOutcome, ExternalEpisodeRequest } from './external-run.js'
 
 // R10 执行器：复用 createHarness、官方预测格式与独立判分通道。它不替用户决定模型、价格或授权；
@@ -46,6 +49,8 @@ export interface RunBatchOptions {
   // 批次级恢复：跳过已经落盘终态的 episode，继续剩余计划；中断的 episode 保留为 infrastructure，
   // 不自动重跑（重跑会变成同一题 arm 的第二次正式 attempt）。
   resume?: boolean
+  // 只供离线测试：跳过 testbed 镜像探针（真实 docker 批次不得设置）。
+  skipEnvironmentProbe?: boolean
 }
 
 function sanitizeName(value: string) { return value.replace(/[^A-Za-z0-9_.-]/g, '-') }
@@ -161,6 +166,12 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
     for (const entry of batchManifest.schedule) if (!digests[entry.instanceId]) throw new Error(`missing image digest for ${entry.instanceId}`)
   }
   if (options.backend === 'fixture' && !options.fixtureRoot) throw new Error('fixture backend requires --fixtures <directory>')
+  const commandEnvironment = manifest.environment.commandEnvironment ?? 'legacy'
+  // testbed-v1 在创建证据目录与任何模型请求之前，逐个唯一镜像跑零模型探针；失败即停。
+  const environmentPreflight = options.backend === 'docker' && commandEnvironment === 'testbed-v1' && !options.skipEnvironmentProbe
+    ? [...new Set(batchManifest.schedule.map(entry => manifest.environment.imageDigests![entry.instanceId]!))].map(image =>
+      probeCommandEnvironment(image, process.getuid?.() ?? 0, process.getgid?.() ?? 0))
+    : []
   const splitArmIds = new Set(batchManifest.arms)
   const externalArms = manifest.arms.filter(arm => splitArmIds.has(arm.id) && arm.system === 'external')
   let externalPreflight: Awaited<ReturnType<typeof preflightExternal>> | undefined
@@ -194,6 +205,7 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
     await fs.mkdir(options.evidenceRoot, { recursive: false })
     await fs.writeFile(path.join(options.evidenceRoot, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
     await fs.writeFile(path.join(options.evidenceRoot, 'dataset.json'), JSON.stringify(batchManifest.instances, null, 2) + '\n')
+    if (environmentPreflight.length) await fs.writeFile(path.join(options.evidenceRoot, 'environment-preflight.json'), JSON.stringify(environmentPreflight, null, 2) + '\n')
   }
   let stopReason: string | undefined
   let spentUsd = records.reduce((sum, record) => sum + (record.costUsd ?? 0), 0)
@@ -248,6 +260,7 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
             model: externalPreflight?.model ?? `${arm.model.provider}/${arm.model.name ?? ''}`,
             apiKeyEnv: arm.external?.apiKeyEnv ?? 'DEEPSEEK_API_KEY',
             timeoutMs: perTask.wallClockMs + 120_000,
+            commandEnvironment,
           }
           const outcome = options.externalRunner ? await options.externalRunner(request) : await runExternalEpisode(request)
           status = outcome.status
@@ -268,6 +281,8 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
             target: workspace, exportName: `mini-dsh-export-${sanitizeName(options.batchId)}-${index}`, containerName: `mini-dsh-run-${sanitizeName(options.batchId)}-${index}` })
           baseCommit = dockerWorkspace.patchBase
         }
+        // Agent 的 git status 不该看到宿主结果存储；导出补丁另有排除，这里只是不让它干扰模型。
+        await fs.appendFile(path.join(workspace, '.git', 'info', 'exclude'), `\n/${HARNESS_ARTIFACTS}/\n`).catch(() => {})
         const adapter = options.adapterFor ? await options.adapterFor(arm, instance) : adapterFromArm(arm)
         const prices = manifest.prices
         const budget: BudgetPolicy = {
@@ -277,8 +292,8 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
           ...(prices ? { maxTotalTokens: tokenCapFromUsd(perTask.maxCostUsd, prices) } : {}),
         }
         const harness = await createHarness({ workspace, profile: 'coding', autoApprove: true, projectContext: false,
-          contextLayout: 'frozen', runtimeClockMode: 'frozen', toolOutput: true, adapter,
-          ...(dockerWorkspace ? { commandRunner: createDockerCandidateRunner(workspace, dockerWorkspace.containerName) } : {}) })
+          contextLayout: 'frozen', runtimeClockMode: 'frozen', toolOutput: true, adapter, ...harnessOptions(arm.harness ?? 'v1'),
+          ...(dockerWorkspace ? { commandRunner: createDockerCandidateRunner(workspace, dockerWorkspace.containerName, { commandEnvironment }) } : {}) })
         try {
           const session = harness.root.sessions.create({ source: `swebench-${options.split}`, workspace })
           sessionId = session.id

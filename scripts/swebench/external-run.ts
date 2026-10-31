@@ -14,6 +14,7 @@ import type { ExternalCaps, ExternalUsageReading } from './external.js'
 import type { EpisodeStatus, PriceSnapshot, SwebenchArm, SwebenchInstance, SwebenchRunManifest } from './protocol.js'
 import { removeContainersByLabel } from './workspace.js'
 import { fingerprintBaseline } from './external-fingerprint.js'
+import type { CommandEnvironment } from './command-environment.js'
 
 export interface ExternalEpisodeRequest {
   arm: SwebenchArm
@@ -33,6 +34,7 @@ export interface ExternalEpisodeRequest {
   modelClass?: string
   modelExtra?: Record<string, unknown>
   timeoutMs?: number
+  commandEnvironment?: CommandEnvironment
 }
 
 export interface ExternalEpisodeEvidence {
@@ -162,7 +164,7 @@ export async function runExternalEpisode(request: ExternalEpisodeRequest, depend
   const config = externalOverrideConfig({ model, caps: request.caps, paths: {
     episodeDirectory: request.episodeDirectory, workspace: request.workspace, datasetDirectory, configPath, outputDirectory,
     upstreamConfigPath: request.upstreamConfigPath,
-  }, uid, gid, labels, modelClass: request.modelClass, modelExtra: request.modelExtra })
+  }, uid, gid, labels, modelClass: request.modelClass, modelExtra: request.modelExtra, commandEnvironment: request.commandEnvironment })
   const written = await writeExternalConfig(configPath, config)
   const values: Record<ExternalPlaceholder, string> = {
     python: request.python, dataset: datasetDirectory, config: configPath, output: outputDirectory,

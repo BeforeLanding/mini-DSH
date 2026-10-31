@@ -2,6 +2,8 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { EXTERNAL_CONTRACT_VERSION, validateExternalCommand } from './external-contract.js'
 import { fingerprintBaseline } from './external-fingerprint.js'
+import { validateCommandEnvironment } from './command-environment.js'
+import { SWE_FULL_BUDGET } from './harness-profile.js'
 import { buildSchedule, estimateBudget, sanitizeInstanceRow, selectInstances, validatePriceSnapshot } from './protocol.js'
 import type { BatchInstanceList, SwebenchInstance } from './protocol.js'
 
@@ -51,7 +53,11 @@ async function main() {
   const datasetRevision = argument('--dataset-revision')
   const harnessCommit = argument('--harness-commit')
   if (!/^[0-9a-f]{7,40}$/.test(harnessCommit)) throw new Error('--harness-commit must be a git commit hash')
-  const arms = numberArgument('--arms', 4)
+  const protocol = optionalArgument('--protocol') ?? 'four-arm-v1'
+  if (protocol !== 'four-arm-v1' && protocol !== 'swe-full-v1') throw new Error('--protocol must be four-arm-v1 or swe-full-v1')
+  const commandEnvironment = validateCommandEnvironment(optionalArgument('--command-environment'))
+  if (protocol === 'swe-full-v1' && commandEnvironment !== 'testbed-v1') throw new Error('swe-full-v1 requires --command-environment testbed-v1')
+  const arms = protocol === 'swe-full-v1' ? 3 : numberArgument('--arms', 4)
   if (!Number.isSafeInteger(arms) || arms < 1 || arms > 4) throw new Error('--arms must be 1..4')
   const perTaskCapUsd = numberArgument('--per-task-cap-usd', 0.5)
   const devTasks = numberArgument('--dev-tasks', 5)
@@ -71,7 +77,14 @@ async function main() {
   const formal = selectInstances(sanitized, { tasks, seed, exclude: [...exclusions, ...development.map(instance => instance.instance_id)] })
 
   // 同题两臂只改变声明的维度：context 两臂都保留 65,536 输入目标，reference 仅关掉自动/溢出摘要。
-  const armDefinitions = [
+  // swe-full-v1：full 与 minimal 共用源码、模型、环境与预算上限，只差 harness 装配与三个预算开关；
+  // baseline 是未修改的外部 mini-SWE-agent，作系统级比较。三臂都用 testbed-v1 命令环境。
+  const sweFullArms = [
+    { id: 'full', system: 'mini-dsh', harness: 'swe-full', role: 'full harness: compact tool output, in-task observation masking, budget notices, completion checks, task workflow guidance', budget: { inputTargetTokens: 65_536, ...SWE_FULL_BUDGET } },
+    { id: 'baseline', system: 'external', role: 'same-model capability baseline (mini-SWE-agent)', budget: {} },
+    { id: 'minimal', system: 'mini-dsh', harness: 'v1', role: 'minimal harness: the 2026-10 candidate assembly under the same environment', budget: { inputTargetTokens: 65_536 } },
+  ]
+  const armDefinitions = protocol === 'swe-full-v1' ? sweFullArms : [
     { id: 'candidate', system: 'mini-dsh', role: 'capability candidate', budget: { inputTargetTokens: 65_536 } },
     { id: 'baseline', system: 'external', role: 'same-model capability baseline (mini-SWE-agent)', budget: {} },
     { id: 'context-reference', system: 'mini-dsh', role: 'context strategy reference: no active or overflow summary', budget: { inputTargetTokens: 65_536, auto: false } },
@@ -165,6 +178,7 @@ async function main() {
     freezeStatus: finalized && missing.length === 0 ? 'frozen' : 'draft',
     dataset: { name: 'SWE-bench Verified', revision: datasetRevision },
     harnessCommit,
+    protocol,
     selection: {
       development: { tasks: devTasks, seed: devSeed, rule: 'repository-stratified round robin after a seeded within-repo shuffle; selected first and excluded from the formal batch' },
       formal: { tasks, seed, exclusions: formalBatch.exclusions, rule: 'repository-stratified round robin after a seeded within-repo shuffle; no difficulty stratification, no result-based selection' },
@@ -189,7 +203,7 @@ async function main() {
       failureTraces: 'first provider failure, first budget stop, first logically wrong completed episode with a non-empty patch; absent classes are reported as absent',
       newRunIdPerBatch: true,
     },
-    environment: { imageDigests: imageDigests ?? null },
+    environment: { imageDigests: imageDigests ?? null, ...(commandEnvironment === 'legacy' ? {} : { commandEnvironment }) },
     authorization: 'not granted by this file; paid model calls require explicit user approval per batch',
     missing,
     createdAt: new Date().toISOString(),

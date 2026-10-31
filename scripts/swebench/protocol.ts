@@ -1,5 +1,9 @@
 import path from 'node:path'
 import type { Usage } from '../../src/core/budget.js'
+import { validateSwebenchHarness } from './harness-profile.js'
+import type { SwebenchHarness } from './harness-profile.js'
+import { validateCommandEnvironment } from './command-environment.js'
+import type { CommandEnvironment } from './command-environment.js'
 import { EXTERNAL_CONTRACT_VERSION, validateExternalCommand } from './external-contract.js'
 
 // R10 的离线适配层。这里不运行 Docker、不下载数据集、不调用模型；它只固定正式实验需要的
@@ -203,6 +207,8 @@ export interface SwebenchArm {
   model: { provider: string; name: string | null; contextWindowTokens: number }
   external?: SwebenchArmExternal
   budget: Record<string, unknown>
+  // mini-DSH 臂的装配；缺省 v1（历史 manifest 不含该字段）。
+  harness?: SwebenchHarness
 }
 
 export interface SwebenchBatchManifest {
@@ -220,6 +226,8 @@ export interface SwebenchRunManifest {
   freezeStatus: 'draft' | 'frozen'
   dataset: { name: string; revision: string }
   harnessCommit: string
+  // 缺省为历史四臂协议；swe-full-v1 为 full/baseline/minimal 三臂。
+  protocol?: 'four-arm-v1' | 'swe-full-v1'
   selection: unknown
   development: SwebenchBatchManifest
   formal: SwebenchBatchManifest
@@ -232,7 +240,7 @@ export interface SwebenchRunManifest {
   }
   prices: PriceSnapshot | null
   scoring: Record<string, unknown>
-  environment: { imageDigests: Record<string, string> | null }
+  environment: { imageDigests: Record<string, string> | null; commandEnvironment?: CommandEnvironment }
   authorization: string
   missing: string[]
   createdAt: string
@@ -334,6 +342,11 @@ function validateExternalArm(value: unknown, index: number, frozen: boolean): Sw
   }
 }
 
+function validateProtocol(value: unknown): 'four-arm-v1' | 'swe-full-v1' {
+  if (value !== 'four-arm-v1' && value !== 'swe-full-v1') throw new Error('protocol must be four-arm-v1 or swe-full-v1')
+  return value
+}
+
 export function validateRunManifest(value: unknown): SwebenchRunManifest {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('run manifest must be an object')
   const manifest = value as Record<string, unknown>
@@ -356,11 +369,13 @@ export function validateRunManifest(value: unknown): SwebenchRunManifest {
     if (system === 'external' && !external) throw new Error(`arms[${index}].external is required for an external arm`)
     if (system === 'external' && frozen && (typeof model.name !== 'string' || !model.name)) throw new Error(`arms[${index}].model.name is required when frozen`)
     if (system === 'mini-dsh' && external) throw new Error(`arms[${index}].external is only valid for an external arm`)
+    const harness = arm.harness === undefined ? undefined : validateSwebenchHarness(arm.harness)
+    if (harness !== undefined && system !== 'mini-dsh') throw new Error(`arms[${index}].harness is only valid for a mini-dsh arm`)
     return { id: arm.id, system, role: typeof arm.role === 'string' ? arm.role : '', model: { provider: model.provider, name: model.name as string | null, contextWindowTokens },
-      ...(external ? { external } : {}), budget: arm.budget as Record<string, unknown> }
+      ...(external ? { external } : {}), budget: arm.budget as Record<string, unknown>, ...(harness ? { harness } : {}) }
   })
   if (new Set(arms.map(arm => arm.id)).size !== arms.length) throw new Error('arm ids must be unique')
-  const candidate = arms.find(arm => arm.id === 'candidate')
+  const candidate = arms.find(arm => arm.id === 'candidate') ?? arms.find(arm => arm.system === 'mini-dsh')
   for (const arm of arms.filter(item => item.system === 'external')) {
     if (candidate && (arm.model.provider !== candidate.model.provider || arm.model.name !== candidate.model.name)) {
       throw new Error(`external arm ${arm.id} must use the same model as candidate`)
@@ -392,14 +407,16 @@ export function validateRunManifest(value: unknown): SwebenchRunManifest {
   return {
     schemaVersion: 3, kind: 'swebench-run-manifest', freezeStatus: manifest.freezeStatus,
     dataset: { name: String((manifest.dataset as Record<string, unknown>).name ?? 'SWE-bench Verified'), revision: (manifest.dataset as Record<string, unknown>).revision as string },
-    harnessCommit: manifest.harnessCommit, selection: manifest.selection,
+    harnessCommit: manifest.harnessCommit,
+    ...(manifest.protocol === undefined ? {} : { protocol: validateProtocol(manifest.protocol) }), selection: manifest.selection,
     development: validateBatch(manifest.development, ids, 'development'),
     formal: validateBatch(manifest.formal, ids, 'formal'),
     arms, promptTemplate: manifest.promptTemplate,
     caps: { perTask: perTask as SwebenchRunManifest['caps']['perTask'], developmentPerTask: dev as SwebenchRunManifest['caps']['developmentPerTask'], batch: batchCaps as SwebenchRunManifest['caps']['batch'] },
     prices: manifest.prices === null ? null : validatePriceSnapshot(manifest.prices),
     scoring: isRecord(manifest.scoring) ? manifest.scoring : {},
-    environment: { imageDigests: (manifest.environment as Record<string, unknown>).imageDigests as Record<string, string> | null ?? null },
+    environment: { imageDigests: (manifest.environment as Record<string, unknown>).imageDigests as Record<string, string> | null ?? null,
+      ...((manifest.environment as Record<string, unknown>).commandEnvironment === undefined ? {} : { commandEnvironment: validateCommandEnvironment((manifest.environment as Record<string, unknown>).commandEnvironment) }) },
     authorization: typeof manifest.authorization === 'string' ? manifest.authorization : '',
     missing: Array.isArray(manifest.missing) ? manifest.missing.map(item => String(item)) : [],
     createdAt: manifest.createdAt, paidRequests: manifest.paidRequests,
