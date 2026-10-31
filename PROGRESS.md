@@ -1,14 +1,10 @@
 # 开发进度
 
-更新：2026-10-30。历史逐步记录已整体迁入 [2026-09-28 至 2026-09-30 归档](docs/history/PROGRESS-2026-09-28--2026-09-30.md)；本文件只维护当前状态、阻塞和下一步。
+更新：2026-10-31。历史逐步记录已整体迁入 [2026-09-28 至 2026-09-30 归档](docs/history/PROGRESS-2026-09-28--2026-09-30.md)；本文件只维护当前状态、阻塞和下一步。
 
 ## 当前状态
 
-- **SWE 远端完整预检通过，等待凭证目的地同意（2026-10-30）**：run `41065536232` 实际恢复相同 manifest SHA b713…25f3e82，baseline/官方 scorer/五镜像/生产 validate-only/history gate 全过，30 计划、0 episode、0 模型请求；八项新 helper 测试与实际密钥配对往返通过。原 30条/$17预算授权有效。现有仓库无模型 secret，新增 GitHub 临时凭证目的地尚未同意；只有同意后才复制 key、派发一次并在入队后删除secret。本地 Docker 1920 不再阻止远端准备；模型成功率提升仍未实测。[完整预检与待批准动作](docs/context-budget/SWE-COMPONENT-EFFECTS.md)。
-
-- **SWE 远端环境机制实测通过（2026-10-30）**：本地 Docker 仍有 socket 1920，但 run `41060962921` 对已冻结五镜像的 testbed、项目依赖、真实候选隔离与双向文件可见全部通过，旧环境 0/5、新环境 5/5；原生 Django runner 无 pytest 属合法环境。源码 `027236b` 修复后完整 602/572/0/30。开发清单任务/臂/模型/价格/预算不变，仅更新 source/time 并保留旧快照；30 条/$17 已获授权，实际模型请求仍为 0。准备远端无 key 全链路及加密轨迹交付；向 GitHub 临时复制 key 尚未授权。[真实环境证据与后续边界](docs/context-budget/SWE-COMPONENT-EFFECTS.md)。
-
-- **SWE 组件优化：代码与冻结准备完成，真实运行待续（2026-10-30）**：独立分支 `improve/swe-component-effects-20261030` 修复候选/外部基线的 testbed Python 环境、候选相对路径说明；新增六臂同源消融、实际触发指标、早期短摘要、开发专用冻结、零模型预检和 Windows/WSL 源码身份验证。最终完整 601 tests / 571 pass / 0 fail / 30 平台 skipped，构建/语法/lint/fixtures/offline/组件基准通过。源码 `3b03f48` 冻结 30 条开发计划、$17 batch cap，模型请求 0；validate-only 停在 Docker/WSL 连接，真实镜像探针待环境恢复；用户已明确授权仅本批 30 条/$17，无需重复询问。未声称成功率提升、未合并 main；[代码、证据及续跑条件](docs/context-budget/SWE-COMPONENT-EFFECTS.md)。
+- **SWE 组件优化：恢复执行准备，等待凭证目的地同意（2026-10-31）**：独立 PR #13 已完成环境修复、六臂消融、触发指标与早期短摘要。源码 `027236b`，开发 manifest SHA `b713df57…25f3e82`；五镜像环境 run `41060962921`、完整无 key 预检 run `41065536232` 均成功，最新 HEAD `d566334` 的 CI `41066894570` 六项实际检查全绿，八项 helper 测试复核通过。用户原 30 条/$17 授权有效；尚未授权将现有 key 传送至 GitHub Actions secret `MINI_DSH_SWE_DEV_API_KEY`，未读取或上传 key，实际 episode/模型请求均为 0。本地 Docker 1920 不再阻止远端执行准备；取得具体目的地同意后，只派发一次并在入队确认后删除 secret，再回收加密轨迹、重算组件覆盖与独立评分。尚无真实成功率提升结论，不合并 main；[冻结、预检证据与凭证动作](docs/context-budget/SWE-COMPONENT-EFFECTS.md)。
 
 - **组件 LOO 开发批收口（2026-10-28）**：PR #8 的独立协议与 PR #9 的零付费重冻已合并；四批分别获授权执行，full/no-preview/no-projection/no-report 重跑各 12/12 条完整，17 项可比性检查通过。可靠完成分别 11/12、12/12、12/12、11/12；产物验收均 12/12；三项归因均 `inconclusive`，维持现有组件行为与摘要后裁剪默认关闭。四份完整批次峰值价估价合计 $5.3084，不含首次 no-report 中断批次的未知总费用；中断证据保留且排除。比较器后处理修正 `3f95703` 通过完整 579/579 测试；[描述性结果与边界](docs/context-budget/COMPONENT-LOO-PAID-RESULT.md)。下一步若需泛化判断，先设计未曝光题库并单独冻结/授权。
 

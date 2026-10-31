@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### SWE-O7 续跑前状态复核与入口同步（2026-10-31）
+
+用户恢复任务后，只读确认 PR #13 仍以独立 SWE 分支为 base、完整无 key 预检 run `41065536232` 成功、最新 HEAD `d566334` 的 CI `41066894570` 六项实际检查全绿，仓库仍无 Actions secret。重新执行四份 helper 测试文件：8/8 通过；实际 manifest SHA 仍为 `b713df5768dc816ae39a893e9aba3e73010ec102e8ab34b9426e6f54525f3e82`，`git diff --quiet 027236b HEAD -- src scripts package.json pnpm-lock.yaml tsconfig.json plugins.config.ts` 退出 0。同步 TASKS/PROGRESS 和 PR 描述中陈旧的本地 Docker 阻塞说明，明确远端已具备零模型运行条件；30 条/$17 授权有效，新增凭证目的地尚待明确同意，模型请求 0。只改状态文档，不改冻结产品源码或实验配置。
+
 ### SWE-O6-3b 真实远端完整预检通过（2026-10-30）
 
 run 41065536232 成功：恢复完整 manifest SHA b713df57…25f3e82，Python/123 包/官方 scorer、baseline 指纹、五镜像、生产 validate-only 与一次性 history gate 全部通过，30 计划/0 执行/0 provider。下载 artifact 后本地逐项比对，并验证实际公私钥配对可解密；公开 JSON 只含 metadata/聚合，无问题正文或 key。待用户明确同意新增 GitHub Actions secret 目的地后，才可临时复制 key 并运行已授权的同批；预算无需重复确认。
