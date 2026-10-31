@@ -11,7 +11,7 @@
 - **main 功能撤回验收已通过。** `src/` 与 PR #7 第一父提交 `a5d9191` 一致；构建和 202 文件语法检查、232 文件 lint 通过；正常用户环境完整回归 546 项：516 pass、0 fail、30 平台条件 skipped。公开样例复算、编程夹具及组件基准通过。命令与边界见 [PORT-1 证据](docs/context-budget/CHANGES.md#port-1-main-撤回记忆与只读协作2026-10-30)。
 - **当前代码 CI 全绿。** [CI 41211546998](https://github.com/BeforeLanding/mini-DSH/actions/runs/41211546998) 对应 PR #20 的 `7689c81`，其树与合并后的 main `4de3219` 相同；Ubuntu/Windows × Node 22/24、Linux isolation、Ubuntu package-install 六个必需 job 全部 success，SWE PoC 按配置 skipped，不计为已执行。相对验收基线 `46b8fb1`，`src/` 与依赖未变；之后的提交只改演示标题文案（`5fab772`）、文档、图片与文档回归测试。
 - **README 已有脚本化演示动图（2026-10-31）。** 首屏的 [预算续跑动图](docs/images/demo-resume.gif) 由 [`scripts/demo-resume.tape`](scripts/demo-resume.tape) 驱动 `pnpm demo:resume` 录制，使用预设模型响应，不调用付费 API；架构图改为矢量源 [architecture.svg](docs/images/architecture.svg) 导出。完整讲解视频尚未录制。
-- **v0.1.0 已发布（2026-10-31）。** 标签 `v0.1.0` 指向 `4de3219`，[GitHub Release](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.1.0) 附 `beforelanding-mini-dsh-0.1.0.tgz` 与 `SHA256SUMS`。tarball 124 个条目，不含测试、文档与 `.env`；在仓库外含空格目录安装后 `--version` 为 0.1.0、`demo fix` 通过；从 Release 下载后 `sha256sum -c` 通过。npm 未发布。
+- **v0.1.1 已发布（2026-10-31）。** 相对 v0.1.0，`src/` 未变：锁文件更新了受漏洞影响的 MCP 依赖（PR #22），`pnpm audit` 0 漏洞；CI 的仓库外安装检查改为从 `package.json` 读取期望版本。标签 `v0.1.1` 指向版本发布 PR 的合并提交，[GitHub Release](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.1.1) 附 tarball 与 `SHA256SUMS`。首个版本 v0.1.0（`4de3219`）的 Release 保留。npm 未发布。
 
 ## 阻塞
 
@@ -21,7 +21,7 @@
 
 ## 下一步
 
-1. 以 [v0.1.0 Release](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.1.0) 交付；源码验收见 [DELIVERY-20261030](docs/DELIVERY-20261030.md)，其后的演示标题与文档改动由上述 CI 覆盖。后续再有代码变化时重新验收并另发版本，不继续复用旧绿灯。
+1. 以 [v0.1.1 Release](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.1.1) 交付；源码验收见 [DELIVERY-20261030](docs/DELIVERY-20261030.md)，其后的演示标题与文档改动由上述 CI 覆盖。后续再有代码变化时重新验收并另发版本，不继续复用旧绿灯。
 2. 核对本地简历锚点与五题问答；个人实际贡献和 AI 辅助范围由本人确认，不根据 Git 作者名代作身份判断。
 3. 完整讲解视频待用户安排录制；记忆/协作后续开发、付费实验和 npm 发布由后续明确任务决定。
 

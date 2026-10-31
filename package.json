@@ -1,6 +1,6 @@
 {
   "name": "@beforelanding/mini-dsh",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "A minimal, reproducible coding-agent harness with event sourcing, context budgets, and offline evidence.",

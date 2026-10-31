@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### PORT-11 v0.1.1 版本号与发布链接（2026-10-31）
+
+v0.1.0 之后 main 合入了锁文件的依赖漏洞修复（PORT-10），已发布的 Release 仍指向修复前的 `4de3219`。`package.json` 的 `version` 改为 0.1.1；`--version` 运行时读取 `package.json`，源码无需改动。CI 的 Package install job 原先写死 `grep -qx '0.1.0'`，改为 `grep -qxF "$(node -p "require('./package.json').version")"`，以后升版本不必再改工作流。README（快速开始、当前状态）、PROGRESS（版本条目与下一步）与讲解页指向 v0.1.1；PROGRESS 以纯文本保留 v0.1.0（`4de3219`）的说明，不再链接，以满足 Release 链接版本须与 `package.json` 一致的回归。`DELIVERY-20261030.md` 是带日期记录，测试中的 `version: '0.1.0'` 是合成 package 夹具，均不改。
+
+验收：`pnpm install --frozen-lockfile` 通过，锁文件不变；`node scripts/build.js`、`node scripts/check-syntax.js`（205 files）通过；Biome 236 files、0 诊断；在本机按 CI 步骤打包 `beforelanding-mini-dsh-0.1.1.tgz` 并在仓库外含空格目录安装，新的版本检查通过（输出 0.1.1），`demo fix` 输出 `demo result: PASS`；完整离线回归 554 项：524 pass、0 fail、30 平台条件 skipped。
+
 ### PORT-10 锁文件内更新受漏洞影响的依赖（2026-10-31）
 
 `pnpm audit --prod` 报 16 个已知漏洞（6 high、8 moderate、2 low），全部经 `@deepseek-ai/dsh-mcp-client@0.1.1-rc.2` 引入：`@modelcontextprotocol/sdk` 6 项、`fast-uri` 4 项，`zod`、`body-parser`、`hono`、`@hono/node-server`、`qs`、`ip-address` 各 1 项。该客户端声明 `@modelcontextprotocol/sdk ^1.12.0` 与 `zod ^4.4.3`，修复版本都在范围内。运行 `pnpm update --depth Infinity @modelcontextprotocol/sdk zod body-parser fast-uri hono @hono/node-server qs ip-address`（pnpm 11.22.0，锁文件通过供应链策略检查），`package.json` 未变；锁文件只变 9 个包：`@modelcontextprotocol/sdk` 1.30.0→1.32.2、`zod` 4.6.5→4.6.7、`body-parser` 2.3.0→2.4.0、`fast-uri` 3.1.8→3.1.9、`hono` 4.13.8→4.13.14、`@hono/node-server` 2.1.1→2.1.5、`qs` 6.16.0→6.17.1、`ip-address` 10.7.2→10.7.5，以及随 zod 变化的 `zod-to-json-schema` peer 标识。

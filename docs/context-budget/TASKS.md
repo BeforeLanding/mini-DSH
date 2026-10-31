@@ -1,5 +1,9 @@
 # 任务清单
 
+### v0.1.1 发布（2026-10-31）
+
+- PORT-11（完成，本提交）：`package.json` 版本 0.1.0 → 0.1.1；CI 仓库外安装检查改为从 `package.json` 读取期望版本，不再写死；README、PROGRESS 与讲解页的 Release 链接改为 v0.1.1。合并后在合并提交上打 `v0.1.1` 并发布带 tarball 与 `SHA256SUMS` 的 Release。
+
 ### 依赖漏洞修复（2026-10-31）
 
 `pnpm audit --prod` 报 16 个已知漏洞（6 high、8 moderate、2 low），全部经 `@deepseek-ai/dsh-mcp-client@0.1.1-rc.2` 引入；其声明范围（`@modelcontextprotocol/sdk ^1.12.0`、`zod ^4.4.3`）已覆盖修复版本，只是锁文件停在旧版。
