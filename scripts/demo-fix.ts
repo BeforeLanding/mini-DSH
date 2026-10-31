@@ -7,7 +7,7 @@ import type { ToolCall } from '../src/core/contracts.js'
 // 模型是预设的脚本化序列，因此逐字可复现：不读 .env、不出网、不调用付费 API。
 // 每一步的结果都按原文打印（见 demo-context.ts 的 excerpt），不做改写——演示要让人核对的是
 // Harness 真的产出了什么，而不是我们转述了什么。
-heading('NX-10 第一幕：项目规则 → 定位 → 修改 → 失败测试 → 再修复 → diff 与证据')
+heading('演示 1/4 · 代码修复：项目规则 → 定位 → 修改 → 失败测试 → 再修复 → diff 与证据')
 
 const fixture = await createFixture('repair')
 const initial = fixture.edits[0].oldText
@@ -93,7 +93,7 @@ try {
   failed = checks.some(([, ok]) => !ok)
 } catch (error) {
   failed = true
-  console.error(`第一幕失败：${error instanceof Error ? error.message : String(error)}`)
+  console.error(`演示 1/4 失败：${error instanceof Error ? error.message : String(error)}`)
 } finally {
   await harness.dispose()
 }

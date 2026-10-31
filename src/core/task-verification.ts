@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import type { SessionRuntime } from './session-runtime.js'
 import type { CommandResult } from './command-runner.js'
 import { commandFailed } from './command-runner.js'
-import { snapshot } from './file-edit.js'
+import { fileVersionQuery } from './file-edit.js'
 import { taskChanges } from './task-changes.js'
 import { emptyCounters } from './budget.js'
 import type { SessionEvent } from './contracts.js'
@@ -12,12 +12,12 @@ export interface VerificationStart { verificationId: string; command: string; cw
 export interface VerificationResult { verificationId: string; commandResult: CommandResult; files: VerificationFile[] }
 type Sessions = Pick<SessionRuntime, 'latestRun' | 'confirmedEvents' | 'append' | 'flush'>
 
-export async function verificationFiles(paths: string[], resolve: (file: string) => string, maxBytes: number, signal: AbortSignal, tolerateErrors = false): Promise<VerificationFile[]> {
+export async function verificationFiles(paths: string[], resolve: (file: string) => string, maxBytes: number, signal: AbortSignal, tolerateErrors = false, readVersion = fileVersionQuery(maxBytes, signal)): Promise<VerificationFile[]> {
   const files: VerificationFile[] = []
   for (const file of paths) {
     signal.throwIfAborted()
     try {
-      const current = await snapshot(resolve(file), maxBytes, signal)
+      const current = await readVersion(resolve(file))
       files.push({ path: file, hash: current.hash, ...(current.location ? { location: current.location } : {}) })
     } catch (error) {
       signal.throwIfAborted()
@@ -46,7 +46,7 @@ export class TaskVerification {
   }
 }
 
-export async function taskVerifications(sessions: Sessions, sessionId: string, resolve: (file: string) => string, maxBytes: number, signal: AbortSignal, offset = 0, maxRecords = 20) {
+export async function taskVerifications(sessions: Sessions, sessionId: string, resolve: (file: string) => string, maxBytes: number, signal: AbortSignal, offset = 0, maxRecords = 20, readVersion = fileVersionQuery(maxBytes, signal)) {
   const confirmed = sessions.confirmedEvents(sessionId)
   const latest = [...confirmed].reverse().find(event => event.type === 'run/start')
   const taskId = latest?.type === 'run/start' ? latest.data.state.taskId : null
@@ -56,7 +56,7 @@ export async function taskVerifications(sessions: Sessions, sessionId: string, r
   for (const event of starts.slice(offset, offset + maxRecords)) {
     const start = event.data
     const result = events.find(e => e.type === 'verification/result' && e.data.verificationId === start.verificationId)
-    const current = await verificationFiles(start.files.map(file => file.path), resolve, maxBytes, signal, true)
+    const current = await verificationFiles(start.files.map(file => file.path), resolve, maxBytes, signal, true, readVersion)
     const outcome = result?.type === 'verification/result' ? result.data : undefined
     const after = outcome?.files
     const same = (a: VerificationFile, b: VerificationFile | undefined) => !!b && a.hash !== undefined && a.hash === b.hash && a.location === b.location
@@ -101,13 +101,14 @@ function taskRunReport(events: SessionEvent[], taskId: string | null) {
 }
 
 export async function taskReport(sessions: Sessions, sessionId: string, resolve: (file: string) => string, maxBytes: number, signal: AbortSignal, fileOffset = 0, verificationOffset = 0, maxFiles = 20, maxRecords = 20) {
-  const changes = await taskChanges(sessions, sessionId, resolve, maxBytes, signal, false, fileOffset, maxFiles)
-  const verification = await taskVerifications(sessions, sessionId, resolve, maxBytes, signal, verificationOffset, maxRecords)
+  const readVersion = fileVersionQuery(maxBytes, signal)
+  const changes = await taskChanges(sessions, sessionId, resolve, maxBytes, signal, false, fileOffset, maxFiles, readVersion)
+  const verification = await taskVerifications(sessions, sessionId, resolve, maxBytes, signal, verificationOffset, maxRecords, readVersion)
   const events = changes.taskId ? sessions.confirmedEvents(sessionId).filter(e => e.taskId === changes.taskId) : []
   const files = []
   const versions = new Map<string, VerificationFile>()
   const version = async (file: string) => {
-    if (!versions.has(file)) versions.set(file, (await verificationFiles([file], resolve, maxBytes, signal, true))[0])
+    if (!versions.has(file)) versions.set(file, (await verificationFiles([file], resolve, maxBytes, signal, true, readVersion))[0])
     return versions.get(file)!
   }
   for (const file of changes.files) {

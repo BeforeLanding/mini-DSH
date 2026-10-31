@@ -1,49 +1,51 @@
-# Evaluation evidence
+# 评测证据
 
-This repository separates three kinds of evidence. They are not interchangeable:
+本仓库区分三类证据，它们不能互相替代：
 
-1. **Regression fixtures** (`test/fixtures/`, `pnpm fixtures:check`) verify the harness mechanics: projection, compaction, approval gates, persistence, recovery.
-2. **Synthetic public samples** (`docs/samples/`) verify the event format, one successful scripted repair, and one provider failure/recovery path. They are scripted and must not be read as model capability results.
-3. **Real model runs** are not published in this repository. The historical NX-45 run kept its raw prompts and outputs private; its summary is not upgraded to reproducible evidence by publishing a checksum. A real public experiment needs a new frozen protocol, approved budget, and privacy review.
+[2026-10-25 的组件优化](COMPONENT-OPTIMIZATION.md)增加了一个冻结的前后对照**离线机制与资源**基准（`pnpm bench:components`）。它的预览保真度、事件访问次数和文件打开次数不估计模型能力。原始基线字节和协议固定在 CI 中；历史模型运行结果保持不变。
 
-## What is in `docs/samples/`
+1. **回归 fixture**（`test/fixtures/`、`pnpm fixtures:check`）验证 Harness 机制：投影、压缩、审批闸门、持久化和恢复。
+2. **合成公开样例**（`docs/samples/`）验证事件格式、一次成功的脚本化修复，以及一条 provider 失败/恢复路径。它们是脚本化的，不得读作模型能力结果。
+3. **真实模型运行**不在本仓库发布，展示面（README 和讲解页）也不使用模型评测数字作为能力主张。历史 NX-45 run 的原始提示和输出保持私密；发布一个校验和并不会把它的摘要升级为可复现证据。真正的公开实验需要新的冻结协议、已批准的预算和隐私审查。
 
-| Episode | Scenario | What it proves |
+## `docs/samples/` 里有什么
+
+| Episode | 场景 | 证明了什么 |
 | --- | --- | --- |
-| `normal-fix` | Scripted edit of the `repair` fixture | Events are complete, acceptance runs, usage and cost are recomputable |
-| `provider-recovery` | Same task; first provider call returns 429, then succeeds | `model/retry` links the failed and next attempt; the run completes and both attempts are accounted |
+| `normal-fix` | 对 `repair` fixture 执行脚本化编辑 | 事件完整、验收执行、usage 与成本可复算 |
+| `provider-recovery` | 同一任务；第一次 provider 调用返回 429，随后成功 | `model/retry` 关联失败尝试与下一次尝试；run 完成，两次尝试都计入 |
 
-Each episode directory contains:
+每个 episode 目录包含：
 
-- `events.jsonl`: the session log, readable by `mini-dsh inspect`.
-- `patch.diff`: the scripted edit that was applied.
-- `verification.json`: acceptance result and its output.
-- `manifest.json`: schema version, source commit and dirty flag, model label, budget, task set and order seed, tool-schema digest, policy version, environment, price snapshot, and missing-data counts.
-- `report.json`: status, request/retry/tool counts, provider usage, cost, missing usage.
-- `SHA256SUMS`: digest of every file above.
+- `events.jsonl`：会话日志，可用 `mini-dsh inspect` 读取。
+- `patch.diff`：实际应用的脚本化编辑。
+- `verification.json`：验收结果及其输出。
+- `manifest.json`：schema 版本、源码提交与脏标记、模型标签、预算、任务集与顺序种子、工具 schema 摘要、策略版本、环境、价格快照和缺失数据计数。
+- `report.json`：状态、请求/重试/工具计数、provider usage、成本、缺失 usage。
+- `SHA256SUMS`：上述每个文件的摘要。
 
-The events are sanitized by replacing the temporary workspace and home directory with `<tmp>` and `<home>`. No API key, real user prompt, or private tool output is included. Checksums describe the sanitized files.
+事件通过把临时工作区和主目录替换为 `<tmp>` 和 `<home>` 完成脱敏。其中不包含 API key、真实用户提示或私有工具输出。校验和描述的是脱敏后的文件。
 
-## Offline recomputation
+## 离线复算
 
-No API key and no network are required:
+不需要 API key，也不需要网络：
 
 ```sh
 pnpm build
 node dist/scripts/recompute-report.js docs/samples --check
 ```
 
-The command verifies each checksum, rebuilds `report.json` from `events.jsonl`, checks that `inspect` sees a complete log, and compares the regenerated table with `docs/RESULTS.md`. CI runs the same logic through `test/public-evidence.test.ts`.
+该命令校验每个校验和，从 `events.jsonl` 重建 `report.json`，检查 `inspect` 看到完整日志，并把重新生成的表格与 `docs/RESULTS.md` 比较。CI 通过 `test/public-evidence.test.ts` 运行同一套逻辑。
 
-To regenerate the samples (only the scripted fixture is used; this makes no provider request):
+重新生成样例（只使用脚本化 fixture；不发出 provider 请求）：
 
 ```sh
 pnpm evidence:export
 ```
 
-## Cost口径
+## 成本口径
 
-The sample uses a **synthetic** price snapshot in each manifest:
+样例在每个 manifest 中使用**合成**价格快照：
 
 ```
 (inputTokens - cacheReadTokens) × inputPrice
@@ -51,11 +53,11 @@ The sample uses a **synthetic** price snapshot in each manifest:
 + outputTokens × outputPrice
 ```
 
-Prices are per million tokens and normalized to USD. The result is an estimate, not a provider bill. Usage from an estimated (non-provider) attempt is excluded from the sum and listed in `costBasis`; it is never treated as zero. Real runs must state usage coverage and unknown cost separately.
+价格按每百万 token 计，并归一化为 USD。结果是估算，不是 provider 账单。来自估算（非 provider）尝试的 usage 不计入总和，而是列在 `costBasis` 中；绝不当作 0。真实运行必须分别说明 usage 覆盖率和未知成本。
 
-## Known limits
+## 已知限制
 
-- The two samples do not estimate a success rate, and `n=2` cannot support any capability claim.
-- The scripted adapter is a fixture driver, not a model. `normal-fix` and `provider-recovery` demonstrate mechanisms only.
-- The price snapshot is illustrative. Only reconciliation with a provider bill may be called “paid”.
-- The repository does not publish the historical NX-45 raw prompts or model outputs.
+- 两个样例不估计成功率，`n=2` 无法支撑任何能力主张。
+- 脚本化适配器是 fixture 驱动器，不是模型。`normal-fix` 和 `provider-recovery` 只演示机制。
+- 价格快照仅作说明。只有与 provider 账单核对后，才可以称为“付费”。
+- 本仓库不发布历史 NX-45 的原始提示或模型输出。

@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { SessionRuntime } from '../src/core/session-runtime.js'
 import { inspectSession, formatInspect } from '../src/core/session-inspect.js'
 
@@ -142,4 +143,13 @@ test('inspect handles repeated summaries, omitted cache field, prepared but unse
     await f.save()
     assert.deepEqual((await inspectSession(f.file)).frozenSnapshots.currentEpoch, { runtime: 'new-session', project: null })
   } finally { await fs.rm(f.directory, { recursive: true, force: true }) }
+})
+
+test('使用指南写明的 inspect --json 版本与实际输出一致', async () => {
+  const repository = new URL('../../', import.meta.url)
+  const usage = await fs.readFile(new URL('docs/USAGE.md', repository), 'utf8')
+  const documented = usage.match(/`--json` 返回版本为 `(\d+)`/)?.[1]
+  assert.ok(documented, 'USAGE.md 缺少 --json 版本说明')
+  const report = await inspectSession(fileURLToPath(new URL('docs/samples/provider-recovery/events.jsonl', repository)))
+  assert.equal(Number(documented), report.version, 'USAGE.md 的 --json 版本与 InspectReport.version 不一致')
 })

@@ -9,7 +9,7 @@ import type { ChatRequest, ChatResponse } from '../src/core/contracts.js'
 // NX-34 第四幕：上下文压缩。零付费——摘要由一个脚本化模型写，因此逐字可复现。
 // 要看的是四件事：单任务长会话本来会以 context_overflow 停下、压缩之后它装得下、被替换掉的原文
 // 仍在日志里、而且能用 read_history 按事件号逐字读回来。这四件都由断言判定，不由旁白担保。
-heading('NX-34 第四幕：上下文压缩（单任务长会话，零付费）')
+heading('演示 4/4 · 上下文压缩：单任务长会话，原文可回读')
 
 const fixture = await createFixture('repair')
 
@@ -128,7 +128,7 @@ try {
   failed = checks.some(([, ok]) => !ok)
 } catch (error) {
   failed = true
-  console.error(`第四幕失败：${error instanceof BudgetStop ? `预算停止 ${error.reason}` : error instanceof Error ? error.message : String(error)}`)
+  console.error(`演示 4/4 失败：${error instanceof BudgetStop ? `预算停止 ${error.reason}` : error instanceof Error ? error.message : String(error)}`)
 } finally {
   await harness.dispose()
 }

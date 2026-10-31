@@ -1,5 +1,121 @@
 # 任务清单
 
+### 配置模板与环境变量说明（2026-10-31）
+
+对照文档与源码时发现：`.env.example` 后半段是付费评测变量，与 README“不展示模型评测结果”的定位不符，也让普通用户在复制模板时看到计费批次；`src/models/deepseek.ts` 读取的 `DEEPSEEK_THINKING` 在 `.env.example` 与 USAGE 中都没有说明。按两次提交：
+
+- PORT-7a（完成，`9968b3e`）：`MINI_DSH_EVAL_*` 三个变量及 `--plan-only` 说明从 `.env.example` 移到唯一读取它们的 `scripts/eval-screening.ts` 页首；新增 `test/env-docs.test.ts`，`.env.example` 不得再出现 `MINI_DSH_EVAL_`。
+- PORT-7b（完成，本提交）：`.env.example` 与 USAGE 说明 `DEEPSEEK_THINKING`（`enabled` 默认 / `disabled`）；同一测试文件增加回归，`src/` 与 `plugins.config.ts` 读取的每个 `MINI_DSH_*`、`DEEPSEEK_*` 变量都须出现在 `.env.example` 或 USAGE。
+
+### 跨 shell 使用说明与路线图归档（2026-10-31）
+
+快速开始与使用指南的部分命令只有 PowerShell 写法；核对 bash 版本时发现使用指南的 `inspect --json` 版本号过期；内部路线图仍在 docs 顶层。按三次提交：
+
+- PORT-6a（完成，`afb58fc`）：README 与 USAGE 中只适用于 PowerShell 的四处命令（复制 `.env`、恢复会话、`inspect`、本地打包安装）补 bash 版本，两种 shell 通用的命令块改标 `shell`。验收：在 Git Bash 逐条实跑 bash 版本，打包安装结束输出 `demo result: PASS`。
+- PORT-6b（完成，`4de68a8`）：USAGE 的 `inspect --json` 版本由 1 改为实际的 2，并加回归比对文档版本与 `InspectReport.version`。
+- PORT-6c（完成，本提交）：`docs/INTERNSHIP_ROADMAP.md` 移入 `docs/history/`，同步仍在使用的链接与 DECISIONS 页首路径；带日期记录里的纯文本路径保留原样。
+
+### 进度页与 10-31 展示改动同步（2026-10-31）
+
+10-31 的演示动图、架构图重绘与演示标题改动之后，PROGRESS 仍写 10-30 的 CI 与“演示录制暂缓”。按两次提交收尾：
+
+- PORT-5a（完成，`2ab7cab`）：PROGRESS 改为 `06846d5` 的 CI 41175510465，写明相对 `46b8fb1` 仅演示标题文案变化、本地安装包未重打；演示状态改为“README 含脚本化预算续跑动图，完整讲解视频尚未录制”，PLAN/REQUIREMENTS/本页的范围行同步。验收：文档链接、展示边界与 DECISIONS 回归通过，Biome 通过。
+- PORT-5b（完成，本提交）：新增 `test/progress-sync.test.ts`，PROGRESS 更新日期不得早于 CHANGES 最新条目，README 嵌入演示图时 PROGRESS 不得再写演示录制暂缓。验收：新测试在本提交通过，在 PORT-5a 之前的 PROGRESS 上两项均失败。
+
+### 求职版本收尾与扩展分支隔离（2026-10-30）
+
+用户范围：main 仅交付单 Agent；记忆与只读协作仅保留在 `feat/memory-team-eval-v2`，暂不合入 main。完整讲解视频尚未录制（README 自 2026-10-31 起含脚本化动图），不启动真实模型评测、公开发布或部署。
+
+按可独立验收和回退的结果分三次提交，每步通过后再进入下一步：
+
+- PORT-1（完成，本提交）：撤回 PR #7 引入 main 的记忆/协作源码、配置、CLI、专属测试与文档；保留组件优化与后续独立评测代码。远端分支 `2f2dca9` 包含已审查核心 `5841f79`；main 的 `src/` 与 PR #7 第一父提交 `a5d9191` 无差异。构建/202 文件语法、232 文件 lint、完整离线 546 项（516 通过、30 平台跳过、0 失败）、单 Agent 装配边界、公开复算/夹具/组件基准通过。
+- PORT-2（完成，本提交）：修订 MCP 显式环境启动器、Windows/Ubuntu 安装边界与 CI lint 说明；进度页只呈现当前状态，旧正文完整移入带日期归档并核对未改事实。修正索引中的消融状态及两条旧相对链接。8/8 文档锚点/展示边界/代码锚点回归、520 个本地文件链接、232 文件 lint、diff 检查通过。
+- PORT-3（完成，本提交）：新增当前源码验收 `docs/DELIVERY-20261030.md`，绑定代码 `46b8fb1`、安装包来源 `14ec973` 与六项全绿 CI。Windows 新建含空格目录安装、版本/帮助/配置/inspect、包白名单与 checksum 通过；8/8 文档回归、526 个本地链接、232 文件 lint、代码基线相同检查通过。本地收尾索引、验收、简历技术锚点与问答已更新，旧记录保留。演示录制暂缓；个人贡献事实由本人核准，不代作确认。
+
+### README 架构图与目录介绍（2026-10-28）
+
+- DOC-R2（完成，本提交）：将现有架构图移到 README 第一行，后部架构章节改用实际项目目录树解释职责，保留实现入口锚点与关键代码链接。作为一个文档提交验收；图像仅出现一次，12 个目录/文件路径均存在；类型/构建与 227 文件语法检查通过，完整离线回归 584 项（554 通过、30 平台条件跳过、0 失败），不改产品行为。
+
+### README 产品介绍与使用入口（2026-10-28）
+
+- DOC-R1（完成，本提交）：按“定位 → 任务体验 → 核心能力 → 快速开始 → 日常使用 → 状态与边界 → 架构与文档”重组 README；详细配置、日志检查和本地安装迁入使用指南，同步文档索引与现有锚点引用。作为一个可独立回退的文档提交验收，不改产品行为。验收：类型/构建与 227 文件语法检查通过；正常用户权限完整回归 584 项（554 通过、30 平台条件跳过、0 失败），包含文档锚点与展示边界检查；离线演示、配置查看、72 个本地链接、PowerShell 示例语法和 Biome 259 文件检查均通过。未调用真实模型，详细命令见 CHANGES。
+
+### SWE 实验分支隔离（2026-10-28）
+
+- SW-R1（完成，本提交）：撤回 PR #12 的 main 变更；保留后续 README/中文文档整理，SWE 完整结果保存在 `feat/swebench-formal-results@dc7e659`。验收：构建通过、227 文件语法通过、完整离线回归 584 项（554 通过、30 平台条件跳过、0 失败）、Biome 259 文件零诊断；diff 与独立分支提交核对通过。没有重跑付费实验。
+
+
+### 组件 LOO 付费结果收口（2026-10-28，完成）
+
+按可独立回退的验收结论分两步提交：
+
+- CE-P1（完成，本提交）：修正 LOO 后处理中的重复方向字段和“离线变差／付费反向”原因；构造双重复反例验收，重新计算四臂比较。构建/语法与完整 579/579 测试通过；只读复用原始付费证据，模型请求 0。
+- CE-P2（完成，本提交）：记录四份完整批次的描述性结果、原 no-report 中断证据的排除边界、费用估价与逐题配对读数；更新进度与变更记录，公开汇总不包含原始 prompt 或工具正文。证据见 [开发批结果](COMPONENT-LOO-PAID-RESULT.md) 与 [机器比较记录](../samples/component-loo-paid-20261028.json)。
+
+### 合并后组件 LOO 重冻（2026-10-27，零付费完成）
+
+- CE-F1（完成，本提交）：在 main merge `54a1921` 的干净工作树重新冻结 full；三回退臂应用 `0fdc666` 与 `92538c9` 两项评测修复后分别重冻。四份 check、定向测试、`--validate-only` 与统一审计通过；共同配置、tool schema、精确源码差异、源码身份与离线输出哈希全部成立。48 条仅计划，实际运行/付费请求 0。新 digest、模型价格与证据见 [合并后冻结](COMPONENT-LOO-POSTMERGE-FREEZE.md)。这是独立的冻结验收记录，与旧 CE-2 结果分别保存。
+- CE-F2（完成，2026-10-28）：四批分别取得明确授权并按固定顺序执行，每批上限 $22。首次 no-report 中断只产生 4/12 条完整观察，保留原证据且不补跑；另获一次 $22 完整重跑授权后完成 12/12。四份完整批次各 12/12，比较器全部可比性检查通过；三项归因均 `inconclusive`，详见 [开发批结果](COMPONENT-LOO-PAID-RESULT.md)。
+
+### PR #8 合并前审查补强（2026-10-27）
+
+两个可分别验收和回退的步骤，均在付费执行前完成：
+
+- CE-R1（完成，`0fdc666`）：冻结与运行入口检查 `sourceBaseCommit..evaluationCommit` 的 `src/**` 无差异；临时仓库正反例覆盖文档变更允许、产品源码变更拒绝。验收 `pnpm check`、定向测试与 lint。合并后四臂须重新冻结。
+- CE-R2（完成，`92538c9`）：LOO 归因中质量差异双向超过 1 条都要求轨迹审阅；去掉组件后质量明显提高时不得判组件 `signal`。验收比较器反例与相关回归；同步协议说明。
+
+### 组件评测收口（2026-10-27，完成，付费未授权）
+
+从最新 main `0b8b973` 开发，复用未合并的 `3752ca4` LOO 实现，重新验证；不沿用旧分支的测试通过声明。按可独立回退的验收结论分两次提交：
+
+- CE-1（完成，`4251382`）：独立 LOO 协议、集中配置/允许变化/验收规则；显式冻结 `postCompactionPrune=false`；保持 NX-50 历史比较器；拒绝共同配置漂移、调换顺序、重复观察、伪造报告和意外源码差异。验收：完整隔离 576/576，最终定向 26/26、check 224、lint 253 无诊断；fixtures/offline/bench 通过，详见 CHANGES。
+- CE-2（完成，`6bbc1de`；另有证据 LF 换行修正）：统一消融文档、从当前基线重新派生四臂并冻结 manifest，逐臂 `--validate-only` 与离线探针；记录 commit/digest/命令、零付费结果。旧准备材料保留；不执行付费批次。四份 validate-only 全过；共同字段、精确源码差异与离线输出审计通过，付费请求与实际 episode 均 0。证据见 [冻结验收](COMPONENT-EVAL-CLOSURE.md)。两个步骤分别提交并推送，一个 PR；三个回退源码分支仅供复现。
+
+### NX-51 四臂逐项消融：旧分支准备记录（2026-10-26）
+
+协议见 [NX-51 四臂消融](NX-51-COMPONENT-ABLATION.md)。`full`／`no-preview`／`no-projection`／`no-report` 四份 manifest 各 12 条，合计 48 条；每份仍是单 `context` 执行臂，`variant` 标识源码变体。四个可独立验证的步骤：
+
+- NX-51-5a（旧分支已验证，`3752ca4`；本 PR 重新验收）：新增 `component-loo` split / `NX-51-component-loo-v1`、通用 LOO 比较器与离线探针校验。验收：`pnpm typecheck`、`pnpm check`、`pnpm lint`、隔离完整 `pnpm test` 536/536/0/0；新增 `eval-v2-loo-compare` 定向 7/7；NX-50 legacy 比较器测试保持不变。真实模型请求 0。
+- NX-51-5b（待做）：从合并后的 `main` 派生四臂；三个变体各做一个只含预期 `src/**` 与测试适配的源码提交，同一份评测代码 cherry-pick 到四臂；每臂在源码提交上生成离线探针。
+- NX-51-5c（待做）：四份 config/manifest 冻结到 `D:\Agent\outputs\nx51-component-loo-20261026\`，逐臂 `--validate-only`，记录 `paidRequests=0`。付费执行尚未授权。
+- NX-51-5d（待做）：48 条真实批次，单批 $22、合计 $88 上限；只有取得该批授权后才执行 `--execute`，任一批 incomplete 即停，不补跑。
+
+### NX-51 变慢任务诊断、摘要后裁剪与持久化（2026-10-25，零付费完成）
+
+只读复用 NX-50 两批轨迹做耗时分解，诊断与逐题读数见 [NX-51-TIMING-DIAGNOSIS](NX-51-TIMING-DIAGNOSIS.md)。两个可独立验证的步骤：
+
+- NX-51-1（完成，`9e30f5c`）：补两条回归测试并修复。第一条钉住目标案例确实裁掉“已结束且非当前”的旧任务，且摘要后的后续轮次不再带回；第二条钉住 `/continue`、重启恢复与“摘要用掉最后一次请求额度”的边界，同时用 `read_history` 验证原始事件仍可回读。实现为 `ContextBudgetRuntime.project()` 的 `pruneTargetTokens`／`prunedTaskIds`、`context/prune` 事件与主循环 `afterApplied` 钩子；原“不可约前缀”与“溢出兜底”用例改用当前 task 自身构造，语义不变。验收：定向 `budget`／`context`／`compaction-recovery`／`nx38-covenant` 28/28（covenant 4/4）；设置 `MINI_DSH_V2_RUNTIME` 后完整 `pnpm test` **525/525，0 fail，0 skipped**；`pnpm check` 197 files、`pnpm lint` 223 files 0 诊断、`pnpm fixtures:check` 25 项 `expected=true`、`pnpm eval:offline` 12/12 completed/accepted、`pnpm bench:components` 三项比较全过，均 exit 0。真实模型请求 0。
+- NX-51-2（完成，本条目所在提交）：回填诊断证据（`scripts/analyze-eval-timing.mjs`、`docs/samples/nx51-timing.json`）、PLAN／REQUIREMENTS／DECISIONS 的规范条目，以及 [24 条 prune 开/关协议](NX-51-PRUNE-AB.md) 与 [48 条逐项消融设计](NX-51-COMPONENT-ABLATION.md)。24 条协议尚未生成 manifest、未执行、未授权；48 条放在它之后。
+- NX-51-3（完成，2026-10-25）：从 `9e30f5c` 与 `cc2b769` 两个干净 HEAD 各冻结一臂 12 条，`--validate-only` 后先跑 `prune-on` 再跑 `prune-off`；实际 usage 估价 `$3.087115`，低于 $44 上限。结果：摘要 3→7、摘要耗时 43,249→105,394 ms、主动耗时 +37.7%、输出 token +48.4%，可靠完成 11→10、产物验收 12→12。结论为**摘要下降假设未获支持**，不把该行为作为默认推广；完整读数见 [NX-51-PRUNE-RESULT](NX-51-PRUNE-RESULT.md)。
+- NX-51-4（完成，本条目所在提交）：按预注册规则改为显式 opt-in——`postCompactionPrune` 默认关闭，只有显式设为 true 才启用；两条持久化回归测试显式开启，另增默认关闭用例。验收：隔离完整 526/526/0/0；定向 28/28；check 197 / lint 224 / fixtures 25 / eval:offline 12/12 / bench:components 全过。默认行为回到 main；48 条三项组件消融在开关决定后冻结，当前建议统一以默认背景运行。任何复跑或新批次需重新授权。
+
+### NX-50 PR5 组件版本对照（2026-10-25，零付费准备完成）
+
+协议见 [NX-50-COMPONENT-AB](NX-50-COMPONENT-AB.md)。旧版 `74f8e89`、优化版 `0b24b32`，两边 cherry-pick 同一份评测代码；只跑 `context` 臂，6 题 × 2 次 = 每版 12 条。四个可独立回退的步骤：
+
+- CMP-1（完成，`f3aab1f`）：`component` split、`NX-50-component-ab-v1`、单臂报告与 `sourceBaseCommit` 冻结。验收：plan-only 为 6 题/1 臂/12 episodes、caps 768 请求/1,536 工具/12M token/7.2M ms；component 冻结与单臂报告测试通过；`--split component --tier 2m` 拒绝。
+- CMP-2（完成，`5665293`）：runner 的 1 episode/block、严格 HEAD/金额/usage 守卫、`startedAt`/`finishedAt`/环境 provenance。验收：错误协议在隔离与模型调用前拒绝；单臂 block 与 reserve 测试通过。
+- CMP-3（完成，`e4dfe4b`）：离线比较器 `eval:v2-compare`，检查协议/任务/episode/臂/种子/模型/价格/tool schema，只允许 `src/**` 与 `package.json` 的已知差异，按预注册容差给出 pass/review/fail。验收：比较器定向 3/3；1 条容差、2 条失败、15% token 边界、双题退步 review、incomparable 拒绝。
+- CMP-4（完成，`adabea5`）：本文件、CHANGES、PROGRESS 与 `docs/COMPONENT-OPTIMIZATION.md` 的零付费回填；不改变协议或门槛。
+- CMP-5（完成，2026-10-25）：两批各 12/12 执行，旧/新可靠完成 12/12 对 12/12、产物验收 12/12 对 12/12；token 4,065,419→3,791,203（-6.75%），主动耗时 898,977→958,913 ms（+6.67%），均在预注册 15% 内，`gate=pass`、`mergeEligible=true`。逐题与边界见 [NX-50-RESULT](NX-50-RESULT.md)；main 合并待用户确认，不自动合并。
+
+零付费验证（优化版 checkout）：`pnpm check` 197 files；设置 `MINI_DSH_V2_RUNTIME` 后 `pnpm test` 523/523/0/0（含全部隔离用例）；`pnpm lint` 221 files 0 诊断；`pnpm fixtures:check`、`pnpm eval:offline`、`pnpm bench:components` 均 exit 0。真实模型请求 0，未冻结付费批次、未合并 main。下一步是建 `74f8e89` 工作树、冻结两版 manifest 并做 `--validate-only`；付费执行需单批 $22 的独立授权。
+
+### OPT-20261025 组件优化（进行中）
+
+基线：远端 main `74f8e89721820ef514e26df71cbb05e0c69683c7`，本机 Node 24.16.0 / pnpm 11.22.0；509 tests / 479 pass / 0 fail / 30 skipped，check 193 files。沙箱 Bash 环境失败后已在正常用户权限下复跑。保留其他 checkout 的未提交工作。
+
+按可独立回退的行为分五次提交，不修改历史模型实验或隐藏验收：
+
+- OPT-0（完成，`c2ee97b`）：冻结同源离线组件测试集和基线。验收：工具边界/UTF-8/完整回读、长历史摘要投影、重复检查的交付报告均产生可复算 JSON，记录脚本及模块哈希。只测机制和资源量，不冒充模型成功率。
+- OPT-1（完成，`00c8e32`）：工具预览的头尾共享字节额度，截断边界保留尾部。验收：12/12 固定探针满足尾标记、额度与回读，新增 UTF-8/重叠边界测试；完整 511/481/0/30。压力探针以双流填满原额度，阈值/预算/断言不变。
+- OPT-2（完成，`cd17cbc`）：摘要可见性投影使用索引，避免反复扫描事件及无用消息序列化。验收：80 seed × 12 次差分与旧实现一致，嵌套/非法/unknown/原始请求保护不变；最大历史事件属性读取 2,133,569→25,070（-98.82%）。定向 37/37，完整 513/483/0/30。
+- OPT-3（完成，`fda47d0`）：报告查询共享本次查询的文件版本，避免按检查条目重复读取。验收：1/8/32 检查的文件打开次数 5/19/67→2/2/2，报告证据哈希不变；下一次查询重新读盘、取消/分页/失败检查保留。定向 8/8，完整 513/483/0/30。
+- OPT-1b（复核新增边界，完成，`14a0d1c`）：1～2 字节命令预览必须清空放不下的原采集 tail；奇数字节额度按 stdout ceil/stderr floor 分配。新增双流/UTF-8/ref 回读验收；不修改冻结探针。此修复按独立失败边界单独提交，随后完成 OPT-4。
+- OPT-4（本地完成）：三组件固定量化门槛接入 `pnpm test` 和 `pnpm bench:components`；基线/脚本 SHA-256 钉版，空改进拒绝探针通过。完整 517/487/0/30、check 195 files、lint 无诊断；fixture checker、12/12 离线筛查、估算器核对、两条公开证据复算通过。结果与复现见 `docs/COMPONENT-OPTIMIZATION.md`；跨平台 CI 由 PR checks 提供，不用本机跳过替代隔离验收。
+
+OPT-0 与 OPT-4 属于各自独立的验收结论；OPT-1/2/3 分别独立提交，全部完成后核对实际提交。真实模型泛化与供应商缓存收益须另行冻结并取得具体预算授权，当前不发模型请求。
+
 ### R10 正式评测执行器零付费准备（2026-10-20，工作分支验收完成）
 
 独立提交 `430234e`：新增 `scripts/swebench/{run,report,workspace}.ts`，并扩展 `protocol.ts`/`preregister.ts`/`docs/EVALUATION-SWEBENCH.md`。行为边界：① 冻结文件同时包含开发批次（默认 5 题）与正式批次（50 题），开发题先选并从正式批排除，排除规则与确定性 arm 交错顺序写入 manifest；② 原始数据集只保留 `instance_id/repo/base_commit/version/environment_setup_commit/problem_statement/image`，gold/hidden 字段在预注册时剥离，执行器再拒绝仍带 `patch`/`test_patch`/`FAIL_TO_PASS` 的输入；③ `preregister` 缺模型、价格、基线命令、镜像 digest 或批次上限时保持 `draft`，只有齐备且 `--finalize` 才成为 `frozen`；④ 执行器复用 `createHarness`，每任务应用请求/工具/时间/输出/token 上限（金额上限按最大单价反推保守 token 上限），保存 session JSONL、终态、usage、空/非空 patch，基础设施失败与未知 usage 停批，批次金额与 episode 数量有硬上限，`--resume` 跳过已完成/中断 episode 而不重跑；⑤ 独立判分只读已保存 prediction，每批每臂使用新 run_id，官方判分失败保留为 error 分类并留在主分母；⑥ 报告给出 planned/executed 分母、每臂 Wilson 区间、预先声明的 candidate/baseline 与 context 两臂配对四格、精确 McNemar、失败分类与三条预声明失败轨迹，并关联 events/patch/session 路径。

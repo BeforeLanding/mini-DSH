@@ -8,7 +8,7 @@ import type { ChatRequest, ChatResponse, Message, ToolCall } from '../src/core/c
 // NX-10 第二幕：预算停止 → 同任务恢复。
 // 要看的是三件事：停止发生在派发之前（那条编辑被执行了吗）、续跑是**同一 task 的另一段 run**、
 // 以及已经完成的工具不会被重放。这三件都由断言判定，不由旁白担保。
-heading('NX-10 第二幕：预算停止 → 同 task 恢复（不重放已完成的工具）')
+heading('演示 2/4 · 预算停止与续跑：同一任务恢复，不重放已完成的工具')
 
 const fixture = await createFixture('repair')
 const initial = fixture.edits[0].oldText
@@ -110,7 +110,7 @@ try {
 } catch (error) {
   failed = true
   const broken = harness.root.sessions.latestRun(harness.sessionId)
-  console.error(`第二幕失败：${error instanceof Error ? error.message : String(error)}`)
+  console.error(`演示 2/4 失败：${error instanceof Error ? error.message : String(error)}`)
   console.error(`  run=${broken?.runId} previous=${broken?.previousRunId ?? '—'} status=${broken?.status} requests=${broken?.counters.modelRequests} maxModelRequests=${broken?.policy.maxModelRequests}`)
 } finally {
   await harness.dispose()

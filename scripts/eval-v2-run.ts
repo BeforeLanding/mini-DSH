@@ -15,6 +15,7 @@ import { blockSizeForV2Split, developmentReserveUsd, protocolForV2Split } from '
 import { createSmokeAmountGuard } from './smoke-cost.js'
 import { createIsolationBackend } from './eval-v2-isolation.js'
 import { reportV2, verifyV2FrozenFiles } from './eval-v2-report.js'
+import { assertV2ProductSourceUnchanged } from './eval-v2-provenance.js'
 import type { V2Manifest, V2Observation } from './eval-v2-report.js'
 
 const repository = fileURLToPath(new URL('../../', import.meta.url))
@@ -33,20 +34,21 @@ if (manifest.priceSnapshot.currency !== 'USD') throw new Error('this runner requ
 if (![manifest.priceSnapshot.inputPerMillion, manifest.priceSnapshot.outputPerMillion, manifest.priceSnapshot.cacheReadPerMillion].every(value => Number.isFinite(value) && value >= 0) ||
   manifest.priceSnapshot.inputPerMillion === 0 || manifest.priceSnapshot.outputPerMillion === 0) throw new Error('invalid frozen price snapshot')
 if (!manifest.model.startsWith('deepseek/')) throw new Error('only a frozen deepseek model is supported')
-if (manifest.split !== 'calibration' && manifest.split !== 'formal' && manifest.split !== 'development' && manifest.split !== 'component') throw new Error('invalid V2 split')
-const strictSplit = manifest.split === 'development' || manifest.split === 'component'
+if (manifest.split !== 'calibration' && manifest.split !== 'formal' && manifest.split !== 'development' && manifest.split !== 'component' && manifest.split !== 'component-loo') throw new Error('invalid V2 split')
+const strictSplit = manifest.split === 'development' || manifest.split === 'component' || manifest.split === 'component-loo'
 if (strictSplit) {
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' }).trim()
   const dirty = execFileSync('git', ['status', '--porcelain'], { cwd: repository, encoding: 'utf8' }).trim()
   if (head !== manifest.gitCommit || dirty) throw new Error(`${manifest.split} run requires the clean frozen HEAD`)
   if (manifest.priceSnapshot.source !== 'https://api-docs.deepseek.com/quick_start/pricing/' || !manifest.modelVersion) throw new Error(`${manifest.split} price or model version snapshot missing`)
-  if (manifest.split === 'component') {
-    if (!manifest.sourceBaseCommit || !/^[0-9a-f]{40}$/.test(manifest.sourceBaseCommit) || manifest.sourceBaseCommit === head) throw new Error('component run requires a distinct frozen sourceBaseCommit')
+  if (manifest.split === 'component' || manifest.split === 'component-loo') {
+    if (!manifest.sourceBaseCommit || !/^[0-9a-f]{40}$/.test(manifest.sourceBaseCommit) || manifest.sourceBaseCommit === head) throw new Error(`${manifest.split} run requires a distinct frozen sourceBaseCommit`)
     try {
       execFileSync('git', ['merge-base', '--is-ancestor', manifest.sourceBaseCommit, head], { cwd: repository, stdio: 'ignore' })
     } catch {
-      throw new Error('component sourceBaseCommit must be an ancestor of the frozen HEAD')
+      throw new Error(`${manifest.split} sourceBaseCommit must be an ancestor of the frozen HEAD`)
     }
+      assertV2ProductSourceUnchanged(repository, manifest.sourceBaseCommit, head)
   }
 }
 reportV2(manifest, []) // Validate the entire fixed task, arm and episode schedule before side effects.
@@ -73,7 +75,7 @@ try {
   if (path.dirname(preflight) === path.resolve(os.tmpdir()) && path.basename(preflight).startsWith('mini-dsh-v2-preflight-')) await fs.rm(preflight, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
 }
 if (validateOnly) {
-  console.log(JSON.stringify({ manifestDigest: manifest.digest, sourceBaseCommit: manifest.sourceBaseCommit ?? null, evaluationCommit: manifest.gitCommit,
+  console.log(JSON.stringify({ manifestDigest: manifest.digest, variant: manifest.variant ?? null, sourceBaseCommit: manifest.sourceBaseCommit ?? null, evaluationCommit: manifest.gitCommit,
     tasks: manifest.tasks.length, episodes: manifest.episodes.length, isolation: isolationKind, paidRequests: 0 }))
   process.exit(0)
 }

@@ -1,5 +1,223 @@
 # 改动与验收证据
 
+### PORT-7b 说明 DEEPSEEK_THINKING 并加环境变量覆盖回归（2026-10-31）
+
+`src/models/deepseek.ts:138` 把 `config.thinking ?? process.env.DEEPSEEK_THINKING ?? 'enabled'` 原样作为请求的 `thinking.type` 发送，但 `.env.example` 与 USAGE 都没有提到它。按 DeepSeek 官方 Chat Completions 文档，`thinking.type` 取 `enabled` 或 `disabled`，省略时默认开启。`.env.example` 在 `DEEPSEEK_BASE_URL` 后加注释示例，USAGE 的模型段说明取值与关闭后的表现（不返回推理内容，CLI 不显示 `[Thinking]` 段）。`test/env-docs.test.ts` 新增回归：遍历 `src/**/*.ts` 与 `plugins.config.ts` 中的 `MINI_DSH_*`、`DEEPSEEK_*` 名称（当前 16 个），每个都须出现在 `.env.example` 或 USAGE；评测专用变量只在 `scripts/` 读取，不在扫描范围。
+
+验收：新回归在本提交通过；暂存掉本次 `.env.example` 与 USAGE 改动时失败（缺 `DEEPSEEK_THINKING`），随后恢复。`node scripts/build.js`、`node scripts/check-syntax.js`（204 files）通过；Biome 235 files、0 诊断；完整离线回归 551 项：521 pass、0 fail、30 平台条件 skipped。
+
+### PORT-7a 评测变量移出配置模板（2026-10-31）
+
+`.env.example` 是快速开始让用户复制的模板，后半段却列出 `pnpm eval:screening`／`eval:sequence` 的付费评测说明与 `MINI_DSH_EVAL_MODEL`、`MINI_DSH_EVAL_EVIDENCE_DIR`、`MINI_DSH_EVAL_CONTEXT_WINDOW`。这三个变量只由 `scripts/eval-screening.ts`（含其调用的 `eval-cli.ts`）读取，安装包也不带 `.env.example`。整段移到 `scripts/eval-screening.ts` 页首注释，补上证据目录的实际默认值 `.eval-evidence/<phase>-<scope>`；其余说明与代码逐项核对：官方端点窗口默认 1000000、自定义端点必填（`resolveContextWindow`），`--plan-only` 排在建目录与探测之前。脚本只改注释，运行行为不变。新增 `test/env-docs.test.ts`：`.env.example` 不得出现 `MINI_DSH_EVAL_`。
+
+验收：新回归在本提交通过；把 `.env.example` 临时换回 `HEAD` 版本时失败，随后恢复。`node scripts/build.js` 通过；Biome 0 诊断；`git diff --check` 通过。
+
+### PORT-6c 内部路线图移入历史档案（2026-10-31）
+
+`docs/INTERNSHIP_ROADMAP.md` 是 2026-09-29 的完成度评估与路线图，页首叠有多条带日期修订，展示边界回归已禁止 README 与文档索引链接它，却仍位于 docs 顶层。用 `git mv` 移到 `docs/history/INTERNSHIP_ROADMAP.md`，正文不改，只把 27 处相对链接改为新位置（`../src` → `../../src`、`context-budget/` → `../context-budget/`）。同步仍在使用的链接：PLAN、REQUIREMENTS、NX-08-REPORT、本页两处旧条目与 2026-09-28 至 09-30 历史进度三处；DECISIONS 页首的路径改为新位置，行号不变。其余带日期记录里的纯文本路径描述当时状态，保留原样。
+
+验收：文档链接、展示边界与 DECISIONS 回归通过（链接回归只核对 `.md` 目标，另逐个确认移动后文件的 16 个相对目标全部存在）；Biome 0 诊断；`git diff --check` 通过；完整离线回归 549 项：519 pass、0 fail、30 平台条件 skipped。
+
+### PORT-6b 使用指南的 inspect JSON 版本号（2026-10-31）
+
+实跑 PORT-6a 的 bash 命令时发现：USAGE 写 `inspect --json` 返回版本 `1`，实际输出 `"version": 2`。`2eb28d3`（2026-10-19，记录安全运行错误）把 `InspectReport.version` 升为 2 并新增 `errors`，当时未同步使用指南。USAGE 改为版本 `2` 并列出 `errors`；`test/session-inspect.test.ts` 新增回归，从 USAGE 读出写明的版本，与读取公开样例 `docs/samples/provider-recovery/events.jsonl` 得到的 `InspectReport.version` 比对。
+
+验收：新回归在本提交通过；把 USAGE 临时改回 `1` 时失败（“USAGE.md 的 --json 版本与 InspectReport.version 不一致”），随后恢复。`node scripts/build.js`、`node scripts/check-syntax.js`（203 files）通过；Biome 234 files、0 诊断；完整离线回归 549 项：519 pass、0 fail、30 平台条件 skipped。
+
+### PORT-6a 快速开始与使用指南补 bash 命令（2026-10-31）
+
+README 的复制 `.env`，USAGE 的恢复会话、`inspect` 与本地打包安装原先只有 PowerShell 写法；CI 在 Ubuntu 上运行，Linux/macOS 读者需自行翻译。四处各补 bash 版本：`.env` 用 `[ -f .env ] || cp …` 保留已有文件（不用行为随 coreutils 版本变化的 `cp -n`）；恢复会话用单条命令前缀的环境变量，无需事后取消；打包安装与 CI `package-install` job 的步骤一致。两种 shell 通用的命令块（clone/build、demo、start、show-config、check/test）改标 `shell`，并在快速开始说明该约定。
+
+验收：在 Windows Git Bash 逐条实跑：已有 `.env` 时内容保留；`MINI_DSH_SESSION_ID='abc' node dist/src/index.js --show-config` 按预期拒绝，证明变量已传入；`inspect` 三种形式读取 `docs/samples/provider-recovery/events.jsonl` 的副本（complete JSONL，46 事件）；打包安装在含空格目录完成，`--help`、`--version`（0.1.0）、`--show-config` 正常，`demo fix` 输出 `demo result: PASS`。文档链接回归通过，Biome 0 诊断，`git diff --check` 通过。
+
+### PORT-5b 进度页漂移护栏（2026-10-31）
+
+新增 `test/progress-sync.test.ts` 两项离线检查：PROGRESS 的“更新：”日期不得早于 CHANGES 中带日期标题的最新日期；README 以 `docs/images/demo-*` 嵌入演示图时，PROGRESS 不得再出现“演示录制…暂缓”。前者在任何新 CHANGES 条目之后强制复核当前状态页，后者挡住 PORT-5a 修的这类具体矛盾。
+
+验收：新测试在本提交 2/2 pass；把 PROGRESS 临时换回 `12a5d53` 版本后两项均失败（“PROGRESS 更新于 2026-10-30，早于 CHANGES 最新条目 2026-10-31”与“README 已有演示图，PROGRESS 仍写‘演示录制暂缓’”），随后恢复。`node scripts/build.js` 与 `node scripts/check-syntax.js`（203 files）通过；Biome 234 files、0 诊断；完整离线回归 548 项：518 pass、0 fail、30 平台条件 skipped（PORT-1 的 546 项加本次 2 项）。真实模型请求 0。
+
+### PORT-5a 进度页同步 10-31 的展示与 CI 状态（2026-10-31）
+
+PROGRESS 停在 10-30：CI 仍引用 `46b8fb1` 的 41045952548，阻塞与下一步仍写“演示录制暂缓”，而 10-31 已把预算续跑动图放进 README 首屏，并在 `5fab772` 改了四个离线演示脚本的标题。核对 `gh run view 41175510465`：head 为 `06846d5`（PR #15 合并，含 `5fab772`），六个必需 job success、SWE PoC skipped；`git diff --stat 46b8fb1 06846d5 -- src test package.json pnpm-lock.yaml` 为空，`06846d5` 之后到 `12a5d53` 只改文档与图片。PROGRESS 据此改写 CI 行，新增动图条目（`scripts/demo-resume.tape` 驱动脚本化 `demo:resume`），阻塞与下一步改为“完整讲解视频尚未录制”，并写明本地安装包未重打。PLAN、REQUIREMENTS 与 TASKS 的范围行同步同一口径；DELIVERY-20261030 是带日期的验收记录，不改。
+
+验收：`node scripts/build.js` 通过；`node --test dist/test/docs-links.test.js dist/test/display-policy.test.js dist/test/decisions-doc.test.js` 8/8 pass；Biome 233 files、0 诊断；`git diff --check` 通过。未改产品源码，未重复完整功能测试。
+
+### PORT-4 重绘 README 架构图（2026-10-31）
+
+README 顶部架构图改为可维护的矢量源 `docs/images/architecture.svg`，由 Chrome headless 以 1600×960 视口、2 倍缩放导出 `docs/images/architecture.png`（约 0.55 MB，原图约 1.5 MB）；采用深色底与彩色描边，兼顾 GitHub 浅色与深色主题；删除旧位图 `architecture-v1.png`。新图按 ARCHITECTURE 与现行源码标注模块：入口与 `createHarness` 装配，Agent Loop 的投影、预算预留、模型请求、授权与执行四步，左右两侧的上下文管理与模型/工具/审批，`events.jsonl` 事件日志，以及由事件派生的恢复续跑、只读 inspect 与交付证据。应用层闸门仍标注为非 OS 隔离。
+
+验收：SVG 通过 XML 解析并带 `<title>` 替代文本；导出图人工检查无文字重叠；文档链接、展示边界与 DECISIONS 回归 8/8 pass；Biome 233 files、0 诊断；`git diff --check` 通过。未改产品源码，未重复完整功能测试。
+
+### PORT-3 当前源码交付验收与本地材料收尾（2026-10-30）
+
+新增 `docs/DELIVERY-20261030.md`，在文档索引提供入口；PROGRESS 将代码 CI 与交付状态更新为已核验。记录绑定生产代码/测试 `46b8fb196f2f6124fa742ba2193430b055311c8a` 与安装包来源 `14ec973919717a633180922db3b77ea399923070`。GitHub CI 41045952548 的 head_sha 与代码基线相同，整体 success；Ubuntu/Windows × Node 22/24、Linux isolation 与 Ubuntu package-install 六个必需 job 全绿，SWE PoC 按配置 skipped。
+
+Windows 正常用户环境通过 pnpm 11.22.0 的 Node 入口 pack，在新建 `consumer space` 目录 `add --ignore-scripts` 安装；另一个空白 `sample project` 中的已安装 CLI 通过 version/help/show-config/inspect，版本 0.1.0、日志 complete JSONL、无记忆/委派专属工具。tarball 124 个条目，无 .env/.git/测试/文档目录或专属产物。打包时仅 TASKS 状态页待提交且不进入包，包内输入未改动。安装包与 SHA256SUMS/verification.json 保存在本地 `D:\Agent\outputs\mini-dsh-portfolio-20261030`，包 SHA-256 为 `99259733b145d8b1c3154ead365a148d9a9929a925d166b73e1b5f339b60a74d`；独立重算 retainedTarball 哈希一致。不是 npm/Release 发布。
+
+本地 `mini-DSH-wrapup` 更新本版验收与展示面核对、工作索引、简历技术锚点与五题问答；旧验收与问答/锚点日期备份保留。核对 restore、unknown、settle、model/start 及 D-21/D-22、R-22/R-23 的现行行号与关键字。未读取/重写实际简历 docx，不以项目扩展或 Git 作者名替本人确认贡献；演示脚本、分镜与录制继续暂缓。
+
+最终验证：文档/展示/代码锚点回归 8/8；526 个本地链接 0 缺失；历史进度正文去除链接目标后与来源逐字相同；Biome 232 files、0 诊断；`git diff --exit-code 46b8fb1 -- src scripts test package.json pnpm-lock.yaml .github` 退出 0；`git diff --check` 通过。无新增代码，不重复完整功能测试，引用 PORT-1 的 546/516/0/30 结果和当前代码 CI。真实模型请求 0，未发布或部署。
+
+### PORT-2 当前文档与历史状态分离（2026-10-30）
+
+架构页改为实际的 MCP stdio 薄启动器与 `childEnvironment` 行为，区分 SDK 协议职责、显式凭据转交及文件系统边界；讲解页统一 Windows 本地/Ubuntu CI/macOS 未验证的安装范围；AGENTS 的 lint 说明与当前四个 CI job 一致。文档索引将消融标为已执行并链接描述性结果，记忆/协作只链接分支。
+
+将 `main@5ae84d1` 的 PROGRESS 正文归档到 [历史快照](../history/PROGRESS-2026-10-01--2026-10-28.md)，仅重定向相对链接与扩展分支文档；忽略 Markdown 目标地址后逐字比较原文与归档，完全相同。新的 PROGRESS 只维护当前单 Agent 状态、独立实验分支、实际验收、CI 与暂缓录制，不把过去的 R10 付费计划或已完成消融继续列为当前待办。链接扫描另发现本文件两条旧 fixture README 路径错误，已机械改为相对本文件的正确目标，历史事实不变。
+
+验收：`node --test --test-reporter=tap dist/test/docs-links.test.js dist/test/display-policy.test.js dist/test/decisions-doc.test.js` 为 8/8 pass、0 fail/skip；对 README、AGENTS、PROGRESS 与 docs 下 Markdown 的文件/图片/源码链接扫描（排除代码示例）520 个、0 缺失；`node node_modules/@biomejs/biome/bin/biome check .` 为 232 files、0 诊断；`git diff --check` 通过。产品源码、配置与模型实验未改动，未重复完整功能测试；延用 PORT-1 的当前代码基线完整回归，跨平台 CI 单独核验。
+
+### PORT-1 main 撤回记忆与只读协作（2026-10-30）
+
+按用户范围，main 只交付单 Agent，记忆与只读协作仅保留在远端 `feat/memory-team-eval-v2@2f2dca9f4f968485d9eb5f950f2accf173ce4539`。开始前 `git ls-remote --heads origin` 核实分支仍在，`git merge-base --is-ancestor 5841f79 origin/feat/memory-team-eval-v2` 退出 0，确认包括 PR #7 的四项独立修复及后续分支工作。
+
+以 PR #7 第一父提交 `a5d9191` 为基准，只恢复该 PR 改动的生产源码、专属脚本/测试、package 命令、环境模板及代码锚点；专属需求、评测与历史证据移出 main 工作树，仍可从分支和 Git 历史读取。README、使用指南、讲解页与旧专题链接同步指向独立分支；提示扩展会话使用独立目录，不把专属事件日志混用于 main。保留后续组件 LOO 代码及原结果，没有重写历史或重跑付费实验。
+
+验收：`git diff --exit-code a5d9191 -- src` 退出 0；现有装配测试增加 main 不暴露 memory/delegation/taskGroups 服务与工具的断言。`node scripts/build.js` strict 类型/构建通过；`node scripts/check-syntax.js` 为 202 files；`node node_modules/@biomejs/biome/bin/biome check .` 为 232 files、0 诊断。正常用户权限 `node --test --test-reporter=tap dist/test/*.test.js` 为 546 tests / 516 pass / 0 fail / 30 skipped，日志 `D:\Agent\tmp\mini-dsh-port1-tests-20261030.log`；30 项为 Linux 隔离条件用例，未计为通过。`node dist/scripts/recompute-report.js docs/samples --check`、`node dist/scripts/check-coding-fixtures.js`、`node scripts/benchmark-components.mjs --compare docs/samples/components-baseline.json` 均退出 0；三组件比较通过。`git diff --check` 通过。真实模型请求 0；演示录制暂缓。
+
+### DOC-R2 架构图置顶与目录职责介绍（2026-10-28）
+
+按用户要求将原有架构图移到 README 第一行、项目标题之前；后部“架构与扩展”改为目录树，说明 app/core/plugins/models/tools/utils、插件配置、脚本、测试及文档的职责，再用关键源码链接说明从入口到装配和 Agent Loop 的关系。保留“实现入口”标题，既有讲解页锚点继续有效；图片仅展示一次。
+
+核对目录树涉及的 12 个目录/文件路径全部存在，图像确为首行且引用唯一；`git diff --check` 通过。正常用户权限下执行 `node scripts/build.js`、`node scripts/check-syntax.js`（227 files）及 `node --test dist/test/*.test.js`，完整 584 项（554 通过、30 平台条件跳过、0 失败），包括文档锚点与展示边界回归。产品源码和配置未改动，真实模型请求 0。
+
+### DOC-R1 README 产品介绍与使用入口（2026-10-28）
+
+以当前主仓 `5579b82` 为基线重组 README：首屏说明用途和适用人群，用一个编程任务串起规则读取、审批、编辑、检查与交付；核心能力按使用收益介绍，快速开始提供源码构建、免密钥修复演示及真实模型接入，日常命令按使用场景组织。架构图和源码入口后移；保留权限、恢复、预算、发布与评测展示边界。新增 [使用指南](../USAGE.md) 承接完整 CLI、预算续跑、会话恢复、日志检查、配置来源、记忆/协作及本地 tarball 安装；修正旧 inspect 示例依赖尚未定义的 `$miniDsh` 的问题，同步文档索引与讲解页链接。产品源码、模型适配器、默认配置和评测结果未改动。
+
+采用 AGENTS 允许的直接 Node 等价命令验收：`node scripts/build.js` 通过 strict 类型检查和构建，`node scripts/check-syntax.js` 通过 227 文件语法检查。受限环境的完整回归停在超时命令的进程树清理环节，未将该次运行记为通过；正常用户权限运行 `node --test dist/test/*.test.js` 完成 584 项（554 通过、30 平台条件跳过、0 失败），覆盖已有 Markdown 锚点及展示边界回归。`node dist/src/index.js demo fix` 输出 `demo result: PASS`，`--help` 与 `--show-config` 正常；`node node_modules/@biomejs/biome/bin/biome check .` 检查 259 文件、0 诊断。另对四份入口文档的 72 个本地文件/图片链接逐项检查存在性，README/使用指南中所有 PowerShell 代码块通过语法解析；`git diff --check` 通过。真实模型请求 0。
+
+### SW-R1 撤回 main 中的 SWE 正式实验（2026-10-28）
+
+按用户确认，以 PR #12 merge `94d1728` 的第一父提交为撤回基准，恢复其引入前的代码、测试和 package.json；不重写 Git 历史。完整四臂外部适配器和正式结果保留在 `feat/swebench-formal-results@dc7e659`，不重新合并 main。保留后续 README 展示面护栏、中文文档及其它非 SWE 改动；处理四份翻译文档的撤回冲突，并将 README、文档索引和进度中的结果入口指向独立分支。
+
+`pnpm` 引导访问 npm registry 失败，按 AGENTS 允许的等价命令验收：`node scripts/build.js` 通过；`node scripts/check-syntax.js` 227 文件通过；`node node_modules/@biomejs/biome/bin/biome check .` 259 文件零诊断。沙箱内 Bash/子进程回归受限，正常用户权限下完整离线回归最终为 584 项、554 通过、30 平台条件跳过、0 失败。首次正常权限回归发现展示边界文档断言缺失，恢复边界说明后定向 5/5 与完整回归通过。`git diff --check` 通过；模型调用 0。
+
+
+### CE-P2 四臂开发批结果与中断边界（2026-10-28）
+
+四份完整付费批次按 `full → no-preview → no-projection → no-report` 顺序分别授权，每批 12/12，价格峰值估价分别 $1.28431524、$1.334783124、$1.354099452、$1.335197268，合计 $5.308395084（含探针储备，不是账单）。首次 no-report 在第五条中断，4/12 条完整，1 个模型请求缺 provider usage，原始证据保留并排除；新目录的完整重跑另获授权。比较器按源码提交、manifest、观察 digest、tool schema、共同配置、批次顺序、provider usage 和离线探针验证，17 项检查全部 true；可靠完成 11/12、12/12、12/12、11/12，产物验收四臂均 12/12。三项归因均 `inconclusive`，不改变组件默认行为或摘要后裁剪默认关闭。逐题逐重复读数、费用边界和完整文件哈希见 [开发批结果](COMPONENT-LOO-PAID-RESULT.md) 与 [机器比较记录](../samples/component-loo-paid-20261028.json)。公开记录不含原始 prompt 或工具正文，报告与 JSON 对照验证通过，文档步骤模型请求 0。
+
+### CE-P1 消融比较器后处理读数修正（2026-10-28）
+
+四批付费执行完成后复核发现，原比较器仅在“去掉组件后资源变差”时计算重复方向：当去掉组件后资源变好，`repeatConsistent` 可对空集合返回 true，掩盖两次重复相反；离线机制变差而付费读数反向时，也误写为“未达阈值”。现在对超过 5% 的任一方向都检查两次重复，冲突写 `repeat-directions-conflict`；付费方向与离线机制相反时写 `paid-direction-opposes-offline-mechanism`。这只修正归因解释，三项 `inconclusive` 结论与原始批次证据不变。新增双重复反例，覆盖预览臂冲突与投影/报告臂反向。
+
+`pnpm check` 因 pnpm 引导访问 npm registry 失败；按 AGENTS 允许的等价命令运行 `node scripts/build.js`（exit 0）、`node scripts/check-syntax.js`（226 files）、定向测试 11/11、设置固定 WSL runtime 后 `node --test dist/test/*.test.js`（579/579，0 fail，0 skipped）；Biome 257 files、0 诊断，`git diff --check` 通过。修正后的四臂比较器全部 16 项协议检查通过，三臂仍为 `inconclusive`，但原因字段现与实测方向一致；后处理额外模型请求 0。
+
+
+### CE-F1 PR #8 合并后的四臂零付费重冻（2026-10-27）
+
+PR #8 merge commit `54a1921` 的六项 CI 全绿。full 评测 HEAD 固定为该 merge；三个回退臂各自应用两项审查修复后重新运行 `pnpm check` 和定向测试（14/14、14/14、15/15、15/15）。官方 DeepSeek 模型版本、thinking、1M 窗口和峰值单价仍与协议一致，新快照时间 `2026-10-27T12:51:07Z`。四臂重新 `eval-v2-freeze`、`--validate-only` 全过，独立审计确认共同字段/非组件文件逐字相同、源码精确差异、tool schema、源码身份与探针输出一致；每臂 12 条计划、实际运行/付费请求 0。按峰值价机械储备每批 $21.1355904，拟定每批 $22、四批 $88 硬上限，尚未执行任何付费批次。提交号、digest、日志哈希、复现与后续授权边界见 [合并后冻结](COMPONENT-LOO-POSTMERGE-FREEZE.md) 和 [机器记录](../samples/component-loo-postmerge-freeze-20261027.json)。
+
+### CE-R2 消融归因双向质量差异（2026-10-27）
+
+PR #8 审查发现，`qualityLoss` 只检查“去掉组件后变差”，若回退臂可靠完成或产物验收比 full 明显更好，仍可能把资源方向和离线探针组成 `signal`。现在保留单向 `qualityLoss` 用于效率权衡，另以双向最大绝对差定义 `qualityDifference`；任一质量读数超过 1 条时 `reviewRequired=true`、归因为 `inconclusive`，先读逐题轨迹。新增 full 质量下降 2 条而 no-preview 资源变差/离线机制变差的反例，断言不能标为组件收益。`pnpm check` syntax 226 files；相关 25/25 测试、`pnpm lint` 256 files 0 诊断，和 CE-R1 同一完整工作树验收。历史付费证据未改写。
+
+### CE-R1 评测提交与源码提交身份一致（2026-10-27）
+
+PR #8 审查发现冻结器此前只验 `sourceBaseCommit` 为评测 HEAD 的祖先，无法拒绝两次提交之间修改产品源码。冻结与运行入口现用 `git diff --quiet SOURCE EVAL -- src` 检查，任何产品源码差异在模型请求前报错；比较器及 manifest 冻结清单纳入该检查文件。临时 Git 仓库正反例验证文档变更通过、`src/**` 变更拒绝。`pnpm check` syntax 226 files，相关 25/25 测试、`pnpm lint` 256 files 0 诊断（CE-R2 的未提交测试也在同一工作树中通过）。原 2026-10-27 四份零付费证据保留为当时固定 HEAD 的结果；合并后按新代码重新冻结。
+
+### CE-2 证据换行修正（2026-10-27）
+
+CE-1 `4251382`、CE-2 `6bbc1de` 分别对应计划中的协议收口与冻结验收；随后单独修正新增机器记录的换行。`.gitattributes` 对 docs/samples/** 设置 -text，首次写入 CRLF 导致 git diff --check 报行尾空白；改为 LF 后复检通过。JSON 解析值及四份 manifest/probe 原始文件、digest 均不变，不改写已有提交。最终 lint 254 files、0 诊断。
+
+### CE-2 四臂重新冻结与零付费验收（2026-10-27，完成）
+
+CE-1 提交 `4251382` 已推送。从最新 main `0b8b973` 重新派生三个独立回退源码提交，分别 check/针对性测试通过后，再应用相同评测代码。源码变体源提交与评测 HEAD 的 `src/**` 一致；四份 manifest 各 12 条，合计 48 条计划，全部 `--validate-only` 通过（wsl-bwrap、paidRequests=0）。规范化共同字段及非组件文件逐字相同，精确源码路径审计通过，四臂显式 prune=false、tool schema 一致。
+
+离线预览通过 12→0（fullRecall 全部 12/12），投影 propertyReads 32,982→2,284,323，报告 snapshotOpens 6→91；投影/报告输出哈希一致。源码定向测试 no-preview 14/14、no-projection 机制 4/4＋实际 compaction 四文件 46/46、no-report 6/6，三臂 check 与应用评测代码后的 check 全过。full 另从干净源码 HEAD 运行探针；没有伪造 sourceCommit。新证据根 `D:\Agent\outputs\component-eval-closure-20261027\`，evidence/ 为空，真实 episode 0、provider 请求 0。
+
+实际命令：各评测工作树 `pnpm check`、`node dist/scripts/eval-v2-freeze.js --config CONFIG --output MANIFEST`、设置 MINI_DSH_V2_RUNTIME 后 `node dist/scripts/eval-v2-run.js --manifest MANIFEST --validate-only`；各源码工作树 `node scripts/benchmark-components.mjs --out PROBE`；`node D:/Agent/outputs/component-eval-closure-20261027/audit.mjs` 检查四份实际材料，全项通过。提交号/digest/哈希/复现与边界见 [冻结验收](COMPONENT-EVAL-CLOSURE.md) 和 [机器记录](../samples/component-eval-closure-20261027.json)。CE-2 不修改冻结输入；付费执行与实时价格核对/重冻仍需另行安排，未授权。
+
+### CE-1 组件评测协议收口（2026-10-27，完成）
+
+从 main `0b8b973` 复用未合并的 `3752ca4`（原实现作者与提交记录保留），引入独立 `component-loo` 与四臂比较器。NX-50 的比较器/历史门槛不变；LOO 的包文件必须完全相等，源码仅允许精确组件路径差异。`scripts/eval-v2-component-protocol.ts` 集中维护新协议的调度、裁剪开关、允许路径与诊断阈值。
+
+补齐原准备代码的校验缺口：四臂预算显式冻结 `postCompactionPrune=false`；全部四批严格按预注册顺序、不重叠；比较器重新验证 manifest 与每条 observation，核对汇总 digest 和 provenance，拒绝共同配置漂移、重复/伪造观察和源码路径新增/删除。离线机制与付费归因分开，5% 仅为诊断阈值，不输出 mergeEligible 或显著性结论。
+
+本轮实测：`pnpm check` → syntax 224 files；设置 `MINI_DSH_V2_RUNTIME=D:\Agent\tmp\nx42-runtime\unpack` 后 `pnpm test` → **576/576，0 fail，0 skipped**（包含隔离验收）；复核发现可选源码 pin 的空配置被误拒绝，修复后重新 `pnpm check` 与五个 eval-v2 相关测试文件 → **26/26**；`pnpm lint` → 253 files，0 诊断。`node dist/scripts/check-coding-fixtures.js` → 25 项 expected=true；`node dist/scripts/eval-offline.js` → 12/12 completed/accepted；`node scripts/benchmark-components.mjs --compare docs/samples/components-baseline.json` → tools/compaction/reports 全过、providerRequests=0。
+
+初次沙箱 pnpm 引导因无法联网校验签名失败；正常用户环境 `pnpm install --frozen-lockfile --offline` 与以上检查使用固定 pnpm 11.22.0 通过，未修改锁文件、未跳过签名。本轮完整日志在仓库外 `D:\Agent\outputs\component-eval-{test,targeted,fixtures,offline}-20261027.log`；真实 provider 请求 0。NX-50 历史源码比较器的三条回归用例保持不变并通过。
+
+### NX-51 24 条 prune 开/关结果：摘要下降假设未获支持（2026-10-25）
+
+两臂各 12/12 执行，`incomplete=false`；manifest 除 `sourceBaseCommit`、`gitCommit` 与 `src/**` 外逐字相同，均通过 `--validate-only`。实际 usage 估价 on `$1.734961`、off `$1.352154`，合计 `$3.087115`，低于 $44 上限。
+
+读数：摘要次数 3→**7**、摘要耗时 43,249→**105,394 ms（+143.7%）**、主动耗时 967,446→**1,332,173 ms（+37.7%）**、输出 token 127,305→**188,915（+48.4%）**、provider token 4,115,550→**5,224,805（+27.0%）**；可靠完成 11→**10**（新增失败为 R04/1 的 `token_budget`），产物验收 12→12。`context/prune` 在 R04/0、R04/1、T04/0、T04/1 共 5 条，行为确实触发，但没有带来摘要下降。逐题差值在重复间方向不一致（U02/0 摘要 1→0，U02/1 0→1；B03、F02 两重复方向相反），24 条不足以区分采样方差与机制效应。
+
+结论：离线反事实（T04/0 后两次摘要本可避免）**没有在真实轨迹上复现**；按预注册规则不把“摘要后裁剪”作为默认行为推广。完整表、逐题配对与复现见 [NX-51-PRUNE-RESULT](NX-51-PRUNE-RESULT.md)。
+
+决策回填：新增 `postCompactionPrune` 策略开关并**默认关闭**；两条持久化回归测试显式开启，另增默认关闭用例，默认投影回到 main。验收：隔离完整 `pnpm test` **526/526，0 fail，0 skipped**；定向 `budget`／`context`／`compaction-recovery`／`nx38-covenant` 28/28；`pnpm check` 197 files、`pnpm lint` 224 files 0 诊断、`pnpm fixtures:check` 25 项 `expected=true`、`pnpm eval:offline` 12/12 accepted、`pnpm bench:components` 三项比较全过。真实模型请求 0（本段只回填开关与测试）。
+
+### NX-51 变慢任务离线诊断、摘要后裁剪与持久化（2026-10-25）
+
+只读复用 NX-50 两批 24 个 episode 的 `events.jsonl`，把墙钟拆成模型等待、摘要、工具与投影开销。新增 `scripts/analyze-eval-timing.mjs` 与 `docs/samples/nx51-timing.json`（不含 prompt/模型正文/工具正文）；口径与逐题归因见 [NX-51-TIMING-DIAGNOSIS](NX-51-TIMING-DIAGNOSIS.md)。
+
+读数：旧/新主动耗时 899,287→959,303 ms（+60,016），其中主请求模型等待 775,096→783,688（+8,592）、摘要 38,479→83,483（**+45,004**）、工具 84,001→90,072（+6,071）、投影/循环约 1.7～2.1 s。输入 token 3,937,718→3,647,881，输出 token **127,701→143,322（+12.2%）**；逐 episode 墙钟与输出 token 的 R²=0.983，>10 s 请求 9→19 次。F02 的 +23.8 s 集中在 repeat 1（输出 2.2k→6.7k，含一次 3.6 s 命令冷启动）；T04 的 +82.5 s 中 44.4 s 是摘要次数 1→3；R04 两 repeat 方向相反（+88.3 s / -51.9 s）。`read_file` 与 `task_report` 合计不足 0.4 s，报告正文会进入上下文但直接墙钟可忽略。
+
+根因：`project()` 只在输入超过硬目标 65,536 时裁剪，而压力线是 52,428；压力摘要只压当前 task，已结束旧任务仍占 35,765～41,127 token，摘要后几次请求又越线。修改 `ContextBudgetRuntime.project()` 增加可选 `pruneTargetTokens`，主循环在压力摘要 applied 后按 `postCompactionTargetRatio × compactionBudget` 重投影并裁掉已结束旧任务。摘要仍先发生，保留 NX-38 covenant 的“模型摘要可带下旧知识”路径；单任务、显式 `/compact`、摘要失败/拒绝不改变。
+
+**持久化**：裁剪决定写成 `context/prune` 事件（`targetTokens`、`removedTaskIds`、可选 `summarySeq`），`project()` 读取日志里全部 prune 的并集并在后续轮次、`/continue` 与重启恢复中继续排除。原始事件一条不删，`read_history` 仍按 seq 回读旧阶段；`context/prune` 也计入崩溃折叠，决定先于请求额度检查落盘。没有 `context/prune` 的旧日志行为不变。
+
+验收：新增 `compaction-trigger` 两条回归——目标案例确实裁掉旧任务；后续轮次、`/continue`、重启恢复都不带回它们，且 `read_history` 仍读得到旧阶段原文。原“不可约前缀”与“溢出兜底”用例改用当前 task 自身构造（旧任务在摘要后可裁，不再构成不可约前缀），语义不变。定向 `budget`／`context`／`compaction-recovery`／`nx38-covenant` 28/28（covenant 4/4）；`MINI_DSH_V2_RUNTIME='D:\Agent\tmp\nx42-runtime\unpack' pnpm test` **525/525，0 fail，0 skipped**；`pnpm check` 197 files，`pnpm lint` 223 files 0 诊断；`pnpm fixtures:check` 25 项 `expected=true`、`pnpm eval:offline` 12/12 completed/accepted、`pnpm bench:components` 三项比较全过，均 exit 0。**真实 provider 请求 0**；真实收益与三项组件归因需按 [NX-51 消融设计](NX-51-COMPONENT-ABLATION.md) 另行授权。
+
+### NX-50 PR5 组件版本对照：两批执行与门槛结果（2026-10-25）
+
+旧版 manifest `6d50a359…`（被测 `74f8e89`，评测 `c17145a`）与优化版 `9746c90f…`（被测 `0b24b32`，评测 `adabea5`）分别在干净工作树冻结并通过 `--validate-only`；两批各 12/12 执行、无 missing/invalid、provider usage 全覆盖、estimated=0。预注册顺序先优化版（03:52–04:09 UTC）后旧版（05:55–06:10 UTC），中间等待旧版单独授权。
+
+结果：旧/新可靠完成 **12/12 对 12/12**、产物验收 **12/12 对 12/12**；token **4,065,419→3,791,203（-6.75%）**，主动耗时 **898,977→958,913 ms（+6.67%）**，模型请求 206→189、工具调用 357→332、工具错误 23→22、预览截断 19→18、压力压缩 3→5、cache-read 两版均 57,728。比较器 `gate.status=pass`、`mergeEligible=true`、`reasons=[]`，无单题双退步。峰时价 usage 估价旧版 `$1.337245368`、新版 `$1.269039468`，均低于单批 $22 授权上限；这是估价，不是供应商账单。
+
+逐题 token 变化不均：U02 -65.0%、F01 -51.5%、R04 -3.9%，而 B03 +19.5%、F02 +30.9%、T04 +22.2%；主动耗时在 B03/F02/R04/T04 上升，其中 F02/R04/T04 单题升幅超过 15%，但预注册门槛按两批总量判定。完整表、证据路径与解释边界见 [NX-50-RESULT](NX-50-RESULT.md)。两批串行且时间窗不同，cache 可能跨会话共享；不作显著性、泛化或单项组件归因。证据在 `D:\Agent\outputs\nx50-component-ab-20261025\`，原始 prompt/输出未进仓库。main 合并待用户确认。
+
+### NX-50 PR5 组件版本对照的零付费准备（2026-10-25）
+
+新增独立 `component` split 与 `NX-50-component-ab-v1` 协议，固定 `U02`、`B03`、`F01`、`F02`、`R04`、`T04` 六道此前无真实模型曝光的 formal fixture，只跑 `context` 臂，每题两次；每版 12 条 episode，整题预算与 NX-45 相同（1M token / 64 请求 / 128 工具 / 600 秒）。旧版 `74f8e89` 与优化版 `0b24b32` 各自在干净树上冻结，manifest 同时记录被测 `sourceBaseCommit` 与实际评测 `gitCommit`；比较器只允许 `src/**` 与已知 `package.json` 脚本差异。
+
+提交边界：`f3aab1f` 协议/冻结/单臂报告与文档；`5665293` runner 单臂 block、严格守卫与 provenance；`e4dfe4b` 离线比较器与门槛；本条目所在提交只回填状态。`developmentReserveUsd` 由固定 24 条/baseline 参数化为可指定臂与 episode 数，默认值保持历史读数。比较门槛在开跑前固定：新版可靠完成/产物验收各允许 1 条 episode 容差；token 与主动耗时不得超过旧版 1.15 倍；单题两次都退步为 `review-required`，不自动合并。
+
+零付费实测（优化版 checkout）：`pnpm check` → syntax 197 files；`MINI_DSH_V2_RUNTIME='D:\Agent\tmp\nx42-runtime\unpack' pnpm test` → 523 tests / 523 pass / 0 fail / 0 skipped；`pnpm lint` → 221 files / 0 diagnostics；`pnpm fixtures:check`、`pnpm eval:offline`（12/12 completed/accepted）、`pnpm bench:components`（tools/compaction/reports 三 gate）均 exit 0。`eval:v2 --split component --plan-only` 输出 6 题、1 臂、12 episodes、12 blocks，caps 与预留一致；比较器定向 3/3。未读取 API key、未发 provider 请求、未创建付费证据目录、未合并 main。两版 manifest 的冻结、digest 与 `--validate-only` 及后续付费执行结果见上一条。
+
+### OPT-4 冻结对照门禁与最终交付（2026-10-25）
+
+新增 `pnpm bench:components`、`test/component-benchmark.test.ts`、最终 `components-optimized.json` 与 `docs/COMPONENT-OPTIMIZATION.md`。基线 `74f8e89`、候选生产源码 `14a0d1c6e8eb1519cd27e8cc61ce0011927536cd`；两版协议 SHA-256 为 `34af74cd9143ec2680db33a8ae1b4231c8b0ea50d716ee9ad788cfd86c019f28`，冻结脚本未改。基线文件 SHA-256 与协议钉版并进入完整测试，另验证将已通过的工具探针当基线时不能报告空改进。`.gitattributes` 固定协议脚本 LF，避免 Windows checkout 改变字节指纹。
+
+结果：工具尾标记 3/12→12/12，正文额度 9/12→12/12，全文回读两版均 12/12；最大历史事件属性读取下降 98.82%，报告文件打开次数下降 97.01%，两类选定证据输出哈希相同。未测其他组件、真实模型成功率或泛化，不追溯修改 NX-45。独立功能提交为 `00c8e32`、`cd17cbc`、`fda47d0`，新增边界 `14a0d1c`；基线提交 `c2ee97b`。原计划五步因复核发现独立失败边界增加 OPT-1b，六个步骤均可单独回退，没有 squash/amend/rebase。
+
+最终实际检查：正常用户权限 `pnpm test` → 517 tests / 487 pass / 0 fail / 30 skipped；`pnpm check` → syntax 195 files；`pnpm lint` → 219 files / 0 diagnostics；`pnpm bench:components` → 三 gate 通过；`node dist/scripts/check-coding-fixtures.js` exit 0；`node dist/scripts/eval-offline.js` → 12 planned / 12 executed / 12 completed / 12 accepted；`node dist/scripts/eval-estimate.js` → exit 0（估算器/语料哈希保持）；`node dist/scripts/recompute-report.js docs/samples --check` → 两条报告和 RESULTS 均一致。原始本地输出在 `D:\Agent\outputs\mini-dsh-components-20261025`，公开合成测量随仓库提交。30 项隔离测试由 Linux CI 实测，本机不计为通过。无真实 provider 请求、新模型费用、npm 发布或部署。
+
+### OPT-1b 极小命令额度的失败边界（2026-10-25）
+
+独立提交 `14a0d1c`。最终复核发现：即使裁剪 helper 返回空尾部，展开原始 `stream` 仍可能保留采集的 tail；同时两流各 `max(1, floor(limit/2))` 在总额度为 1 时会分配 2 字节。现明确覆盖原 tail（无完整字符时 undefined），并按 stdout ceil/stderr floor 分配。新增 1/2 字节双流、中文字符放不下和 sparse ref 全文回读用例；18 个冻结对照探针未改。含待提交 OPT-4 门禁的完整工作区回归 517 tests / 487 pass / 0 fail / 30 skipped；lint 无诊断，语法 195 files。OPT-4 的门禁/最终证据另提交；没有合并或改写已有提交。
+
+### OPT-3 报告查询内复用文件版本（2026-10-25）
+
+`fileVersionQuery` 只缓存本次查询的 hash/location 或读取失败；`taskReport` 的变更、检查与覆盖视图共享读取器，独立查询/分页各自重新读盘。文件正文不进入缓存，取消命中前仍检查；Bash 验证前后的读取不共享。PLAN 明确报告不是文件系统原子快照，`acceptance: not_asserted` 与失败/过期/未知、声明覆盖边界不变。
+
+固定报告探针 1/8/32 条检查均输出与基线相同的证据哈希；文件打开次数从 5/19/67 降到 2/2/2，最大案例下降 97.01%。新增真实查询断言：变更文件和配置各读一次，失败检查仍在；修改配置后下一次查询变 stale，已取消查询拒绝。定向 task-report/task-verification/task-changes 8/8。
+
+完整 `pnpm test` 首次仅决策文档源码锚点失败：新增函数插入中间移动了编辑器锚点；现把函数移至文件末尾，保留原行号。复跑 513 tests / 483 pass / 0 fail / 30 skipped；strict build、语法 194 files、lint 无诊断。真实 provider 请求 0。
+
+### OPT-2 摘要投影索引（2026-10-25）
+
+`surfaceSeqs` 建立事件 seq 和可见位置索引，不再对每个 shadowed seq 扫描全事件；只按事件类型选初始可见集，不在选择阶段序列化所有未被遮蔽工具的参数。摘要替换顺序、协议闭合、unknown 与原始用户请求保护规则不变，没有缓存跨请求或改写日志。
+
+固定对照脚本的 compaction gate 通过，三个输出 SHA-256 与基线完全一致。64/256/1024 工具组的事件 `seq/type` 读取为 10,529→1,610、140,225→6,302、2,133,569→25,070，最大案例下降 98.82%；该指标不等同于时间复杂度或模型 token。5 次计时中位数仅作环境相关观测，不作 CI 门槛。新增冻结旧实现 oracle，80 个 seed 各 12 次比较嵌套、缺失、不连续、协议不闭合、unknown/用户请求保护，并确认不修改事件；另测选择阶段不序列化未遮蔽参数。
+
+验收：定向 surface/context/compaction-plan/compaction-runtime 37/37；完整 `pnpm test` 513 tests / 483 pass / 0 fail / 30 skipped；build 严格类型通过，`node scripts/check-syntax.js` 194 files，`pnpm lint` 无诊断。构建清理 dist 与第一次语法检查并发造成文件暂缺，该检查已在构建结束后重跑通过；后续避免并发构建与 dist 读取。真实 provider 请求 0。
+
+### OPT-1 预览头尾共享额度（2026-10-25）
+
+`previewWindow` 从同一正文额度分配头尾，保留阈值边界的尾部信息与中段游标；普通结果推荐从中段偏移回读。Bash 两流各分一半；合法的采集头尾重叠先去重再存储，避免 quota/integrity 误报。PLAN/REQUIREMENTS 显式修订 D-20；历史 JSONL 与 NX-45 结论未改。
+
+固定脚本未改：`node scripts/benchmark-components.mjs --compare docs/samples/components-baseline.json --component tools --out <output>` 通过，12/12 同时满足尾部可见、头尾合计不超正文额度、完整 ref 回读；基线为 0/12 同时满足。两个新增回归覆盖 1～64 字节 ASCII/Unicode 额度及重叠稀疏命令结果；定向 tool-results 13/13。
+
+完整回归首次 511 tests / 480 pass / 1 fail / 30 skipped：旧压力探针只有 stdout，依赖超额尾部达到压缩阈值。现改为同时填满 stdout/stderr，共享原 16 KiB 正文额度，不改阈值、预算和断言、不改 fixture 或冻结对照集；复跑 511 tests / 481 pass / 0 fail / 30 skipped。`pnpm check` 193 files、`pnpm lint` 无诊断。真实 provider 请求 0。新请求指纹与旧录制可能不同，不把本次结果追溯套用旧实验。
+
+### OPT-0 组件对照基线（2026-10-25）
+
+基于远端 main `74f8e89721820ef514e26df71cbb05e0c69683c7`，冻结 `scripts/benchmark-components.mjs` 与 `docs/samples/components-baseline.json`。12 个工具输出边界/Unicode/长输出探针、3 个嵌套摘要历史（64/256/1024 工具组）、3 个重复检查报告（1/8/32 条检查、2 个文件）。脚本使用实际生产组件、真实临时文件与结果存储；不装配 provider、不运行模型或 Bash。机制断言与原文回读均成功，工具预览的问题作为测量结果保留：9/12 丢失尾标记，3/12 头尾合计超正文额度；最大历史投影事件属性读取 2,133,569 次，32 检查报告打开文件 67 次。
+
+验证：`pnpm check` → 193 files；正常权限 `pnpm test` → 509 tests / 479 pass / 0 fail / 30 skipped；`node scripts/benchmark-components.mjs --root .eval-evidence/components-baseline --out docs/samples/components-baseline.json` → exit 0；`pnpm lint` → 无诊断。基线编译产物副本位于忽略目录 `.eval-evidence/components-baseline`；JSON 记录源提交、脚本和模块哈希，不依赖本机目录发布原始日志。改动前已列明独立提交边界。后续不得重写本基线或为获得分数修改脚本/题目。
+
 ### R00—R11 本轮收尾核验（2026-10-20，工作分支 tip）
 
 - 代码 tip `bece051`（其后仅文档提交）。本轮新增提交：`6113bc7`（MCP stdio 显式 env）、`430234e`（SWE-bench 执行器）、`d11fb80`（发布/部署拆分）、`0568c6d`（Windows MCP 进程树终止）及对应文档回填。
@@ -887,7 +1105,7 @@ PLAN 的 NX-39 节把 `ablationIds` 的前三类写成「bug 修复 4 ＋ 功能
 
 **一处执行失误，如实记。** 这四个 fixture 文件在跑反例时**还没进 git**（新文件、untracked），而我用 `git checkout -- <path>` 还原——它对未跟踪文件直接 `error: pathspec ... did not match`，**静默地什么都没做**，四处改动因此全部留在盘上。是「还原后应复绿」那次仍然 `pass 3 / fail 3` 才露出来的。改用 `Write` 逐份写回并复核（`grep -c` 计数归零、门禁复绿）。教训是直接的：**用版本控制还原，前提是目标已经被版本控制跟踪**；对新增文件应当先备份再改。
 
-**与设计的一处落差，如实记。** NX-39 的设计里这两类新任务要做成**多阶段**，理由是裁剪只移除「已结束且非当前」的 task（R-21），单任务会话永远不触发裁剪，于是上下文那一维在对照批次里只剩「压缩 + 有界」两半。这四份目前都是**单任务**（3a 的第一份就是，本步沿用了它）。处置：不在这一步凭推理改成多阶段，交给 NX-39-5 的离线因子预检按**实测**决定——R-21 的验收条款本来就写着「处理没真的发生就不得开跑对照」。这条同时写进 [fixture README](test/fixtures/coding/README.md)，并须在 NX-39-4 重写 R-21 条文时一并落定。
+**与设计的一处落差，如实记。** NX-39 的设计里这两类新任务要做成**多阶段**，理由是裁剪只移除「已结束且非当前」的 task（R-21），单任务会话永远不触发裁剪，于是上下文那一维在对照批次里只剩「压缩 + 有界」两半。这四份目前都是**单任务**（3a 的第一份就是，本步沿用了它）。处置：不在这一步凭推理改成多阶段，交给 NX-39-5 的离线因子预检按**实测**决定——R-21 的验收条款本来就写着「处理没真的发生就不得开跑对照」。这条同时写进 [fixture README](../../test/fixtures/coding/README.md)，并须在 NX-39-4 重写 R-21 条文时一并落定。
 
 提交：见本节对应的本地提交。
 
@@ -915,7 +1133,7 @@ PLAN 的 NX-39 节把 `ablationIds` 的前三类写成「bug 修复 4 ＋ 功能
 1. **`applyReference()` 对新种类不能把 `reference/` 覆盖进工作区。** 第一版按 `edit` 的思路写了「覆盖 `reference/` + 放上参考产物」，结果 `fixtures:check` 报 reference 态 `initialExitCode=0` 且受保护文件被改——把源码修好之后，agent 的产物在「缺陷」上也照样通过，判据当场失效。新种类的参考态**只有产物这一半**：`reference/` 只被验收器用在工作区副本上。
 2. **前提自检不能共用一句「初始失败、参考通过」。** 对新种类那句话几乎恒真：初始态失败只是因为**产物还不存在**，与判据有没有分辨力无关。改成按种类分查：`repro` 要额外查两件事——**放上参考产物**（源码仍是缺陷）必须判过，**放上反例产物**必须判不过，且前者**读数里那一对退出码要显式成立**（缺陷上非零、参考实现上 0）。只看 `passed` 的话，「缺陷到底存不存在」没有任何证据。
 
-**已知可被绕过的一处，如实记。** 判据只看退出码，因此一份**比对源码文本**（在 `src/sessions.mjs` 里找某个运算符）而不真正调用实现的产物也能满足 FAIL_TO_PASS。TASK.md 明文禁止这么做，但**没有机械门禁**。要堵它需要「行为保持的改写」，而那正是 `mutation` 类 `equivalents/` 的机制——两类合并到同一份验收器之后可以顺带补上，本步不做。这条已写进 [fixture README](test/fixtures/coding/README.md) 而不只是留在这里。
+**已知可被绕过的一处，如实记。** 判据只看退出码，因此一份**比对源码文本**（在 `src/sessions.mjs` 里找某个运算符）而不真正调用实现的产物也能满足 FAIL_TO_PASS。TASK.md 明文禁止这么做，但**没有机械门禁**。要堵它需要「行为保持的改写」，而那正是 `mutation` 类 `equivalents/` 的机制——两类合并到同一份验收器之后可以顺带补上，本步不做。这条已写进 [fixture README](../../test/fixtures/coding/README.md) 而不只是留在这里。
 
 **验证**
 
@@ -4271,7 +4489,7 @@ pnpm eval:offline     # planned 12 / executed 12 / accepted 12
 - 关联：R-02、R-05、R-09、R-11 的边界复核及后续开发方向。
 - 行为：核对源码、测试、远程基线和 CI；复现交叉边界；产出求职导向的完成度、优先级及验收路线。
 - 状态：done（2026-09-29，仅评估完成）。
-- 证据：基线 ca1e2c4；pnpm check 46 文件、pnpm test 57/57；CI 36514313704 四组合 success；`node docs/context-budget/review-probes.mjs` 输出 F1～F3 诊断值。报告与新任务见 [完成度评估与后续路线](../INTERNSHIP_ROADMAP.md)。
+- 证据：基线 ca1e2c4；pnpm check 46 文件、pnpm test 57/57；CI 36514313704 四组合 success；`node docs/context-budget/review-probes.mjs` 输出 F1～F3 诊断值。报告与新任务见 [完成度评估与后续路线](../history/INTERNSHIP_ROADMAP.md)。
 - 后续：F1～F3 尚未修复；原 NX-01～NX-11 经 CB-19 按 coding agent 定位重排，并扩展至 NX-16，功能均为 todo。没有付费模型效果证据，不将规划标记为功能完成。
 
 ## CB-19 按 mini coding agent harness 定位修订路线
@@ -4279,7 +4497,7 @@ pnpm eval:offline     # planned 12 / executed 12 / accepted 12
 - 关联：用户明确的仿 DeepSeek Harness 项目定位；CB-18 后续规划。
 - 行为：保留原评估及 F1～F3；将下一主线收敛到仓库上下文、可靠编辑、结构化命令结果、验证证据和编程评测；同步 README、需求/计划入口和进度。
 - 状态：done（2026-09-29，仅文档修订完成）。
-- 证据：核对 runtime-context 通用身份、files 编辑行为、Bash 文本结果及 Loop completed 路径；[开发路线](../INTERNSHIP_ROADMAP.md) 明确 M5～M9、NX-01～NX-16 的范围、依赖与验收。
+- 证据：核对 runtime-context 通用身份、files 编辑行为、Bash 文本结果及 Loop completed 路径；[开发路线](../history/INTERNSHIP_ROADMAP.md) 明确 M5～M9、NX-01～NX-16 的范围、依赖与验收。
 - 验证：本轮仅 Markdown 变更，32 个本地链接、16 个父任务 ID、M5～M9 阶段及 `git diff --check` 均通过；未重跑功能测试，57/57 为 CB-18 基线结果。
 - 后续：M5 加固后进入 M6 最小编程任务闭环；NX-05 先做 3 个 fixture，再扩至 12 个任务。运行时、prompt 和工具行为尚未改动。
 
@@ -4469,4 +4687,3 @@ NX-07 最终验收：a 5ef5b2e、b 21ee528、c 04f5c4b、d dd45f75、e 6c03300�
 README 增加无 key 的 inspect 文本、`--json`、`--trace` 示例和退出码 0/1/2；说明 `integrity.complete` 只表示读到的 JSONL 完整，不代表任务或产物成功。由当前源码 `pnpm pack --pack-destination D:/Agent/outputs/nx49-inspect-validation-20261018/package-final` 得到 `mini-DSH-0.0.1.tgz`（SHA256 `07FC27637BEC9F11ED1FEFEAC88AE967902CC25A9D4644B73C5E666781D4F84B`），仓库外 `consumer space` 用 `pnpm --dir ... add --offline --ignore-scripts` 安装。109 个包成员，全部在白名单内，含 inspect 与入口 JS，无 `.env`、会话日志、原始实验及审计文件。安装后在 `sample project` 含空格目录，Windows `mini-dsh.cmd inspect <synthetic session.jsonl>`、`--json`、`--trace` 均退出 0；截断文件退出 2，缺失文件退出 1。输入 SHA256 前后相同，未创建指定会话目录，DEEPSEEK_API_KEY 为空。真实模型请求 0。
 
 最终检查：正常权限 `pnpm check`（syntax 158 文件）、`pnpm test`（435 项、405 通过、30 跳过、0 失败）、`pnpm lint`（172 文件、0 诊断），另核对 `git diff --check`。tarball 仅作本地安装验收，未发布 npm；只在 Windows `.cmd` 路径验证安装，不推断其他平台结果。
-

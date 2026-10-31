@@ -23,6 +23,9 @@ export interface BudgetPolicy {
   tokenCalibration?: boolean
   tokenCalibrationMaxMultiplier?: number
   auto?: boolean
+  // NX-51：压力摘要后按压缩后目标线裁掉已结束旧任务。24 条真实对照未显示摘要/耗时下降，
+  // 因此**默认关闭**；显式设为 true 才启用，裁剪决定仍以 context/prune 事件持久化。
+  postCompactionPrune?: boolean
 }
 export const CLI_BUDGET: Readonly<BudgetPolicy> = Object.freeze({
   maxModelRequests: 64, maxToolCalls: 128, maxActiveDurationMs: 600_000,
@@ -37,8 +40,8 @@ const positive = new Set(['maxOutputTokens', 'minimumOutputTokens', 'contextWind
 // 比率与开关不是安全整数，单独放行——但只放行这两个集合里的键，其余仍走整数判定。
 // 压缩比率落在 0 < v ≤ 1：0 会让阈值恒为真，超过 1 则永远触发不了，两者都不是比率。
 const fractions = new Set(['compactionRatio', 'retainRatio', 'postCompactionTargetRatio'])
-const booleans = new Set(['auto', 'tokenCalibration'])
-const keys = new Set(Object.keys(CLI_BUDGET).concat('contextWindowTokens', 'compactionBudgetTokens', 'postCompactionTargetRatio', 'tokenCalibration', 'tokenCalibrationMaxMultiplier'))
+const booleans = new Set(['auto', 'tokenCalibration', 'postCompactionPrune'])
+const keys = new Set(Object.keys(CLI_BUDGET).concat('contextWindowTokens', 'compactionBudgetTokens', 'postCompactionTargetRatio', 'tokenCalibration', 'tokenCalibrationMaxMultiplier', 'postCompactionPrune'))
 export function resolveBudget(...layers: (BudgetPolicy | undefined)[]): Readonly<BudgetPolicy> {
   const result: BudgetPolicy = {}
   for (const layer of layers) {

@@ -167,20 +167,20 @@ async function writeEpisode(target: string, scenario: Awaited<ReturnType<typeof 
 export function formatResults(reports: readonly { name: string; report: ReturnType<typeof summarize> }[], verification: readonly { name: string; accepted: boolean }[]) {
   const rows = reports.map(({ name, report }) => {
     const accepted = verification.find(item => item.name === name)?.accepted ?? false
-    return `| ${name} | ${report.status} | ${accepted ? 'yes' : 'no'} | ${report.requests.dispatched} | ${report.requests.retries} | ${report.tools.calls} | ${report.tools.errors} | ${report.usage.inputTokens} | ${report.usage.cacheReadTokens} | ${report.usage.outputTokens} | ${report.costUsd.toFixed(9)} | ${report.missingUsage} |`
+    return `| ${name} | ${report.status} | ${accepted ? '是' : '否'} | ${report.requests.dispatched} | ${report.requests.retries} | ${report.tools.calls} | ${report.tools.errors} | ${report.usage.inputTokens} | ${report.usage.cacheReadTokens} | ${report.usage.outputTokens} | ${report.costUsd.toFixed(9)} | ${report.missingUsage} |`
   })
   return [
-    '# Synthetic evidence results',
+    '# 合成证据结果',
     '',
-    'These two episodes are **scripted/offline mechanism evidence**, not model capability results. They verify event format, provider-failure recovery, acceptance, and offline cost recomputation. They must not be reported as a benchmark score.',
+    '这两个 episode 是 **脚本化/离线机制证据**，不是模型能力结果。它们验证事件格式、provider 失败恢复、验收和离线成本复算。不得作为基准分数报告。',
     '',
-    'Cost uses the synthetic price snapshot in each manifest: `(input - cacheRead) × input + cacheRead × cacheReadPrice + output × outputPrice`, normalized per million tokens. It is an estimate for the sample, not a provider bill.',
+    '成本使用每个 manifest 中的合成价格快照：`(input - cacheRead) × input + cacheRead × cacheReadPrice + output × outputPrice`，按每百万 token 归一化。这是样例估算，不是 provider 账单。',
     '',
-    '| Episode | Status | Accepted | Requests | Retries | Tool calls | Tool errors | Input | Cache read | Output | Cost (USD) | Missing usage |',
+    '| Episode | 状态 | 验收通过 | 请求 | 重试 | 工具调用 | 工具错误 | 输入 | 缓存读取 | 输出 | 成本（USD） | 缺失 usage |',
     '| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
     ...rows,
     '',
-    'Reproduce offline: `pnpm build && node dist/scripts/recompute-report.js docs/samples --check`. The command verifies every `SHA256SUMS`, replays reports from `events.jsonl`, and compares this file.',
+    '离线复现：`pnpm build && node dist/scripts/recompute-report.js docs/samples --check`。该命令校验每个 `SHA256SUMS`，从 `events.jsonl` 回放报告，并与本文件比较。',
     '',
   ].join('\n')
 }

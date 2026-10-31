@@ -25,6 +25,7 @@
     "test": "pnpm build && node --test dist/test/*.test.js",
     "fixtures:check": "pnpm build && node dist/scripts/check-coding-fixtures.js",
     "eval:offline": "pnpm build && node dist/scripts/eval-offline.js",
+    "bench:components": "pnpm build && node scripts/benchmark-components.mjs --compare docs/samples/components-baseline.json",
     "eval:screening": "pnpm build && node dist/scripts/eval-screening.js",
     "eval:sequence": "pnpm build && node dist/scripts/eval-screening.js --phase sequence",
     "eval:estimate": "pnpm build && node dist/scripts/eval-estimate.js",
