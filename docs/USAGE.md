@@ -29,13 +29,19 @@
 
 默认会话日志位于用户主目录 `.mini-dsh/sessions/<session-id>/events.jsonl`，工具结果位于工作区 `.mini-dsh/tool-results`。启动时会打印 session ID；可分别用 `MINI_DSH_SESSION_DIR` 与 `MINI_DSH_WORKSPACE` 指定存储位置和工作区。
 
-退出后可在相同工作区恢复已有会话：
+退出后可在相同工作区恢复已有会话。PowerShell：
 
 ```powershell
 $env:MINI_DSH_SESSION_ID = '<启动时打印的 session-id>'
 node dist/src/index.js
 # 结束后取消本终端的恢复设置，下次即可创建新会话
 Remove-Item Env:MINI_DSH_SESSION_ID
+```
+
+bash 中变量只作用于这一条命令，结束后无需取消：
+
+```bash
+MINI_DSH_SESSION_ID='<启动时打印的 session-id>' node dist/src/index.js
 ```
 
 恢复重建事件状态，不恢复文件系统快照，也不重跑未知工具。若崩溃留下写锁，先用 `pnpm session:lock <session-id>` 查看锁体、进程探针和日志尾部；只有人工确认旧进程与副作用后，才使用输出提示的 token 显式解除。不要直接删除日志或凭 PID 自动解锁。
@@ -51,13 +57,22 @@ MCP 默认不加载 server。用户配置位于 `~/.mini-dsh/mcp.json`，可用 
 
 ## 只读检查会话日志
 
-已有 `events.jsonl` 可在无 API key、无模型请求时查看。`inspect` 不恢复会话、不获取写锁，也不执行日志里的命令或工具；路径可以位于含空格的目录。
+已有 `events.jsonl` 可在无 API key、无模型请求时查看。`inspect` 不恢复会话、不获取写锁，也不执行日志里的命令或工具；路径可以位于含空格的目录。PowerShell：
 
 ```powershell
 $log = Join-Path $env:USERPROFILE '.mini-dsh\sessions\<session-id>\events.jsonl'
 node dist/src/index.js inspect $log
 node dist/src/index.js inspect $log --json
 node dist/src/index.js inspect $log --trace
+```
+
+bash：
+
+```bash
+log="$HOME/.mini-dsh/sessions/<session-id>/events.jsonl"
+node dist/src/index.js inspect "$log"
+node dist/src/index.js inspect "$log" --json
+node dist/src/index.js inspect "$log" --trace
 ```
 
 - 文本默认列出会话和最近一次 run 的状态、请求/重试/派发前拒绝、工具结果、provider token 与缓存、缺 usage、摘要及 `read_history` 次数、frozen 快照来源。
@@ -68,7 +83,7 @@ node dist/src/index.js inspect $log --trace
 
 ## 检查生效配置
 
-```powershell
+```shell
 node dist/src/index.js --show-config
 ```
 
@@ -110,7 +125,7 @@ v2.1 的 Full/Baseline 是冻结开发协议里的两条实验臂，不是生产
 
 ## 本地打包与安装
 
-项目**尚未发布到 npm**，`private: true` 保留以防误发。下面从当前仓库生成 tarball，在仓库外的临时目录安装；已在 Windows 的含空格路径验证 `mini-dsh.cmd`。依赖首次安装可能需要访问包注册表；`--help`、`--version`、`--show-config`、`demo` 与 `inspect` 不需要 API key，也不会请求模型。
+项目**尚未发布到 npm**，`private: true` 保留以防误发。下面从当前仓库生成 tarball，在仓库外的临时目录安装；已在 Windows 的含空格路径验证 `mini-dsh.cmd`。依赖首次安装可能需要访问包注册表；`--help`、`--version`、`--show-config`、`demo` 与 `inspect` 不需要 API key，也不会请求模型。PowerShell：
 
 ```powershell
 $packRoot = Join-Path $env:TEMP ("mini-dsh-local-" + [guid]::NewGuid().ToString('N'))
@@ -126,6 +141,24 @@ Set-Location $workspace
 & $miniDsh --version
 & $miniDsh --show-config
 & $miniDsh demo fix
+```
+
+bash（Linux/macOS，或 Windows 的 Git Bash）：
+
+```bash
+packRoot=$(mktemp -d)
+installRoot="$packRoot/consumer space"
+workspace="$packRoot/sample project"
+mkdir -p "$installRoot" "$workspace"
+pnpm pack --pack-destination "$packRoot"
+tarball=$(find "$packRoot" -name '*.tgz' -print -quit)
+pnpm --dir "$installRoot" add --ignore-scripts "$tarball"
+miniDsh="$installRoot/node_modules/.bin/mini-dsh"
+cd "$workspace"
+"$miniDsh" --help
+"$miniDsh" --version
+"$miniDsh" --show-config
+"$miniDsh" demo fix
 ```
 
 本地安装验收覆盖 Windows 含空格路径；CI 的 `package-install` job（ubuntu-latest、Node 22）也在仓库外路径完成同一套 `--help`/`--version`/`--show-config`/`demo`/`inspect` 检查。macOS 安装未验证。

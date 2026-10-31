@@ -36,11 +36,11 @@ mini-DSH 使用 TypeScript / Cordis 构建，内置 DeepSeek 适配器，适合�
 
 ## 快速开始
 
-需要 **Node.js ≥ 22、pnpm 11.22.0 和 Bash**。Windows 使用 Git for Windows 自带的 Bash；Linux/macOS 使用 PATH 中的 `bash`。当前从源码使用，尚未发布到 npm。
+需要 **Node.js ≥ 22、pnpm 11.22.0 和 Bash**。Windows 使用 Git for Windows 自带的 Bash；Linux/macOS 使用 PATH 中的 `bash`。当前从源码使用，尚未发布到 npm。标为 `shell` 的命令在 PowerShell 与 bash 中相同；只适用于一种 shell 的写法分别给出。
 
 ### 1. 获取并构建
 
-```powershell
+```shell
 git clone https://github.com/BeforeLanding/mini-DSH.git
 cd mini-DSH
 pnpm install --frozen-lockfile
@@ -49,7 +49,7 @@ pnpm build
 
 ### 2. 先体验一次离线修复
 
-```powershell
+```shell
 node dist/src/index.js demo fix
 ```
 
@@ -57,10 +57,16 @@ node dist/src/index.js demo fix
 
 ### 3. 接入真实模型
 
-以下示例使用 PowerShell；已有 `.env` 会保留：
+复制示例配置，已有 `.env` 会保留。PowerShell：
 
 ```powershell
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+```
+
+bash：
+
+```bash
+[ -f .env ] || cp .env.example .env
 ```
 
 在 `.env` 填写 `DEEPSEEK_API_KEY`。默认工作区是启动目录；要操作自己的项目，再设置：
@@ -73,7 +79,7 @@ MINI_DSH_WORKSPACE=D:/path/to/your/project
 
 将工作区路径换成实际项目路径；在仓库根目录运行：
 
-```powershell
+```shell
 pnpm start
 ```
 
@@ -141,7 +147,7 @@ mini-DSH/
 
 ## 开发与文档
 
-```powershell
+```shell
 pnpm check
 pnpm test
 ```

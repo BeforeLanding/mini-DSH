@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### PORT-6a 快速开始与使用指南补 bash 命令（2026-10-31）
+
+README 的复制 `.env`，USAGE 的恢复会话、`inspect` 与本地打包安装原先只有 PowerShell 写法；CI 在 Ubuntu 上运行，Linux/macOS 读者需自行翻译。四处各补 bash 版本：`.env` 用 `[ -f .env ] || cp …` 保留已有文件（不用行为随 coreutils 版本变化的 `cp -n`）；恢复会话用单条命令前缀的环境变量，无需事后取消；打包安装与 CI `package-install` job 的步骤一致。两种 shell 通用的命令块（clone/build、demo、start、show-config、check/test）改标 `shell`，并在快速开始说明该约定。
+
+验收：在 Windows Git Bash 逐条实跑：已有 `.env` 时内容保留；`MINI_DSH_SESSION_ID='abc' node dist/src/index.js --show-config` 按预期拒绝，证明变量已传入；`inspect` 三种形式读取 `docs/samples/provider-recovery/events.jsonl` 的副本（complete JSONL，46 事件）；打包安装在含空格目录完成，`--help`、`--version`（0.1.0）、`--show-config` 正常，`demo fix` 输出 `demo result: PASS`。文档链接回归通过，Biome 0 诊断，`git diff --check` 通过。
+
 ### PORT-5b 进度页漂移护栏（2026-10-31）
 
 新增 `test/progress-sync.test.ts` 两项离线检查：PROGRESS 的“更新：”日期不得早于 CHANGES 中带日期标题的最新日期；README 以 `docs/images/demo-*` 嵌入演示图时，PROGRESS 不得再出现“演示录制…暂缓”。前者在任何新 CHANGES 条目之后强制复核当前状态页，后者挡住 PORT-5a 修的这类具体矛盾。
