@@ -59,13 +59,5 @@ test('preregistration separates development and formal batches, sanitizes gold, 
     assert.equal(frozen.freezeStatus, 'frozen')
     assert.deepEqual(frozen.missing, [])
     assert.deepEqual(frozen.formal.instances.map((item: { instance_id: string }) => item.instance_id), draft.formal.instances.map((item: { instance_id: string }) => item.instance_id))
-    const devDigests = Object.fromEntries(draft.development.instances.map((item: { instance_id: string }) => [item.instance_id, 'sha256:test']))
-    await fs.writeFile(digestsPath, JSON.stringify(devDigests))
-    const devOnlyPath = path.join(directory, 'development-only.json')
-    const devOutput = await run([...common, '--scope', 'development', '--batch-cap-usd', '17', '--image-digests', digestsPath, '--finalize', '--out', devOnlyPath])
-    assert.match(devOutput, /batch hard cap \$17.00, scope development/)
-    const devOnly = JSON.parse(await fs.readFile(devOnlyPath, 'utf8'))
-    assert.equal(devOnly.freezeStatus, 'frozen')
-    assert.equal(devOnly.executionScope, 'development')
   } finally { await fs.rm(directory, { recursive: true, force: true }) }
 })

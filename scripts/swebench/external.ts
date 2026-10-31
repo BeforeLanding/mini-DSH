@@ -1,6 +1,4 @@
 import { spawnSync } from 'node:child_process'
-import { commandInterpreter } from './command-environment.js'
-import type { CommandEnvironment } from './command-environment.js'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -92,7 +90,6 @@ export function externalOverrideConfig(input: {
   labels: ExternalLabels
   modelClass?: string
   modelExtra?: Record<string, unknown>
-  commandEnvironment?: CommandEnvironment
 }): Record<string, unknown> {
   const { model, caps, paths, uid, gid, labels, modelClass, modelExtra } = input
   const runArgs = buildExternalRunArgs({ workspace: paths.workspace, uid, gid, labels })
@@ -107,7 +104,7 @@ export function externalOverrideConfig(input: {
       environment_class: 'docker',
       cwd: '/testbed',
       timeout: 30,
-      interpreter: commandInterpreter(input.commandEnvironment),
+      interpreter: ['bash', '-lc'],
       env: {
         HOME: '/tmp',
         PAGER: 'cat',

@@ -22,10 +22,6 @@ import type { SwebenchEpisodeResult, SwebenchScoreResult, SwebenchScores } from 
 import { exportDockerWorkspace, exportPatch, prepareDockerWorkspace, prepareFixtureWorkspace, removeContainerIfPresent } from './workspace.js'
 import { preflightExternal, runExternalEpisode } from './external-run.js'
 import type { ExternalEpisodeOutcome, ExternalEpisodeRequest } from './external-run.js'
-import { CANDIDATE_PATH_GUIDANCE, probeCommandEnvironment, validateCommandEnvironment } from './command-environment.js'
-import { assertComponentSource } from './component-protocol.js'
-import { componentMetrics, readComponentMetrics } from './component-metrics.js'
-import type { ComponentMetrics } from './component-metrics.js'
 
 // R10 执行器：复用 createHarness、官方预测格式与独立判分通道。它不替用户决定模型、价格或授权；
 // 冻结文件里缺任何一项就拒绝执行。正式批次与开发批次共用同一实现，但题号、顺序与上限分别冻结。
@@ -50,7 +46,6 @@ export interface RunBatchOptions {
   // 批次级恢复：跳过已经落盘终态的 episode，继续剩余计划；中断的 episode 保留为 infrastructure，
   // 不自动重跑（重跑会变成同一题 arm 的第二次正式 attempt）。
   resume?: boolean
-  validateOnly?: boolean
 }
 
 function sanitizeName(value: string) { return value.replace(/[^A-Za-z0-9_.-]/g, '-') }
@@ -145,9 +140,6 @@ async function officialScores(options: RunBatchOptions, arm: SwebenchArm, predic
 
 export async function runSwebenchBatch(options: RunBatchOptions) {
   const manifest = options.manifest
-  if (manifest.executionScope === 'development' && options.split !== 'development') throw new Error('manifest is frozen for development only; formal requires a new freeze')
-  const commandEnvironment = validateCommandEnvironment(manifest.environment.commandEnvironment)
-  assertComponentSource(manifest)
   if (manifest.freezeStatus !== 'frozen') throw new Error('refusing to execute a draft manifest; finalize the protocol first')
   if (manifest.paidRequests !== 0) throw new Error('manifest must start with paidRequests: 0')
   if (options.scoring === 'official' && !manifest.prices) throw new Error('official scoring requires a frozen price snapshot for cost accounting')
@@ -177,24 +169,14 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
     if (!manifest.prices) throw new Error('external arms require a frozen price snapshot')
     if (!options.externalRunner) {
       externalPreflight = await preflightExternal({ manifest, split: options.split, instances: batchManifest.instances,
-        images: manifest.environment.imageDigests ?? {}, python: options.externalPython ?? process.env.MINI_DSH_EXTERNAL_PYTHON ?? 'python', requireCredential: !options.validateOnly })
+        images: manifest.environment.imageDigests ?? {}, python: options.externalPython ?? process.env.MINI_DSH_EXTERNAL_PYTHON ?? 'python' })
     }
   }
   const scoringRows = options.scoring === 'official'
     ? await loadScoringRows(options.scoringDataset!, batchManifest.instances)
     : undefined
-  const environmentProbes: ReturnType<typeof probeCommandEnvironment>[] = []
-  if (options.backend === 'docker' && commandEnvironment === 'testbed-v1') {
-    const uid = process.getuid?.(), gid = process.getgid?.()
-    if (uid === undefined || gid === undefined) throw new Error('testbed environment requires a POSIX uid/gid')
-    for (const image of new Set(batchManifest.instances.map(instance => manifest.environment.imageDigests![instance.instance_id]!))) {
-      environmentProbes.push(probeCommandEnvironment(image, uid, gid))
-    }
-  }
   const now = options.now ?? (() => Date.now())
   let startedAt = new Date().toISOString()
-  if (options.validateOnly) return { ...buildReport(manifest, options.split, [], { runIds: {}, results: [] }, { startedAt, finishedAt: startedAt }),
-    validationOnly: true, paidRequests: 0, environmentProbes }
   const records: SwebenchEpisodeResult[] = []
   if (options.resume) {
     const savedManifest = JSON.parse(await fs.readFile(path.join(options.evidenceRoot, 'manifest.json'), 'utf8')) as unknown
@@ -213,7 +195,6 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
     await fs.writeFile(path.join(options.evidenceRoot, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
     await fs.writeFile(path.join(options.evidenceRoot, 'dataset.json'), JSON.stringify(batchManifest.instances, null, 2) + '\n')
   }
-  if (environmentProbes.length) await fs.writeFile(path.join(options.evidenceRoot, 'environment-preflight.json'), JSON.stringify(environmentProbes, null, 2) + '\n')
   let stopReason: string | undefined
   let spentUsd = records.reduce((sum, record) => sum + (record.costUsd ?? 0), 0)
   let unknownCostEpisodes = records.filter(record => record.usageUnknown).length
@@ -231,7 +212,6 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
       await fs.mkdir(episodeDirectory, { recursive: true })
       const patchPath = path.join(episodeDirectory, 'patch.diff')
       let eventsPath: string | undefined, sessionId: string | undefined
-      let components: ComponentMetrics | undefined
       let status: EpisodeStatus = 'infrastructure', error: string | undefined
       let costUsd: number | undefined, usageUnknown = true
       let counters = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, modelRequests: 0, toolCalls: 0, activeDurationMs: 0 }
@@ -268,7 +248,6 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
             model: externalPreflight?.model ?? `${arm.model.provider}/${arm.model.name ?? ''}`,
             apiKeyEnv: arm.external?.apiKeyEnv ?? 'DEEPSEEK_API_KEY',
             timeoutMs: perTask.wallClockMs + 120_000,
-            commandEnvironment,
           }
           const outcome = options.externalRunner ? await options.externalRunner(request) : await runExternalEpisode(request)
           status = outcome.status
@@ -298,10 +277,9 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
           ...(prices ? { maxTotalTokens: tokenCapFromUsd(perTask.maxCostUsd, prices) } : {}),
         }
         const harness = await createHarness({ workspace, profile: 'coding', autoApprove: true, projectContext: false,
-          contextLayout: 'frozen', runtimeClockMode: 'frozen', toolOutput: true, ...arm.harness, adapter,
-          ...(dockerWorkspace ? { commandRunner: createDockerCandidateRunner(workspace, dockerWorkspace.containerName, { commandEnvironment }) } : {}) })
+          contextLayout: 'frozen', runtimeClockMode: 'frozen', toolOutput: true, adapter,
+          ...(dockerWorkspace ? { commandRunner: createDockerCandidateRunner(workspace, dockerWorkspace.containerName) } : {}) })
         try {
-          if (dockerWorkspace && commandEnvironment === 'testbed-v1') harness.root.systemPrompt.context({ name: 'swebench:environment', order: 110, text: CANDIDATE_PATH_GUIDANCE })
           const session = harness.root.sessions.create({ source: `swebench-${options.split}`, workspace })
           sessionId = session.id
           const store = await JsonlStore.open(path.join(episodeDirectory, 'session'), session.id)
@@ -326,7 +304,6 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
           patch = exportPatch(workspace, baseCommit)
           await fs.writeFile(patchPath, patch)
           await harness.root.sessions.flush(session.id)
-          components = componentMetrics(harness.root.sessions.confirmedEvents(session.id))
         } finally {
           await harness.root.sessions.close().catch(cause => { status = 'infrastructure'; error = error ?? `session store close failed: ${String(cause)}` })
           await harness.dispose()
@@ -340,7 +317,6 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
         dockerWorkspace?.cleanup()
       }
       const record: SwebenchEpisodeResult = { instanceId: entry.instanceId, armId: arm.id, status, resolved: false, emptyPatch: patch.trim().length === 0,
-        ...(components ? { components } : {}),
         ...(costUsd === undefined ? {} : { costUsd }), usageUnknown, inputTokens: counters.inputTokens, outputTokens: counters.outputTokens,
         cacheReadTokens: counters.cacheReadTokens, durationMs: Math.max(0, now() - began), modelRequests: counters.modelRequests, toolCalls: counters.toolCalls,
         ...(sessionId ? { sessionId } : {}), ...(eventsPath ? { eventsPath } : {}), patchPath: path.relative(options.evidenceRoot, patchPath),
@@ -395,7 +371,6 @@ export async function runSwebenchBatch(options: RunBatchOptions) {
   const finishedAt = new Date().toISOString()
   const batch = { split: options.split, ...(stopReason ? { stopReason } : {}), spentUsdEstimate: Number(spentUsd.toFixed(9)), unknownCostEpisodes, startedAt, finishedAt }
   await fs.writeFile(path.join(options.evidenceRoot, 'batch.json'), JSON.stringify(batch, null, 2) + '\n')
-  for (const record of records) if (record.eventsPath && record.sessionId) record.components = await readComponentMetrics(options.evidenceRoot, record)
   const report = buildReport(manifest, options.split, records, scores, batch)
   await writeReport(options.evidenceRoot, report)
   await writeChecksums(options.evidenceRoot)
@@ -411,7 +386,6 @@ async function fixtureScorer(root: string) {
 
 async function writeChecksums(root: string) {
   const names = ['manifest.json', 'dataset.json', 'runs.jsonl', 'scores.json', 'batch.json', 'report.json']
-  if (await fs.stat(path.join(root, 'environment-preflight.json')).then(() => true, () => false)) names.push('environment-preflight.json')
   const lines: string[] = []
   for (const name of names) {
     const bytes = await fs.readFile(path.join(root, name))
@@ -435,8 +409,7 @@ function optionalArgument(name: string) {
 
 async function cli() {
   const execute = process.argv.includes('--execute')
-  const validateOnly = process.argv.includes('--validate-only')
-  if (execute === validateOnly) throw new Error('choose exactly one of --execute or --validate-only (zero model calls)')
+  if (!execute) throw new Error('run requires --execute; a dry run would still be a paid operation in the official backend')
   const manifestPath = path.resolve(argument('--manifest'))
   const manifest = validateRunManifest(JSON.parse(await fs.readFile(manifestPath, 'utf8')))
   const split = argument('--split')
@@ -446,12 +419,12 @@ async function cli() {
   const scoring = argument('--scoring')
   if (scoring !== 'mock' && scoring !== 'official') throw new Error('--scoring must be mock or official')
   const report = await runSwebenchBatch({ manifest, manifestPath, datasetPath: path.resolve(argument('--dataset')),
-    evidenceRoot: path.resolve(argument('--evidence-root')), split, backend, scoring, validateOnly,
+    evidenceRoot: path.resolve(argument('--evidence-root')), split, backend, scoring,
     batchId: argument('--batch-id'), ...(optionalArgument('--fixtures') ? { fixtureRoot: path.resolve(argument('--fixtures')) } : {}),
     ...(optionalArgument('--scoring-dataset') ? { scoringDataset: path.resolve(argument('--scoring-dataset')) } : {}),
     ...(optionalArgument('--external-python') ? { externalPython: argument('--external-python') } : {}),
     ...(process.argv.includes('--resume') ? { resume: true } : {}) })
-  console.log(JSON.stringify({ split, ...(validateOnly ? { validationOnly: true, paidRequests: 0 } : {}), executed: report.executedEpisodes, planned: report.plannedEpisodes,
+  console.log(JSON.stringify({ split, executed: report.executedEpisodes, planned: report.plannedEpisodes,
     stopReason: report.batch.stopReason ?? null, perArm: report.perArm.map(arm => ({ armId: arm.armId, resolved: arm.resolved, planned: arm.planned, executed: arm.executed })) }))
 }
 

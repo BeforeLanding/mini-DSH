@@ -134,9 +134,6 @@ test('run manifest validation rejects draft-incompatible schemas and inconsisten
     prices: null, scoring: {}, environment: { imageDigests: null }, authorization: 'none', missing: [], createdAt: '2026-10-20', paidRequests: 0,
   }
   assert.equal(validateRunManifest(manifest).freezeStatus, 'frozen')
-  assert.deepEqual(validateRunManifest(manifest).environment, { imageDigests: null })
-  assert.equal(validateRunManifest({ ...manifest, environment: { imageDigests: null, commandEnvironment: 'testbed-v1' } }).environment.commandEnvironment, 'testbed-v1')
-  assert.throws(() => validateRunManifest({ ...manifest, environment: { imageDigests: null, commandEnvironment: 'base' } }), /commandEnvironment/)
   assert.throws(() => validateRunManifest({ ...manifest, schemaVersion: 1 }), /unsupported/)
   assert.throws(() => validateRunManifest({ ...manifest, formal: { ...batch, schedule: batch.schedule.slice(0, 1) } }), /cover every instance and arm/)
   assert.throws(() => validateRunManifest({ ...manifest, promptTemplate: 'no placeholder' }), /problem_statement/)

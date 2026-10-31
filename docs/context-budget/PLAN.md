@@ -1,9 +1,5 @@
 # 上下文与执行预算管理：计划与设计
 
-## SWE-O 分步执行（2026-10-30）
-
-采用独立 SWE 分支；环境契约、组件观测/消融、上下文优化各自验收提交。旧 manifest 缺环境版本时保留旧行为，新批重冻 `testbed-v1`；真实模型预算须按批授权。细节见 [SWE 组件优化](SWE-COMPONENT-EFFECTS.md)。
-
 组件评测收口（2026-10-27）：新增独立 `component-loo` 协议；配置与允许变化由 `scripts/eval-v2-component-protocol.ts` 维护，四臂明确冻结 `postCompactionPrune=false`，顺序 full → no-preview → no-projection → no-report。package 与评测代码必须相同，产品代码仅允许精确组件路径差异。NX-50 历史门槛保持原样；验收见 NX-51-COMPONENT-ABLATION。
 
 新阶段（2026-10-26）：见 [项目记忆与只读协作计划](../memory-team/PLAN.md)。默认关闭的新功能在独立分支实施，不改写下文历史协议、证据或 PR #6 的消融准备。

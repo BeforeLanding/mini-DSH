@@ -2,7 +2,6 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import { createDockerCandidateRunner } from '../scripts/swebench/docker-candidate.js'
-import { commandInterpreter, validateCommandEnvironment } from '../scripts/swebench/command-environment.js'
 import type { CommandOptions, CommandResult } from '../src/core/command-runner.js'
 
 const result = (status: CommandResult['status']): CommandResult => ({
@@ -41,18 +40,4 @@ test('a timed-out docker exec tears down its container and cannot dispatch again
   assert.equal(calls, 1)
   assert.equal(stops, 1)
   assert.throws(() => createDockerCandidateRunner(path.resolve('candidate'), 'bad/name'), /invalid candidate/)
-})
-
-test('testbed candidate activates the shared interpreter without interpolating the action', async () => {
-  const root = path.resolve('candidate workspace')
-  let dispatched: CommandOptions | undefined
-  const runner = createDockerCandidateRunner(root, 'candidate-testbed', {
-    commandEnvironment: 'testbed-v1', run: async options => { dispatched = options; return result('exited') },
-  })
-  const command = `python - <<'PY'\nprint('quotes: " $HOME $(false)')\nPY\nfalse || true`
-  await runner({ executable: 'bash', args: [], command, cwd: root, signal: new AbortController().signal, env: { DEEPSEEK_API_KEY: 'secret' } })
-  assert.deepEqual(dispatched?.args, ['exec', '--workdir', '/testbed', 'candidate-testbed', ...commandInterpreter('testbed-v1'), command])
-  assert.deepEqual(dispatched?.env, {})
-  assert.equal(validateCommandEnvironment(undefined), 'legacy')
-  assert.throws(() => validateCommandEnvironment('testbed'), /commandEnvironment/)
 })

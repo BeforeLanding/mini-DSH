@@ -1,9 +1,6 @@
 import path from 'node:path'
 import type { Usage } from '../../src/core/budget.js'
-import { validateCommandEnvironment } from './command-environment.js'
-import type { CommandEnvironment } from './command-environment.js'
 import { EXTERNAL_CONTRACT_VERSION, validateExternalCommand } from './external-contract.js'
-import { validateComponentProtocol } from './component-protocol.js'
 
 // R10 的离线适配层。这里不运行 Docker、不下载数据集、不调用模型；它只固定正式实验需要的
 // 选择、预算、路径映射、预测格式与汇总口径，好在取得授权后不做“先跑再改协议”。
@@ -206,7 +203,6 @@ export interface SwebenchArm {
   model: { provider: string; name: string | null; contextWindowTokens: number }
   external?: SwebenchArmExternal
   budget: Record<string, unknown>
-  harness?: { toolOutput: boolean; toolOutputMaxPreviewBytes: number; projectContext: boolean }
 }
 
 export interface SwebenchBatchManifest {
@@ -236,12 +232,11 @@ export interface SwebenchRunManifest {
   }
   prices: PriceSnapshot | null
   scoring: Record<string, unknown>
-  environment: { imageDigests: Record<string, string> | null; commandEnvironment?: CommandEnvironment }
+  environment: { imageDigests: Record<string, string> | null }
   authorization: string
   missing: string[]
   createdAt: string
   paidRequests: number
-  executionScope?: 'development' | 'all'
 }
 
 function positiveInteger(value: unknown, name: string): number {
@@ -345,7 +340,6 @@ export function validateRunManifest(value: unknown): SwebenchRunManifest {
   if (manifest.schemaVersion !== 3 || manifest.kind !== 'swebench-run-manifest') throw new Error('unsupported run manifest schema')
   if (manifest.freezeStatus !== 'draft' && manifest.freezeStatus !== 'frozen') throw new Error('run manifest freezeStatus must be draft or frozen')
   const frozen = manifest.freezeStatus === 'frozen'
-  if (manifest.executionScope !== undefined && manifest.executionScope !== 'development' && manifest.executionScope !== 'all') throw new Error('executionScope must be development or all')
   if (!Array.isArray(manifest.arms) || !manifest.arms.length) throw new Error('run manifest needs arms')
   const arms = manifest.arms.map((value, index) => {
     if (!value || typeof value !== 'object') throw new Error(`arms[${index}] must be an object`)
@@ -362,15 +356,8 @@ export function validateRunManifest(value: unknown): SwebenchRunManifest {
     if (system === 'external' && !external) throw new Error(`arms[${index}].external is required for an external arm`)
     if (system === 'external' && frozen && (typeof model.name !== 'string' || !model.name)) throw new Error(`arms[${index}].model.name is required when frozen`)
     if (system === 'mini-dsh' && external) throw new Error(`arms[${index}].external is only valid for an external arm`)
-    let harness: SwebenchArm['harness']
-    if (arm.harness !== undefined) {
-      if (system !== 'mini-dsh' || !isRecord(arm.harness) || Object.keys(arm.harness).sort().join(',') !== 'projectContext,toolOutput,toolOutputMaxPreviewBytes'
-        || typeof arm.harness.toolOutput !== 'boolean' || typeof arm.harness.projectContext !== 'boolean') throw new Error(`arms[${index}].harness is invalid`)
-      harness = { toolOutput: arm.harness.toolOutput, projectContext: arm.harness.projectContext,
-        toolOutputMaxPreviewBytes: positiveInteger(arm.harness.toolOutputMaxPreviewBytes, `arms[${index}].harness.toolOutputMaxPreviewBytes`) }
-    }
     return { id: arm.id, system, role: typeof arm.role === 'string' ? arm.role : '', model: { provider: model.provider, name: model.name as string | null, contextWindowTokens },
-      ...(external ? { external } : {}), ...(harness ? { harness } : {}), budget: arm.budget as Record<string, unknown> }
+      ...(external ? { external } : {}), budget: arm.budget as Record<string, unknown> }
   })
   if (new Set(arms.map(arm => arm.id)).size !== arms.length) throw new Error('arm ids must be unique')
   const candidate = arms.find(arm => arm.id === 'candidate')
@@ -402,7 +389,7 @@ export function validateRunManifest(value: unknown): SwebenchRunManifest {
   if (typeof manifest.paidRequests !== 'number') throw new Error('paidRequests is required')
   if (typeof manifest.createdAt !== 'string') throw new Error('createdAt is required')
   if (!manifest.environment || typeof manifest.environment !== 'object') throw new Error('environment is required')
-  const validated: SwebenchRunManifest = {
+  return {
     schemaVersion: 3, kind: 'swebench-run-manifest', freezeStatus: manifest.freezeStatus,
     dataset: { name: String((manifest.dataset as Record<string, unknown>).name ?? 'SWE-bench Verified'), revision: (manifest.dataset as Record<string, unknown>).revision as string },
     harnessCommit: manifest.harnessCommit, selection: manifest.selection,
@@ -412,15 +399,11 @@ export function validateRunManifest(value: unknown): SwebenchRunManifest {
     caps: { perTask: perTask as SwebenchRunManifest['caps']['perTask'], developmentPerTask: dev as SwebenchRunManifest['caps']['developmentPerTask'], batch: batchCaps as SwebenchRunManifest['caps']['batch'] },
     prices: manifest.prices === null ? null : validatePriceSnapshot(manifest.prices),
     scoring: isRecord(manifest.scoring) ? manifest.scoring : {},
-    environment: { imageDigests: (manifest.environment as Record<string, unknown>).imageDigests as Record<string, string> | null ?? null,
-      ...((manifest.environment as Record<string, unknown>).commandEnvironment === undefined ? {} : { commandEnvironment: validateCommandEnvironment((manifest.environment as Record<string, unknown>).commandEnvironment) }) },
+    environment: { imageDigests: (manifest.environment as Record<string, unknown>).imageDigests as Record<string, string> | null ?? null },
     authorization: typeof manifest.authorization === 'string' ? manifest.authorization : '',
     missing: Array.isArray(manifest.missing) ? manifest.missing.map(item => String(item)) : [],
     createdAt: manifest.createdAt, paidRequests: manifest.paidRequests,
-    ...(manifest.executionScope === undefined ? {} : { executionScope: manifest.executionScope }),
   }
-  validateComponentProtocol(validated)
-  return validated
 }
 
 export interface PriceSnapshot {
