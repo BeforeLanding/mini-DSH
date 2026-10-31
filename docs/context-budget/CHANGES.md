@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### PORT-8 context-budget 目录说明（2026-10-31）
+
+逐个统计本目录体积与引用：CHANGES 613 KB、TASKS 251 KB、PLAN 141 KB，均为 AGENTS.md 要求同步的工作文档；NX 报告、组件评测记录与 6 个探针合计约 250 KB。`scripts/eval-v2-report.ts` 的 `frozenSourcePaths` 按路径与 SHA-256 冻结 NX-42-EVAL-V2-PLAN、NX-45-DEVELOPMENT、NX-50-COMPONENT-AB、NX-51-COMPONENT-ABLATION，移动或改动会使既有 manifest 无法校验；`test/nx08-report.test.ts` 与 `test/eval-v2-report.test.ts` 也按路径读取其中三份。按用户选择不移动文件，新增 `docs/context-budget/README.md`（GitHub 浏览目录时直接渲染）：工作文档 5 份、冻结协议文档 4 份、历史报告 20 份、诊断探针 6 个，每项一句说明，描述取自各文件标题与页首注释。文档索引的开发档案加入口。新增 `test/context-budget-index.test.ts`：目录中除说明页外的每个文件都须以链接形式列出；`eval-v2-report.ts` 中出现的每个 `docs/context-budget/*.md` 都须列在“被冻结清单引用的协议文档”一节。
+
+验收：新回归 2/2 pass；临时删掉说明页中一份历史报告与一份冻结文档的条目后两项均失败并点名缺失文件，随后恢复。`node scripts/build.js`、`node scripts/check-syntax.js`（205 files）通过；Biome 236 files、0 诊断；完整离线回归 553 项：523 pass、0 fail、30 平台条件 skipped。
+
 ### PORT-7b 说明 DEEPSEEK_THINKING 并加环境变量覆盖回归（2026-10-31）
 
 `src/models/deepseek.ts:138` 把 `config.thinking ?? process.env.DEEPSEEK_THINKING ?? 'enabled'` 原样作为请求的 `thinking.type` 发送，但 `.env.example` 与 USAGE 都没有提到它。按 DeepSeek 官方 Chat Completions 文档，`thinking.type` 取 `enabled` 或 `disabled`，省略时默认开启。`.env.example` 在 `DEEPSEEK_BASE_URL` 后加注释示例，USAGE 的模型段说明取值与关闭后的表现（不返回推理内容，CLI 不显示 `[Thinking]` 段）。`test/env-docs.test.ts` 新增回归：遍历 `src/**/*.ts` 与 `plugins.config.ts` 中的 `MINI_DSH_*`、`DEEPSEEK_*` 名称（当前 16 个），每个都须出现在 `.env.example` 或 USAGE；评测专用变量只在 `scripts/` 读取，不在扫描范围。

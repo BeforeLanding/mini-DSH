@@ -1,5 +1,11 @@
 # 任务清单
 
+### context-budget 目录说明（2026-10-31）
+
+本目录约 1.4 MB，大头是在维护的 CHANGES/TASKS/PLAN；NX 报告与探针约 250 KB，其中四份协议文档被 `scripts/eval-v2-report.ts` 的冻结清单按路径与 SHA-256 引用，不能移动。按用户选择不搬文件，只加目录说明：
+
+- PORT-8（完成，本提交）：新增 `docs/context-budget/README.md`，把全部文件分为工作文档、冻结协议文档、历史报告与诊断探针；文档索引的开发档案加入口；新增 `test/context-budget-index.test.ts`，目录里每个文件都须被说明页列出，冻结清单引用的文档都须在协议一节。
+
 ### 配置模板与环境变量说明（2026-10-31）
 
 对照文档与源码时发现：`.env.example` 后半段是付费评测变量，与 README“不展示模型评测结果”的定位不符，也让普通用户在复制模板时看到计费批次；`src/models/deepseek.ts` 读取的 `DEEPSEEK_THINKING` 在 `.env.example` 与 USAGE 中都没有说明。按两次提交：

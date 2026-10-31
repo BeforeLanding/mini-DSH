@@ -24,6 +24,7 @@
 <summary>展开过程文档</summary>
 
 - [PROGRESS](../PROGRESS.md) — 当前状态、阻塞与下一步。
+- [context-budget 目录说明](context-budget/README.md) — 工作文档、冻结协议文档、历史报告与诊断探针的分类。
 - [context-budget/PLAN](context-budget/PLAN.md) — 规范设计决策与参数。
 - [context-budget/TASKS](context-budget/TASKS.md) — 当前任务与验收证据。
 - [context-budget/CHANGES](context-budget/CHANGES.md) — 每次改动的命令与结果。
