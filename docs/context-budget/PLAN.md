@@ -1,6 +1,6 @@
 # 上下文与执行预算管理：计划与设计
 
-当前交付范围（2026-10-30）：main 保持单 Agent 本地 Harness；记忆与只读协作的代码、专属协议和证据只保留在独立分支 `feat/memory-team-eval-v2`。本轮撤回 main 中的 PR #7 集成，保留其它组件和历史证据，不重写 Git 历史。演示录制暂缓；付费评测、发布与部署不在本轮范围。
+当前交付范围（2026-10-30）：main 保持单 Agent 本地 Harness；记忆与只读协作的代码、专属协议和证据只保留在独立分支 `feat/memory-team-eval-v2`。本轮撤回 main 中的 PR #7 集成，保留其它组件和历史证据，不重写 Git 历史。演示方面，README 自 2026-10-31 起含脚本化预算续跑动图，完整讲解视频尚未录制；付费评测、发布与部署不在本轮范围。
 
 组件评测收口（2026-10-27）：新增独立 `component-loo` 协议；配置与允许变化由 `scripts/eval-v2-component-protocol.ts` 维护，四臂明确冻结 `postCompactionPrune=false`，顺序 full → no-preview → no-projection → no-report。package 与评测代码必须相同，产品代码仅允许精确组件路径差异。NX-50 历史门槛保持原样；验收见 NX-51-COMPONENT-ABLATION。
 

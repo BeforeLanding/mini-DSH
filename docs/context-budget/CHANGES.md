@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### PORT-5a 进度页同步 10-31 的展示与 CI 状态（2026-10-31）
+
+PROGRESS 停在 10-30：CI 仍引用 `46b8fb1` 的 41045952548，阻塞与下一步仍写“演示录制暂缓”，而 10-31 已把预算续跑动图放进 README 首屏，并在 `5fab772` 改了四个离线演示脚本的标题。核对 `gh run view 41175510465`：head 为 `06846d5`（PR #15 合并，含 `5fab772`），六个必需 job success、SWE PoC skipped；`git diff --stat 46b8fb1 06846d5 -- src test package.json pnpm-lock.yaml` 为空，`06846d5` 之后到 `12a5d53` 只改文档与图片。PROGRESS 据此改写 CI 行，新增动图条目（`scripts/demo-resume.tape` 驱动脚本化 `demo:resume`），阻塞与下一步改为“完整讲解视频尚未录制”，并写明本地安装包未重打。PLAN、REQUIREMENTS 与 TASKS 的范围行同步同一口径；DELIVERY-20261030 是带日期的验收记录，不改。
+
+验收：`node scripts/build.js` 通过；`node --test dist/test/docs-links.test.js dist/test/display-policy.test.js dist/test/decisions-doc.test.js` 8/8 pass；Biome 233 files、0 诊断；`git diff --check` 通过。未改产品源码，未重复完整功能测试。
+
 ### PORT-4 重绘 README 架构图（2026-10-31）
 
 README 顶部架构图改为可维护的矢量源 `docs/images/architecture.svg`，由 Chrome headless 以 1600×960 视口、2 倍缩放导出 `docs/images/architecture.png`（约 0.55 MB，原图约 1.5 MB）；采用深色底与彩色描边，兼顾 GitHub 浅色与深色主题；删除旧位图 `architecture-v1.png`。新图按 ARCHITECTURE 与现行源码标注模块：入口与 `createHarness` 装配，Agent Loop 的投影、预算预留、模型请求、授权与执行四步，左右两侧的上下文管理与模型/工具/审批，`events.jsonl` 事件日志，以及由事件派生的恢复续跑、只读 inspect 与交付证据。应用层闸门仍标注为非 OS 隔离。
