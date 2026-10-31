@@ -1,12 +1,10 @@
-![mini-DSH 架构：入口与装配、Agent Loop、上下文管理、模型与工具、事件日志及其派生的恢复、检查与交付证据](docs/images/architecture.png)
+![预算停止后在同一任务续跑，没有工具被执行两次](docs/images/demo-resume.gif)
 
 # mini-DSH
 
 [![CI](https://github.com/BeforeLanding/mini-DSH/actions/workflows/ci.yml/badge.svg)](https://github.com/BeforeLanding/mini-DSH/actions/workflows/ci.yml)
 
 > 在本地代码仓库中运行的命令行编程 Agent，让修改、检查和任务恢复有据可查。
-
-![预算停止后在同一任务续跑，没有工具被执行两次](docs/images/demo-resume.gif)
 
 用自然语言提出任务，让模型读取项目规则、定位代码、编辑文件并运行检查。你可以审批修改与命令执行，查看 diff 和验证记录，并在预算停止后继续任务。
 
@@ -114,6 +112,8 @@ pnpm start
 - **范围：** 本仓库不展示模型评测结果，演示与离线回归验证的是机制而非模型能力。项目记忆与只读协作在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2)，SWE-bench 实验在[独立实验分支](https://github.com/BeforeLanding/mini-DSH/tree/feat/swebench-formal-results)，均不属于 main 交付范围。
 
 ## 架构与扩展
+
+![mini-DSH 架构：入口与装配、Agent Loop、上下文管理、模型与工具、事件日志及其派生的恢复、检查与交付证据](docs/images/architecture.png)
 
 CLI、模型、工具与 MCP 通过 Cordis 插件和服务契约装配；生产入口与评测入口共用 `createHarness`。JSONL 记录会话事实，上下文投影与统计从事件派生；裁剪和压缩保留原始事件。
 
