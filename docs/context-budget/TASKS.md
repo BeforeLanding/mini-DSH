@@ -1,8 +1,30 @@
 # 任务清单
 
+### 配置模板与环境变量说明（2026-10-31）
+
+对照文档与源码时发现：`.env.example` 后半段是付费评测变量，与 README“不展示模型评测结果”的定位不符，也让普通用户在复制模板时看到计费批次；`src/models/deepseek.ts` 读取的 `DEEPSEEK_THINKING` 在 `.env.example` 与 USAGE 中都没有说明。按两次提交：
+
+- PORT-7a（完成，`9968b3e`）：`MINI_DSH_EVAL_*` 三个变量及 `--plan-only` 说明从 `.env.example` 移到唯一读取它们的 `scripts/eval-screening.ts` 页首；新增 `test/env-docs.test.ts`，`.env.example` 不得再出现 `MINI_DSH_EVAL_`。
+- PORT-7b（完成，本提交）：`.env.example` 与 USAGE 说明 `DEEPSEEK_THINKING`（`enabled` 默认 / `disabled`）；同一测试文件增加回归，`src/` 与 `plugins.config.ts` 读取的每个 `MINI_DSH_*`、`DEEPSEEK_*` 变量都须出现在 `.env.example` 或 USAGE。
+
+### 跨 shell 使用说明与路线图归档（2026-10-31）
+
+快速开始与使用指南的部分命令只有 PowerShell 写法；核对 bash 版本时发现使用指南的 `inspect --json` 版本号过期；内部路线图仍在 docs 顶层。按三次提交：
+
+- PORT-6a（完成，`afb58fc`）：README 与 USAGE 中只适用于 PowerShell 的四处命令（复制 `.env`、恢复会话、`inspect`、本地打包安装）补 bash 版本，两种 shell 通用的命令块改标 `shell`。验收：在 Git Bash 逐条实跑 bash 版本，打包安装结束输出 `demo result: PASS`。
+- PORT-6b（完成，`4de68a8`）：USAGE 的 `inspect --json` 版本由 1 改为实际的 2，并加回归比对文档版本与 `InspectReport.version`。
+- PORT-6c（完成，本提交）：`docs/INTERNSHIP_ROADMAP.md` 移入 `docs/history/`，同步仍在使用的链接与 DECISIONS 页首路径；带日期记录里的纯文本路径保留原样。
+
+### 进度页与 10-31 展示改动同步（2026-10-31）
+
+10-31 的演示动图、架构图重绘与演示标题改动之后，PROGRESS 仍写 10-30 的 CI 与“演示录制暂缓”。按两次提交收尾：
+
+- PORT-5a（完成，`2ab7cab`）：PROGRESS 改为 `06846d5` 的 CI 41175510465，写明相对 `46b8fb1` 仅演示标题文案变化、本地安装包未重打；演示状态改为“README 含脚本化预算续跑动图，完整讲解视频尚未录制”，PLAN/REQUIREMENTS/本页的范围行同步。验收：文档链接、展示边界与 DECISIONS 回归通过，Biome 通过。
+- PORT-5b（完成，本提交）：新增 `test/progress-sync.test.ts`，PROGRESS 更新日期不得早于 CHANGES 最新条目，README 嵌入演示图时 PROGRESS 不得再写演示录制暂缓。验收：新测试在本提交通过，在 PORT-5a 之前的 PROGRESS 上两项均失败。
+
 ### 求职版本收尾与扩展分支隔离（2026-10-30）
 
-用户范围：main 仅交付单 Agent；记忆与只读协作仅保留在 `feat/memory-team-eval-v2`，暂不合入 main。演示录制暂缓，不启动真实模型评测、公开发布或部署。
+用户范围：main 仅交付单 Agent；记忆与只读协作仅保留在 `feat/memory-team-eval-v2`，暂不合入 main。完整讲解视频尚未录制（README 自 2026-10-31 起含脚本化动图），不启动真实模型评测、公开发布或部署。
 
 按可独立验收和回退的结果分三次提交，每步通过后再进入下一步：
 

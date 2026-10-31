@@ -1,6 +1,6 @@
 # 上下文与执行预算管理：计划与设计
 
-当前交付范围（2026-10-30）：main 保持单 Agent 本地 Harness；记忆与只读协作的代码、专属协议和证据只保留在独立分支 `feat/memory-team-eval-v2`。本轮撤回 main 中的 PR #7 集成，保留其它组件和历史证据，不重写 Git 历史。演示录制暂缓；付费评测、发布与部署不在本轮范围。
+当前交付范围（2026-10-30）：main 保持单 Agent 本地 Harness；记忆与只读协作的代码、专属协议和证据只保留在独立分支 `feat/memory-team-eval-v2`。本轮撤回 main 中的 PR #7 集成，保留其它组件和历史证据，不重写 Git 历史。演示方面，README 自 2026-10-31 起含脚本化预算续跑动图，完整讲解视频尚未录制；付费评测、发布与部署不在本轮范围。
 
 组件评测收口（2026-10-27）：新增独立 `component-loo` 协议；配置与允许变化由 `scripts/eval-v2-component-protocol.ts` 维护，四臂明确冻结 `postCompactionPrune=false`，顺序 full → no-preview → no-projection → no-report。package 与评测代码必须相同，产品代码仅允许精确组件路径差异。NX-50 历史门槛保持原样；验收见 NX-51-COMPONENT-ABLATION。
 
@@ -54,7 +54,7 @@
 
 NX-05a 使用三个无外部依赖的 Node ESM 编程 fixture。初始代码复制到每次新建的临时工作区，任务说明、参考解及可信验收器留在工作区外；独立 Node 子进程执行行为验收，配置超时和输出上界，退出码与受保护文件完整性共同决定通过。模拟模型使用预设工具序列验证 Harness，不能作为自主编程成功率证据。run completed 与 fixture 验收分别报告，不修改运行事件契约；真实模型评测留待 NX-08。工作目录隔离不等于操作系统安全隔离。
 
-项目定位为仿 DeepSeek Harness 的 mini coding agent harness。M5 起按 [编程 Harness 开发路线](../INTERNSHIP_ROADMAP.md) 推进：收尾已复现预算边界 → 仓库上下文/代码定位/可靠编辑/执行验证闭环 → 编程任务评测 → 按失败证据增强长任务能力。求职演示随开发积累。保持现有 Cordis 服务与模型适配器边界；运行终态和代码验证结果分别建模。
+项目定位为仿 DeepSeek Harness 的 mini coding agent harness。M5 起按 [编程 Harness 开发路线](../history/INTERNSHIP_ROADMAP.md) 推进：收尾已复现预算边界 → 仓库上下文/代码定位/可靠编辑/执行验证闭环 → 编程任务评测 → 按失败证据增强长任务能力。求职演示随开发积累。保持现有 Cordis 服务与模型适配器边界；运行终态和代码验证结果分别建模。
 
 后续功能不改变 D-02 当前 task 完整保护和 D-05 run 终态；NX-13/NX-15 的新增事件见各自决策。实现 NX-16 等涉及契约的任务前，须先在本专题补充对应需求与设计决策；不把未来压缩行为混入现有完成记录。（2026-10-06 补：这一段写于 M5 时期，其中两句已被 NX-34 的 D-21 推翻——**D-02 的「当前 task 所有 run 原文进入请求」已被修订**，压缩会把当前 task 的一段历史换成落盘摘要；「未来压缩行为」现已是现有行为。D-02 的其余部分与 D-05 未变，见 D-21 与 REQUIREMENTS 的 R-22。）
 

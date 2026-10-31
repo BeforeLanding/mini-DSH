@@ -1,5 +1,47 @@
 # 改动与验收证据
 
+### PORT-7b 说明 DEEPSEEK_THINKING 并加环境变量覆盖回归（2026-10-31）
+
+`src/models/deepseek.ts:138` 把 `config.thinking ?? process.env.DEEPSEEK_THINKING ?? 'enabled'` 原样作为请求的 `thinking.type` 发送，但 `.env.example` 与 USAGE 都没有提到它。按 DeepSeek 官方 Chat Completions 文档，`thinking.type` 取 `enabled` 或 `disabled`，省略时默认开启。`.env.example` 在 `DEEPSEEK_BASE_URL` 后加注释示例，USAGE 的模型段说明取值与关闭后的表现（不返回推理内容，CLI 不显示 `[Thinking]` 段）。`test/env-docs.test.ts` 新增回归：遍历 `src/**/*.ts` 与 `plugins.config.ts` 中的 `MINI_DSH_*`、`DEEPSEEK_*` 名称（当前 16 个），每个都须出现在 `.env.example` 或 USAGE；评测专用变量只在 `scripts/` 读取，不在扫描范围。
+
+验收：新回归在本提交通过；暂存掉本次 `.env.example` 与 USAGE 改动时失败（缺 `DEEPSEEK_THINKING`），随后恢复。`node scripts/build.js`、`node scripts/check-syntax.js`（204 files）通过；Biome 235 files、0 诊断；完整离线回归 551 项：521 pass、0 fail、30 平台条件 skipped。
+
+### PORT-7a 评测变量移出配置模板（2026-10-31）
+
+`.env.example` 是快速开始让用户复制的模板，后半段却列出 `pnpm eval:screening`／`eval:sequence` 的付费评测说明与 `MINI_DSH_EVAL_MODEL`、`MINI_DSH_EVAL_EVIDENCE_DIR`、`MINI_DSH_EVAL_CONTEXT_WINDOW`。这三个变量只由 `scripts/eval-screening.ts`（含其调用的 `eval-cli.ts`）读取，安装包也不带 `.env.example`。整段移到 `scripts/eval-screening.ts` 页首注释，补上证据目录的实际默认值 `.eval-evidence/<phase>-<scope>`；其余说明与代码逐项核对：官方端点窗口默认 1000000、自定义端点必填（`resolveContextWindow`），`--plan-only` 排在建目录与探测之前。脚本只改注释，运行行为不变。新增 `test/env-docs.test.ts`：`.env.example` 不得出现 `MINI_DSH_EVAL_`。
+
+验收：新回归在本提交通过；把 `.env.example` 临时换回 `HEAD` 版本时失败，随后恢复。`node scripts/build.js` 通过；Biome 0 诊断；`git diff --check` 通过。
+
+### PORT-6c 内部路线图移入历史档案（2026-10-31）
+
+`docs/INTERNSHIP_ROADMAP.md` 是 2026-09-29 的完成度评估与路线图，页首叠有多条带日期修订，展示边界回归已禁止 README 与文档索引链接它，却仍位于 docs 顶层。用 `git mv` 移到 `docs/history/INTERNSHIP_ROADMAP.md`，正文不改，只把 27 处相对链接改为新位置（`../src` → `../../src`、`context-budget/` → `../context-budget/`）。同步仍在使用的链接：PLAN、REQUIREMENTS、NX-08-REPORT、本页两处旧条目与 2026-09-28 至 09-30 历史进度三处；DECISIONS 页首的路径改为新位置，行号不变。其余带日期记录里的纯文本路径描述当时状态，保留原样。
+
+验收：文档链接、展示边界与 DECISIONS 回归通过（链接回归只核对 `.md` 目标，另逐个确认移动后文件的 16 个相对目标全部存在）；Biome 0 诊断；`git diff --check` 通过；完整离线回归 549 项：519 pass、0 fail、30 平台条件 skipped。
+
+### PORT-6b 使用指南的 inspect JSON 版本号（2026-10-31）
+
+实跑 PORT-6a 的 bash 命令时发现：USAGE 写 `inspect --json` 返回版本 `1`，实际输出 `"version": 2`。`2eb28d3`（2026-10-19，记录安全运行错误）把 `InspectReport.version` 升为 2 并新增 `errors`，当时未同步使用指南。USAGE 改为版本 `2` 并列出 `errors`；`test/session-inspect.test.ts` 新增回归，从 USAGE 读出写明的版本，与读取公开样例 `docs/samples/provider-recovery/events.jsonl` 得到的 `InspectReport.version` 比对。
+
+验收：新回归在本提交通过；把 USAGE 临时改回 `1` 时失败（“USAGE.md 的 --json 版本与 InspectReport.version 不一致”），随后恢复。`node scripts/build.js`、`node scripts/check-syntax.js`（203 files）通过；Biome 234 files、0 诊断；完整离线回归 549 项：519 pass、0 fail、30 平台条件 skipped。
+
+### PORT-6a 快速开始与使用指南补 bash 命令（2026-10-31）
+
+README 的复制 `.env`，USAGE 的恢复会话、`inspect` 与本地打包安装原先只有 PowerShell 写法；CI 在 Ubuntu 上运行，Linux/macOS 读者需自行翻译。四处各补 bash 版本：`.env` 用 `[ -f .env ] || cp …` 保留已有文件（不用行为随 coreutils 版本变化的 `cp -n`）；恢复会话用单条命令前缀的环境变量，无需事后取消；打包安装与 CI `package-install` job 的步骤一致。两种 shell 通用的命令块（clone/build、demo、start、show-config、check/test）改标 `shell`，并在快速开始说明该约定。
+
+验收：在 Windows Git Bash 逐条实跑：已有 `.env` 时内容保留；`MINI_DSH_SESSION_ID='abc' node dist/src/index.js --show-config` 按预期拒绝，证明变量已传入；`inspect` 三种形式读取 `docs/samples/provider-recovery/events.jsonl` 的副本（complete JSONL，46 事件）；打包安装在含空格目录完成，`--help`、`--version`（0.1.0）、`--show-config` 正常，`demo fix` 输出 `demo result: PASS`。文档链接回归通过，Biome 0 诊断，`git diff --check` 通过。
+
+### PORT-5b 进度页漂移护栏（2026-10-31）
+
+新增 `test/progress-sync.test.ts` 两项离线检查：PROGRESS 的“更新：”日期不得早于 CHANGES 中带日期标题的最新日期；README 以 `docs/images/demo-*` 嵌入演示图时，PROGRESS 不得再出现“演示录制…暂缓”。前者在任何新 CHANGES 条目之后强制复核当前状态页，后者挡住 PORT-5a 修的这类具体矛盾。
+
+验收：新测试在本提交 2/2 pass；把 PROGRESS 临时换回 `12a5d53` 版本后两项均失败（“PROGRESS 更新于 2026-10-30，早于 CHANGES 最新条目 2026-10-31”与“README 已有演示图，PROGRESS 仍写‘演示录制暂缓’”），随后恢复。`node scripts/build.js` 与 `node scripts/check-syntax.js`（203 files）通过；Biome 234 files、0 诊断；完整离线回归 548 项：518 pass、0 fail、30 平台条件 skipped（PORT-1 的 546 项加本次 2 项）。真实模型请求 0。
+
+### PORT-5a 进度页同步 10-31 的展示与 CI 状态（2026-10-31）
+
+PROGRESS 停在 10-30：CI 仍引用 `46b8fb1` 的 41045952548，阻塞与下一步仍写“演示录制暂缓”，而 10-31 已把预算续跑动图放进 README 首屏，并在 `5fab772` 改了四个离线演示脚本的标题。核对 `gh run view 41175510465`：head 为 `06846d5`（PR #15 合并，含 `5fab772`），六个必需 job success、SWE PoC skipped；`git diff --stat 46b8fb1 06846d5 -- src test package.json pnpm-lock.yaml` 为空，`06846d5` 之后到 `12a5d53` 只改文档与图片。PROGRESS 据此改写 CI 行，新增动图条目（`scripts/demo-resume.tape` 驱动脚本化 `demo:resume`），阻塞与下一步改为“完整讲解视频尚未录制”，并写明本地安装包未重打。PLAN、REQUIREMENTS 与 TASKS 的范围行同步同一口径；DELIVERY-20261030 是带日期的验收记录，不改。
+
+验收：`node scripts/build.js` 通过；`node --test dist/test/docs-links.test.js dist/test/display-policy.test.js dist/test/decisions-doc.test.js` 8/8 pass；Biome 233 files、0 诊断；`git diff --check` 通过。未改产品源码，未重复完整功能测试。
+
 ### PORT-4 重绘 README 架构图（2026-10-31）
 
 README 顶部架构图改为可维护的矢量源 `docs/images/architecture.svg`，由 Chrome headless 以 1600×960 视口、2 倍缩放导出 `docs/images/architecture.png`（约 0.55 MB，原图约 1.5 MB）；采用深色底与彩色描边，兼顾 GitHub 浅色与深色主题；删除旧位图 `architecture-v1.png`。新图按 ARCHITECTURE 与现行源码标注模块：入口与 `createHarness` 装配，Agent Loop 的投影、预算预留、模型请求、授权与执行四步，左右两侧的上下文管理与模型/工具/审批，`events.jsonl` 事件日志，以及由事件派生的恢复续跑、只读 inspect 与交付证据。应用层闸门仍标注为非 OS 隔离。
@@ -4447,7 +4489,7 @@ pnpm eval:offline     # planned 12 / executed 12 / accepted 12
 - 关联：R-02、R-05、R-09、R-11 的边界复核及后续开发方向。
 - 行为：核对源码、测试、远程基线和 CI；复现交叉边界；产出求职导向的完成度、优先级及验收路线。
 - 状态：done（2026-09-29，仅评估完成）。
-- 证据：基线 ca1e2c4；pnpm check 46 文件、pnpm test 57/57；CI 36514313704 四组合 success；`node docs/context-budget/review-probes.mjs` 输出 F1～F3 诊断值。报告与新任务见 [完成度评估与后续路线](../INTERNSHIP_ROADMAP.md)。
+- 证据：基线 ca1e2c4；pnpm check 46 文件、pnpm test 57/57；CI 36514313704 四组合 success；`node docs/context-budget/review-probes.mjs` 输出 F1～F3 诊断值。报告与新任务见 [完成度评估与后续路线](../history/INTERNSHIP_ROADMAP.md)。
 - 后续：F1～F3 尚未修复；原 NX-01～NX-11 经 CB-19 按 coding agent 定位重排，并扩展至 NX-16，功能均为 todo。没有付费模型效果证据，不将规划标记为功能完成。
 
 ## CB-19 按 mini coding agent harness 定位修订路线
@@ -4455,7 +4497,7 @@ pnpm eval:offline     # planned 12 / executed 12 / accepted 12
 - 关联：用户明确的仿 DeepSeek Harness 项目定位；CB-18 后续规划。
 - 行为：保留原评估及 F1～F3；将下一主线收敛到仓库上下文、可靠编辑、结构化命令结果、验证证据和编程评测；同步 README、需求/计划入口和进度。
 - 状态：done（2026-09-29，仅文档修订完成）。
-- 证据：核对 runtime-context 通用身份、files 编辑行为、Bash 文本结果及 Loop completed 路径；[开发路线](../INTERNSHIP_ROADMAP.md) 明确 M5～M9、NX-01～NX-16 的范围、依赖与验收。
+- 证据：核对 runtime-context 通用身份、files 编辑行为、Bash 文本结果及 Loop completed 路径；[开发路线](../history/INTERNSHIP_ROADMAP.md) 明确 M5～M9、NX-01～NX-16 的范围、依赖与验收。
 - 验证：本轮仅 Markdown 变更，32 个本地链接、16 个父任务 ID、M5～M9 阶段及 `git diff --check` 均通过；未重跑功能测试，57/57 为 CB-18 基线结果。
 - 后续：M5 加固后进入 M6 最小编程任务闭环；NX-05 先做 3 个 fixture，再扩至 12 个任务。运行时、prompt 和工具行为尚未改动。
 

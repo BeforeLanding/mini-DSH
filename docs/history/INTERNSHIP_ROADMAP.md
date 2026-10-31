@@ -4,16 +4,16 @@
 
 > **状态修订（2026-10-02）：本文正文保留为 2026-09-29 的带日期记录，一字未改；其中「未实现／待开发」与各处数字指评估时点。** 截至本注记，§5 的交付线已全部走完，以下四类需按新口径阅读：
 >
-> - **§5 完成标记**：NX-04、NX-07、NX-08、NX-09、NX-10、NX-11 均已完成，§5 开头「NX-01～NX-03、NX-05a 与 NX-12 已完成，以下其余功能均为 todo」不再成立；M5／M6／M7／M9 四段全部收尾，当前待办见 [TASKS](context-budget/TASKS.md) 的「其他待办」。
-> - **数字**：回归数 57 → **205**（§1 与 §5 的 M5 出口、§6 简历段沿用的「旧 57 条回归」按此读）；`pnpm check` 产物 46 → **91**；真实模型付费额度由「尚未在本次任务中设定或使用」变为约 **$6.44**（筛查 $0.15 ＋ 对照 A $4.81 ＋ 对照 B 两次烟测 $0.05 ＋ NX-08h $1.43，见 [NX-08-REPORT](context-budget/NX-08-REPORT.md)）。
+> - **§5 完成标记**：NX-04、NX-07、NX-08、NX-09、NX-10、NX-11 均已完成，§5 开头「NX-01～NX-03、NX-05a 与 NX-12 已完成，以下其余功能均为 todo」不再成立；M5／M6／M7／M9 四段全部收尾，当前待办见 [TASKS](../context-budget/TASKS.md) 的「其他待办」。
+> - **数字**：回归数 57 → **205**（§1 与 §5 的 M5 出口、§6 简历段沿用的「旧 57 条回归」按此读）；`pnpm check` 产物 46 → **91**；真实模型付费额度由「尚未在本次任务中设定或使用」变为约 **$6.44**（筛查 $0.15 ＋ 对照 A $4.81 ＋ 对照 B 两次烟测 $0.05 ＋ NX-08h $1.43，见 [NX-08-REPORT](../context-budget/NX-08-REPORT.md)）。
 > - **术语**：§6 的「Windows/Linux × Node 22/24」中「Linux」应读作 **Ubuntu**，CI 实际组合为 Ubuntu / Windows × Node 22 / 24。
 > - **§4 的方向段落**：其中「先实现…」「缺少…」多数已落地——大结果回读（NX-07）、变更清单与 diff（NX-13）、结构化命令结果（NX-14）、`verification` 证据（NX-15）、`context/projection` 的 `requestId`（NX-08a）、3 个与 12 个 fixture（NX-05a／b）；这些段落按「已实现」而非「待开发」阅读。同段的「M5～M7 加最小 M9 演示即可形成投递版本」已成事实。
 >
 > 正文中与此无关的带日期结论（评估基线 `ca1e2c4`、F1～F3 诊断、各复现值、§3 的缺口描述）**不适用本条**，继续作为历史证据保留。
 
-> **状态修订二（2026-10-06，NX-35）：NX-34 之后 §1 另有两处不再成立，上一条注记列举的四类没有覆盖到。** ① §1 的「上下文质量管理：处于基础阶段」写着「**当前 task 无法压缩**、大文件工具返回缺少分页」——压缩已由 NX-34 实现（[PLAN 的 D-21](context-budget/PLAN.md#设计决策及取舍) 与 [REQUIREMENTS](context-budget/REQUIREMENTS.md) 的 R-22：原始事件一条不删，摘要落盘，可按事件号逐字节回读）；大工具结果的按需回读与尾部窗口也早已分别由 NX-07、NX-33 落地。② 同段的「旧约束可能随历史一起移除」**仍然成立**，但它已是压缩的已知残余风险而非未实现项——R-22 写明「不保证模型不编造事实」。正文照本文件惯例**一字未改**，继续作为 2026-09-29 时点的记录。上一条注记里的「回归数 57 → 205」与「`pnpm check` 产物 46 → 91」同属时点数字，截至本次修订为 **270** 与 **105**（`pnpm test`／`pnpm check` 实跑，2026-10-06）。
+> **状态修订二（2026-10-06，NX-35）：NX-34 之后 §1 另有两处不再成立，上一条注记列举的四类没有覆盖到。** ① §1 的「上下文质量管理：处于基础阶段」写着「**当前 task 无法压缩**、大文件工具返回缺少分页」——压缩已由 NX-34 实现（[PLAN 的 D-21](../context-budget/PLAN.md#设计决策及取舍) 与 [REQUIREMENTS](../context-budget/REQUIREMENTS.md) 的 R-22：原始事件一条不删，摘要落盘，可按事件号逐字节回读）；大工具结果的按需回读与尾部窗口也早已分别由 NX-07、NX-33 落地。② 同段的「旧约束可能随历史一起移除」**仍然成立**，但它已是压缩的已知残余风险而非未实现项——R-22 写明「不保证模型不编造事实」。正文照本文件惯例**一字未改**，继续作为 2026-09-29 时点的记录。上一条注记里的「回归数 57 → 205」与「`pnpm check` 产物 46 → 91」同属时点数字，截至本次修订为 **270** 与 **105**（`pnpm test`／`pnpm check` 实跑，2026-10-06）。
 
-修复更新（2026-09-29）：F1 / NX-01、F2 / NX-02、F3 / NX-03 已按顺序修复并独立提交；NX-05a 的三个编程 fixture 及独立验收也已完成，实际验证见 [TASKS](context-budget/TASKS.md) 与 [PROGRESS](../PROGRESS.md)。下文源码基线评估及复现值作为历史证据保留；其“未修复”描述指评估时状态。NX-04 与其余后续功能仍待开发。
+修复更新（2026-09-29）：F1 / NX-01、F2 / NX-02、F3 / NX-03 已按顺序修复并独立提交；NX-05a 的三个编程 fixture 及独立验收也已完成，实际验证见 [TASKS](../context-budget/TASKS.md) 与 [PROGRESS](../../PROGRESS.md)。下文源码基线评估及复现值作为历史证据保留；其“未修复”描述指评估时状态。NX-04 与其余后续功能仍待开发。
 
 评估日期：2026-09-29。源码基线：`ca1e2c4c47fdebb0232a627eb7e7259e88ec5c90`，核对时与 origin HEAD 一致。
 
@@ -46,25 +46,25 @@
 
 ### 原始历史与模型工作集分离
 
-[SessionRuntime](../src/core/session-runtime.ts) 保存事件，[ContextBudgetRuntime](../src/core/context-runtime.ts) 派生请求。裁剪不删除原始事件；取消、跳过和恢复仍能追溯。这是目前最清楚的架构亮点。
+[SessionRuntime](../../src/core/session-runtime.ts) 保存事件，[ContextBudgetRuntime](../../src/core/context-runtime.ts) 派生请求。裁剪不删除原始事件；取消、跳过和恢复仍能追溯。这是目前最清楚的架构亮点。
 
 按任务分组比“只保留最近 N 条消息”可靠，因为后一种方式可能拆开 tool call/result。代价是完整当前任务越来越大时只能停止。这是明确取舍，并非所有长上下文问题都已经解决。
 
 ### 预算覆盖调度与结算
 
-[AgentLoopRuntime](../src/core/agent-loop-runtime.ts)、[RunBudgetRuntime](../src/core/run-budget-runtime.ts) 在调度前检查，响应后按 usage 结算；失败请求也计数，缺失 usage 标为 estimated/uncertain。实际 token 超估算时停止后续调度，而不是宣称绝不超费。
+[AgentLoopRuntime](../../src/core/agent-loop-runtime.ts)、[RunBudgetRuntime](../../src/core/run-budget-runtime.ts) 在调度前检查，响应后按 usage 结算；失败请求也计数，缺失 usage 标为 estimated/uncertain。实际 token 超估算时停止后续调度，而不是宣称绝不超费。
 
 审批等待暂停主动时间、审批另有超时、非协作工具标 unknown，这些都能用来说明为什么 `maxSteps` 或一个 `Promise.race` 不足以管理完整执行生命周期。
 
 ### 恢复优先避免重复副作用
 
-[JsonlStore](../src/core/event-store.ts) 和 Session 恢复保留“未执行”与“执行结果未知”的区别。`/continue` 是基于现有结果重新规划，不重放已经完成的工具；unknown 则阻止自动续跑。
+[JsonlStore](../../src/core/event-store.ts) 和 Session 恢复保留“未执行”与“执行结果未知”的区别。`/continue` 是基于现有结果重新规划，不重放已经完成的工具；unknown 则阻止自动续跑。
 
 这是比泛泛描述“支持断点续传”更准确的项目表述。测试中真实 Cordis、Bash、文件和恢复链路的组合，比全 mock 的简单单元测试更有说服力。
 
 ## 3. 本次确认的三个边界缺口
 
-三个问题都在模拟模型、内存存储和可控时钟下复现；没有执行真实副作用。诊断脚本为 [review-probes.mjs](context-budget/review-probes.mjs)：
+三个问题都在模拟模型、内存存储和可控时钟下复现；没有执行真实副作用。诊断脚本为 [review-probes.mjs](../context-budget/review-probes.mjs)：
 
 ```powershell
 pnpm build
@@ -113,7 +113,7 @@ node docs/context-budget/review-probes.mjs
 
 ### 4.1 仓库上下文与 coding agent 行为
 
-[runtime-context.ts](../src/plugins/runtime-context.ts) 已支持 general/coding 身份；CLI 默认 coding。编程身份要求先检查相关代码及现有变更，遵循项目规则，作最小必要修改，按任务选择检查，并基于真实结果报告。[project-context.ts](../src/plugins/project-context.ts) 已接入有界祖先规则/配置发现和只读目录查询。Loop 保持调度职责，项目知识通过插件注入。
+[runtime-context.ts](../../src/plugins/runtime-context.ts) 已支持 general/coding 身份；CLI 默认 coding。编程身份要求先检查相关代码及现有变更，遵循项目规则，作最小必要修改，按任务选择检查，并基于真实结果报告。[project-context.ts](../../src/plugins/project-context.ts) 已接入有界祖先规则/配置发现和只读目录查询。Loop 保持调度职责，项目知识通过插件注入。
 
 项目上下文优先包含仓库根目录、当前工作目录、语言/包管理器的显式配置、可用检查命令及有作用域的 `AGENTS.md`。规则加载要保留路径与来源，按目录作用域应用，限制注入体积；仓库内容不能扩大 Harness 权限。配置可发现，但运行脚本仍须经过既有命令策略和审批。
 
@@ -121,7 +121,7 @@ node docs/context-budget/review-probes.mjs
 
 ### 4.2 代码定位、工具输出治理与按需读取
 
-[files.ts](../src/tools/files.ts) 的 `read_file` 读取整文件；`glob`、`grep` 聚合所有匹配，遍历没有默认排除 `.git`、`node_modules` 等目录。Bash 已有 32KiB 截断，但没有完整输出的可回读引用。这会把大量低价值内容带入当前 task；后续只能触发 context_overflow，`/continue` 也无法解决。
+[files.ts](../../src/tools/files.ts) 的 `read_file` 读取整文件；`glob`、`grep` 聚合所有匹配，遍历没有默认排除 `.git`、`node_modules` 等目录。Bash 已有 32KiB 截断，但没有完整输出的可回读引用。这会把大量低价值内容带入当前 task；后续只能触发 context_overflow，`/continue` 也无法解决。
 
 先实现确定性方案：
 
@@ -136,7 +136,7 @@ node docs/context-budget/review-probes.mjs
 
 ### 4.3 可靠编辑与变更交付
 
-NX-13 已完成（2026-09-29）：有界字节快照/指纹、唯一编辑与具体审批 diff、原子替换、乐观冲突检测、可恢复逐次结果、task_changes 及 CLI /changes /diff。按相关文件首次观察的现场内容记基线，跨编辑用户变化使用逐次 diff，Bash/外部工具修改不自动归因。107/107 本地回归与四组合 CI 通过，实际分步提交见 [TASKS](context-budget/TASKS.md) 和 [PROGRESS](../PROGRESS.md)。以下保留设计方向；patch 按需延后。
+NX-13 已完成（2026-09-29）：有界字节快照/指纹、唯一编辑与具体审批 diff、原子替换、乐观冲突检测、可恢复逐次结果、task_changes 及 CLI /changes /diff。按相关文件首次观察的现场内容记基线，跨编辑用户变化使用逐次 diff，Bash/外部工具修改不自动归因。107/107 本地回归与四组合 CI 通过，实际分步提交见 [TASKS](../context-budget/TASKS.md) 和 [PROGRESS](../../PROGRESS.md)。以下保留设计方向；patch 按需延后。
 
 先完善现有 `edit_file` 的错误反馈、变更范围和可审查性。增加统一 diff 展示、修改前内容指纹与冲突检测，再按多处修改任务的实际需要提供小型 patch 工具；不为功能数量同时维护多套含糊重叠的编辑协议。
 
@@ -146,7 +146,7 @@ NX-13 已完成（2026-09-29）：有界字节快照/指纹、唯一编辑与具
 
 ### 4.4 命令执行、验证和完成报告
 
-[bash.ts](../src/tools/bash.ts) 已有审批、进程树终止和输出截断。先扩展结构化结果：命令、工作目录、退出码或终止信号、stdout/stderr 引用、时长、timeout/cancel 状态和截断标记。允许的 cwd 必须经过路径闸门；大日志结合 artifact 回读。首版聚焦有界前台命令，后台服务和交互式终端延后。
+[bash.ts](../../src/tools/bash.ts) 已有审批、进程树终止和输出截断。先扩展结构化结果：命令、工作目录、退出码或终止信号、stdout/stderr 引用、时长、timeout/cancel 状态和截断标记。允许的 cwd 必须经过路径闸门；大日志结合 artifact 回读。首版聚焦有界前台命令，后台服务和交互式终端延后。
 
 在此基础上记录 `verification` 证据：检查名称、执行命令、关联修改版本、退出状态、日志引用及未运行原因。采用独立的 `not_run / passed / failed / partial` 验证状态；`run.status=completed` 继续表示运行段完成，只有任务要求的检查在对应修改版本上全部成功才能报告验证通过。验证后再次改代码，相关旧结果必须失效或标记过期。
 
@@ -208,7 +208,7 @@ NX-01～NX-03、NX-05a 与 NX-12 已完成，以下其余功能均为 **todo**�
 
 ### M6：形成最小编程任务闭环（下一主线）
 
-- `NX-05a`（NX-05 子步骤，done）：三个编程 fixture、参考解、独立验收器、临时工作区及模拟工具闭环已实现；[基线及使用方式](../test/fixtures/coding/README.md)，实际验收见 TASKS/PROGRESS。
+- `NX-05a`（NX-05 子步骤，done）：三个编程 fixture、参考解、独立验收器、临时工作区及模拟工具闭环已实现；[基线及使用方式](../../test/fixtures/coding/README.md)，实际验收见 TASKS/PROGRESS。
 - `NX-12`（done）：coding profile、有界祖先规则/显式配置发现及按需目录工具；86/86 本地测试通过，拆分提交与验收见 TASKS/PROGRESS。
 - `NX-07`：有界代码读取、搜索与大结果回读；优先改善代码定位和测试日志读取。
 - `NX-13`（done）：可靠编辑、冲突检测、持久任务变更清单与分页 diff；107/107 本地回归和四组合 CI 通过；需要时再增加 patch。
@@ -221,7 +221,7 @@ NX-01～NX-03、NX-05a 与 NX-12 已完成，以下其余功能均为 **todo**�
 
 ### M7：用编程任务验证效果
 
-- `NX-05b`（NX-05 子步骤，四类各三 done）：12 项按单文件、多文件、大诊断日志定位、预算约束与续跑各三项实施；初始 0/12、参考 12/12，全量本地测试 147/147。大日志任务实际搜索/有界读取，续跑任务实际发生预算停止与同 task 继续；见 [任务说明](../test/fixtures/coding/README.md) 与 [TASKS](context-budget/TASKS.md)。精确 SHA 53e5aba 的 [CI 36657576782](https://github.com/BeforeLanding/mini-DSH/actions/runs/36657576782) 四组合通过。续跑场景以短代码任务受限分段模拟，不代表真实模型自然长任务成功率。
+- `NX-05b`（NX-05 子步骤，四类各三 done）：12 项按单文件、多文件、大诊断日志定位、预算约束与续跑各三项实施；初始 0/12、参考 12/12，全量本地测试 147/147。大日志任务实际搜索/有界读取，续跑任务实际发生预算停止与同 task 继续；见 [任务说明](../../test/fixtures/coding/README.md) 与 [TASKS](../context-budget/TASKS.md)。精确 SHA 53e5aba 的 [CI 36657576782](https://github.com/BeforeLanding/mini-DSH/actions/runs/36657576782) 四组合通过。续跑场景以短代码任务受限分段模拟，不代表真实模型自然长任务成功率。
 - `NX-06`（done，本地 150/150、12 项 fixture 基线及最终功能提交 08158b9 的四组合 CI 通过）：请求 trace 和编程结果报告；关联 session/task/run/request、文件版本、命令证据、用量与停止原因；模型 `request_trace`、CLI `/trace` 与扩展后的 `task_report` 均已实现。
 - `NX-08`：真实模型任务对照与估算误差实验；固定模型和配置，设置整批请求/token/金额上限，单次 run 预算不能替代整批上限。
 
