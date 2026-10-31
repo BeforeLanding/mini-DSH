@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### PORT-6c 内部路线图移入历史档案（2026-10-31）
+
+`docs/INTERNSHIP_ROADMAP.md` 是 2026-09-29 的完成度评估与路线图，页首叠有多条带日期修订，展示边界回归已禁止 README 与文档索引链接它，却仍位于 docs 顶层。用 `git mv` 移到 `docs/history/INTERNSHIP_ROADMAP.md`，正文不改，只把 27 处相对链接改为新位置（`../src` → `../../src`、`context-budget/` → `../context-budget/`）。同步仍在使用的链接：PLAN、REQUIREMENTS、NX-08-REPORT、本页两处旧条目与 2026-09-28 至 09-30 历史进度三处；DECISIONS 页首的路径改为新位置，行号不变。其余带日期记录里的纯文本路径描述当时状态，保留原样。
+
+验收：文档链接、展示边界与 DECISIONS 回归通过（链接回归只核对 `.md` 目标，另逐个确认移动后文件的 16 个相对目标全部存在）；Biome 0 诊断；`git diff --check` 通过；完整离线回归 549 项：519 pass、0 fail、30 平台条件 skipped。
+
 ### PORT-6b 使用指南的 inspect JSON 版本号（2026-10-31）
 
 实跑 PORT-6a 的 bash 命令时发现：USAGE 写 `inspect --json` 返回版本 `1`，实际输出 `"version": 2`。`2eb28d3`（2026-10-19，记录安全运行错误）把 `InspectReport.version` 升为 2 并新增 `errors`，当时未同步使用指南。USAGE 改为版本 `2` 并列出 `errors`；`test/session-inspect.test.ts` 新增回归，从 USAGE 读出写明的版本，与读取公开样例 `docs/samples/provider-recovery/events.jsonl` 得到的 `InspectReport.version` 比对。
@@ -4471,7 +4477,7 @@ pnpm eval:offline     # planned 12 / executed 12 / accepted 12
 - 关联：R-02、R-05、R-09、R-11 的边界复核及后续开发方向。
 - 行为：核对源码、测试、远程基线和 CI；复现交叉边界；产出求职导向的完成度、优先级及验收路线。
 - 状态：done（2026-09-29，仅评估完成）。
-- 证据：基线 ca1e2c4；pnpm check 46 文件、pnpm test 57/57；CI 36514313704 四组合 success；`node docs/context-budget/review-probes.mjs` 输出 F1～F3 诊断值。报告与新任务见 [完成度评估与后续路线](../INTERNSHIP_ROADMAP.md)。
+- 证据：基线 ca1e2c4；pnpm check 46 文件、pnpm test 57/57；CI 36514313704 四组合 success；`node docs/context-budget/review-probes.mjs` 输出 F1～F3 诊断值。报告与新任务见 [完成度评估与后续路线](../history/INTERNSHIP_ROADMAP.md)。
 - 后续：F1～F3 尚未修复；原 NX-01～NX-11 经 CB-19 按 coding agent 定位重排，并扩展至 NX-16，功能均为 todo。没有付费模型效果证据，不将规划标记为功能完成。
 
 ## CB-19 按 mini coding agent harness 定位修订路线
@@ -4479,7 +4485,7 @@ pnpm eval:offline     # planned 12 / executed 12 / accepted 12
 - 关联：用户明确的仿 DeepSeek Harness 项目定位；CB-18 后续规划。
 - 行为：保留原评估及 F1～F3；将下一主线收敛到仓库上下文、可靠编辑、结构化命令结果、验证证据和编程评测；同步 README、需求/计划入口和进度。
 - 状态：done（2026-09-29，仅文档修订完成）。
-- 证据：核对 runtime-context 通用身份、files 编辑行为、Bash 文本结果及 Loop completed 路径；[开发路线](../INTERNSHIP_ROADMAP.md) 明确 M5～M9、NX-01～NX-16 的范围、依赖与验收。
+- 证据：核对 runtime-context 通用身份、files 编辑行为、Bash 文本结果及 Loop completed 路径；[开发路线](../history/INTERNSHIP_ROADMAP.md) 明确 M5～M9、NX-01～NX-16 的范围、依赖与验收。
 - 验证：本轮仅 Markdown 变更，32 个本地链接、16 个父任务 ID、M5～M9 阶段及 `git diff --check` 均通过；未重跑功能测试，57/57 为 CB-18 基线结果。
 - 后续：M5 加固后进入 M6 最小编程任务闭环；NX-05 先做 3 个 fixture，再扩至 12 个任务。运行时、prompt 和工具行为尚未改动。
 

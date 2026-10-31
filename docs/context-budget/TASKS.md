@@ -5,8 +5,8 @@
 快速开始与使用指南的部分命令只有 PowerShell 写法；核对 bash 版本时发现使用指南的 `inspect --json` 版本号过期；内部路线图仍在 docs 顶层。按三次提交：
 
 - PORT-6a（完成，`afb58fc`）：README 与 USAGE 中只适用于 PowerShell 的四处命令（复制 `.env`、恢复会话、`inspect`、本地打包安装）补 bash 版本，两种 shell 通用的命令块改标 `shell`。验收：在 Git Bash 逐条实跑 bash 版本，打包安装结束输出 `demo result: PASS`。
-- PORT-6b（完成，本提交）：USAGE 的 `inspect --json` 版本由 1 改为实际的 2，并加回归比对文档版本与 `InspectReport.version`。
-- PORT-6c（待做）：`docs/INTERNSHIP_ROADMAP.md` 移入 `docs/history/`，同步仍在使用的链接与 DECISIONS 页首路径；带日期记录里的纯文本路径保留原样。
+- PORT-6b（完成，`4de68a8`）：USAGE 的 `inspect --json` 版本由 1 改为实际的 2，并加回归比对文档版本与 `InspectReport.version`。
+- PORT-6c（完成，本提交）：`docs/INTERNSHIP_ROADMAP.md` 移入 `docs/history/`，同步仍在使用的链接与 DECISIONS 页首路径；带日期记录里的纯文本路径保留原样。
 
 ### 进度页与 10-31 展示改动同步（2026-10-31）
 
