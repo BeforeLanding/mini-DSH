@@ -161,11 +161,27 @@ export async function prepareDockerWorkspace(options: { image: string; baseCommi
 
 // Remove only containers carrying one of the runner's labels. mini-SWE-agent
 // names its containers randomly and does not clean them after a batch.
-export function removeContainersByLabel(label: string): { removed: string[]; remaining: string[] } {
+// mini-SWE-agent 退出时自己也会删容器：两边同时 rm 时 Docker 报 "removal ... already in progress"，
+// 紧接着的 ps 仍能看到该容器（2026-10-31 留出批第 13 条因此误判为基础设施失败）。这里容忍进行中的删除，
+// 并在有限时间内轮询到容器真正消失；超时仍有残留才报告。
+export function removeContainersByLabel(label: string, dependencies: { list?: (label: string) => string[]; remove?: (ids: string[]) => void; sleep?: (ms: number) => void; attempts?: number } = {}): { removed: string[]; remaining: string[] } {
   if (!/^[A-Za-z0-9_.-]+=[A-Za-z0-9_.-]+$/.test(label)) throw new Error('invalid container label filter')
-  const ids = docker('ps', '-aq', '--filter', `label=${label}`).split('\n').filter(Boolean)
-  if (ids.length) docker('rm', '-f', ...ids)
-  const remaining = docker('ps', '-aq', '--filter', `label=${label}`).split('\n').filter(Boolean)
+  const list = dependencies.list ?? (filter => docker('ps', '-aq', '--filter', `label=${filter}`).split('\n').filter(Boolean))
+  const remove = dependencies.remove ?? (ids => {
+    try { docker('rm', '-f', ...ids) } catch (error) {
+      const detail = String((error as { stderr?: unknown }).stderr ?? error)
+      if (!/already in progress|No such container/i.test(detail)) throw error
+    }
+  })
+  const sleep = dependencies.sleep ?? (ms => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms) })
+  const ids = list(label)
+  if (ids.length) remove(ids)
+  let remaining = list(label)
+  for (let attempt = 1; remaining.length && attempt <= (dependencies.attempts ?? 30); attempt++) {
+    sleep(1000)
+    remaining = list(label)
+    if (remaining.length && attempt % 5 === 0) remove(remaining)
+  }
   return { removed: ids, remaining }
 }
 

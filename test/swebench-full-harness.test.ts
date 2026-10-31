@@ -148,3 +148,19 @@ test('manifest validation pins harness to mini-dsh arms and the command environm
   assert.throws(() => validateRunManifest(manifestFor(instances, { arms: [{ ...arms[0]!, harness: 'v9' as never }, arms[1]!] })), /harness must be/)
   assert.throws(() => validateRunManifest(manifestFor(instances, { protocol: 'other' as never })), /protocol must be/)
 })
+
+test('label cleanup tolerates a removal already in progress and waits for it to finish', async () => {
+  const { removeContainersByLabel } = await import('../scripts/swebench/workspace.js')
+  let polls = 0, removes = 0
+  const result = removeContainersByLabel('mini-dsh.external.episode=e1', {
+    // 容器在第 3 次轮询前一直可见（对方的删除仍在进行），之后消失。
+    list: () => (polls++ < 3 ? ['abc123'] : []),
+    remove: () => { removes++ },
+    sleep: () => {},
+  })
+  assert.deepEqual(result, { removed: ['abc123'], remaining: [] })
+  assert.equal(removes, 1, 'polling, not repeated rm, waits out the in-flight removal')
+  const stuck = removeContainersByLabel('mini-dsh.external.episode=e2', { list: () => ['def456'], remove: () => {}, sleep: () => {}, attempts: 3 })
+  assert.deepEqual(stuck.remaining, ['def456'], 'a container that never goes away is still reported')
+  assert.throws(() => removeContainersByLabel('mini-dsh.external.episode=e3', { list: () => ['x'], remove: () => { throw new Error('permission denied') }, sleep: () => {} }), /permission denied/)
+})
