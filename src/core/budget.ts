@@ -26,6 +26,13 @@ export interface BudgetPolicy {
   // NX-51：压力摘要后按压缩后目标线裁掉已结束旧任务。24 条真实对照未显示摘要/耗时下降，
   // 因此**默认关闭**；显式设为 true 才启用，裁剪决定仍以 context/prune 事件持久化。
   postCompactionPrune?: boolean
+  // 单任务长轨迹（SWE 类）里旧任务裁剪永远不触发：只有一个 task。observationWindow 让投影只保留当前
+  // task 最近 N 条工具结果的正文，更早的换成带 seq 的短桩（原始事件不动，read_history 可回读）。
+  observationWindow?: number
+  // 预算提示：累计 token 越过 50%/75%/90% 时各写一条 user/message，让模型知道还剩多少步。
+  budgetNotices?: boolean
+  // 收尾检查：模型想结束时，若工作区无改动、或最后一次编辑后没跑过命令，各提醒一次。
+  completionChecks?: boolean
 }
 export const CLI_BUDGET: Readonly<BudgetPolicy> = Object.freeze({
   maxModelRequests: 64, maxToolCalls: 128, maxActiveDurationMs: 600_000,
@@ -36,12 +43,12 @@ export const CLI_BUDGET: Readonly<BudgetPolicy> = Object.freeze({
   compactionRatio: 0.8, retainRatio: 0.16, compactionMaxTokens: 8_192,
   maxSummaryFailures: 2, maxOverflowRetries: 1, auto: true,
 })
-const positive = new Set(['maxOutputTokens', 'minimumOutputTokens', 'contextWindowTokens', 'inputTargetTokens', 'requestTimeoutMs', 'approvalTimeoutMs', 'finalizationTimeoutMs', 'compactionBudgetTokens', 'compactionMaxTokens'])
+const positive = new Set(['observationWindow', 'maxOutputTokens', 'minimumOutputTokens', 'contextWindowTokens', 'inputTargetTokens', 'requestTimeoutMs', 'approvalTimeoutMs', 'finalizationTimeoutMs', 'compactionBudgetTokens', 'compactionMaxTokens'])
 // 比率与开关不是安全整数，单独放行——但只放行这两个集合里的键，其余仍走整数判定。
 // 压缩比率落在 0 < v ≤ 1：0 会让阈值恒为真，超过 1 则永远触发不了，两者都不是比率。
 const fractions = new Set(['compactionRatio', 'retainRatio', 'postCompactionTargetRatio'])
-const booleans = new Set(['auto', 'tokenCalibration', 'postCompactionPrune'])
-const keys = new Set(Object.keys(CLI_BUDGET).concat('contextWindowTokens', 'compactionBudgetTokens', 'postCompactionTargetRatio', 'tokenCalibration', 'tokenCalibrationMaxMultiplier', 'postCompactionPrune'))
+const booleans = new Set(['auto', 'tokenCalibration', 'postCompactionPrune', 'budgetNotices', 'completionChecks'])
+const keys = new Set(Object.keys(CLI_BUDGET).concat('contextWindowTokens', 'compactionBudgetTokens', 'postCompactionTargetRatio', 'tokenCalibration', 'tokenCalibrationMaxMultiplier', 'postCompactionPrune', 'observationWindow', 'budgetNotices', 'completionChecks'))
 export function resolveBudget(...layers: (BudgetPolicy | undefined)[]): Readonly<BudgetPolicy> {
   const result: BudgetPolicy = {}
   for (const layer of layers) {

@@ -2,6 +2,7 @@ import type { ChatRequest, Message, SessionEvent } from './contracts.js'
 import type { BudgetPolicy } from './budget.js'
 import { BudgetStop } from './budget.js'
 import { estimateInput } from './token-estimator.js'
+import { maskObservations } from './observation-mask.js'
 export interface HistoryGroup { taskId: string; events: SessionEvent[]; complete: boolean; protected: boolean }
 export function assertToolProtocol(messages: Message[]) {
   const pending = new Set<string>()
@@ -65,7 +66,9 @@ export class ContextBudgetRuntime {
     const removedTaskIds = groups.filter(isPruned).map(group => group.taskId)
     let selected = groups.filter(group => !isPruned(group))
     const measure = () => {
-      const messages = derive(selected.flatMap(g => g.events))
+      const visible = selected.flatMap(g => g.events)
+      const masking = policy.observationWindow === undefined ? { events: visible, masked: 0 } : maskObservations(visible, taskId, policy.observationWindow)
+      const messages = derive(masking.events)
       const rawEstimatedInputTokens = estimateInput({ ...request, messages })
       const estimatedInputTokens = calibrate?.(rawEstimatedInputTokens) ?? rawEstimatedInputTokens
       let reservedOutputTokens = request.maxOutputTokens ?? 0
@@ -81,7 +84,7 @@ export class ContextBudgetRuntime {
       const safetyMarginTokens = Math.max(policy.safetyMarginTokens ?? 2048, Math.ceil(estimatedInputTokens * 0.1))
       const fits = tokenFits && (policy.inputTargetTokens === undefined || estimatedInputTokens <= policy.inputTargetTokens) &&
         (policy.contextWindowTokens === undefined || estimatedInputTokens + reservedOutputTokens + safetyMarginTokens <= policy.contextWindowTokens)
-      return { messages, rawEstimatedInputTokens, estimatedInputTokens, safetyMarginTokens, reservedOutputTokens, fits }
+      return { messages, rawEstimatedInputTokens, estimatedInputTokens, safetyMarginTokens, reservedOutputTokens, fits, maskedObservations: masking.masked }
     }
     let projection = measure()
     const pruneTarget = options.pruneTargetTokens

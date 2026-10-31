@@ -37,6 +37,7 @@ import { JsonlStore } from '../core/event-store.js'
 import { CLI_BUDGET } from '../core/budget.js'
 import * as delegationPlugin from '../plugins/delegation.js'
 import { delegationRecovery } from '../core/delegation-recovery.js'
+import { completionCheck } from '../core/run-guidance.js'
 
 export interface HarnessAdapter { provider: string; model: string; chat: Adapter['chat']; capabilities?: Adapter['capabilities'] }
 export interface HarnessConfig {
@@ -60,6 +61,10 @@ export interface HarnessConfig {
   projectContext?: boolean
   toolOutputMaxPreviewBytes?: number
   toolOutput?: boolean
+  // 送进模型的命令结果形态：缺省 json（历史行为）；text 为紧凑文本，结构化值不变。
+  toolOutputCommandFormat?: 'json' | 'text'
+  // 宿主追加的一段系统提示（例如评测任务的工作流说明）；缺省不加。
+  hostGuidance?: string
   // Only the explicitly named pre-v2 path may omit this production capability.
   legacyNoReadHistory?: boolean
   // 默认不装任何 MCP server。条目只来自用户目录级配置或显式路径；createHarness 不会自行扫描工作区。
@@ -88,7 +93,10 @@ export async function createHarness(config: HarnessConfig) {
     const runtimeClockMode = config.runtimeClockMode ?? config.contextLayout ?? 'live'
     await root.plugin(runtimeContext, { workspace: config.workspace, profile: config.profile, layout: runtimeClockMode, ...(readOnly ? { agentRole: role } : {}), ...(config.runtimeTime ? { now: config.runtimeTime } : {}) })
     await root.plugin(sandbox, { workspace: config.workspace, ...(config.autoApprove === undefined ? {} : { autoApprove: config.autoApprove }) })
-    if (config.toolOutput !== false && !readOnly) await root.plugin(toolResults, { maxPreviewBytes: config.toolOutputMaxPreviewBytes, onStore: store => { parentResults = store } })
+    if (config.hostGuidance?.trim()) root.systemPrompt.section({ name: 'host:guidance', order: 20, text: config.hostGuidance })
+    // 只有 policy.completionChecks 为 true 的 run 会调用；只读角色不编辑，不注册。
+    if (!readOnly && config.profile === 'coding') root.agentLoop.setCompletionCheck(input => completionCheck({ workspace: config.workspace, ...input }))
+    if (config.toolOutput !== false && !readOnly) await root.plugin(toolResults, { maxPreviewBytes: config.toolOutputMaxPreviewBytes, ...(config.toolOutputCommandFormat ? { commandFormat: config.toolOutputCommandFormat } : {}), onStore: store => { parentResults = store } })
     if (!config.legacyNoReadHistory) await root.plugin(readHistory)
     if (config.projectContext !== false && config.profile === 'coding') await root.plugin(projectContext, { directory: config.projectDirectory, ...(config.contextLayout ? { layout: config.contextLayout } : {}) })
     await root.plugin(files, { workspace: config.workspace, ...(readOnly ? { allowedTools: READ_ONLY_TOOLS } : {}) })
@@ -132,7 +140,7 @@ export async function createHarness(config: HarnessConfig) {
     const capabilityManifest = {
       tools: schemas.map(schema => schema.function.name).sort(),
       toolSchemaSha256: createHash('sha256').update(JSON.stringify(schemas.slice().sort((a, b) => a.function.name.localeCompare(b.function.name)))).digest('hex'),
-      policy: { profile: config.profile, contextLayout: config.contextLayout ?? 'live', runtimeClockMode, projectContext: config.projectContext !== false && config.profile === 'coding', toolOutput: config.toolOutput !== false && !readOnly, toolOutputMaxPreviewBytes: config.toolOutputMaxPreviewBytes ?? null, legacyNoReadHistory: config.legacyNoReadHistory === true, autoApprove: config.autoApprove ?? false, isolatedCommandRunner: config.commandRunner !== undefined, mcpServers: config.mcpServers?.map(entry => entry.config.serverName) ?? [] },
+      policy: { profile: config.profile, contextLayout: config.contextLayout ?? 'live', runtimeClockMode, projectContext: config.projectContext !== false && config.profile === 'coding', toolOutput: config.toolOutput !== false && !readOnly, toolOutputMaxPreviewBytes: config.toolOutputMaxPreviewBytes ?? null, toolOutputCommandFormat: config.toolOutputCommandFormat ?? 'json', hostGuidance: config.hostGuidance?.trim() ? createHash('sha256').update(config.hostGuidance).digest('hex') : null, legacyNoReadHistory: config.legacyNoReadHistory === true, autoApprove: config.autoApprove ?? false, isolatedCommandRunner: config.commandRunner !== undefined, mcpServers: config.mcpServers?.map(entry => entry.config.serverName) ?? [] },
       ...(memory ? { memory: { mode: config.memory?.mode ?? 'recall', projectId: memory.runtime.store.projectId, limits: memory.runtime.limits } } : {}),
       ...(readOnly ? { role, capabilities: READ_ONLY_TOOLS } : {}),
       ...(config.taskGroupPolicy ? { taskGroupPolicy: groupPolicy(config.taskGroupPolicy) } : {}),
