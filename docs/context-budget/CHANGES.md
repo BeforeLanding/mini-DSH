@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### PORT-4 重绘 README 架构图（2026-10-31）
+
+README 顶部架构图改为可维护的矢量源 `docs/images/architecture.svg`，由 Chrome headless 以 1600×960 视口、2 倍缩放导出 `docs/images/architecture.png`（约 0.55 MB，原图约 1.5 MB）；采用深色底与彩色描边，兼顾 GitHub 浅色与深色主题；删除旧位图 `architecture-v1.png`。新图按 ARCHITECTURE 与现行源码标注模块：入口与 `createHarness` 装配，Agent Loop 的投影、预算预留、模型请求、授权与执行四步，左右两侧的上下文管理与模型/工具/审批，`events.jsonl` 事件日志，以及由事件派生的恢复续跑、只读 inspect 与交付证据。应用层闸门仍标注为非 OS 隔离。
+
+验收：SVG 通过 XML 解析并带 `<title>` 替代文本；导出图人工检查无文字重叠；文档链接、展示边界与 DECISIONS 回归 8/8 pass；Biome 233 files、0 诊断；`git diff --check` 通过。未改产品源码，未重复完整功能测试。
+
 ### PORT-3 当前源码交付验收与本地材料收尾（2026-10-30）
 
 新增 `docs/DELIVERY-20261030.md`，在文档索引提供入口；PROGRESS 将代码 CI 与交付状态更新为已核验。记录绑定生产代码/测试 `46b8fb196f2f6124fa742ba2193430b055311c8a` 与安装包来源 `14ec973919717a633180922db3b77ea399923070`。GitHub CI 41045952548 的 head_sha 与代码基线相同，整体 success；Ubuntu/Windows × Node 22/24、Linux isolation 与 Ubuntu package-install 六个必需 job 全绿，SWE PoC 按配置 skipped。

@@ -1,4 +1,4 @@
-![mini-DSH 架构：入口、Agent Loop、模型、工具、事件与恢复](docs/images/architecture-v1.png)
+![mini-DSH 架构：入口与装配、Agent Loop、上下文管理、模型与工具、事件日志及其派生的恢复、检查与交付证据](docs/images/architecture.png)
 
 # mini-DSH
 
