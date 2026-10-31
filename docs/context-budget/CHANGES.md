@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### PORT-6b 使用指南的 inspect JSON 版本号（2026-10-31）
+
+实跑 PORT-6a 的 bash 命令时发现：USAGE 写 `inspect --json` 返回版本 `1`，实际输出 `"version": 2`。`2eb28d3`（2026-10-19，记录安全运行错误）把 `InspectReport.version` 升为 2 并新增 `errors`，当时未同步使用指南。USAGE 改为版本 `2` 并列出 `errors`；`test/session-inspect.test.ts` 新增回归，从 USAGE 读出写明的版本，与读取公开样例 `docs/samples/provider-recovery/events.jsonl` 得到的 `InspectReport.version` 比对。
+
+验收：新回归在本提交通过；把 USAGE 临时改回 `1` 时失败（“USAGE.md 的 --json 版本与 InspectReport.version 不一致”），随后恢复。`node scripts/build.js`、`node scripts/check-syntax.js`（203 files）通过；Biome 234 files、0 诊断；完整离线回归 549 项：519 pass、0 fail、30 平台条件 skipped。
+
 ### PORT-6a 快速开始与使用指南补 bash 命令（2026-10-31）
 
 README 的复制 `.env`，USAGE 的恢复会话、`inspect` 与本地打包安装原先只有 PowerShell 写法；CI 在 Ubuntu 上运行，Linux/macOS 读者需自行翻译。四处各补 bash 版本：`.env` 用 `[ -f .env ] || cp …` 保留已有文件（不用行为随 coreutils 版本变化的 `cp -n`）；恢复会话用单条命令前缀的环境变量，无需事后取消；打包安装与 CI `package-install` job 的步骤一致。两种 shell 通用的命令块（clone/build、demo、start、show-config、check/test）改标 `shell`，并在快速开始说明该约定。

@@ -77,7 +77,7 @@ node dist/src/index.js inspect "$log" --trace
 
 - 文本默认列出会话和最近一次 run 的状态、请求/重试/派发前拒绝、工具结果、provider token 与缓存、缺 usage、摘要及 `read_history` 次数、frozen 快照来源。
 - `--trace` 只附带最近 40 条所选事件的序号、类型、工具名或终止原因；不显示提示正文和工具输出。
-- `--json` 返回版本为 `1` 的结构化数据，含 `integrity.complete`、`integrity.warnings`，与 `--trace` 可组合。
+- `--json` 返回版本为 `2` 的结构化数据，含 `integrity.complete`、`integrity.warnings` 与最近运行错误的安全摘要 `errors`，与 `--trace` 可组合。
 - 退出码：`0` 表示读到的 JSONL 全部通过校验；`2` 表示只能确认损坏/截断前的部分证据；`1` 表示参数或文件读取失败。
 - `0` 不表示任务成功：没有 `run/finish` 时最近 run 为 `unrecorded_end`，生产日志也没有独立产物验收。派发后缺 usage 计入未知请求数；provider 输入 token 已包含缓存命中，不重复相加，也不估算历史费用。旧日志反映当时的模型和代码，不代表当前配置。
 
