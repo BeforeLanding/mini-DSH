@@ -19,7 +19,7 @@ import * as agentLoop from '../src/plugins/agent-loop.js'
 // 崩溃是真的：子进程执行一条会写下真实副作用文件、然后永久阻塞的命令，父进程等文件出现后按
 // 进程树把它杀掉。所以留在磁盘上的残局也是真的——一条只有 tool/start 的调用，和一把没人释放的
 // writer.lock。手写一段半拉日志也能让 restore 产出同样的记录，但那样展示的是我们编的东西。
-heading('NX-10 第三幕：崩溃恢复——工具已写、结果未落盘')
+heading('演示 3/4 · 崩溃恢复：工具已写、结果未落盘')
 
 const exists = (target: string) => fs.access(target).then(() => true, () => false)
 async function waitFor(check: () => Promise<boolean>, timeoutMs: number, label: string, detail: () => string) {
@@ -141,7 +141,7 @@ try {
   failed = checks.some(([, ok]) => !ok)
 } catch (error) {
   failed = true
-  console.error(`第三幕失败：${error instanceof Error ? error.message : String(error)}`)
+  console.error(`演示 3/4 失败：${error instanceof Error ? error.message : String(error)}`)
 } finally {
   if (root) { await root.sessions.close().catch(() => {}); await root.fiber.dispose() }
   else await store?.close().catch(() => {})
