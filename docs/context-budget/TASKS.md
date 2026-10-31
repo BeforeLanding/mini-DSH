@@ -4,8 +4,8 @@
 
 10-31 的演示动图、架构图重绘与演示标题改动之后，PROGRESS 仍写 10-30 的 CI 与“演示录制暂缓”。按两次提交收尾：
 
-- PORT-5a（完成，本提交）：PROGRESS 改为 `06846d5` 的 CI 41175510465，写明相对 `46b8fb1` 仅演示标题文案变化、本地安装包未重打；演示状态改为“README 含脚本化预算续跑动图，完整讲解视频尚未录制”，PLAN/REQUIREMENTS/本页的范围行同步。验收：文档链接、展示边界与 DECISIONS 回归通过，Biome 通过。
-- PORT-5b（待做）：新增 `test/progress-sync.test.ts`，PROGRESS 更新日期不得早于 CHANGES 最新条目，README 嵌入演示图时 PROGRESS 不得再写演示录制暂缓。验收：新测试在本提交通过，在 PORT-5a 之前的 PROGRESS 上两项均失败。
+- PORT-5a（完成，`2ab7cab`）：PROGRESS 改为 `06846d5` 的 CI 41175510465，写明相对 `46b8fb1` 仅演示标题文案变化、本地安装包未重打；演示状态改为“README 含脚本化预算续跑动图，完整讲解视频尚未录制”，PLAN/REQUIREMENTS/本页的范围行同步。验收：文档链接、展示边界与 DECISIONS 回归通过，Biome 通过。
+- PORT-5b（完成，本提交）：新增 `test/progress-sync.test.ts`，PROGRESS 更新日期不得早于 CHANGES 最新条目，README 嵌入演示图时 PROGRESS 不得再写演示录制暂缓。验收：新测试在本提交通过，在 PORT-5a 之前的 PROGRESS 上两项均失败。
 
 ### 求职版本收尾与扩展分支隔离（2026-10-30）
 

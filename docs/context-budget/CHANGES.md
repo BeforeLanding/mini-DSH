@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### PORT-5b 进度页漂移护栏（2026-10-31）
+
+新增 `test/progress-sync.test.ts` 两项离线检查：PROGRESS 的“更新：”日期不得早于 CHANGES 中带日期标题的最新日期；README 以 `docs/images/demo-*` 嵌入演示图时，PROGRESS 不得再出现“演示录制…暂缓”。前者在任何新 CHANGES 条目之后强制复核当前状态页，后者挡住 PORT-5a 修的这类具体矛盾。
+
+验收：新测试在本提交 2/2 pass；把 PROGRESS 临时换回 `12a5d53` 版本后两项均失败（“PROGRESS 更新于 2026-10-30，早于 CHANGES 最新条目 2026-10-31”与“README 已有演示图，PROGRESS 仍写‘演示录制暂缓’”），随后恢复。`node scripts/build.js` 与 `node scripts/check-syntax.js`（203 files）通过；Biome 234 files、0 诊断；完整离线回归 548 项：518 pass、0 fail、30 平台条件 skipped（PORT-1 的 546 项加本次 2 项）。真实模型请求 0。
+
 ### PORT-5a 进度页同步 10-31 的展示与 CI 状态（2026-10-31）
 
 PROGRESS 停在 10-30：CI 仍引用 `46b8fb1` 的 41045952548，阻塞与下一步仍写“演示录制暂缓”，而 10-31 已把预算续跑动图放进 README 首屏，并在 `5fab772` 改了四个离线演示脚本的标题。核对 `gh run view 41175510465`：head 为 `06846d5`（PR #15 合并，含 `5fab772`），六个必需 job success、SWE PoC skipped；`git diff --stat 46b8fb1 06846d5 -- src test package.json pnpm-lock.yaml` 为空，`06846d5` 之后到 `12a5d53` 只改文档与图片。PROGRESS 据此改写 CI 行，新增动图条目（`scripts/demo-resume.tape` 驱动脚本化 `demo:resume`），阻塞与下一步改为“完整讲解视频尚未录制”，并写明本地安装包未重打。PLAN、REQUIREMENTS 与 TASKS 的范围行同步同一口径；DELIVERY-20261030 是带日期的验收记录，不改。
