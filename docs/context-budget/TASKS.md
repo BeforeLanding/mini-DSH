@@ -1,5 +1,11 @@
 # 任务清单
 
+### v0.1.0 发布与远端整理（2026-10-31）
+
+用户确认后整理远端并发布首个版本；仓库外操作不形成提交，记录与文档同步在本提交：
+
+- PORT-9（完成，本提交）：远端删除 9 个实验分支、5 个已合并 PR 分支与 4 个 `nx51-loo/source-*` tag，删除前以 `archive/experiments` 保留全部实验末端；开启合并后自动删除分支，关闭空的 Wiki 与 Projects；在 `4de3219` 打 `v0.1.0` 并发布带 tarball 与 `SHA256SUMS` 的 GitHub Release。PROGRESS、README、USAGE 与讲解页改为指向 Release；`test/progress-sync.test.ts` 新增回归，文档中的 Release 链接版本须与 `package.json` 一致。
+
 ### context-budget 目录说明（2026-10-31）
 
 本目录约 1.4 MB，大头是在维护的 CHANGES/TASKS/PLAN；NX 报告与探针约 250 KB，其中四份协议文档被 `scripts/eval-v2-report.ts` 的冻结清单按路径与 SHA-256 引用，不能移动。按用户选择不搬文件，只加目录说明：

@@ -23,3 +23,12 @@ test('README 已嵌入演示图时 PROGRESS 不再写演示录制暂缓', () => 
     if (!/!\[[^\]]*\]\(docs\/images\/demo-[^)]+\)/.test(read('README.md'))) return
     assert.equal(/演示录制[^。\n]{0,8}暂缓/.test(read('PROGRESS.md')), false, 'README 已有演示图，PROGRESS 仍写“演示录制暂缓”')
 })
+
+test('文档里的 Release 链接版本与 package.json 一致', () => {
+    const { version } = JSON.parse(read('package.json')) as { version: string }
+    const docs = ['README.md', 'PROGRESS.md', 'docs/USAGE.md', 'docs/RECRUITER_WALKTHROUGH.md']
+    const links = docs.flatMap(doc => [...read(doc).matchAll(/releases\/tag\/v([0-9][\w.-]*)/g)].map(match => ({ doc, tag: match[1] })))
+    assert.ok(links.some(link => link.doc === 'README.md'), 'README 应链接当前版本的 Release')
+    const stale = links.filter(link => link.tag !== version).map(link => `${link.doc}: v${link.tag}`)
+    assert.deepEqual(stale, [], `Release 链接与 package.json 版本 ${version} 不一致`)
+})

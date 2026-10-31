@@ -1,5 +1,13 @@
 # 改动与验收证据
 
+### PORT-9 v0.1.0 发布与远端整理（2026-10-31）
+
+远端整理：删除前逐个核对远端分支是否已并入 main、最后提交日期、文档引用与对应 PR，并从全部文档中提取提交 SHA，检查哪些只经待删引用可达——共 11 个，均来自 `component-closure/*`、`compare/nx50-baseline` 与 `nx51-loo/full`。先用 `git commit-tree` 建 `archive/experiments`（`02c3fae`），以 9 个实验分支末端为父提交，提交信息列出每个原分支与 tag 的完整 SHA 及恢复命令；确认 11 个被引用提交均为其祖先后，一次推送删除 `compare/nx50-baseline`、`component-closure/no-preview|no-projection|no-report`、`docs/nx51-loo-prep`、`nx51-loo/full|no-preview|no-projection|no-report`，已合并的 `demo/recording-prep`、`docs/architecture-diagram`、`docs/readme-gif-first`、`docs/readme-title-first`、`docs/slim-doc-index`，以及 4 个 `nx51-loo/source-*` tag（目标均为上述分支的祖先）。按用户选择保留 `improve/swe-component-effects-20261030`。仓库设置：`delete_branch_on_merge=true`，`has_wiki=false`，`has_projects=false`。
+
+发布：PR #20 的 CI 41211546998 六个必需 job 全绿后以 merge commit 合并；PR head `7689c81` 与 main `4de3219` 的树同为 `d1e8139`。在干净的 `4de3219` 上 `pnpm pack`：`beforelanding-mini-dsh-0.1.0.tgz` 175,848 字节、124 个条目，不含测试、文档、`.env` 与样例，SHA-256 `6d41cab4b1a7c7bf5b93440ce6cff4d2d827701145436449151941d0375b3f56`；仓库外含空格目录安装后 `--version` 为 0.1.0、`demo fix` 输出 `demo result: PASS`。附注 tag `v0.1.0` 指向 `4de3219`，GitHub Release 附 tarball 与 `SHA256SUMS`，非 draft、非 prerelease；从 Release 下载后 `sha256sum -c` 通过。本地副本在 `D:\Agent\outputs\mini-dsh-v0.1.0`。npm 未发布。
+
+文档：PROGRESS 的 CI 行改为 PR #20 的运行，新增 v0.1.0 条目，阻塞与下一步不再把 tag/Release 列为本轮之外；README 快速开始、当前状态与已知边界，USAGE 的本地打包与安装，讲解页的安装边界均指向 Release。`test/progress-sync.test.ts` 新增回归：README、PROGRESS、USAGE 与讲解页中的 `releases/tag/v*` 链接版本须等于 `package.json` 的 `version`，且 README 须有该链接；把 `version` 临时改为 0.1.1 时失败，随后恢复。`node scripts/build.js`、`node scripts/check-syntax.js`（205 files）通过；Biome 236 files、0 诊断；完整离线回归 554 项：524 pass、0 fail、30 平台条件 skipped。
+
 ### PORT-8 context-budget 目录说明（2026-10-31）
 
 逐个统计本目录体积与引用：CHANGES 613 KB、TASKS 251 KB、PLAN 141 KB，均为 AGENTS.md 要求同步的工作文档；NX 报告、组件评测记录与 6 个探针合计约 250 KB。`scripts/eval-v2-report.ts` 的 `frozenSourcePaths` 按路径与 SHA-256 冻结 NX-42-EVAL-V2-PLAN、NX-45-DEVELOPMENT、NX-50-COMPONENT-AB、NX-51-COMPONENT-ABLATION，移动或改动会使既有 manifest 无法校验；`test/nx08-report.test.ts` 与 `test/eval-v2-report.test.ts` 也按路径读取其中三份。按用户选择不移动文件，新增 `docs/context-budget/README.md`（GitHub 浏览目录时直接渲染）：工作文档 5 份、冻结协议文档 4 份、历史报告 20 份、诊断探针 6 个，每项一句说明，描述取自各文件标题与页首注释。文档索引的开发档案加入口。新增 `test/context-budget-index.test.ts`：目录中除说明页外的每个文件都须以链接形式列出；`eval-v2-report.ts` 中出现的每个 `docs/context-budget/*.md` 都须列在“被冻结清单引用的协议文档”一节。
