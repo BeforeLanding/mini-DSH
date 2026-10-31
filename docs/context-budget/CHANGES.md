@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### PORT-7b 说明 DEEPSEEK_THINKING 并加环境变量覆盖回归（2026-10-31）
+
+`src/models/deepseek.ts:138` 把 `config.thinking ?? process.env.DEEPSEEK_THINKING ?? 'enabled'` 原样作为请求的 `thinking.type` 发送，但 `.env.example` 与 USAGE 都没有提到它。按 DeepSeek 官方 Chat Completions 文档，`thinking.type` 取 `enabled` 或 `disabled`，省略时默认开启。`.env.example` 在 `DEEPSEEK_BASE_URL` 后加注释示例，USAGE 的模型段说明取值与关闭后的表现（不返回推理内容，CLI 不显示 `[Thinking]` 段）。`test/env-docs.test.ts` 新增回归：遍历 `src/**/*.ts` 与 `plugins.config.ts` 中的 `MINI_DSH_*`、`DEEPSEEK_*` 名称（当前 16 个），每个都须出现在 `.env.example` 或 USAGE；评测专用变量只在 `scripts/` 读取，不在扫描范围。
+
+验收：新回归在本提交通过；暂存掉本次 `.env.example` 与 USAGE 改动时失败（缺 `DEEPSEEK_THINKING`），随后恢复。`node scripts/build.js`、`node scripts/check-syntax.js`（204 files）通过；Biome 235 files、0 诊断；完整离线回归 551 项：521 pass、0 fail、30 平台条件 skipped。
+
 ### PORT-7a 评测变量移出配置模板（2026-10-31）
 
 `.env.example` 是快速开始让用户复制的模板，后半段却列出 `pnpm eval:screening`／`eval:sequence` 的付费评测说明与 `MINI_DSH_EVAL_MODEL`、`MINI_DSH_EVAL_EVIDENCE_DIR`、`MINI_DSH_EVAL_CONTEXT_WINDOW`。这三个变量只由 `scripts/eval-screening.ts`（含其调用的 `eval-cli.ts`）读取，安装包也不带 `.env.example`。整段移到 `scripts/eval-screening.ts` 页首注释，补上证据目录的实际默认值 `.eval-evidence/<phase>-<scope>`；其余说明与代码逐项核对：官方端点窗口默认 1000000、自定义端点必填（`resolveContextWindow`），`--plan-only` 排在建目录与探测之前。脚本只改注释，运行行为不变。新增 `test/env-docs.test.ts`：`.env.example` 不得出现 `MINI_DSH_EVAL_`。

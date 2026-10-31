@@ -50,7 +50,7 @@ MINI_DSH_SESSION_ID='<启动时打印的 session-id>' node dist/src/index.js
 
 `.env` 只从启动时的当前目录读取，已有环境变量优先；安装包不带 `.env`。从仓库启动时，可在 `.env` 填写 `DEEPSEEK_API_KEY`，并用 `MINI_DSH_WORKSPACE` 指向其他项目的绝对路径。`MINI_DSH_PROJECT_DIRECTORY` 只选择初始规则上下文，不改变文件/Bash 工作目录。
 
-当前内置 DeepSeek 模型适配器；模型名用 `MINI_DSH_MODEL` 配置，示例文件选择 `deepseek/deepseek-v4-flash`。模型列表以 `/models` 为准；更换 provider 需要接入适配器。
+当前内置 DeepSeek 模型适配器；模型名用 `MINI_DSH_MODEL` 配置，示例文件选择 `deepseek/deepseek-v4-flash`。`DEEPSEEK_THINKING` 原样作为请求的 `thinking.type` 发送，取 `enabled`（默认）或 `disabled`；关闭后模型不返回推理内容，CLI 也不显示 `[Thinking]` 段。模型列表以 `/models` 为准；更换 provider 需要接入适配器。
 
 MCP 默认不加载 server。用户配置位于 `~/.mini-dsh/mcp.json`，可用 `--mcp-config <path>` 或 `MINI_DSH_MCP_CONFIG` 指定；不自动加载工作区中的 `mcp.json`。`MINI_DSH_MCP=0` 可禁用。stdio server 使用收紧的环境继承与独立临时 HOME，仍能访问当前用户可读的文件；显式配置表示信任该进程。
 

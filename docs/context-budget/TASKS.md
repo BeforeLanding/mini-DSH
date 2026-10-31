@@ -4,8 +4,8 @@
 
 对照文档与源码时发现：`.env.example` 后半段是付费评测变量，与 README“不展示模型评测结果”的定位不符，也让普通用户在复制模板时看到计费批次；`src/models/deepseek.ts` 读取的 `DEEPSEEK_THINKING` 在 `.env.example` 与 USAGE 中都没有说明。按两次提交：
 
-- PORT-7a（完成，本提交）：`MINI_DSH_EVAL_*` 三个变量及 `--plan-only` 说明从 `.env.example` 移到唯一读取它们的 `scripts/eval-screening.ts` 页首；新增 `test/env-docs.test.ts`，`.env.example` 不得再出现 `MINI_DSH_EVAL_`。
-- PORT-7b（待做）：`.env.example` 与 USAGE 说明 `DEEPSEEK_THINKING`（`enabled` 默认 / `disabled`）；同一测试文件增加回归，`src/` 与 `plugins.config.ts` 读取的每个 `MINI_DSH_*`、`DEEPSEEK_*` 变量都须出现在 `.env.example` 或 USAGE。
+- PORT-7a（完成，`9968b3e`）：`MINI_DSH_EVAL_*` 三个变量及 `--plan-only` 说明从 `.env.example` 移到唯一读取它们的 `scripts/eval-screening.ts` 页首；新增 `test/env-docs.test.ts`，`.env.example` 不得再出现 `MINI_DSH_EVAL_`。
+- PORT-7b（完成，本提交）：`.env.example` 与 USAGE 说明 `DEEPSEEK_THINKING`（`enabled` 默认 / `disabled`）；同一测试文件增加回归，`src/` 与 `plugins.config.ts` 读取的每个 `MINI_DSH_*`、`DEEPSEEK_*` 变量都须出现在 `.env.example` 或 USAGE。
 
 ### 跨 shell 使用说明与路线图归档（2026-10-31）
 
