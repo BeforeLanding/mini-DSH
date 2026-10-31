@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### PORT-7a 评测变量移出配置模板（2026-10-31）
+
+`.env.example` 是快速开始让用户复制的模板，后半段却列出 `pnpm eval:screening`／`eval:sequence` 的付费评测说明与 `MINI_DSH_EVAL_MODEL`、`MINI_DSH_EVAL_EVIDENCE_DIR`、`MINI_DSH_EVAL_CONTEXT_WINDOW`。这三个变量只由 `scripts/eval-screening.ts`（含其调用的 `eval-cli.ts`）读取，安装包也不带 `.env.example`。整段移到 `scripts/eval-screening.ts` 页首注释，补上证据目录的实际默认值 `.eval-evidence/<phase>-<scope>`；其余说明与代码逐项核对：官方端点窗口默认 1000000、自定义端点必填（`resolveContextWindow`），`--plan-only` 排在建目录与探测之前。脚本只改注释，运行行为不变。新增 `test/env-docs.test.ts`：`.env.example` 不得出现 `MINI_DSH_EVAL_`。
+
+验收：新回归在本提交通过；把 `.env.example` 临时换回 `HEAD` 版本时失败，随后恢复。`node scripts/build.js` 通过；Biome 0 诊断；`git diff --check` 通过。
+
 ### PORT-6c 内部路线图移入历史档案（2026-10-31）
 
 `docs/INTERNSHIP_ROADMAP.md` 是 2026-09-29 的完成度评估与路线图，页首叠有多条带日期修订，展示边界回归已禁止 README 与文档索引链接它，却仍位于 docs 顶层。用 `git mv` 移到 `docs/history/INTERNSHIP_ROADMAP.md`，正文不改，只把 27 处相对链接改为新位置（`../src` → `../../src`、`context-budget/` → `../context-budget/`）。同步仍在使用的链接：PLAN、REQUIREMENTS、NX-08-REPORT、本页两处旧条目与 2026-09-28 至 09-30 历史进度三处；DECISIONS 页首的路径改为新位置，行号不变。其余带日期记录里的纯文本路径描述当时状态，保留原样。

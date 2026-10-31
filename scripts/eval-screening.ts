@@ -16,6 +16,12 @@ import type { ChatResponse } from '../src/core/contracts.js'
 // 与 eval-offline 共用同一套运行器与 fixture 驱动，区别只在适配器来源、预算口径（evalPolicy 而非裸
 // singleRunBudget）和证据落盘。本脚本会真实计费，默认不做任何干预：不重试、不跳过、不因单次失败中止
 // 阶段，只把每步的累计用量打出来供人工决定是否继续。
+//
+// 评测专用环境变量只由评测入口读取，不写进 .env.example，避免把付费批次放进普通用户的配置模板：
+// - MINI_DSH_EVAL_MODEL：仅评测使用的模型，覆盖 MINI_DSH_MODEL，便于固定一批筛查的模型。
+// - MINI_DSH_EVAL_EVIDENCE_DIR：一批证据的目录，必须尚不存在，每批都要新目录；默认 .eval-evidence/<phase>-<scope>。
+// - MINI_DSH_EVAL_CONTEXT_WINDOW：模型窗口 token 数；DEEPSEEK_BASE_URL 不是官方端点时必填，官方端点默认 1000000。
+// 加 --plan-only 只打印一批会跑什么，不建目录也不发请求。
 dotenv.config({ quiet: true })
 
 const repository = fileURLToPath(new URL('../../', import.meta.url))
