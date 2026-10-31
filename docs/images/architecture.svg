@@ -1,4 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="960" viewBox="0 0 1600 960">
+  <title>mini-DSH 架构：入口与装配、Agent Loop、上下文管理、模型与工具、事件日志及其派生的恢复、检查与交付证据</title>
   <!-- 源文件：修改后用 Chrome headless 以 2 倍缩放导出 architecture.png（1600×960 视口）。 -->
   <defs>
     <style>

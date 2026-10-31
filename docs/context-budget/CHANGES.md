@@ -4,7 +4,7 @@
 
 README 顶部架构图改为可维护的矢量源 `docs/images/architecture.svg`，由 Chrome headless 以 1600×960 视口、2 倍缩放导出 `docs/images/architecture.png`（约 0.5 MB，原图约 1.5 MB）；删除旧位图 `architecture-v1.png`。新图按 ARCHITECTURE 与现行源码标注模块：入口与 `createHarness` 装配，Agent Loop 的投影、预算预留、模型请求、授权与执行四步，左右两侧的上下文管理与模型/工具/审批，`events.jsonl` 事件日志，以及由事件派生的恢复续跑、只读 inspect 与交付证据。应用层闸门仍标注为非 OS 隔离。
 
-验收：SVG 通过 XML 解析；导出图人工检查无文字重叠；文档链接、展示边界与 DECISIONS 回归 8/8 pass；Biome 232 files、0 诊断；`git diff --check` 通过。未改产品源码，未重复完整功能测试。
+验收：SVG 通过 XML 解析并带 `<title>` 替代文本；导出图人工检查无文字重叠；文档链接、展示边界与 DECISIONS 回归 8/8 pass；Biome 233 files、0 诊断；`git diff --check` 通过。未改产品源码，未重复完整功能测试。
 
 ### PORT-3 当前源码交付验收与本地材料收尾（2026-10-30）
 
