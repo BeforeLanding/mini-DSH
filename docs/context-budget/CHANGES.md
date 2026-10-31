@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### SWE-F1 SWE full harness 组件与三臂协议（2026-10-31，实验分支）
+
+正式四臂批次的聚合诊断显示：两臂命令都落在 base Python（候选 49/50 条轨迹缺包）、三个 mini-DSH 臂压缩触发 0、候选 37/50 条停在累计 token 上限、22/50 条补丁带入 `.mini-dsh/` 结果存储。新增任务内观测遮蔽、紧凑命令结果、预算提示、收尾检查四个显式开关（产品默认不变），`testbed-v1` 两臂共用命令环境与镜像探针，补丁导出排除宿主产物，`preregister --protocol swe-full-v1` 生成 full/baseline/minimal 三臂。设计、诊断与离线读数见 [SWE full harness](SWE-FULL-HARNESS.md)。
+
+验收：`pnpm check` 238 files；`pnpm test` 604 tests / 574 pass / 0 fail / 30 平台 skipped；`pnpm lint` 271 files 0 诊断；新增 `test/run-guidance.test.ts` 8 项、`test/swebench-full-harness.test.ts` 5 项。离线重放 1,053 次已记录请求：紧凑 + 遮蔽（窗口 6）估算输入 −33.5%。真实模型请求 0，成功率未测。
+
 ### CE-P2 四臂开发批结果与中断边界（2026-10-28）
 
 四份完整付费批次按 `full → no-preview → no-projection → no-report` 顺序分别授权，每批 12/12，价格峰值估价分别 $1.28431524、$1.334783124、$1.354099452、$1.335197268，合计 $5.308395084（含探针储备，不是账单）。首次 no-report 在第五条中断，4/12 条完整，1 个模型请求缺 provider usage，原始证据保留并排除；新目录的完整重跑另获授权。比较器按源码提交、manifest、观察 digest、tool schema、共同配置、批次顺序、provider usage 和离线探针验证，17 项检查全部 true；可靠完成 11/12、12/12、12/12、11/12，产物验收四臂均 12/12。三项归因均 `inconclusive`，不改变组件默认行为或摘要后裁剪默认关闭。逐题逐重复读数、费用边界和完整文件哈希见 [开发批结果](COMPONENT-LOO-PAID-RESULT.md) 与 [机器比较记录](../samples/component-loo-paid-20261028.json)。公开记录不含原始 prompt 或工具正文，报告与 JSON 对照验证通过，文档步骤模型请求 0。
