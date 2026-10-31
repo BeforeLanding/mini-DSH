@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### SWE-F3 留出 50 题三臂结果（2026-10-31，实验分支）
+
+50 道未曝光 Verified 题 × full / baseline / minimal，源码 `a8d70e7`；第 13 条因外部臂容器清理竞态停批，`98df64c` 修运行器清理并加测试后经授权续跑，150/150 执行、官方评分、估价 $2.664。full 32/50、minimal 30/50、baseline 27/50；full vs baseline 配对 8:3、+10 点、McNemar p=0.227（不显著）；预算停止 13/25/16，空补丁 4/13/16；full 估价 $1.081 vs baseline $0.746。详见 [SWE full harness](SWE-FULL-HARNESS.md)。完整测试 605 / 575 pass / 0 fail / 30 skipped。
+
 ### SWE-F2 开发冒烟批与遮蔽步长（2026-10-31，实验分支）
 
 swe-full-v1 开发 5 题 × 3 臂：首次尝试因补丁导出 bug 在第 2 条停止（约 $0.047，`287edcf` 修复并补「目录已被忽略」测试）；授权重跑 15/15 执行、0 基础设施失败，full 3/5、minimal 2/5、baseline 1/5，估价 $0.159 / $0.106 / $0.108。遮蔽使 full 输入/请求 −28% 但缓存命中 93%→80%；新增 `observationStep`，swe-full 改为窗口 4/步长 8（离线模拟命中 84%、估算输入仍 −32%）。读数与边界见 [SWE full harness](SWE-FULL-HARNESS.md)。`pnpm check` 239 files，`pnpm test` 604 / 574 pass / 0 fail / 30 skipped，lint 0 诊断。
