@@ -67,7 +67,7 @@ export class ContextBudgetRuntime {
     let selected = groups.filter(group => !isPruned(group))
     const measure = () => {
       const visible = selected.flatMap(g => g.events)
-      const masking = policy.observationWindow === undefined ? { events: visible, masked: 0 } : maskObservations(visible, taskId, policy.observationWindow)
+      const masking = policy.observationWindow === undefined ? { events: visible, masked: 0 } : maskObservations(visible, taskId, policy.observationWindow, policy.observationStep)
       const messages = derive(masking.events)
       const rawEstimatedInputTokens = estimateInput({ ...request, messages })
       const estimatedInputTokens = calibrate?.(rawEstimatedInputTokens) ?? rawEstimatedInputTokens

@@ -37,6 +37,8 @@ test('new budget keys are opt-in and validated', () => {
   assert.equal(resolveBudget({}).completionChecks, undefined)
   assert.equal(resolveBudget({ observationWindow: 6, budgetNotices: true, completionChecks: true }).observationWindow, 6)
   assert.throws(() => resolveBudget({ observationWindow: 0 }), /positive/)
+  assert.throws(() => resolveBudget({ observationStep: 0 }), /positive/)
+  assert.equal(resolveBudget({ observationWindow: 4, observationStep: 8 }).observationStep, 8)
   assert.throws(() => resolveBudget({ budgetNotices: 1 as unknown as boolean }), /boolean/)
 })
 
@@ -46,6 +48,11 @@ test('observation masking advances in blocks and keeps short outputs verbatim', 
   assert.equal(maskedObservationCount(6, 4), 2)
   assert.equal(maskedObservationCount(7, 4), 2)
   assert.equal(maskedObservationCount(8, 4), 4)
+  // 显式步长：窗口 4、步长 8 时，到第 12 条才第一次遮蔽 8 条。
+  assert.equal(maskedObservationCount(11, 4, 8), 0)
+  assert.equal(maskedObservationCount(12, 4, 8), 8)
+  assert.equal(maskedObservationCount(19, 4, 8), 8)
+  assert.equal(maskedObservationCount(20, 4, 8), 16)
   assert.equal(observationStub('short', 3), 'short')
   const stub = observationStub(`${'line\n'.repeat(400)}`, 17)
   assert.ok(stub.length < 500)

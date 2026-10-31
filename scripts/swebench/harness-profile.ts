@@ -23,5 +23,6 @@ export function harnessOptions(harness: SwebenchHarness): Pick<HarnessConfig, 't
   return harness === 'swe-full' ? { toolOutputCommandFormat: 'text', toolOutputMaxPreviewBytes: 8 * 1024, hostGuidance: SWE_FULL_GUIDANCE } : {}
 }
 
-// swe-full 臂冻结的预算开关：窗口 6 意味着任一请求里最多保留最近 6～8 条工具结果的正文。
-export const SWE_FULL_BUDGET = { observationWindow: 6, budgetNotices: true, completionChecks: true } as const
+// swe-full 臂冻结的预算开关：保留最近 4～11 条工具结果正文，每 8 条推进一次遮蔽。离线缓存模拟（正式批 1,053 次请求）：
+// 估算输入相对 v1 −32%，前缀命中约 84%；冒烟批用过的窗口 6/步长 3 为 −33%、命中约 75%，输入费用高出近一半。
+export const SWE_FULL_BUDGET = { observationWindow: 4, observationStep: 8, budgetNotices: true, completionChecks: true } as const

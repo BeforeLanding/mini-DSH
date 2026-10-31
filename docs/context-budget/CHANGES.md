@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### SWE-F2 开发冒烟批与遮蔽步长（2026-10-31，实验分支）
+
+swe-full-v1 开发 5 题 × 3 臂：首次尝试因补丁导出 bug 在第 2 条停止（约 $0.047，`287edcf` 修复并补「目录已被忽略」测试）；授权重跑 15/15 执行、0 基础设施失败，full 3/5、minimal 2/5、baseline 1/5，估价 $0.159 / $0.106 / $0.108。遮蔽使 full 输入/请求 −28% 但缓存命中 93%→80%；新增 `observationStep`，swe-full 改为窗口 4/步长 8（离线模拟命中 84%、估算输入仍 −32%）。读数与边界见 [SWE full harness](SWE-FULL-HARNESS.md)。`pnpm check` 239 files，`pnpm test` 604 / 574 pass / 0 fail / 30 skipped，lint 0 诊断。
+
 ### SWE-F1 SWE full harness 组件与三臂协议（2026-10-31，实验分支）
 
 正式四臂批次的聚合诊断显示：两臂命令都落在 base Python（候选 49/50 条轨迹缺包）、三个 mini-DSH 臂压缩触发 0、候选 37/50 条停在累计 token 上限、22/50 条补丁带入 `.mini-dsh/` 结果存储。新增任务内观测遮蔽、紧凑命令结果、预算提示、收尾检查四个显式开关（产品默认不变），`testbed-v1` 两臂共用命令环境与镜像探针，补丁导出排除宿主产物，`preregister --protocol swe-full-v1` 生成 full/baseline/minimal 三臂。设计、诊断与离线读数见 [SWE full harness](SWE-FULL-HARNESS.md)。

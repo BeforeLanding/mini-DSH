@@ -77,7 +77,8 @@ test('the swe-full arm assembles guidance, compact command results and frozen bu
       return events.find(event => event.type === 'run/start').data.state.policy
     }
     const fullPolicy = await policyOf('full'), minimalPolicy = await policyOf('minimal')
-    assert.equal(fullPolicy.observationWindow, 6)
+    assert.equal(fullPolicy.observationWindow, 4)
+    assert.equal(fullPolicy.observationStep, 8)
     assert.equal(fullPolicy.budgetNotices, true)
     assert.equal(fullPolicy.completionChecks, true)
     assert.equal(minimalPolicy.observationWindow, undefined)
