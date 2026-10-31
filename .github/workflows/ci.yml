@@ -191,7 +191,7 @@ jobs:
           tarball=$(find "$pack" -name '*.tgz' -print -quit)
           (cd "$install" && pnpm add --ignore-scripts "$tarball")
           cli="$install/node_modules/.bin/mini-dsh"
-          "$cli" --version | grep -qx '0.1.0'
+          "$cli" --version | grep -qxF "$(node -p "require('./package.json').version")"
           "$cli" --help | grep -q 'demo \[fix\]'
           (cd "$work" && "$cli" --show-config | grep -q '"readHistory"')
           (cd "$work" && "$cli" demo fix | grep -q 'demo result: PASS')
