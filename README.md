@@ -149,10 +149,9 @@ pnpm test
 
 `pnpm check` 执行 strict 类型检查、构建和产物语法检查；`pnpm test` 运行核心与 Cordis 集成回归，无需模型密钥，集成测试实际执行 Bash。修改前阅读 [AGENTS.md](AGENTS.md)。
 
-- [使用指南](docs/USAGE.md)：命令、预算、恢复、配置来源与本地打包安装。
-- [证据说明](docs/EVALUATION.md)：离线机制证据与复算边界。
 - [五分钟项目讲解](docs/RECRUITER_WALKTHROUGH.md)：演示顺序与工程取舍。
-- [开发进度](PROGRESS.md)、[完整文档索引](docs/README.md)：实现状态及专题入口。
+- [使用指南](docs/USAGE.md)：命令、预算、恢复、配置来源与本地打包安装。
+- [文档索引](docs/README.md)：设计文档、验收记录与开发档案。
 
 ## 来源与许可
 
