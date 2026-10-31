@@ -1,5 +1,13 @@
 # 改动与验收证据
 
+### PORT-10 锁文件内更新受漏洞影响的依赖（2026-10-31）
+
+`pnpm audit --prod` 报 16 个已知漏洞（6 high、8 moderate、2 low），全部经 `@deepseek-ai/dsh-mcp-client@0.1.1-rc.2` 引入：`@modelcontextprotocol/sdk` 6 项、`fast-uri` 4 项，`zod`、`body-parser`、`hono`、`@hono/node-server`、`qs`、`ip-address` 各 1 项。该客户端声明 `@modelcontextprotocol/sdk ^1.12.0` 与 `zod ^4.4.3`，修复版本都在范围内。运行 `pnpm update --depth Infinity @modelcontextprotocol/sdk zod body-parser fast-uri hono @hono/node-server qs ip-address`（pnpm 11.22.0，锁文件通过供应链策略检查），`package.json` 未变；锁文件只变 9 个包：`@modelcontextprotocol/sdk` 1.30.0→1.32.2、`zod` 4.6.5→4.6.7、`body-parser` 2.3.0→2.4.0、`fast-uri` 3.1.8→3.1.9、`hono` 4.13.8→4.13.14、`@hono/node-server` 2.1.1→2.1.5、`qs` 6.16.0→6.17.1、`ip-address` 10.7.2→10.7.5，以及随 zod 变化的 `zod-to-json-schema` peer 标识。
+
+MCP 冒烟（仓库外临时脚本，未提交）：仓库内没有连接真实 MCP server 的测试，`mcp-config.test.ts` 只覆盖配置解析。用 SDK 1.32.2 写一个带 `echo_upper` 工具的 stdio server，经 `loadMcpServers` 读入临时配置并传给 `createHarness`：`@deepseek-ai/dsh-mcp-client` 加载，工具注册为 `mcp__smoke__echo_upper`，直接调用返回 `MCP OK`。经 `root.tools.execute` 调用返回通用 `ToolError`，原因是驱动脚本未提供会话与审批上下文；把锁文件临时换回旧版（客户端解析到 SDK 1.30.0）后三项结果完全相同，确认与本次更新无关，随后恢复新锁文件。
+
+验收：`pnpm audit --prod` 与 `pnpm audit` 均为 No known vulnerabilities found；`pnpm install --frozen-lockfile` 通过；`node scripts/build.js`、`node scripts/check-syntax.js`（205 files）通过；Biome 236 files、0 诊断；`mcp-config.test.js` 9/9；完整离线回归 554 项：524 pass、0 fail、30 平台条件 skipped。已发布的 v0.1.0 tarball 不随本提交改变；其依赖在安装时按范围解析。
+
 ### PORT-9 v0.1.0 发布与远端整理（2026-10-31）
 
 远端整理：删除前逐个核对远端分支是否已并入 main、最后提交日期、文档引用与对应 PR，并从全部文档中提取提交 SHA，检查哪些只经待删引用可达——共 11 个，均来自 `component-closure/*`、`compare/nx50-baseline` 与 `nx51-loo/full`。先用 `git commit-tree` 建 `archive/experiments`（`02c3fae`），以 9 个实验分支末端为父提交，提交信息列出每个原分支与 tag 的完整 SHA 及恢复命令；确认 11 个被引用提交均为其祖先后，一次推送删除 `compare/nx50-baseline`、`component-closure/no-preview|no-projection|no-report`、`docs/nx51-loo-prep`、`nx51-loo/full|no-preview|no-projection|no-report`，已合并的 `demo/recording-prep`、`docs/architecture-diagram`、`docs/readme-gif-first`、`docs/readme-title-first`、`docs/slim-doc-index`，以及 4 个 `nx51-loo/source-*` tag（目标均为上述分支的祖先）。按用户选择保留 `improve/swe-component-effects-20261030`。仓库设置：`delete_branch_on_merge=true`，`has_wiki=false`，`has_projects=false`。

@@ -1,5 +1,11 @@
 # 任务清单
 
+### 依赖漏洞修复（2026-10-31）
+
+`pnpm audit --prod` 报 16 个已知漏洞（6 high、8 moderate、2 low），全部经 `@deepseek-ai/dsh-mcp-client@0.1.1-rc.2` 引入；其声明范围（`@modelcontextprotocol/sdk ^1.12.0`、`zod ^4.4.3`）已覆盖修复版本，只是锁文件停在旧版。
+
+- PORT-10（完成，本提交）：只在既有范围内更新锁文件中的受影响包，不改 `package.json`、不加 overrides、不换 MCP 客户端版本。验收：`pnpm audit` 0 漏洞；冻结安装、构建、lint 与完整离线回归通过；手工 MCP stdio 冒烟在新旧锁文件下行为一致。
+
 ### v0.1.0 发布与远端整理（2026-10-31）
 
 用户确认后整理远端并发布首个版本；仓库外操作不形成提交，记录与文档同步在本提交：
