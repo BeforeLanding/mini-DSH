@@ -3,55 +3,63 @@
   <!-- 源文件：修改后用 Chrome headless 以 2 倍缩放导出 architecture.png（1600×960 视口）。 -->
   <defs>
     <style>
-      text { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif; fill: #1f2328; }
+      text { font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif; fill: #e6edf3; }
       .mono { font-family: "Cascadia Mono", "JetBrains Mono", Consolas, "SFMono-Regular", monospace; }
       .title { font-size: 40px; font-weight: 700; }
-      .subtitle { font-size: 18px; fill: #57606a; }
+      .subtitle { font-size: 18px; fill: #8b9bb0; }
       .h { font-size: 20px; font-weight: 700; }
       .h-sm { font-size: 17px; font-weight: 700; }
-      .body { font-size: 16px; fill: #333a42; }
-      .small { font-size: 14px; fill: #57606a; }
-      .code { font-size: 12px; fill: #57606a; }
-      .label { font-size: 13px; fill: #57606a; }
-      .arrow { stroke: #8c959f; stroke-width: 2; fill: none; marker-end: url(#tip); }
-      .arrow-both { stroke: #8c959f; stroke-width: 2; fill: none; marker-end: url(#tip); marker-start: url(#tip-start); }
-      .loop { stroke: #0c8599; stroke-width: 2; fill: none; stroke-dasharray: 6 5; marker-end: url(#tip-teal); }
+      .body { font-size: 16px; fill: #c5d0dc; }
+      .small { font-size: 14px; fill: #8b9bb0; }
+      .code { font-size: 12px; fill: #8b9bb0; }
+      .label { font-size: 13px; fill: #8b9bb0; }
+      .arrow { stroke: #5f7391; stroke-width: 2; fill: none; marker-end: url(#tip); }
+      .arrow-both { stroke: #5f7391; stroke-width: 2; fill: none; marker-end: url(#tip); marker-start: url(#tip-start); }
+      .loop { stroke: #22b8cf; stroke-width: 2; fill: none; stroke-dasharray: 6 5; marker-end: url(#tip-teal); }
     </style>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40,0 L0,0 0,40" fill="none" stroke="#16213a" stroke-width="1"/>
+    </pattern>
+    <filter id="glow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
     <marker id="tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
-      <path d="M0,0 L10,5 L0,10 z" fill="#8c959f"/>
+      <path d="M0,0 L10,5 L0,10 z" fill="#5f7391"/>
     </marker>
     <marker id="tip-start" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="8" markerHeight="8" orient="auto">
-      <path d="M10,0 L0,5 L10,10 z" fill="#8c959f"/>
+      <path d="M10,0 L0,5 L10,10 z" fill="#5f7391"/>
     </marker>
     <marker id="tip-teal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
-      <path d="M0,0 L10,5 L0,10 z" fill="#0c8599"/>
+      <path d="M0,0 L10,5 L0,10 z" fill="#22b8cf"/>
     </marker>
   </defs>
 
-  <rect width="1600" height="960" fill="#ffffff"/>
+  <rect width="1600" height="960" fill="#0b1120"/>
+  <rect width="1600" height="960" fill="url(#grid)"/>
 
   <!-- 标题 -->
-  <text x="60" y="72" class="title">mini-DSH</text>
+  <text x="60" y="72" class="title">mini-<tspan style="fill:#3bc9db">DSH</tspan></text>
   <text x="290" y="72" class="subtitle">本地编程 Agent Harness · 单 Agent · 单本地工作区 · TypeScript / Cordis</text>
 
   <!-- 第一行：入口与装配 -->
-  <rect x="60" y="120" width="500" height="104" rx="12" fill="#f3f6fc" stroke="#4263eb" stroke-width="1.5"/>
-  <text x="84" y="154" class="h" fill="#364fc7" style="fill:#364fc7">入口</text>
+  <rect x="60" y="120" width="500" height="104" rx="12" fill="#101a33" stroke="#5c7cfa" stroke-width="1.5" filter="url(#glow)"/>
+  <text x="84" y="154" class="h" fill="#91a7ff" style="fill:#91a7ff">入口</text>
   <text x="84" y="184" class="body">交互 CLI：<tspan class="mono" style="font-size:15px">pnpm start</tspan> / <tspan class="mono" style="font-size:15px">mini-dsh</tspan></text>
   <text x="84" y="210" class="body">无需模型：<tspan class="mono" style="font-size:15px">inspect · demo · --show-config</tspan></text>
 
   <line x1="560" y1="172" x2="636" y2="172" class="arrow"/>
 
-  <rect x="640" y="120" width="900" height="104" rx="12" fill="#f3f6fc" stroke="#4263eb" stroke-width="1.5"/>
-  <text x="664" y="154" class="h" style="fill:#364fc7">createHarness · Cordis 插件装配</text>
+  <rect x="640" y="120" width="900" height="104" rx="12" fill="#101a33" stroke="#5c7cfa" stroke-width="1.5" filter="url(#glow)"/>
+  <text x="664" y="154" class="h" style="fill:#91a7ff">createHarness · Cordis 插件装配</text>
   <text x="664" y="184" class="body">CLI、模型 provider、工具与 MCP 通过服务契约装配，均可替换</text>
   <text x="664" y="210" class="body">生产 CLI、离线演示与测试共用同一套装配</text>
 
   <line x1="800" y1="224" x2="800" y2="276" class="arrow"/>
 
   <!-- 第二行左：上下文管理 -->
-  <rect x="60" y="280" width="380" height="280" rx="12" fill="#f6f3ff" stroke="#7048e8" stroke-width="1.5"/>
-  <text x="84" y="316" class="h" style="fill:#5f3dc4">上下文管理</text>
+  <rect x="60" y="280" width="380" height="280" rx="12" fill="#171330" stroke="#9775fa" stroke-width="1.5" filter="url(#glow)"/>
+  <text x="84" y="316" class="h" style="fill:#b197fc">上下文管理</text>
   <text x="84" y="356" class="body">• 项目规则：注入作用域内 AGENTS.md</text>
   <text x="84" y="392" class="body">• 请求投影：按任务分组，保护当前任务</text>
   <text x="84" y="428" class="body">• 压缩：当前任务内摘要，原始事件不删</text>
@@ -62,53 +70,53 @@
   <line x1="440" y1="420" x2="476" y2="420" class="arrow-both"/>
 
   <!-- 第二行中：Agent Loop -->
-  <rect x="480" y="280" width="640" height="280" rx="12" fill="#eefaf9" stroke="#0c8599" stroke-width="2"/>
-  <text x="504" y="316" class="h" style="fill:#0b7285">Agent Loop</text>
+  <rect x="480" y="280" width="640" height="280" rx="12" fill="#0a2228" stroke="#22b8cf" stroke-width="2" filter="url(#glow)"/>
+  <text x="504" y="316" class="h" style="fill:#66d9e8">Agent Loop</text>
   <text x="640" y="316" class="code mono">agent-loop-runtime.ts</text>
 
   <g>
-    <rect x="490" y="350" width="140" height="92" rx="8" fill="#ffffff" stroke="#66d9e8"/>
+    <rect x="490" y="350" width="140" height="92" rx="8" fill="#0d2a31" stroke="#1098ad"/>
     <text x="560" y="384" class="h-sm" text-anchor="middle">① 构建投影</text>
     <text x="560" y="406" class="small" text-anchor="middle">规则 + 历史</text>
     <text x="560" y="428" class="code mono" text-anchor="middle">context-runtime</text>
 
     <line x1="630" y1="396" x2="646" y2="396" class="arrow"/>
 
-    <rect x="650" y="350" width="140" height="92" rx="8" fill="#ffffff" stroke="#66d9e8"/>
+    <rect x="650" y="350" width="140" height="92" rx="8" fill="#0d2a31" stroke="#1098ad"/>
     <text x="720" y="384" class="h-sm" text-anchor="middle">② 预算预留</text>
     <text x="720" y="406" class="small" text-anchor="middle">请求 · 工具 · token</text>
     <text x="720" y="428" class="code mono" text-anchor="middle">run-budget-runtime</text>
 
     <line x1="790" y1="396" x2="806" y2="396" class="arrow"/>
 
-    <rect x="810" y="350" width="140" height="92" rx="8" fill="#ffffff" stroke="#66d9e8"/>
+    <rect x="810" y="350" width="140" height="92" rx="8" fill="#0d2a31" stroke="#1098ad"/>
     <text x="880" y="384" class="h-sm" text-anchor="middle">③ 模型请求</text>
     <text x="880" y="406" class="small" text-anchor="middle">流式 · 有界重试</text>
     <text x="880" y="428" class="code mono" text-anchor="middle">model-dispatch</text>
 
     <line x1="950" y1="396" x2="966" y2="396" class="arrow"/>
 
-    <rect x="970" y="350" width="140" height="92" rx="8" fill="#ffffff" stroke="#66d9e8"/>
+    <rect x="970" y="350" width="140" height="92" rx="8" fill="#0d2a31" stroke="#1098ad"/>
     <text x="1040" y="384" class="h-sm" text-anchor="middle">④ 授权与执行</text>
     <text x="1040" y="406" class="small" text-anchor="middle">集中授权钩子</text>
     <text x="1040" y="428" class="code mono" text-anchor="middle">tool-runtime</text>
   </g>
 
   <path d="M1040,442 L1040,486 L560,486 L560,448" class="loop"/>
-  <text x="800" y="512" class="label" text-anchor="middle" style="fill:#0b7285">循环直到完成、取消或预算停止；触顶时停止调度并记录原因</text>
+  <text x="800" y="512" class="label" text-anchor="middle" style="fill:#66d9e8">循环直到完成、取消或预算停止；触顶时停止调度并记录原因</text>
   <text x="800" y="538" class="label" text-anchor="middle">输入压力超过阈值时先在当前任务内压缩，再继续</text>
 
   <line x1="1120" y1="420" x2="1156" y2="420" class="arrow-both"/>
 
   <!-- 第二行右：模型与工具 -->
-  <rect x="1160" y="280" width="380" height="280" rx="12" fill="#fff4e6" stroke="#e8590c" stroke-width="1.5"/>
-  <text x="1184" y="316" class="h" style="fill:#d9480f">模型与工具</text>
+  <rect x="1160" y="280" width="380" height="280" rx="12" fill="#24170c" stroke="#ff922b" stroke-width="1.5" filter="url(#glow)"/>
+  <text x="1184" y="316" class="h" style="fill:#ffa94d">模型与工具</text>
   <text x="1184" y="356" class="body">• DeepSeek 流式适配器（可替换）</text>
   <text x="1184" y="392" class="body">• 文件工具：版本指纹 + 真实路径检查</text>
   <text x="1184" y="428" class="body">• Bash：白名单环境、独立临时 HOME</text>
   <text x="1184" y="464" class="body">• MCP：默认关闭，显式配置才加载</text>
-  <rect x="1180" y="488" width="340" height="56" rx="8" fill="#ffffff" stroke="#ffa94d"/>
-  <text x="1350" y="512" class="h-sm" text-anchor="middle" style="fill:#d9480f">写入与 Bash 默认人工审批</text>
+  <rect x="1180" y="488" width="340" height="56" rx="8" fill="#2b1a0b" stroke="#ff922b"/>
+  <text x="1350" y="512" class="h-sm" text-anchor="middle" style="fill:#ffa94d">写入与 Bash 默认人工审批</text>
   <text x="1350" y="534" class="small" text-anchor="middle">路径与命令闸门为应用层策略，非 OS 隔离</text>
 
   <!-- 第三行：事件日志 -->
@@ -117,34 +125,34 @@
   <line x1="250" y1="610" x2="250" y2="564" class="arrow"/>
   <text x="262" y="592" class="label">派生投影</text>
 
-  <rect x="60" y="610" width="1480" height="76" rx="12" fill="#24292f"/>
+  <rect x="60" y="610" width="1480" height="76" rx="12" fill="#131c31" stroke="#4dabf7" stroke-width="1.5" filter="url(#glow)"/>
   <text x="88" y="656" class="h mono" style="fill:#ffffff">events.jsonl</text>
   <text x="250" y="656" class="h" style="fill:#ffffff">追加式事件日志</text>
-  <text x="1512" y="645" class="body" text-anchor="end" style="fill:#d0d7de">唯一事实来源 · 关键写入等待落盘确认</text>
-  <text x="1512" y="670" class="body" text-anchor="end" style="fill:#d0d7de">每个 tool_call 都有配对结果（含 skipped / unknown / 取消）</text>
+  <text x="1512" y="645" class="body" text-anchor="end" style="fill:#9fb0c3">唯一事实来源 · 关键写入等待落盘确认</text>
+  <text x="1512" y="670" class="body" text-anchor="end" style="fill:#9fb0c3">每个 tool_call 都有配对结果（含 skipped / unknown / 取消）</text>
 
   <!-- 第四行：由事件派生的能力 -->
   <line x1="290" y1="686" x2="290" y2="736" class="arrow"/>
   <line x1="800" y1="686" x2="800" y2="736" class="arrow"/>
   <line x1="1310" y1="686" x2="1310" y2="736" class="arrow"/>
 
-  <rect x="60" y="740" width="460" height="130" rx="12" fill="#ebfbee" stroke="#2f9e44" stroke-width="1.5"/>
-  <text x="84" y="776" class="h" style="fill:#2b8a3e">会话恢复与续跑</text>
+  <rect x="60" y="740" width="460" height="130" rx="12" fill="#0e2416" stroke="#51cf66" stroke-width="1.5" filter="url(#glow)"/>
+  <text x="84" y="776" class="h" style="fill:#8ce99a">会话恢复与续跑</text>
   <text x="84" y="810" class="body">从 JSONL 重建状态；预算停止后同一任务续跑</text>
   <text x="84" y="840" class="body">结果未知的工具记为 unknown，不自动重试</text>
 
-  <rect x="570" y="740" width="460" height="130" rx="12" fill="#ebfbee" stroke="#2f9e44" stroke-width="1.5"/>
-  <text x="594" y="776" class="h" style="fill:#2b8a3e">只读检查 <tspan class="mono">inspect</tspan></text>
+  <rect x="570" y="740" width="460" height="130" rx="12" fill="#0e2416" stroke="#51cf66" stroke-width="1.5" filter="url(#glow)"/>
+  <text x="594" y="776" class="h" style="fill:#8ce99a">只读检查 <tspan class="mono">inspect</tspan></text>
   <text x="594" y="810" class="body">完整性、运行状态、用量与事件轨迹</text>
   <text x="594" y="840" class="body">只读日志，不执行其中的工具</text>
 
-  <rect x="1080" y="740" width="460" height="130" rx="12" fill="#ebfbee" stroke="#2f9e44" stroke-width="1.5"/>
-  <text x="1104" y="776" class="h" style="fill:#2b8a3e">交付证据</text>
+  <rect x="1080" y="740" width="460" height="130" rx="12" fill="#0e2416" stroke="#51cf66" stroke-width="1.5" filter="url(#glow)"/>
+  <text x="1104" y="776" class="h" style="fill:#8ce99a">交付证据</text>
   <text x="1104" y="810" class="body"><tspan class="mono" style="font-size:15px">/changes · /diff</tspan>：文件工具的变更清单</text>
   <text x="1104" y="840" class="body"><tspan class="mono" style="font-size:15px">/report</tspan>：检查绑定文件版本，文件变化即过期</text>
 
   <!-- 页脚 -->
-  <line x1="60" y1="904" x2="1540" y2="904" stroke="#d0d7de"/>
+  <line x1="60" y1="904" x2="1540" y2="904" stroke="#24314a"/>
   <text x="60" y="934" class="small">CI：Ubuntu / Windows × Node.js 22 / 24 · Linux bubblewrap 隔离测试 · 仓库外安装检查</text>
   <text x="1540" y="934" class="small" text-anchor="end">源文件 docs/images/architecture.svg</text>
 </svg>
