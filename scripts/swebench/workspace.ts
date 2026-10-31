@@ -172,6 +172,8 @@ export function removeContainersByLabel(label: string): { removed: string[]; rem
 // 宿主自己的结果存储（.mini-dsh/）不是 Agent 的改动：2026-10 正式批次有 22/50 条候选补丁把它带进了预测。
 export const HARNESS_ARTIFACTS = '.mini-dsh'
 export function exportPatch(workspace: string, baseCommit: string) {
-  execFileSync('git', ['add', '-A', '--', '.', `:(exclude)${HARNESS_ARTIFACTS}`], { cwd: workspace, timeout: 60_000 })
+  // 先全部暂存再撤出宿主目录：排除型 pathspec 在该目录已被 .git/info/exclude 忽略时会让 git add 报错退出。
+  execFileSync('git', ['add', '-A'], { cwd: workspace, timeout: 60_000 })
+  execFileSync('git', ['rm', '-r', '-q', '--cached', '--ignore-unmatch', '--', HARNESS_ARTIFACTS], { cwd: workspace, timeout: 60_000 })
   return raw('git', ['diff', '--cached', '--binary', baseCommit], workspace)
 }

@@ -100,6 +100,11 @@ test('exported patches leave the harness result store out but keep real new file
     assert.match(patch, /a\/a\.py/)
     assert.match(patch, /new_module\.py/)
     assert.doesNotMatch(patch, /\.mini-dsh/)
+    // 运行器同时把宿主目录写进 .git/info/exclude；两者并存时导出仍须成功（2026-10-31 冒烟批的基础设施失败）。
+    await fs.appendFile(path.join(workspace, '.git', 'info', 'exclude'), '\n/.mini-dsh/\n')
+    const ignored = exportPatch(workspace, base)
+    assert.match(ignored, /new_module\.py/)
+    assert.doesNotMatch(ignored, /\.mini-dsh/)
   } finally { await fs.rm(workspace, { recursive: true, force: true }) }
 })
 
