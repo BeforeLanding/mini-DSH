@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### PORT-13 v0.2.0 版本号与发布链接（2026-11-01）
+
+PORT-12 新增可选组件与 SWE-bench 结果页，按次版本号发布：`package.json` 0.1.1 → 0.2.0；README（快速开始、当前状态）、PROGRESS（版本条目与下一步）与讲解页的 Release 链接改为 v0.2.0，PROGRESS 以纯文本保留 v0.1.0、v0.1.1 的说明。与 PORT-12 同一 PR，避免多一轮 CI。
+
+验收：`pnpm install --frozen-lockfile` 通过，锁文件不变；`node scripts/build.js`、`node scripts/check-syntax.js`（208 files）通过；Biome 239 files、0 诊断；按 CI 步骤打包 `beforelanding-mini-dsh-0.2.0.tgz` 并在仓库外含空格目录安装，版本检查通过（0.2.0），`demo fix` 输出 `demo result: PASS`；完整离线回归 565 项：535 pass、0 fail、30 平台条件 skipped（含 Release 链接版本须与 `package.json` 一致的回归）。
+
 ### PORT-12b SWE-bench 结果页与展示边界（2026-11-01）
 
 新增 `docs/SWE-BENCH-RESULTS.md`：数字取自分支 `b4b7c43` 的 `docs/context-budget/SWE-FULL-HARNESS.md`——最终 90 题 full 74 / minimal 61 / mini-SWE-agent 57，配对 18:1（p=7.6×10⁻⁵）、14:1（p=9.8×10⁻⁴）、10:6（p=0.454），估价 $3.640 / $1.647 / $1.396，每解决一题约 $0.049 vs $0.024；留出 50 题 32/30/27、p=0.227 作为不显著的前一轮列出。页内写明模型 `deepseek/deepseek-flash`、每条 $0.50 / 416,666 token、`testbed-v1`、三臂定义、题目划分（105 道曝光题与中断批 10 题排除）、超限敏感性，以及成本、未做逐项消融、SWE 专用工作流提示、单模型单基准、1 条越限与复现须用实验分支等限制。

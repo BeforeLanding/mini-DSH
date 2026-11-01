@@ -26,7 +26,7 @@
 ## 已知限制
 
 - 单 Agent、单本地工作区；应用层路径和命令闸门不等于操作系统隔离。
-- 本地 tarball 安装在 Windows 验证，Ubuntu 由 CI 的仓库外安装 job 验证；macOS 未验证；以 GitHub Release 提供 v0.1.1 tarball，npm 未发布。真实交互需要模型密钥，零付费演示使用脚本化响应。
+- 本地 tarball 安装在 Windows 验证，Ubuntu 由 CI 的仓库外安装 job 验证；macOS 未验证；以 GitHub Release 提供 v0.2.0 tarball，npm 未发布。真实交互需要模型密钥，零付费演示使用脚本化响应。
 - 模型评测只有 SWE-bench 三臂对照一项，结论须连同约 2.6 倍成本与未做逐项消融一起陈述，见 [SWE-BENCH-RESULTS](SWE-BENCH-RESULTS.md)。更早的开发集探索不构成可靠完成率或泛化提升，也不能把组合策略结果单独归因于稳定前缀或主动压缩；公开仓库只有脱敏摘要，原始事件仅本地保存。协议边界见 [EVALUATION-SWEBENCH](EVALUATION-SWEBENCH.md)。
 
 ## 简历描述草案

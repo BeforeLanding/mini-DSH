@@ -1,11 +1,15 @@
 # 任务清单
 
+### v0.2.0 发布（2026-11-01）
+
+- PORT-13（完成，本提交）：`package.json` 版本 0.1.1 → 0.2.0（新增可选组件，次版本号）；README、PROGRESS 与讲解页的 Release 链接改为 v0.2.0。与 PORT-12 同一 PR 合并，合并后在合并提交上打 `v0.2.0` 并发布带 tarball 与 `SHA256SUMS` 的 Release。
+
 ### SWE full harness 组件与结果并入 main（2026-11-01）
 
 SWE 分支 `improve/swe-harness-advantage-20261031@b4b7c43` 在 90 道未曝光 SWE-bench Verified 题上测得 full 74 / minimal 61 / mini-SWE-agent 57。该分支切自已撤回的 `feat/swebench-formal-results`，直接合并有 13 处冲突并会带回 main 已撤回的记忆/协作装配与外部 SWE 运行器，因此按用户选择只移植产品侧组件并新增结果页；SWE 运行器与原始证据留在分支。
 
 - PORT-12a（完成，`8fae801`）：移植可选组件——任务内观测遮蔽（`observationWindow` / `observationStep`）、预算提示（`budgetNotices`，含无改动时的进度提示）、收尾检查与一次复核（`completionChecks`）、紧凑命令结果（`toolOutputCommandFormat: 'text'`）与宿主提示（`hostGuidance`）；默认全部关闭，`CLI_BUDGET` 不变；`capabilityManifest.policy` 只在显式设置时记录新字段，默认清单不变。随附 `test/run-guidance.test.ts`；DECISIONS 中因插入行而偏移的代码锚点按原行内容重新定位。
-- PORT-12b（完成，本提交）：新增 `docs/SWE-BENCH-RESULTS.md`；README、EVALUATION、讲解页、文档索引、PROGRESS 与 USAGE 同步；展示边界回归从“不展示结果”改为“结果须与成本、限制和结果页一起出现”。
+- PORT-12b（完成，`c05a5ef`）：新增 `docs/SWE-BENCH-RESULTS.md`；README、EVALUATION、讲解页、文档索引、PROGRESS 与 USAGE 同步；展示边界回归从“不展示结果”改为“结果须与成本、限制和结果页一起出现”。
 
 ### v0.1.1 发布（2026-10-31）
 
