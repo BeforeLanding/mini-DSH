@@ -1,12 +1,13 @@
 # 开发进度
 
-更新：2026-10-31。本页只维护当前 main 的状态、实际阻塞与下一步；历史实验与分支决定按原日期归档，不再作为当前开发清单。
+更新：2026-11-01。本页只维护当前 main 的状态、实际阻塞与下一步；历史实验与分支决定按原日期归档，不再作为当前开发清单。
 
 ## 当前状态
 
 - **交付范围：单 Agent、本地工作区。** TypeScript / Cordis CLI 保留文件与 Bash 工具、项目规则、版本化检查证据、上下文投影/压缩/回读、预算、JSONL 持久化与恢复、只读日志检查、显式配置 MCP。
 - **记忆与只读协作仅保留在独立分支。** `46b8fb1` 撤回 PR #7 对 main 的集成；完整实现、审查修复与后续评测保留在 [feat/memory-team-eval-v2@2f2dca9](https://github.com/BeforeLanding/mini-DSH/tree/2f2dca9f4f968485d9eb5f950f2accf173ce4539)，暂不合入 main，不列为本版交付待办。分支会话使用独立目录。
 - **SWE 正式实验保持分支隔离。** main 保留旧版预注册与零模型评分通道，正式四臂实现与结果在 [feat/swebench-formal-results@dc7e659](https://github.com/BeforeLanding/mini-DSH/tree/dc7e659883b9729f6f10510d5067f31a42361fee)，不重新合入 main；不把它写成“尚未执行”的 main 任务。
+- **SWE 长单任务组件已并入 main，默认关闭（2026-11-01）。** 观测遮蔽、预算提示、收尾检查与复核、紧凑命令结果、宿主提示从 SWE 分支移植；`CLI_BUDGET` 与默认能力清单不变，CLI 用户可经 `MINI_DSH_BUDGET` 打开前三项。SWE 运行器与原始证据仍在分支。
 - **组件开发评测已收口。** 三组件离线对照与实际开发消融均有记录；真实归因均为 `inconclusive`，摘要后裁剪继续默认关闭。历史样本不支撑泛化或效率收益主张，见 [开发批结果](docs/context-budget/COMPONENT-LOO-PAID-RESULT.md)。
 - **main 功能撤回验收已通过。** `src/` 与 PR #7 第一父提交 `a5d9191` 一致；构建和 202 文件语法检查、232 文件 lint 通过；正常用户环境完整回归 546 项：516 pass、0 fail、30 平台条件 skipped。公开样例复算、编程夹具及组件基准通过。命令与边界见 [PORT-1 证据](docs/context-budget/CHANGES.md#port-1-main-撤回记忆与只读协作2026-10-30)。
 - **当前代码 CI 全绿。** [CI 41211546998](https://github.com/BeforeLanding/mini-DSH/actions/runs/41211546998) 对应 PR #20 的 `7689c81`，其树与合并后的 main `4de3219` 相同；Ubuntu/Windows × Node 22/24、Linux isolation、Ubuntu package-install 六个必需 job 全部 success，SWE PoC 按配置 skipped，不计为已执行。相对验收基线 `46b8fb1`，`src/` 与依赖未变；之后的提交只改演示标题文案（`5fab772`）、文档、图片与文档回归测试。

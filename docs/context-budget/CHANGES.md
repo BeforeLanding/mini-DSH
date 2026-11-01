@@ -1,5 +1,13 @@
 # 改动与验收证据
 
+### PORT-12a 移植 SWE full harness 的可选组件（2026-11-01）
+
+来源：分支 `improve/swe-harness-advantage-20261031` 相对其合并基 `dc7e659` 的产品侧改动（提交 `b3a5519`、`a8d70e7`、`04df868`）。新文件 `src/core/observation-mask.ts`、`src/core/run-guidance.ts` 与 `test/run-guidance.test.ts` 原样带入；`budget.ts`、`context-runtime.ts`、`contracts.ts`、`event-validation.ts` 的补丁 3-way 应用无冲突；`agent-loop-runtime.ts`、`plugins/agent-loop.ts`、`plugins/context.d.ts`、`plugins/tool-results.ts` 的冲突只因分支一侧带有 main 已撤回的 `setRunGuard` 与 `onStore`，解决时只保留新成员。`create-harness.ts` 按 main 的单 Agent 装配手工接线：`coding` profile 注册收尾检查与工作区探测（仅 `completionChecks` / `budgetNotices` 为真的 run 调用），`hostGuidance` 作为 `host:guidance` 系统提示段，`toolOutputCommandFormat` 传给结果插件。与分支不同，`capabilityManifest.policy` 只在显式设置时写入 `toolOutputCommandFormat` 与 `hostGuidance` 摘要，默认清单逐字节不变。SWE 运行器（`scripts/swebench/*` 的外部臂、testbed 环境、补丁导出排除）与 `test/swebench-full-harness.test.ts` 依赖 main 已撤回的外部适配器，留在分支。
+
+`decisions-doc` 回归发现插入行使 DECISIONS 锚点偏移：`agent-loop-runtime.ts:366` → `:391`（`unknown`/`skipped` 补结果），`context-runtime.ts` 的 6/40/54/92/96 → 7/41/55/95/99；按原行内容逐条重定位，各只有唯一匹配。
+
+验收：`node scripts/build.js`（strict 类型检查 + 构建）通过；`run-guidance.test.js` 10/10；`node scripts/check-syntax.js` 208 files；Biome 239 files、0 诊断；完整离线回归 564 项：534 pass、0 fail、30 平台条件 skipped（PROGRESS 同步后进度回归通过）。`MINI_DSH_BUDGET='{"observationWindow":6,"observationStep":3,"budgetNotices":true,"completionChecks":true}'` 时 `--show-config` 显示四键且来源为 environment；`{"observationWindow":0}` 被拒绝（expected positive safe integer）。真实模型请求 0。
+
 ### PORT-11 v0.1.1 版本号与发布链接（2026-10-31）
 
 v0.1.0 之后 main 合入了锁文件的依赖漏洞修复（PORT-10），已发布的 Release 仍指向修复前的 `4de3219`。`package.json` 的 `version` 改为 0.1.1；`--version` 运行时读取 `package.json`，源码无需改动。CI 的 Package install job 原先写死 `grep -qx '0.1.0'`，改为 `grep -qxF "$(node -p "require('./package.json').version")"`，以后升版本不必再改工作流。README（快速开始、当前状态）、PROGRESS（版本条目与下一步）与讲解页指向 v0.1.1；PROGRESS 以纯文本保留 v0.1.0（`4de3219`）的说明，不再链接，以满足 Release 链接版本须与 `package.json` 一致的回归。`DELIVERY-20261030.md` 是带日期记录，测试中的 `version: '0.1.0'` 是合成 package 夹具，均不改。
