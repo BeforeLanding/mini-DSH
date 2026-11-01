@@ -29,6 +29,12 @@ type Projection = ReturnType<ContextBudgetRuntime['project']>
 export class AgentLoopRuntime {
     #runGuard?: (state: RunState, control: RunBudgetRuntime) => Promise<() => void>
     #completionCheck?: (input: Omit<CompletionCheckInput, 'workspace'>) => string | undefined
+    #workspaceProbe?: () => boolean | undefined
+    // 预算提示据此区分「已有改动」与「还没改任何文件」；宿主注册，缺省不探测。
+    setWorkspaceProbe(probe: () => boolean | undefined) {
+        if (this.#workspaceProbe) throw new Error('workspace probe already fixed')
+        this.#workspaceProbe = probe
+    }
     // 宿主注册（它知道工作区）；只有 policy.completionChecks 为 true 的 run 才会调用。
     setCompletionCheck(check: (input: Omit<CompletionCheckInput, 'workspace'>) => string | undefined) {
         if (this.#completionCheck) throw new Error('completion check already fixed')
@@ -91,7 +97,7 @@ export class AgentLoopRuntime {
             control.check()
             if (policy.maxModelRequests !== undefined && state.counters.modelRequests >= policy.maxModelRequests) throw new BudgetStop('max_steps', state)
             if (step > 1 || input === undefined) {
-                const notice = budgetNotice(policy, state, this.sessions.visibleEvents(sessionId))
+                const notice = policy.budgetNotices ? budgetNotice(policy, state, this.sessions.visibleEvents(sessionId), this.#workspaceProbe?.()) : undefined
                 if (notice) append(sessionId, 'user/message', { content: notice })
             }
 

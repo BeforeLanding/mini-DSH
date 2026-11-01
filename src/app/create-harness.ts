@@ -37,7 +37,7 @@ import { JsonlStore } from '../core/event-store.js'
 import { CLI_BUDGET } from '../core/budget.js'
 import * as delegationPlugin from '../plugins/delegation.js'
 import { delegationRecovery } from '../core/delegation-recovery.js'
-import { completionCheck } from '../core/run-guidance.js'
+import { completionCheck, workspaceChanged } from '../core/run-guidance.js'
 
 export interface HarnessAdapter { provider: string; model: string; chat: Adapter['chat']; capabilities?: Adapter['capabilities'] }
 export interface HarnessConfig {
@@ -95,7 +95,10 @@ export async function createHarness(config: HarnessConfig) {
     await root.plugin(sandbox, { workspace: config.workspace, ...(config.autoApprove === undefined ? {} : { autoApprove: config.autoApprove }) })
     if (config.hostGuidance?.trim()) root.systemPrompt.section({ name: 'host:guidance', order: 20, text: config.hostGuidance })
     // 只有 policy.completionChecks 为 true 的 run 会调用；只读角色不编辑，不注册。
-    if (!readOnly && config.profile === 'coding') root.agentLoop.setCompletionCheck(input => completionCheck({ workspace: config.workspace, ...input }))
+    if (!readOnly && config.profile === 'coding') {
+      root.agentLoop.setCompletionCheck(input => completionCheck({ workspace: config.workspace, ...input }))
+      root.agentLoop.setWorkspaceProbe(() => workspaceChanged(config.workspace))
+    }
     if (config.toolOutput !== false && !readOnly) await root.plugin(toolResults, { maxPreviewBytes: config.toolOutputMaxPreviewBytes, ...(config.toolOutputCommandFormat ? { commandFormat: config.toolOutputCommandFormat } : {}), onStore: store => { parentResults = store } })
     if (!config.legacyNoReadHistory) await root.plugin(readHistory)
     if (config.projectContext !== false && config.profile === 'coding') await root.plugin(projectContext, { directory: config.projectDirectory, ...(config.contextLayout ? { layout: config.contextLayout } : {}) })

@@ -8,7 +8,7 @@ import { resolveBudget } from '../src/core/budget.js'
 import type { BudgetPolicy } from '../src/core/budget.js'
 import type { Adapter, ChatRequest, ChatResponse, SessionEvent } from '../src/core/contracts.js'
 import { maskedObservationCount, maskObservations, observationStub, OBSERVATION_MARKER } from '../src/core/observation-mask.js'
-import { BUDGET_NOTICE_PREFIX, COMPLETION_CHECK_PREFIX, completionCheck } from '../src/core/run-guidance.js'
+import { BUDGET_NOTICE_PREFIX, COMPLETION_CHECK_PREFIX, budgetNotice, completionCheck, workspaceChanged } from '../src/core/run-guidance.js'
 import { renderCommandText } from '../src/plugins/tool-results.js'
 import type { CommandResult } from '../src/core/command-runner.js'
 import { harness } from './harness.js'
@@ -159,11 +159,19 @@ test('completionCheck reports an empty diff, scratch files and an edit after the
     assert.match(message!, /scratch-files\].*reproduce_bug\.py/)
     await fs.rm(path.join(workspace, 'reproduce_bug.py'))
 
+    // 有改动时第一次想结束：先要求按问题复核一次，并点名改动文件。
     const edited = [ev(2, 'tool/start', { name: 'bash' }), ev(3, 'file/change', {})]
-    message = completionCheck({ workspace, events: edited, state })
+    const review = completionCheck({ workspace, events: edited, state })
+    assert.match(review!, /review\].*re-read the issue.*\(a\.py\)/s)
+    const reviewed = [...edited, ev(4, 'user/message', { content: review })]
+    message = completionCheck({ workspace, events: reviewed, state })
     assert.match(message!, /unverified-edit/)
-    assert.equal(completionCheck({ workspace, events: [...edited, ev(4, 'tool/start', { name: 'bash' })], state }), undefined)
-    assert.equal(completionCheck({ workspace, events: [...edited, ev(5, 'user/message', { content: message })], state }), undefined)
+    assert.equal(completionCheck({ workspace, events: [...reviewed, ev(5, 'tool/start', { name: 'bash' })], state }), undefined)
+    assert.equal(completionCheck({ workspace, events: [...reviewed, ev(6, 'user/message', { content: message })], state }), undefined)
+    assert.equal(workspaceChanged(workspace), true)
+    await fs.writeFile(path.join(workspace, 'a.py'), 'x = 1\n')
+    assert.equal(workspaceChanged(workspace), false, 'the harness result store alone is not a change')
+    assert.equal(workspaceChanged(os.tmpdir() + '/definitely-not-a-repo-' + Date.now()), undefined)
   } finally { await fs.rm(workspace, { recursive: true, force: true }) }
 })
 
@@ -176,4 +184,41 @@ test('compact command text keeps exit status, both streams and the readback ref'
   const timedOut = renderCommandText({ ...base, status: 'timed_out', exitCode: null, timedOut: true, stdout: { text: '', bytes: 0, truncated: false } })
   assert.equal(timedOut, 'timed_out (1.2s)')
   assert.ok(renderCommandText({ ...base, stdout: { text: 'a"b\n', bytes: 4, truncated: false } }).includes('a"b'), 'no JSON escaping')
+})
+
+test('budget notices name the lack of progress when no repository file has changed', () => {
+  const state = { runId: 'r', counters: { totalTokens: 40_000 }, estimatedInputTokens: 10_000 } as unknown as Parameters<typeof budgetNotice>[1]
+  const policy = { budgetNotices: true, maxTotalTokens: 100_000 }
+  // 35% 档只在确认尚无改动时发；未知或已有改动时不发。
+  assert.match(budgetNotice(policy, state, [], false)!, /level=35:.*No repository file has been changed yet/)
+  assert.equal(budgetNotice(policy, state, [], true), undefined)
+  assert.equal(budgetNotice(policy, state, [], undefined), undefined)
+  const half = { ...state, counters: { totalTokens: 55_000 } } as typeof state
+  assert.match(budgetNotice(policy, half, [], false)!, /level=50:.*No repository file/)
+  assert.match(budgetNotice(policy, half, [], true)!, /level=50:.*Avoid broad exploration/)
+  const late = { ...state, counters: { totalTokens: 92_000 } } as typeof state
+  assert.match(budgetNotice(policy, late, [], false)!, /level=90:.*Finish now/, 'the last notice always asks to finish')
+})
+
+test('at the swe-full compaction budget a long reasoning-heavy run summarises its early history', async () => {
+  const { structuredSummary } = await import('./structured-summary.js')
+  const requests: ChatRequest[] = []
+  let main = 0, summaries = 0
+  const chat = (async (request: ChatRequest): Promise<ChatResponse> => {
+    const last = request.messages?.at(-1)?.content
+    if (typeof last === 'string' && last.includes('上面的对话正在被摘要')) { summaries++; return { content: structuredSummary('Located the bug.') } }
+    requests.push(request)
+    main++
+    // 每一步带约 6k 字符推理，模拟留出批里推理占上下文一半的轨迹。
+    if (main <= 14) return { reasoningContent: `step ${main} reasoning `.repeat(400), toolCalls: [{ id: `c${main}`, name: 'probe', arguments: { n: main } }] }
+    return { content: 'done' }
+  }) as Adapter['chat']
+  const h = harness(chat)
+  h.tools.register({ name: 'probe', execute: (args: { n: number }) => `out-${args.n}\n${'y'.repeat(3000)}` })
+  assert.equal(await h.agent.send('fix', { budget: policy({ maxOutputTokens: 1000, compactionBudgetTokens: 24_576, observationWindow: 4, observationStep: 8, inputTargetTokens: 65_536 }) }), 'done')
+  assert.ok(summaries >= 1, 'compaction fired')
+  const lastText = (requests.at(-1)!.messages ?? []).map(message => String(message.reasoning_content ?? '')).join('\n')
+  assert.ok(!lastText.includes('step 1 reasoning'), 'the earliest reasoning left the request')
+  const projections = h.sessions.visibleEvents(h.session.id).flatMap(event => event.type === 'context/projection' ? [event.data.estimatedInputTokens] : [])
+  assert.ok(Math.max(...projections) < 24_576, `requests stay under the compaction budget (max ${Math.max(...projections)})`)
 })

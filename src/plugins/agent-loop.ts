@@ -23,6 +23,9 @@ class AgentLoopService extends Service {
     setRunGuard(...args: Parameters<AgentLoopRuntime['setRunGuard']>) {
         return this.runtime.setRunGuard(...args)
     }
+    setWorkspaceProbe(...args: Parameters<AgentLoopRuntime['setWorkspaceProbe']>) {
+        return this.runtime.setWorkspaceProbe(...args)
+    }
     setCompletionCheck(...args: Parameters<AgentLoopRuntime['setCompletionCheck']>) {
         return this.runtime.setCompletionCheck(...args)
     }
