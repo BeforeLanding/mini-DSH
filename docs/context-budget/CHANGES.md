@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### SWE-F5 最终测试：90 道未碰过的题（2026-11-01，实验分支）
+
+源码 `645e3cb`，90 道未曝光题 × full / baseline / minimal，270/270 执行、0 基础设施失败、官方评分、估价 $6.683。full 74/90、minimal 61/90、baseline 57/90；full vs baseline 18:1、+19 点、McNemar p=7.6×10⁻⁵；full vs minimal 14:1、+14 点、p=9.8×10⁻⁴。代价：full 估价 $3.64，为 baseline 的 2.6 倍；1 条 full episode 超名义上限 1.83%（未解决）。修 Docker：删除 `%LOCALAPPDATA%\Docker\run` 下三个陈旧 socket 后恢复。详见 [SWE full harness](SWE-FULL-HARNESS.md)。
+
 ### SWE-F4 第二轮组件优化（2026-11-01，实验分支）
 
 以留出 50 题为开发集归类 full 臂 18 道失败：11 条目标没修全、3 条回归、4 条空补丁预算停止（只查不改）；预算停止轨迹最终上下文约一半是不能截短的历史推理。收尾检查增加一次复核（`04df868`），预算提示在确认无改动时点名并增设 35% 档（同提交），swe-full 压缩预算 24,576（`996cea5`，离线 −11% / −4%）。100 题批次在第 30 条因 WSL 重启中断（$0.71）后暂停。`pnpm test` 607 / 576 pass / 0 fail / 30 skipped。详见 [SWE full harness](SWE-FULL-HARNESS.md)。
