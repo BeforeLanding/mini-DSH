@@ -36,7 +36,7 @@ mini-DSH 使用 TypeScript / Cordis 构建，内置 DeepSeek 适配器，适合�
 
 ## 快速开始
 
-需要 **Node.js ≥ 22、pnpm 11.22.0 和 Bash**。Windows 使用 Git for Windows 自带的 Bash；Linux/macOS 使用 PATH 中的 `bash`。可从源码使用，也可安装 [v0.1.1 Release](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.1.1) 附带的 tarball（安装步骤见[使用指南](docs/USAGE.md#本地打包与安装)）；尚未发布到 npm。标为 `shell` 的命令在 PowerShell 与 bash 中相同；只适用于一种 shell 的写法分别给出。
+需要 **Node.js ≥ 22、pnpm 11.22.0 和 Bash**。Windows 使用 Git for Windows 自带的 Bash；Linux/macOS 使用 PATH 中的 `bash`。可从源码使用，也可安装 [v0.2.0 Release](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.2.0) 附带的 tarball（安装步骤见[使用指南](docs/USAGE.md#本地打包与安装)）；尚未发布到 npm。标为 `shell` 的命令在 PowerShell 与 bash 中相同；只适用于一种 shell 的写法分别给出。
 
 ### 1. 获取并构建
 
@@ -105,7 +105,7 @@ pnpm start
 
 ## 当前状态
 
-已发布 [v0.1.1](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.1.1)。已实现源码 CLI、本地 tarball 安装、DeepSeek 适配器、文件/Bash 工具、上下文与预算管理、持久化恢复和只读日志检查。CI 覆盖 Ubuntu / Windows × Node.js 22 / 24，并包含 Linux bubblewrap 隔离测试和仓库外安装检查。
+已发布 [v0.2.0](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.2.0)。已实现源码 CLI、本地 tarball 安装、DeepSeek 适配器、文件/Bash 工具、上下文与预算管理、持久化恢复和只读日志检查。CI 覆盖 Ubuntu / Windows × Node.js 22 / 24，并包含 Linux bubblewrap 隔离测试和仓库外安装检查。
 
 ### 已知边界
 
@@ -115,7 +115,11 @@ pnpm start
 - **预算：** token 为估算值，执行预算不等于费用硬上限；`/compact` 可能请求模型。
 - **验收：** 任务能否完成取决于模型与项目；`/report` 记录检查证据，验收仍由使用者判断。
 - **发布：** 以 GitHub Release 提供 tarball，尚未发布 npm；macOS 安装未验证。ECS 部署仅保留[手动入口](docs/ECS_DEPLOYMENT.md)。
-- **范围：** 本仓库不展示模型评测结果，演示与离线回归验证的是机制而非模型能力。项目记忆与只读协作在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2)，SWE-bench 实验在[独立实验分支](https://github.com/BeforeLanding/mini-DSH/tree/feat/swebench-formal-results)，均不属于 main 交付范围。
+- **范围：** 演示与离线回归验证的是机制；模型评测只有下面的 SWE-bench 对照一项，其运行器与完整过程在[实验分支](https://github.com/BeforeLanding/mini-DSH/tree/improve/swe-harness-advantage-20261031)。项目记忆与只读协作在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2)，不属于 main 交付范围。
+
+## 评测
+
+在 90 道未参与调参的 SWE-bench Verified 题上，打开长单任务组件的 mini-DSH 解决 74 题；同模型（`deepseek/deepseek-flash`）、同环境、同 token 上限下，mini-SWE-agent 解决 57 题，同源码但不开组件的 mini-DSH 解决 61 题。代价是成本约为 mini-SWE-agent 的 2.6 倍；没有做逐项消融，差距不能归给单个组件。这些组件在 main 上默认关闭，开关见[使用指南](docs/USAGE.md#长单任务的可选组件)。设置、配对检验与限制见 [SWE-bench 结果](docs/SWE-BENCH-RESULTS.md)。
 
 ## 架构与扩展
 

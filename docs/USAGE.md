@@ -25,6 +25,16 @@
 
 预算停止后可用 `/continue` 开始同一任务的新一段运行，保留已有事件与任务累计用量。已完成工具不会重新执行；已完成任务不能继续，`context_overflow` 需先调整上下文配置。工具结果为 `unknown` 时须人工核验副作用，自动续跑会拒绝。
 
+### 长单任务的可选组件
+
+以下预算键默认关闭，可写进 `MINI_DSH_BUDGET` 或 `/budget` 打开。它们为 SWE 类“一个任务、很多步”的长轨迹设计，只在 [SWE-bench 实验](SWE-BENCH-RESULTS.md) 中与真实模型一起验证过；日常 CLI 是否受益未测。
+
+- `observationWindow` / `observationStep`：当前任务只保留最近 N 条工具结果正文，更早的换成带事件号的短桩，可用 `read_history` 回读；原始事件不变。遮蔽会改写前缀，缓存命中率会下降。
+- `budgetNotices`：累计 token 越过 50% / 75% / 90% 时各写一条 `[harness budget]` 提示；宿主确认工作区尚无改动时，从 35% 起改为提醒先动手修改。
+- `completionChecks`：模型想结束时，若工作区无改动、留有临时脚本、有改动但尚未复核，或最后一次编辑后没跑过命令，各提醒一次（`[harness check:…]`）。需要工作区是 git 仓库。
+
+例如：`MINI_DSH_BUDGET={"observationWindow":6,"budgetNotices":true,"completionChecks":true}`。提示以 user/message 事件落盘，可从日志复算。
+
 ## 保存与恢复会话
 
 默认会话日志位于用户主目录 `.mini-dsh/sessions/<session-id>/events.jsonl`，工具结果位于工作区 `.mini-dsh/tool-results`。启动时会打印 session ID；可分别用 `MINI_DSH_SESSION_DIR` 与 `MINI_DSH_WORKSPACE` 指定存储位置和工作区。

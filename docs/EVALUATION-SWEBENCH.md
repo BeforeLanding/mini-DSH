@@ -2,7 +2,7 @@
 
 **主分支状态（2026-10-28）。** PR #12 的四臂外部执行器和正式实验结果已从 main 撤回，完整实现和结果仅保留在 [feat/swebench-formal-results](https://github.com/BeforeLanding/mini-DSH/tree/feat/swebench-formal-results)。本页保留合并前的预注册、候选工作区和零模型评分通道说明；下文草案与限制描述该旧版实现，不代表实验从未执行。
 
-**展示边界。** 本页的协议与零模型通道验证不是能力分数；README 不展示模型评测结果。
+**展示边界。** 本页的协议与零模型通道验证不是能力分数；真实模型三臂结果见 [SWE-BENCH-RESULTS](SWE-BENCH-RESULTS.md)，三臂运行器在 SWE 实验分支。
 
 ## 已实现的内容
 

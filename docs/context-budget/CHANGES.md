@@ -1,5 +1,27 @@
 # 改动与验收证据
 
+### PORT-13 v0.2.0 版本号与发布链接（2026-11-01）
+
+PORT-12 新增可选组件与 SWE-bench 结果页，按次版本号发布：`package.json` 0.1.1 → 0.2.0；README（快速开始、当前状态）、PROGRESS（版本条目与下一步）与讲解页的 Release 链接改为 v0.2.0，PROGRESS 以纯文本保留 v0.1.0、v0.1.1 的说明。与 PORT-12 同一 PR，避免多一轮 CI。
+
+验收：`pnpm install --frozen-lockfile` 通过，锁文件不变；`node scripts/build.js`、`node scripts/check-syntax.js`（208 files）通过；Biome 239 files、0 诊断；按 CI 步骤打包 `beforelanding-mini-dsh-0.2.0.tgz` 并在仓库外含空格目录安装，版本检查通过（0.2.0），`demo fix` 输出 `demo result: PASS`；完整离线回归 565 项：535 pass、0 fail、30 平台条件 skipped（含 Release 链接版本须与 `package.json` 一致的回归）。
+
+### PORT-12b SWE-bench 结果页与展示边界（2026-11-01）
+
+新增 `docs/SWE-BENCH-RESULTS.md`：数字取自分支 `b4b7c43` 的 `docs/context-budget/SWE-FULL-HARNESS.md`——最终 90 题 full 74 / minimal 61 / mini-SWE-agent 57，配对 18:1（p=7.6×10⁻⁵）、14:1（p=9.8×10⁻⁴）、10:6（p=0.454），估价 $3.640 / $1.647 / $1.396，每解决一题约 $0.049 vs $0.024；留出 50 题 32/30/27、p=0.227 作为不显著的前一轮列出。页内写明模型 `deepseek/deepseek-flash`、每条 $0.50 / 416,666 token、`testbed-v1`、三臂定义、题目划分（105 道曝光题与中断批 10 题排除）、超限敏感性，以及成本、未做逐项消融、SWE 专用工作流提示、单模型单基准、1 条越限与复现须用实验分支等限制。
+
+展示边界改为“只发布这一项，且结论不离开成本与限制”：README 新增“评测”一节（结果、2.6 倍成本、未做逐项消融、组件默认关闭、结果页与使用指南链接），“范围”一条改指新实验分支；EVALUATION 第 3 类、讲解页两处、EVALUATION-SWEBENCH 展示边界、文档索引与 PROGRESS 的 SWE 条目同步；USAGE 新增“长单任务的可选组件”。`test/display-policy.test.ts` 删去“README 须写不展示模型评测结果”，新增两条：README 的“评测”一节须同时链接结果页、写成本与逐项消融；结果页须包含模型、题目划分、McNemar、不显著、限制、成本、逐项消融与默认关闭。展示面不得出现美元金额、分数表与“提升/成功率+数字”句式的原有规则保留。
+
+验收：文档类回归全部通过；临时删掉 README 中的成本句后新规则失败（“评测一节须写成本”），随后恢复。`node scripts/build.js`、`node scripts/check-syntax.js`（208 files）通过；Biome 239 files、0 诊断；完整离线回归 565 项：535 pass、0 fail、30 平台条件 skipped。真实模型请求 0。
+
+### PORT-12a 移植 SWE full harness 的可选组件（2026-11-01）
+
+来源：分支 `improve/swe-harness-advantage-20261031` 相对其合并基 `dc7e659` 的产品侧改动（提交 `b3a5519`、`a8d70e7`、`04df868`）。新文件 `src/core/observation-mask.ts`、`src/core/run-guidance.ts` 与 `test/run-guidance.test.ts` 原样带入；`budget.ts`、`context-runtime.ts`、`contracts.ts`、`event-validation.ts` 的补丁 3-way 应用无冲突；`agent-loop-runtime.ts`、`plugins/agent-loop.ts`、`plugins/context.d.ts`、`plugins/tool-results.ts` 的冲突只因分支一侧带有 main 已撤回的 `setRunGuard` 与 `onStore`，解决时只保留新成员。`create-harness.ts` 按 main 的单 Agent 装配手工接线：`coding` profile 注册收尾检查与工作区探测（仅 `completionChecks` / `budgetNotices` 为真的 run 调用），`hostGuidance` 作为 `host:guidance` 系统提示段，`toolOutputCommandFormat` 传给结果插件。与分支不同，`capabilityManifest.policy` 只在显式设置时写入 `toolOutputCommandFormat` 与 `hostGuidance` 摘要，默认清单逐字节不变。SWE 运行器（`scripts/swebench/*` 的外部臂、testbed 环境、补丁导出排除）与 `test/swebench-full-harness.test.ts` 依赖 main 已撤回的外部适配器，留在分支。
+
+`decisions-doc` 回归发现插入行使 DECISIONS 锚点偏移：`agent-loop-runtime.ts:366` → `:391`（`unknown`/`skipped` 补结果），`context-runtime.ts` 的 6/40/54/92/96 → 7/41/55/95/99；按原行内容逐条重定位，各只有唯一匹配。
+
+验收：`node scripts/build.js`（strict 类型检查 + 构建）通过；`run-guidance.test.js` 10/10；`node scripts/check-syntax.js` 208 files；Biome 239 files、0 诊断；完整离线回归 564 项：534 pass、0 fail、30 平台条件 skipped（PROGRESS 同步后进度回归通过）。`MINI_DSH_BUDGET='{"observationWindow":6,"observationStep":3,"budgetNotices":true,"completionChecks":true}'` 时 `--show-config` 显示四键且来源为 environment；`{"observationWindow":0}` 被拒绝（expected positive safe integer）。真实模型请求 0。
+
 ### PORT-11 v0.1.1 版本号与发布链接（2026-10-31）
 
 v0.1.0 之后 main 合入了锁文件的依赖漏洞修复（PORT-10），已发布的 Release 仍指向修复前的 `4de3219`。`package.json` 的 `version` 改为 0.1.1；`--version` 运行时读取 `package.json`，源码无需改动。CI 的 Package install job 原先写死 `grep -qx '0.1.0'`，改为 `grep -qxF "$(node -p "require('./package.json').version")"`，以后升版本不必再改工作流。README（快速开始、当前状态）、PROGRESS（版本条目与下一步）与讲解页指向 v0.1.1；PROGRESS 以纯文本保留 v0.1.0（`4de3219`）的说明，不再链接，以满足 Release 链接版本须与 `package.json` 一致的回归。`DELIVERY-20261030.md` 是带日期记录，测试中的 `version: '0.1.0'` 是合成 package 夹具，均不改。

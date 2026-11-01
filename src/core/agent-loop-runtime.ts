@@ -12,6 +12,8 @@ import { ModelStreamError, ProviderError, runErrorData } from './model-error.js'
 import { retryDelay, waitForRetry } from './retry-policy.js'
 import { systemClock } from './run-budget-runtime.js'
 import { ModelNotDispatchedError } from './model-dispatch.js'
+import { budgetNotice } from './run-guidance.js'
+import type { CompletionCheckInput } from './run-guidance.js'
 import type { BudgetPolicy, RunState, Usage, StopReason } from './budget.js'
 import { createHash, randomUUID } from 'node:crypto'
 import { BudgetStop } from './budget.js'
@@ -25,6 +27,18 @@ const CANCELLED_RESULT = 'ToolError: the run was cancelled before this tool ran'
 const REQUEST_TOOL = 'read_history'
 type Projection = ReturnType<ContextBudgetRuntime['project']>
 export class AgentLoopRuntime {
+    #completionCheck?: (input: Omit<CompletionCheckInput, 'workspace'>) => string | undefined
+    #workspaceProbe?: () => boolean | undefined
+    // 预算提示据此区分「已有改动」与「还没改任何文件」；宿主注册，缺省不探测。
+    setWorkspaceProbe(probe: () => boolean | undefined) {
+        if (this.#workspaceProbe) throw new Error('workspace probe already fixed')
+        this.#workspaceProbe = probe
+    }
+    // 宿主注册（它知道工作区）；只有 policy.completionChecks 为 true 的 run 才会调用。
+    setCompletionCheck(check: (input: Omit<CompletionCheckInput, 'workspace'>) => string | undefined) {
+        if (this.#completionCheck) throw new Error('completion check already fixed')
+        this.#completionCheck = check
+    }
     sessions: Pick<SessionRuntime, keyof SessionRuntime>
     systemPrompt: Pick<SystemPromptRuntime, "assemble">
     tools: Pick<ToolRuntime, "schemas" | "execute" | "renderResult">
@@ -75,6 +89,10 @@ export class AgentLoopRuntime {
 
             control.check()
             if (policy.maxModelRequests !== undefined && state.counters.modelRequests >= policy.maxModelRequests) throw new BudgetStop('max_steps', state)
+            if (step > 1 || input === undefined) {
+                const notice = policy.budgetNotices ? budgetNotice(policy, state, this.sessions.visibleEvents(sessionId), this.#workspaceProbe?.()) : undefined
+                if (notice) append(sessionId, 'user/message', { content: notice })
+            }
 
             const system = await control.wait(() => this.systemPrompt.assemble({
                 agent,
@@ -115,6 +133,7 @@ export class AgentLoopRuntime {
                     ...(calibration ? { rawEstimatedInputTokens: projection.rawEstimatedInputTokens, calibration } : {}),
                     reservedOutputTokens: maxOutputTokens,
                     safetyMarginTokens: projection.safetyMarginTokens, removedTaskIds: projection.removedTaskIds,
+                    ...(projection.maskedObservations ? { maskedObservations: projection.maskedObservations } : {}),
                     // NX-39 因子 2 的读数：本轮装配出的系统提示的摘要。投影是「这一轮要发出去的东西」的记录，
                     // 系统提示正是其中一部分，记在这里就不必为了量前缀稳定性再多一条事件类型。
                     systemPromptDigest: createHash('sha256').update(system).digest('hex') })
@@ -261,6 +280,12 @@ export class AgentLoopRuntime {
                 const content = response.content ?? ''
                 append(sessionId, 'assistant/message', { content, reasoningContent: response.reasoningContent })
                 if (policy.maxTotalTokens !== undefined && state.counters.totalTokens > policy.maxTotalTokens) throw new BudgetStop('token_budget', state)
+                const followUp = policy.completionChecks ? this.#completionCheck?.({ events: this.sessions.visibleEvents(sessionId), state }) : undefined
+                if (followUp) {
+                    append(sessionId, 'user/message', { content: followUp })
+                    await control.wait(() => this.sessions.flush(sessionId))
+                    continue
+                }
                 await control.wait(() => this.sessions.flush(sessionId))
                 control.check()
                 state.counters.approvalDurationMs = control.approvalDurationMs

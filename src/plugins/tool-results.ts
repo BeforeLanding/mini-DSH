@@ -6,12 +6,32 @@ import type { AvailableRange } from '../core/tool-result-store.js'
 
 export const name = 'mini-tool-results'
 export const inject = ['tools', 'sandbox']
-export interface ToolResultsConfig extends Partial<ResultStoreConfig> { maxPreviewBytes?: number }
+export interface ToolResultsConfig extends Partial<ResultStoreConfig> { maxPreviewBytes?: number; commandFormat?: 'json' | 'text' }
+
+// 命令结果的紧凑文本形态：结构化值（含 ref、窗口与存储字段）原样留在 ToolResult.value 与事件派生里，
+// 只有送进模型的那份正文不再是缩进 JSON——转义的换行/引号与 cwd、signal、字节数等元数据每条都要重付。
+export function renderCommandText(value: CommandResult): string {
+  const seconds = (value.durationMs / 1000).toFixed(1)
+  const head = value.status === 'exited' ? `exit ${value.exitCode} (${seconds}s)` : `${value.status}${value.exitCode === null ? '' : ` exit ${value.exitCode}`} (${seconds}s)${value.error ? `: ${value.error}` : ''}`
+  const lines = [head]
+  for (const [label, stream] of [['stdout', value.stdout], ['stderr', value.stderr]] as const) {
+    if (!stream.text && !stream.tail && !stream.previewTruncated && !stream.truncated) continue
+    lines.push(`--- ${label} ---`, stream.text.replace(/\n$/, ''))
+    if (stream.previewTruncated || stream.truncated) {
+      const where = stream.ref ? `read_tool_result ref=${stream.ref} offset=${stream.resumeOffset ?? 0}` : `not stored${stream.storageError ? `: ${stream.storageError}` : ''}`
+      lines.push(`[${label} truncated: ${stream.omittedBytes ?? 0} of ${stream.bytes} bytes omitted; ${where}]`)
+      if (stream.tail) lines.push(stream.tail.replace(/\n$/, ''))
+    }
+  }
+  return lines.join('\n')
+}
 
 export function apply(ctx: Context, config: ToolResultsConfig = {}) {
   const directory = config.directory ?? '.mini-dsh/tool-results'
   const store = new ToolResultStore({ ...config, directory: ctx.sandbox.resolvePath(directory) })
   const maxPreviewBytes = positiveLimit(config.maxPreviewBytes, 16 * 1024, 'maxPreviewBytes')
+  const commandFormat = config.commandFormat ?? 'json'
+  if (commandFormat !== 'json' && commandFormat !== 'text') throw new Error('commandFormat must be json or text')
   const tailLimit = Math.max(1, Math.floor(maxPreviewBytes / PREVIEW_TAIL_DIVISOR))
   ctx.effect(() => ctx.tools.setResultProjection(async (tool, result, execution) => {
     // read_history 与 read_tool_result 一样，输出已由调用方自己的 maxBytes 限定；再套一层预览截断与
@@ -48,7 +68,7 @@ export function apply(ctx: Context, config: ToolResultsConfig = {}) {
       // previewTruncated，不认 storageTruncated——后者是存盘时的上限，与进历史的那份是不是预览无关。
       return { value: projected, isError: result.isError || !!stdout.storageError || !!stderr.storageError,
         previewTruncated: !!stdout.previewTruncated || !!stderr.previewTruncated,
-        content: [{ type: 'text', text: JSON.stringify(projected, null, 2) }] }
+        content: [{ type: 'text', text: commandFormat === 'text' ? renderCommandText(projected) : JSON.stringify(projected, null, 2) }] }
     }
     const text = ctx.tools.renderResult(result), bytes = Buffer.from(text)
     if (bytes.length <= maxPreviewBytes) return result

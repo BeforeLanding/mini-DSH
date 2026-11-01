@@ -18,6 +18,7 @@ import * as files from '../tools/files.js'
 import * as bash from '../tools/bash.js'
 import { assertMcpRuntime, secureStdioEntry } from './mcp-config.js'
 import type { McpServerEntry } from './mcp-config.js'
+import { completionCheck, workspaceChanged } from '../core/run-guidance.js'
 
 export interface HarnessAdapter { provider: string; model: string; chat: Adapter['chat']; capabilities?: Adapter['capabilities'] }
 export interface HarnessConfig {
@@ -33,6 +34,10 @@ export interface HarnessConfig {
   projectContext?: boolean
   toolOutputMaxPreviewBytes?: number
   toolOutput?: boolean
+  // 送进模型的命令结果形态：缺省 json（历史行为）；text 为紧凑文本，结构化值不变。
+  toolOutputCommandFormat?: 'json' | 'text'
+  // 宿主追加的一段系统提示（例如评测任务的工作流说明）；缺省不加。
+  hostGuidance?: string
   // Only the explicitly named pre-v2 path may omit this production capability.
   legacyNoReadHistory?: boolean
   // 默认不装任何 MCP server。条目只来自用户目录级配置或显式路径；createHarness 不会自行扫描工作区。
@@ -46,7 +51,13 @@ export async function createHarness(config: HarnessConfig) {
     const runtimeClockMode = config.runtimeClockMode ?? config.contextLayout ?? 'live'
     await root.plugin(runtimeContext, { workspace: config.workspace, profile: config.profile, layout: runtimeClockMode, ...(config.runtimeTime ? { now: config.runtimeTime } : {}) })
     await root.plugin(sandbox, { workspace: config.workspace, ...(config.autoApprove === undefined ? {} : { autoApprove: config.autoApprove }) })
-    if (config.toolOutput !== false) await root.plugin(toolResults, { maxPreviewBytes: config.toolOutputMaxPreviewBytes })
+    if (config.hostGuidance?.trim()) root.systemPrompt.section({ name: 'host:guidance', order: 20, text: config.hostGuidance })
+    // 收尾检查与预算提示的工作区探测：只有 policy.completionChecks / budgetNotices 为 true 的 run 才会调用。
+    if (config.profile === 'coding') {
+      root.agentLoop.setCompletionCheck(input => completionCheck({ workspace: config.workspace, ...input }))
+      root.agentLoop.setWorkspaceProbe(() => workspaceChanged(config.workspace))
+    }
+    if (config.toolOutput !== false) await root.plugin(toolResults, { maxPreviewBytes: config.toolOutputMaxPreviewBytes, ...(config.toolOutputCommandFormat ? { commandFormat: config.toolOutputCommandFormat } : {}) })
     if (!config.legacyNoReadHistory) await root.plugin(readHistory)
     if (config.projectContext !== false && config.profile === 'coding') await root.plugin(projectContext, { directory: config.projectDirectory, ...(config.contextLayout ? { layout: config.contextLayout } : {}) })
     await root.plugin(files, { workspace: config.workspace })
@@ -59,7 +70,7 @@ export async function createHarness(config: HarnessConfig) {
     const capabilityManifest = {
       tools: schemas.map(schema => schema.function.name).sort(),
       toolSchemaSha256: createHash('sha256').update(JSON.stringify(schemas.slice().sort((a, b) => a.function.name.localeCompare(b.function.name)))).digest('hex'),
-      policy: { profile: config.profile, contextLayout: config.contextLayout ?? 'live', runtimeClockMode, projectContext: config.projectContext !== false && config.profile === 'coding', toolOutput: config.toolOutput !== false, toolOutputMaxPreviewBytes: config.toolOutputMaxPreviewBytes ?? null, legacyNoReadHistory: config.legacyNoReadHistory === true, autoApprove: config.autoApprove ?? false, isolatedCommandRunner: config.commandRunner !== undefined, mcpServers: config.mcpServers?.map(entry => entry.config.serverName) ?? [] },
+      policy: { profile: config.profile, contextLayout: config.contextLayout ?? 'live', runtimeClockMode, projectContext: config.projectContext !== false && config.profile === 'coding', toolOutput: config.toolOutput !== false, toolOutputMaxPreviewBytes: config.toolOutputMaxPreviewBytes ?? null, ...(config.toolOutputCommandFormat ? { toolOutputCommandFormat: config.toolOutputCommandFormat } : {}), ...(config.hostGuidance?.trim() ? { hostGuidance: createHash('sha256').update(config.hostGuidance).digest('hex') } : {}), legacyNoReadHistory: config.legacyNoReadHistory === true, autoApprove: config.autoApprove ?? false, isolatedCommandRunner: config.commandRunner !== undefined, mcpServers: config.mcpServers?.map(entry => entry.config.serverName) ?? [] },
     }
     return { root, capabilityManifest, dispose: () => root.fiber.dispose() }
   } catch (error) {
