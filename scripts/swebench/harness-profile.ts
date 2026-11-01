@@ -25,4 +25,6 @@ export function harnessOptions(harness: SwebenchHarness): Pick<HarnessConfig, 't
 
 // swe-full 臂冻结的预算开关：保留最近 4～11 条工具结果正文，每 8 条推进一次遮蔽。离线缓存模拟（正式批 1,053 次请求）：
 // 估算输入相对 v1 −32%，前缀命中约 84%；冒烟批用过的窗口 6/步长 3 为 −33%、命中约 75%，输入费用高出近一半。
-export const SWE_FULL_BUDGET = { observationWindow: 4, observationStep: 8, budgetNotices: true, completionChecks: true } as const
+// 第二轮（留出 50 题诊断后）：预算停止的 full 轨迹最终上下文约一半是历史推理内容；DeepSeek 带 tools 时要求推理完整回传，
+// 不能就地截短，只能由压缩把早期区间换成摘要。压缩预算降到 24,576（约 19.7k 触发），摘要上限保持 8,192。
+export const SWE_FULL_BUDGET = { observationWindow: 4, observationStep: 8, budgetNotices: true, completionChecks: true, compactionBudgetTokens: 24_576 } as const

@@ -79,6 +79,11 @@ test('the swe-full arm assembles guidance, compact command results and frozen bu
     const fullPolicy = await policyOf('full'), minimalPolicy = await policyOf('minimal')
     assert.equal(fullPolicy.observationWindow, 4)
     assert.equal(fullPolicy.observationStep, 8)
+    assert.equal(fullPolicy.compactionBudgetTokens, 24_576)
+    assert.equal(minimalPolicy.compactionBudgetTokens, undefined)
+    // full 臂第一次想结束时收到一次复核要求，随后的结束被接受。
+    assert.ok((full.at(-1)!.messages ?? []).some(message => message.role === 'user' && String(message.content).startsWith('[harness check:review]')))
+    assert.ok(!(minimal.at(-1)!.messages ?? []).some(message => String(message.content).startsWith('[harness check:')))
     assert.equal(fullPolicy.budgetNotices, true)
     assert.equal(fullPolicy.completionChecks, true)
     assert.equal(minimalPolicy.observationWindow, undefined)
