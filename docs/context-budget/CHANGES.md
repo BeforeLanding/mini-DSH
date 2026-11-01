@@ -1,5 +1,9 @@
 # 改动与验收证据
 
+### SWE-F4 第二轮组件优化（2026-11-01，实验分支）
+
+以留出 50 题为开发集归类 full 臂 18 道失败：11 条目标没修全、3 条回归、4 条空补丁预算停止（只查不改）；预算停止轨迹最终上下文约一半是不能截短的历史推理。收尾检查增加一次复核（`04df868`），预算提示在确认无改动时点名并增设 35% 档（同提交），swe-full 压缩预算 24,576（`996cea5`，离线 −11% / −4%）。100 题批次在第 30 条因 WSL 重启中断（$0.71）后暂停。`pnpm test` 607 / 576 pass / 0 fail / 30 skipped。详见 [SWE full harness](SWE-FULL-HARNESS.md)。
+
 ### SWE-F3 留出 50 题三臂结果（2026-10-31，实验分支）
 
 50 道未曝光 Verified 题 × full / baseline / minimal，源码 `a8d70e7`；第 13 条因外部臂容器清理竞态停批，`98df64c` 修运行器清理并加测试后经授权续跑，150/150 执行、官方评分、估价 $2.664。full 32/50、minimal 30/50、baseline 27/50；full vs baseline 配对 8:3、+10 点、McNemar p=0.227（不显著）；预算停止 13/25/16，空补丁 4/13/16；full 估价 $1.081 vs baseline $0.746。详见 [SWE full harness](SWE-FULL-HARNESS.md)。完整测试 605 / 575 pass / 0 fail / 30 skipped。
