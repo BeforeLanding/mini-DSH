@@ -1,5 +1,13 @@
 # 改动与验收证据
 
+### PORT-12b SWE-bench 结果页与展示边界（2026-11-01）
+
+新增 `docs/SWE-BENCH-RESULTS.md`：数字取自分支 `b4b7c43` 的 `docs/context-budget/SWE-FULL-HARNESS.md`——最终 90 题 full 74 / minimal 61 / mini-SWE-agent 57，配对 18:1（p=7.6×10⁻⁵）、14:1（p=9.8×10⁻⁴）、10:6（p=0.454），估价 $3.640 / $1.647 / $1.396，每解决一题约 $0.049 vs $0.024；留出 50 题 32/30/27、p=0.227 作为不显著的前一轮列出。页内写明模型 `deepseek/deepseek-flash`、每条 $0.50 / 416,666 token、`testbed-v1`、三臂定义、题目划分（105 道曝光题与中断批 10 题排除）、超限敏感性，以及成本、未做逐项消融、SWE 专用工作流提示、单模型单基准、1 条越限与复现须用实验分支等限制。
+
+展示边界改为“只发布这一项，且结论不离开成本与限制”：README 新增“评测”一节（结果、2.6 倍成本、未做逐项消融、组件默认关闭、结果页与使用指南链接），“范围”一条改指新实验分支；EVALUATION 第 3 类、讲解页两处、EVALUATION-SWEBENCH 展示边界、文档索引与 PROGRESS 的 SWE 条目同步；USAGE 新增“长单任务的可选组件”。`test/display-policy.test.ts` 删去“README 须写不展示模型评测结果”，新增两条：README 的“评测”一节须同时链接结果页、写成本与逐项消融；结果页须包含模型、题目划分、McNemar、不显著、限制、成本、逐项消融与默认关闭。展示面不得出现美元金额、分数表与“提升/成功率+数字”句式的原有规则保留。
+
+验收：文档类回归全部通过；临时删掉 README 中的成本句后新规则失败（“评测一节须写成本”），随后恢复。`node scripts/build.js`、`node scripts/check-syntax.js`（208 files）通过；Biome 239 files、0 诊断；完整离线回归 565 项：535 pass、0 fail、30 平台条件 skipped。真实模型请求 0。
+
 ### PORT-12a 移植 SWE full harness 的可选组件（2026-11-01）
 
 来源：分支 `improve/swe-harness-advantage-20261031` 相对其合并基 `dc7e659` 的产品侧改动（提交 `b3a5519`、`a8d70e7`、`04df868`）。新文件 `src/core/observation-mask.ts`、`src/core/run-guidance.ts` 与 `test/run-guidance.test.ts` 原样带入；`budget.ts`、`context-runtime.ts`、`contracts.ts`、`event-validation.ts` 的补丁 3-way 应用无冲突；`agent-loop-runtime.ts`、`plugins/agent-loop.ts`、`plugins/context.d.ts`、`plugins/tool-results.ts` 的冲突只因分支一侧带有 main 已撤回的 `setRunGuard` 与 `onStore`，解决时只保留新成员。`create-harness.ts` 按 main 的单 Agent 装配手工接线：`coding` profile 注册收尾检查与工作区探测（仅 `completionChecks` / `budgetNotices` 为真的 run 调用），`hostGuidance` 作为 `host:guidance` 系统提示段，`toolOutputCommandFormat` 传给结果插件。与分支不同，`capabilityManifest.policy` 只在显式设置时写入 `toolOutputCommandFormat` 与 `hostGuidance` 摘要，默认清单逐字节不变。SWE 运行器（`scripts/swebench/*` 的外部臂、testbed 环境、补丁导出排除）与 `test/swebench-full-harness.test.ts` 依赖 main 已撤回的外部适配器，留在分支。

@@ -27,8 +27,21 @@ test('展示面不展示模型评测分数与费用', () => {
     }
 })
 
-test('README 保留“不展示模型评测结果”的边界声明', () => {
-    assert.match(read('README.md'), /不展示模型评测结果/)
+// 模型评测只发布 SWE-bench 一项：README 写到结果时，同一节里必须同时有成本、逐项消融的限制与结果页链接，
+// 不允许只摘出分数。展示面的美元金额、分数表与“提升/成功率+数字”句式仍由上一条用例拦截。
+test('README 的评测结论连同成本、限制与结果页一起出现', () => {
+    const section = read('README.md').split('\n## ').find(part => part.startsWith('评测\n'))
+    assert.ok(section, 'README 缺少“评测”一节')
+    assert.match(section, /\]\(docs\/SWE-BENCH-RESULTS\.md\)/, '评测一节须链接结果页')
+    assert.match(section, /成本/, '评测一节须写成本')
+    assert.match(section, /逐项消融/, '评测一节须写未做逐项消融')
+})
+
+test('SWE-bench 结果页写明设置、题目划分、检验、成本与限制', () => {
+    const page = read('docs/SWE-BENCH-RESULTS.md')
+    for (const required of ['deepseek/deepseek-flash', '题目划分', 'McNemar', '不显著', '## 限制', '成本', '逐项消融', '默认关闭']) {
+        assert.ok(page.includes(required), `SWE-BENCH-RESULTS.md 缺少：${required}`)
+    }
 })
 
 test('内部路线图不出现在 README 与文档索引的链接里', () => {

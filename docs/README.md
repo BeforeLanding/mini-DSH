@@ -12,6 +12,7 @@
 ## 验收与证据
 
 - [DELIVERY-20261030](DELIVERY-20261030.md) — 当前源码的版本、离线检查、跨平台 CI 与仓库外安装验收。
+- [SWE-BENCH-RESULTS](SWE-BENCH-RESULTS.md) — SWE-bench Verified 三臂对照：90 道未参与调参的题上的结果、配对检验、成本与限制。
 - [EVALUATION](EVALUATION.md) — 证据分级、合成样例、校验和与成本口径；不把机制证据当能力分数。
 - [RESULTS](RESULTS.md) — 两条合成轨迹及其离线复算。
 - [COMPONENT-OPTIMIZATION](COMPONENT-OPTIMIZATION.md) — 三项组件的离线前后对照与复跑命令。
@@ -28,7 +29,7 @@
 - [context-budget/PLAN](context-budget/PLAN.md) — 规范设计决策与参数。
 - [context-budget/TASKS](context-budget/TASKS.md) — 当前任务与验收证据。
 - [context-budget/CHANGES](context-budget/CHANGES.md) — 每次改动的命令与结果。
-- [EVALUATION-SWEBENCH](EVALUATION-SWEBENCH.md) — 主分支旧版预注册协议与实现边界；正式四臂结果仅保留在独立 SWE 分支。
+- [EVALUATION-SWEBENCH](EVALUATION-SWEBENCH.md) — 主分支旧版预注册协议与实现边界；三臂运行器与完整过程在 SWE 实验分支。
 - [context-budget/NX-51-TIMING-DIAGNOSIS](context-budget/NX-51-TIMING-DIAGNOSIS.md) — NX-50 的离线耗时分解与摘要后裁剪修复。
 - [context-budget/NX-51-PRUNE-AB](context-budget/NX-51-PRUNE-AB.md) — 24 条裁剪开关协议与预注册读数。
 - [context-budget/NX-51-PRUNE-RESULT](context-budget/NX-51-PRUNE-RESULT.md) — 已执行 24/24；摘要缩减假设未获支持。
