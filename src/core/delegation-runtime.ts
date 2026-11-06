@@ -67,7 +67,9 @@ export class DelegationRuntime {
           results[index] = await this.#child(planned, { ...execution, signal }, start, group, append)
         }
       }
-      await Promise.all(Array.from({ length: Math.min(this.limits.maxConcurrent, tasks.length) }, worker))
+      const workers = Array.from({ length: Math.min(this.limits.maxConcurrent, tasks.length) }, worker)
+      try { await Promise.all(workers) }
+      catch (error) { controller.abort(); await Promise.allSettled(workers); throw error }
       const batch = boundDelegationBatch({ batchId: start.batchId, results, truncated: false }, this.limits)
       await append('delegation/finish', { batchId: start.batchId, toolCallId, toolSequence, result: JSON.stringify(batch) })
       return batch
@@ -82,7 +84,9 @@ export class DelegationRuntime {
       result.childSessionId = child.sessionId
       await append('delegation/child-created', { batchId: start.batchId, delegationId: planned.delegationId, childSessionId: child.sessionId, role: planned.task.role, capabilityDigest: child.capabilityDigest })
       const prompt = JSON.stringify({ objective: planned.task.objective, outputFocus: planned.task.outputFocus, context: start.anchors.filter(anchor => planned.task.contextRefs.includes(anchor.path)), responseFormat: { findings: [{ kind: 'observation|hypothesis|recommendation', text: 'bounded finding', evidence: [{ path: 'workspace-relative', contentSha256: 'read_file hash', line: 1 }] }], unresolved: ['remaining question'] }, instructions: 'Investigate using the available read tools. Return ONLY the JSON object, within 1536 estimated tokens and 8192 bytes. Cite current file hashes. Do not claim to have run tests.' })
+      execution.signal.throwIfAborted()
       const text = await child.send(prompt, execution.signal)
+      execution.signal.throwIfAborted()
       if (child.status() !== 'completed') throw new Error('child did not complete')
       const findings = parseChildFindings(text, this.limits)
       for (const finding of findings.findings) for (const ref of finding.evidence) {

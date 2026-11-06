@@ -15,10 +15,10 @@ try {
   }
   if (args[0] === 'inspect') {
     const options = args.slice(1)
-    if (!options.length || options.length > 3 || options.slice(1).some(option => !['--json', '--trace'].includes(option)) || new Set(options.slice(1)).size !== options.length - 1)
+    if (!options.length || options.length > 4 || options.slice(1).some(option => !['--json', '--trace', '--tree'].includes(option)) || new Set(options.slice(1)).size !== options.length - 1)
       throw new Error('usage: mini-dsh inspect <session-jsonl-path> [--json] [--trace]')
     const { inspectSession, formatInspect } = await import('./core/session-inspect.js')
-    const report = await inspectSession(options[0]!, { trace: options.includes('--trace') })
+    const report = await inspectSession(options[0]!, { trace: options.includes('--trace'), tree: options.includes('--tree') })
     console.log(options.includes('--json') ? JSON.stringify(report, null, 2) : formatInspect(report))
     if (!report.integrity.complete) process.exitCode = 2
   } else if (args[0] === 'demo') {
