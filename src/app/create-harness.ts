@@ -19,9 +19,12 @@ import * as bash from '../tools/bash.js'
 import { assertMcpRuntime, secureStdioEntry } from './mcp-config.js'
 import type { McpServerEntry } from './mcp-config.js'
 import { completionCheck, workspaceChanged } from '../core/run-guidance.js'
+import { READ_ONLY_TOOLS, validateAgentRole } from '../core/agent-capabilities.js'
+import type { AgentRole } from '../core/agent-capabilities.js'
 
 export interface HarnessAdapter { provider: string; model: string; chat: Adapter['chat']; capabilities?: Adapter['capabilities'] }
 export interface HarnessConfig {
+  agentRole?: AgentRole
   workspace: string
   profile: 'general' | 'coding'
   adapter?: HarnessAdapter
@@ -45,11 +48,14 @@ export interface HarnessConfig {
 }
 
 export async function createHarness(config: HarnessConfig) {
+  const role = validateAgentRole(config.agentRole ?? 'coordinator'), readOnly = role !== 'coordinator'
+  if (readOnly && (config.mcpServers?.length || config.commandRunner)) throw new Error('read-only roles cannot configure MCP or commands')
   const root = new Context()
   try {
     for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
+    if (readOnly) root.tools.setCapabilities(READ_ONLY_TOOLS)
     const runtimeClockMode = config.runtimeClockMode ?? config.contextLayout ?? 'live'
-    await root.plugin(runtimeContext, { workspace: config.workspace, profile: config.profile, layout: runtimeClockMode, ...(config.runtimeTime ? { now: config.runtimeTime } : {}) })
+    await root.plugin(runtimeContext, { workspace: config.workspace, profile: config.profile, layout: runtimeClockMode, ...(readOnly ? { agentRole: role } : {}), ...(config.runtimeTime ? { now: config.runtimeTime } : {}) })
     await root.plugin(sandbox, { workspace: config.workspace, ...(config.autoApprove === undefined ? {} : { autoApprove: config.autoApprove }) })
     if (config.hostGuidance?.trim()) root.systemPrompt.section({ name: 'host:guidance', order: 20, text: config.hostGuidance })
     // 收尾检查与预算提示的工作区探测：只有 policy.completionChecks / budgetNotices 为 true 的 run 才会调用。
@@ -57,11 +63,11 @@ export async function createHarness(config: HarnessConfig) {
       root.agentLoop.setCompletionCheck(input => completionCheck({ workspace: config.workspace, ...input }))
       root.agentLoop.setWorkspaceProbe(() => workspaceChanged(config.workspace))
     }
-    if (config.toolOutput !== false) await root.plugin(toolResults, { maxPreviewBytes: config.toolOutputMaxPreviewBytes, ...(config.toolOutputCommandFormat ? { commandFormat: config.toolOutputCommandFormat } : {}) })
+    if (config.toolOutput !== false && !readOnly) await root.plugin(toolResults, { maxPreviewBytes: config.toolOutputMaxPreviewBytes, ...(config.toolOutputCommandFormat ? { commandFormat: config.toolOutputCommandFormat } : {}) })
     if (!config.legacyNoReadHistory) await root.plugin(readHistory)
     if (config.projectContext !== false && config.profile === 'coding') await root.plugin(projectContext, { directory: config.projectDirectory, ...(config.contextLayout ? { layout: config.contextLayout } : {}) })
-    await root.plugin(files, { workspace: config.workspace })
-    await root.plugin(bash, { workspace: config.workspace, ...(config.commandRunner ? { commandRunner: config.commandRunner } : {}) })
+    await root.plugin(files, { workspace: config.workspace, ...(readOnly ? { allowedTools: READ_ONLY_TOOLS } : {}) })
+    if (!readOnly) await root.plugin(bash, { workspace: config.workspace, ...(config.commandRunner ? { commandRunner: config.commandRunner } : {}) })
     // MCP 工具经 ToolRuntime 中央授权：插件不声明 effect/origin，因此按 unknown 默认询问；
     // failOnStartupError 固定为 false，连接失败只丢该 server 的工具，不阻断主循环。
     if (config.mcpServers?.length) { assertMcpRuntime(); await root.plugin(externalPlugins, { entries: config.mcpServers.map(secureStdioEntry) }) }
@@ -70,7 +76,8 @@ export async function createHarness(config: HarnessConfig) {
     const capabilityManifest = {
       tools: schemas.map(schema => schema.function.name).sort(),
       toolSchemaSha256: createHash('sha256').update(JSON.stringify(schemas.slice().sort((a, b) => a.function.name.localeCompare(b.function.name)))).digest('hex'),
-      policy: { profile: config.profile, contextLayout: config.contextLayout ?? 'live', runtimeClockMode, projectContext: config.projectContext !== false && config.profile === 'coding', toolOutput: config.toolOutput !== false, toolOutputMaxPreviewBytes: config.toolOutputMaxPreviewBytes ?? null, ...(config.toolOutputCommandFormat ? { toolOutputCommandFormat: config.toolOutputCommandFormat } : {}), ...(config.hostGuidance?.trim() ? { hostGuidance: createHash('sha256').update(config.hostGuidance).digest('hex') } : {}), legacyNoReadHistory: config.legacyNoReadHistory === true, autoApprove: config.autoApprove ?? false, isolatedCommandRunner: config.commandRunner !== undefined, mcpServers: config.mcpServers?.map(entry => entry.config.serverName) ?? [] },
+      policy: { profile: config.profile, contextLayout: config.contextLayout ?? 'live', runtimeClockMode, projectContext: config.projectContext !== false && config.profile === 'coding', toolOutput: config.toolOutput !== false && !readOnly, toolOutputMaxPreviewBytes: config.toolOutputMaxPreviewBytes ?? null, ...(config.toolOutputCommandFormat ? { toolOutputCommandFormat: config.toolOutputCommandFormat } : {}), ...(config.hostGuidance?.trim() ? { hostGuidance: createHash('sha256').update(config.hostGuidance).digest('hex') } : {}), legacyNoReadHistory: config.legacyNoReadHistory === true, autoApprove: config.autoApprove ?? false, isolatedCommandRunner: config.commandRunner !== undefined, mcpServers: config.mcpServers?.map(entry => entry.config.serverName) ?? [] },
+      ...(readOnly ? { role, capabilities: READ_ONLY_TOOLS } : {}),
     }
     return { root, capabilityManifest, dispose: () => root.fiber.dispose() }
   } catch (error) {

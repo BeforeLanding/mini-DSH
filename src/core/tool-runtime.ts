@@ -20,6 +20,12 @@ export class ToolRuntime {
     #projection?: (name: string, result: ToolResult, execution: Execution) => Promise<ToolResult>
     #authorize?: (tool: ToolDefinition, args: Arguments, execution: Execution) => Promise<void>
     #authorizationConfigured = false
+    #capabilities?: ReadonlySet<string>
+    setCapabilities(names: readonly string[]) {
+        if (this.#capabilities) throw new Error('tool capabilities already fixed')
+        this.#capabilities = new Set(names)
+    }
+    #permitted(tool: ToolDefinition) { return !this.#capabilities || (this.#capabilities.has(tool.name) && tool.origin === 'builtin' && tool.effect === 'read') }
 
     setAuthorization(authorize: (tool: ToolDefinition, args: Arguments, execution: Execution) => Promise<void>) {
         if (this.#authorize) throw new Error('tool authorization already configured')
@@ -56,7 +62,7 @@ export class ToolRuntime {
     }
 
     list() {
-        return [...this.#tools.values()]
+        return [...this.#tools.values()].filter(tool => this.#permitted(tool))
     }
 
     schemas() {
@@ -90,6 +96,7 @@ export class ToolRuntime {
 
         let result: ToolResult
         try {
+            if (!this.#permitted(tool)) throw new Error('tool is forbidden by immutable role capabilities')
             if (this.#authorizationConfigured && !this.#authorize) throw new Error('tool authorization unavailable')
             await this.#authorize?.(tool, args, execution)
             execution.signal.throwIfAborted()
