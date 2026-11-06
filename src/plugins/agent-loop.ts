@@ -26,6 +26,9 @@ class AgentLoopService extends Service {
     setCompletionCheck(...args: Parameters<AgentLoopRuntime['setCompletionCheck']>) {
         return this.runtime.setCompletionCheck(...args)
     }
+    setRunGuard(...args: Parameters<AgentLoopRuntime['setRunGuard']>) {
+        return this.runtime.setRunGuard(...args)
+    }
     compact(...args: Parameters<AgentLoopRuntime['compact']>) {
         return this.runtime.compact(...args)
     }

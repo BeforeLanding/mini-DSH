@@ -1,4 +1,6 @@
 import { Context } from '@deepseek-ai/cordis'
+import os from 'node:os'
+import path from 'node:path'
 import { createHash } from 'node:crypto'
 import type { Adapter } from '../core/contracts.js'
 import type { CommandOptions, CommandResult } from '../core/command-runner.js'
@@ -19,9 +21,26 @@ import * as bash from '../tools/bash.js'
 import { assertMcpRuntime, secureStdioEntry } from './mcp-config.js'
 import type { McpServerEntry } from './mcp-config.js'
 import { completionCheck, workspaceChanged } from '../core/run-guidance.js'
+import { READ_ONLY_TOOLS, validateAgentRole } from '../core/agent-capabilities.js'
+import type { AgentRole } from '../core/agent-capabilities.js'
+import { TaskGroups, guardTaskGroup } from '../core/task-groups.js'
+import { groupPolicy } from '../core/task-group-budget.js'
+import type { TaskGroupPolicy, TaskGroupBudgetCoordinator } from '../core/task-group-budget.js'
+import { DelegationRuntime } from '../core/delegation-runtime.js'
+import type { DelegationLimits } from '../core/delegation-contracts.js'
+import type { ToolResultStore } from '../core/tool-result-store.js'
+import { JsonlStore } from '../core/event-store.js'
+import { CLI_BUDGET } from '../core/budget.js'
+import * as delegationPlugin from '../plugins/delegation.js'
+import { delegationRecovery } from '../core/delegation-recovery.js'
 
 export interface HarnessAdapter { provider: string; model: string; chat: Adapter['chat']; capabilities?: Adapter['capabilities'] }
 export interface HarnessConfig {
+  agentRole?: AgentRole
+  taskGroupPolicy?: Partial<TaskGroupPolicy>
+  // Host-only binding: child budgets always resolve to the parent's coordinator.
+  parentTaskGroup?: TaskGroupBudgetCoordinator
+  delegation?: { mode: 'off' | 'read-only'; directory?: string; limits?: Partial<DelegationLimits> }
   workspace: string
   profile: 'general' | 'coding'
   adapter?: HarnessAdapter
@@ -45,11 +64,24 @@ export interface HarnessConfig {
 }
 
 export async function createHarness(config: HarnessConfig) {
+  const role = validateAgentRole(config.agentRole ?? 'coordinator'), readOnly = role !== 'coordinator'
+  if (readOnly && (config.mcpServers?.length || config.commandRunner || config.delegation?.mode === 'read-only')) throw new Error('read-only roles cannot configure MCP, commands or delegation')
+  if (config.delegation && !['off', 'read-only'].includes(config.delegation.mode)) throw new Error('invalid delegation mode')
+  if (config.delegation?.mode === 'read-only' && config.toolOutput === false) throw new Error('delegation requires parent-owned result storage')
   const root = new Context()
+  let taskGroups: TaskGroups | undefined
+  let delegation: DelegationRuntime | undefined
+  let parentResults: ToolResultStore | undefined
   try {
     for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
+    if (config.taskGroupPolicy || config.parentTaskGroup || config.delegation?.mode === 'read-only') {
+      if (config.taskGroupPolicy && config.parentTaskGroup) throw new Error('child cannot override parent task group policy')
+      taskGroups = config.parentTaskGroup ? undefined : new TaskGroups(root.sessions, groupPolicy(config.taskGroupPolicy))
+      guardTaskGroup(root.llm, root.tools, root.sessions, config.parentTaskGroup ? async () => config.parentTaskGroup! : (sessionId, taskId) => taskGroups!.get(sessionId, taskId), { root: !config.parentTaskGroup }, root.agentLoop)
+    }
+    if (readOnly) root.tools.setCapabilities(READ_ONLY_TOOLS)
     const runtimeClockMode = config.runtimeClockMode ?? config.contextLayout ?? 'live'
-    await root.plugin(runtimeContext, { workspace: config.workspace, profile: config.profile, layout: runtimeClockMode, ...(config.runtimeTime ? { now: config.runtimeTime } : {}) })
+    await root.plugin(runtimeContext, { workspace: config.workspace, profile: config.profile, layout: runtimeClockMode, ...(readOnly ? { agentRole: role } : {}), ...(config.runtimeTime ? { now: config.runtimeTime } : {}) })
     await root.plugin(sandbox, { workspace: config.workspace, ...(config.autoApprove === undefined ? {} : { autoApprove: config.autoApprove }) })
     if (config.hostGuidance?.trim()) root.systemPrompt.section({ name: 'host:guidance', order: 20, text: config.hostGuidance })
     // 收尾检查与预算提示的工作区探测：只有 policy.completionChecks / budgetNotices 为 true 的 run 才会调用。
@@ -57,11 +89,34 @@ export async function createHarness(config: HarnessConfig) {
       root.agentLoop.setCompletionCheck(input => completionCheck({ workspace: config.workspace, ...input }))
       root.agentLoop.setWorkspaceProbe(() => workspaceChanged(config.workspace))
     }
-    if (config.toolOutput !== false) await root.plugin(toolResults, { maxPreviewBytes: config.toolOutputMaxPreviewBytes, ...(config.toolOutputCommandFormat ? { commandFormat: config.toolOutputCommandFormat } : {}) })
+    if (config.toolOutput !== false && !readOnly) await root.plugin(toolResults, { maxPreviewBytes: config.toolOutputMaxPreviewBytes, ...(config.toolOutputCommandFormat ? { commandFormat: config.toolOutputCommandFormat } : {}), onStore: store => { parentResults = store } })
     if (!config.legacyNoReadHistory) await root.plugin(readHistory)
     if (config.projectContext !== false && config.profile === 'coding') await root.plugin(projectContext, { directory: config.projectDirectory, ...(config.contextLayout ? { layout: config.contextLayout } : {}) })
-    await root.plugin(files, { workspace: config.workspace })
-    await root.plugin(bash, { workspace: config.workspace, ...(config.commandRunner ? { commandRunner: config.commandRunner } : {}) })
+    await root.plugin(files, { workspace: config.workspace, ...(readOnly ? { allowedTools: READ_ONLY_TOOLS } : {}) })
+    if (!readOnly) await root.plugin(bash, { workspace: config.workspace, ...(config.commandRunner ? { commandRunner: config.commandRunner } : {}) })
+    if (config.delegation?.mode === 'read-only') {
+      const directory = path.resolve(config.delegation.directory ?? path.join(os.homedir(), '.mini-dsh', 'teams'))
+      delegation = new DelegationRuntime({ workspace: config.workspace, directory, sessions: root.sessions, results: parentResults!, group: (sessionId, taskId) => taskGroups!.get(sessionId, taskId),
+        async buildChild(task, delegationId, execution, group) {
+          const adapter = root.llm.adapterFor(execution.agent!.model)
+          const child = await createHarness({ workspace: config.workspace, profile: config.profile, agentRole: task.role, adapter, parentTaskGroup: group, contextLayout: config.contextLayout, runtimeClockMode })
+          try {
+            const session = child.root.sessions.create({ workspace: config.workspace, parentSessionId: execution.sessionId, parentToolCallId: execution.toolCallId, groupId: group.start.groupId, delegationId })
+            const store = await JsonlStore.open(path.join(directory, 'sessions'), session.id)
+            child.root.sessions.attachStore(session.id, store); await child.root.sessions.flush(session.id)
+            const limits = delegation!.limits
+            const capacity = adapter.capabilities?.[adapter.model]?.contextWindowTokens ?? root.sessions.latestRun(execution.sessionId!)?.policy.contextWindowTokens
+            if (capacity === undefined) throw new Error('child model context capacity must be explicitly configured')
+            const agent = child.root.agents.create({ sessionId: session.id, model: `${adapter.provider}/${adapter.model}`, loop: child.root.agentLoop,
+              budget: { ...CLI_BUDGET, maxModelRequests: limits.childMaxModelRequests, maxToolCalls: limits.childMaxToolCalls, maxTotalTokens: limits.childMaxTotalTokens, contextWindowTokens: capacity } })
+            return { sessionId: session.id, capabilityDigest: child.capabilityManifest.toolSchemaSha256, send: (input, signal) => agent.send(input, { signal }), status: () => child.root.sessions.latestRun(session.id)?.status,
+              dispose: async () => { try { await child.root.sessions.close() } finally { await child.dispose() } } }
+          } catch (error) { await child.root.sessions.close(); await child.dispose(); throw error }
+        },
+      }, config.delegation.limits)
+      await root.plugin(delegationPlugin, { runtime: delegation })
+      root.sessions.setDelegationRecovery(delegationRecovery(delegation.deps))
+    }
     // MCP 工具经 ToolRuntime 中央授权：插件不声明 effect/origin，因此按 unknown 默认询问；
     // failOnStartupError 固定为 false，连接失败只丢该 server 的工具，不阻断主循环。
     if (config.mcpServers?.length) { assertMcpRuntime(); await root.plugin(externalPlugins, { entries: config.mcpServers.map(secureStdioEntry) }) }
@@ -70,9 +125,12 @@ export async function createHarness(config: HarnessConfig) {
     const capabilityManifest = {
       tools: schemas.map(schema => schema.function.name).sort(),
       toolSchemaSha256: createHash('sha256').update(JSON.stringify(schemas.slice().sort((a, b) => a.function.name.localeCompare(b.function.name)))).digest('hex'),
-      policy: { profile: config.profile, contextLayout: config.contextLayout ?? 'live', runtimeClockMode, projectContext: config.projectContext !== false && config.profile === 'coding', toolOutput: config.toolOutput !== false, toolOutputMaxPreviewBytes: config.toolOutputMaxPreviewBytes ?? null, ...(config.toolOutputCommandFormat ? { toolOutputCommandFormat: config.toolOutputCommandFormat } : {}), ...(config.hostGuidance?.trim() ? { hostGuidance: createHash('sha256').update(config.hostGuidance).digest('hex') } : {}), legacyNoReadHistory: config.legacyNoReadHistory === true, autoApprove: config.autoApprove ?? false, isolatedCommandRunner: config.commandRunner !== undefined, mcpServers: config.mcpServers?.map(entry => entry.config.serverName) ?? [] },
+      policy: { profile: config.profile, contextLayout: config.contextLayout ?? 'live', runtimeClockMode, projectContext: config.projectContext !== false && config.profile === 'coding', toolOutput: config.toolOutput !== false && !readOnly, toolOutputMaxPreviewBytes: config.toolOutputMaxPreviewBytes ?? null, ...(config.toolOutputCommandFormat ? { toolOutputCommandFormat: config.toolOutputCommandFormat } : {}), ...(config.hostGuidance?.trim() ? { hostGuidance: createHash('sha256').update(config.hostGuidance).digest('hex') } : {}), legacyNoReadHistory: config.legacyNoReadHistory === true, autoApprove: config.autoApprove ?? false, isolatedCommandRunner: config.commandRunner !== undefined, mcpServers: config.mcpServers?.map(entry => entry.config.serverName) ?? [] },
+      ...(readOnly ? { role, capabilities: READ_ONLY_TOOLS } : {}),
+      ...(config.taskGroupPolicy ? { taskGroupPolicy: groupPolicy(config.taskGroupPolicy) } : {}),
+      ...(delegation ? { delegation: { mode: 'read-only', limits: delegation.limits, taskGroupPolicy: groupPolicy(config.taskGroupPolicy) } } : {}),
     }
-    return { root, capabilityManifest, dispose: () => root.fiber.dispose() }
+    return { root, capabilityManifest, ...(taskGroups ? { taskGroups } : {}), ...(delegation ? { delegation } : {}), dispose: () => root.fiber.dispose() }
   } catch (error) {
     await root.fiber.dispose()
     throw error

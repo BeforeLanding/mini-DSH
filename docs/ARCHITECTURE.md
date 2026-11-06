@@ -29,6 +29,12 @@ mini-DSH 是用 TypeScript ESM 编写、基于 Cordis 插件的编程 Agent Harn
 - `src/core/tool-authorization.ts` 只信任声明效果与注册表一致的内置工具。未知或外部工具一律询问；审批绑定到工具调用、参数摘要、工作区和策略版本。
 - 文件工具在审批前后都做真实路径和软链检查。Bash 使用显式构造的子进程环境和一个独立的临时 HOME。这是应用层策略，不是操作系统隔离。
 
+## 可选只读委派
+
+- `src/core/agent-capabilities.ts` 与 `ToolRuntime.setCapabilities` 固定只读角色的工具集，装配后不可扩大；子 Agent 有独立 Harness，不挂载 Bash、MCP 与结果文件。
+- `src/core/task-group-budget.ts` 的任务组协调器把根与子 Agent 的模型请求、工具调用与 token 记在同一本账上：预留先写日志，派发后未知用量会阻止继续派发；`run guard` 让组的 wall deadline 打断挂起的工具与审批。
+- `src/core/delegation-runtime.ts` 校验批次、并发 2、结果有界且带哈希；`delegation-recovery.ts` 在崩溃后复核已落盘结果，不重放子任务。默认关闭，不改变默认工具清单。
+
 ## MCP
 
 - MCP 默认关闭且为空（`src/app/mcp-config.ts`）。它只加载用户级配置或显式路径，密钥只接受 `${ENV_NAME}` 引用，绝不自动加载工作区配置。
