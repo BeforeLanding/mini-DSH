@@ -35,6 +35,6 @@
 - [context-budget/NX-51-PRUNE-RESULT](context-budget/NX-51-PRUNE-RESULT.md) — 已执行 24/24；摘要缩减假设未获支持。
 - [context-budget/NX-51-COMPONENT-ABLATION](context-budget/NX-51-COMPONENT-ABLATION.md) — 历史逐项消融协议；对应开发批已经执行。
 - [context-budget/COMPONENT-LOO-PAID-RESULT](context-budget/COMPONENT-LOO-PAID-RESULT.md) — 已完成开发批的描述性结果与限制；三项归因均 inconclusive。
-- 项目记忆与只读协作仅在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2) 保留，不属于 main 的可选功能或交付待办。
+- 只读委派（`delegation.mode=read-only`，默认关闭）已移植到 main；项目记忆仅在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2) 保留，不属于 main 的可选功能或交付待办。
 
 </details>

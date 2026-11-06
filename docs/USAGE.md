@@ -129,9 +129,11 @@ node dist/src/index.js --show-config
 
 v2.1 的 Full/Baseline 是冻结开发协议里的两条实验臂，不是生产默认；完整配置、冻结代码与变更边界见 [NX-45 开发协议](context-budget/NX-45-DEVELOPMENT.md)。
 
-## 扩展分支
+## 可选只读委派与扩展分支
 
-本指南对应 main 的单 Agent CLI。项目记忆、只读协作及专属配置/命令仅保留在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2)，不在 main 启用。扩展分支的会话包含专属事件，切换分支时使用独立会话目录，不把扩展会话当作 main 日志恢复；原始日志保持不变。
+主 Agent 默认是单 Agent。设置 `MINI_DSH_DELEGATION=read-only` 后，主 Agent 获得 `delegate_tasks`：至多 4 个只读子任务（`analyst`、`test_designer`、`reviewer`），并发 2，子 Agent 只有读类工具，不执行命令、不写文件、不再委派；结果由父会话落盘并带内容哈希，`reviewer` 的结论只对固定的候选文件版本有效。主 Agent 与全部子 Agent 共用一个任务组预算（`MINI_DSH_TASK_GROUP_BUDGET`，JSON），写前日志在根会话里，崩溃后已落盘的委派结果被复用，未完成的子任务不会重跑。`MINI_DSH_TEAM_DIR` 指定子会话目录，`MINI_DSH_TEAM_LIMITS` 调整并发与上限；用 `inspect <根日志> --tree` 查看子任务结局，`pnpm demo:team` 离线演示。token 估算不构成供应商计费硬上限。
+
+项目记忆及其专属配置/命令仅保留在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2，不在 main 启用。关闭委派（默认）时，工具清单与 v0.2.0 相同。含委派事件的会话日志请用同一版本恢复。
 
 ## 本地打包与安装
 
