@@ -6,7 +6,7 @@ import type { AvailableRange } from '../core/tool-result-store.js'
 
 export const name = 'mini-tool-results'
 export const inject = ['tools', 'sandbox']
-export interface ToolResultsConfig extends Partial<ResultStoreConfig> { maxPreviewBytes?: number; commandFormat?: 'json' | 'text' }
+export interface ToolResultsConfig extends Partial<ResultStoreConfig> { maxPreviewBytes?: number; commandFormat?: 'json' | 'text'; onStore?: (store: ToolResultStore) => void }
 
 // 命令结果的紧凑文本形态：结构化值（含 ref、窗口与存储字段）原样留在 ToolResult.value 与事件派生里，
 // 只有送进模型的那份正文不再是缩进 JSON——转义的换行/引号与 cwd、signal、字节数等元数据每条都要重付。
@@ -29,6 +29,7 @@ export function renderCommandText(value: CommandResult): string {
 export function apply(ctx: Context, config: ToolResultsConfig = {}) {
   const directory = config.directory ?? '.mini-dsh/tool-results'
   const store = new ToolResultStore({ ...config, directory: ctx.sandbox.resolvePath(directory) })
+  config.onStore?.(store)
   const maxPreviewBytes = positiveLimit(config.maxPreviewBytes, 16 * 1024, 'maxPreviewBytes')
   const commandFormat = config.commandFormat ?? 'json'
   if (commandFormat !== 'json' && commandFormat !== 'text') throw new Error('commandFormat must be json or text')

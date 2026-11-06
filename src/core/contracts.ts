@@ -50,7 +50,7 @@ export interface ToolResult { value: unknown; content: ContentBlock[]; isError: 
 export interface ToolDefinition {
   name: string; description?: string; parameters?: Arguments
   exposeErrors?: boolean
-  effect?: 'read' | 'write' | 'exec' | 'network' | 'unknown'
+  effect?: 'read' | 'write' | 'exec' | 'network' | 'unknown' | 'delegate'
   origin?: 'builtin' | 'external'
   resources?(args: Arguments): string[]
   execute(args: Arguments, execution: Execution): unknown | Promise<unknown>
@@ -62,6 +62,10 @@ export interface PromptEntry { name: string; order?: number; text: string | ((co
 export interface ApprovalRequest { tool: string; summary: string; signal?: AbortSignal; approval?: <T>(work: () => Promise<T>) => Promise<T> }
 export interface SandboxConfig { workspace?: string; autoApprove?: boolean }
 export interface EventData {
+  'delegation/start': import('./delegation-contracts.js').DelegationStart
+  'delegation/child-created': { batchId: string; delegationId: string; childSessionId: string; role: import('./delegation-contracts.js').ChildRole; capabilityDigest: string }
+  'delegation/child-finish': { batchId: string; delegationId: string; childSessionId?: string; status: import('./delegation-contracts.js').ChildStatus; resultRef: string; resultSha256: string }
+  'delegation/finish': { batchId: string; toolCallId: string; toolSequence: number; result: string }
   'group/start': import('./task-group-budget.js').GroupStart
   'group/budget-reserved': import('./task-group-budget.js').GroupReservation & { groupId: string }
   'group/model-dispatched': { groupId: string; requestId: string }

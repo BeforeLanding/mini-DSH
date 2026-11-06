@@ -37,6 +37,12 @@ export class LlmRuntime {
         const { provider, model } = normalizeSelection(selection)
         return this.#providers.get(provider)?.capabilities?.[model]?.contextWindowTokens
     }
+    // Host-only fork: the child installs its own group guard around this validated adapter.
+    adapterFor(selection: ModelSelection): { provider: string; model: string; chat: Adapter['chat']; capabilities?: Adapter['capabilities'] } {
+        const { provider, model } = normalizeSelection(selection), adapter = this.#providers.get(provider)
+        if (!adapter) throw new Error('cannot fork an unregistered model')
+        return { provider, model, capabilities: adapter.capabilities, chat: request => this.#invoke(adapter, { ...request, model }) }
+    }
     models() {
         const out: string[] = []
         for (const [provider, adapter] of this.#providers) {

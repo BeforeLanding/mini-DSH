@@ -84,6 +84,9 @@ export class ToolRuntime {
     async execute(name: string, args: Arguments = {}, exec: Partial<Execution> = {}): Promise<ToolResult> {
         const tool = this.get(name)
         if (!tool) {
+            if (this.#admission) try {
+                await this.#admission({ ...exec, signal: exec.signal ?? new AbortController().signal })
+            } catch { return { value: null, content: [{ type: 'text', text: 'ToolError: group admission rejected' }], isError: true } }
             return {
                 value: null,
                 content: [{ type: 'text', text: `Unknown tool: ${name}` }],
@@ -102,8 +105,8 @@ export class ToolRuntime {
 
         let result: ToolResult
         try {
-            if (!this.#permitted(tool)) throw new Error('tool is forbidden by immutable role capabilities')
             await this.#admission?.(execution)
+            if (!this.#permitted(tool)) throw new Error('tool is forbidden by immutable role capabilities')
             if (this.#authorizationConfigured && !this.#authorize) throw new Error('tool authorization unavailable')
             await this.#authorize?.(tool, args, execution)
             execution.signal.throwIfAborted()
