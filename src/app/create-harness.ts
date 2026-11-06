@@ -21,10 +21,16 @@ import type { McpServerEntry } from './mcp-config.js'
 import { completionCheck, workspaceChanged } from '../core/run-guidance.js'
 import { READ_ONLY_TOOLS, validateAgentRole } from '../core/agent-capabilities.js'
 import type { AgentRole } from '../core/agent-capabilities.js'
+import { TaskGroups, guardTaskGroup } from '../core/task-groups.js'
+import { groupPolicy } from '../core/task-group-budget.js'
+import type { TaskGroupPolicy, TaskGroupBudgetCoordinator } from '../core/task-group-budget.js'
 
 export interface HarnessAdapter { provider: string; model: string; chat: Adapter['chat']; capabilities?: Adapter['capabilities'] }
 export interface HarnessConfig {
   agentRole?: AgentRole
+  taskGroupPolicy?: Partial<TaskGroupPolicy>
+  // Host-only binding: child budgets always resolve to the parent's coordinator.
+  parentTaskGroup?: TaskGroupBudgetCoordinator
   workspace: string
   profile: 'general' | 'coding'
   adapter?: HarnessAdapter
@@ -51,8 +57,14 @@ export async function createHarness(config: HarnessConfig) {
   const role = validateAgentRole(config.agentRole ?? 'coordinator'), readOnly = role !== 'coordinator'
   if (readOnly && (config.mcpServers?.length || config.commandRunner)) throw new Error('read-only roles cannot configure MCP or commands')
   const root = new Context()
+  let taskGroups: TaskGroups | undefined
   try {
     for (const plugin of [sessions, systemPrompt, tools, llm, agents, agentLoop]) await root.plugin(plugin)
+    if (config.taskGroupPolicy || config.parentTaskGroup) {
+      if (config.taskGroupPolicy && config.parentTaskGroup) throw new Error('child cannot override parent task group policy')
+      taskGroups = config.parentTaskGroup ? undefined : new TaskGroups(root.sessions, groupPolicy(config.taskGroupPolicy))
+      guardTaskGroup(root.llm, root.tools, root.sessions, config.parentTaskGroup ? async () => config.parentTaskGroup! : (sessionId, taskId) => taskGroups!.get(sessionId, taskId), { root: !config.parentTaskGroup }, root.agentLoop)
+    }
     if (readOnly) root.tools.setCapabilities(READ_ONLY_TOOLS)
     const runtimeClockMode = config.runtimeClockMode ?? config.contextLayout ?? 'live'
     await root.plugin(runtimeContext, { workspace: config.workspace, profile: config.profile, layout: runtimeClockMode, ...(readOnly ? { agentRole: role } : {}), ...(config.runtimeTime ? { now: config.runtimeTime } : {}) })
@@ -78,8 +90,9 @@ export async function createHarness(config: HarnessConfig) {
       toolSchemaSha256: createHash('sha256').update(JSON.stringify(schemas.slice().sort((a, b) => a.function.name.localeCompare(b.function.name)))).digest('hex'),
       policy: { profile: config.profile, contextLayout: config.contextLayout ?? 'live', runtimeClockMode, projectContext: config.projectContext !== false && config.profile === 'coding', toolOutput: config.toolOutput !== false && !readOnly, toolOutputMaxPreviewBytes: config.toolOutputMaxPreviewBytes ?? null, ...(config.toolOutputCommandFormat ? { toolOutputCommandFormat: config.toolOutputCommandFormat } : {}), ...(config.hostGuidance?.trim() ? { hostGuidance: createHash('sha256').update(config.hostGuidance).digest('hex') } : {}), legacyNoReadHistory: config.legacyNoReadHistory === true, autoApprove: config.autoApprove ?? false, isolatedCommandRunner: config.commandRunner !== undefined, mcpServers: config.mcpServers?.map(entry => entry.config.serverName) ?? [] },
       ...(readOnly ? { role, capabilities: READ_ONLY_TOOLS } : {}),
+      ...(config.taskGroupPolicy ? { taskGroupPolicy: groupPolicy(config.taskGroupPolicy) } : {}),
     }
-    return { root, capabilityManifest, dispose: () => root.fiber.dispose() }
+    return { root, capabilityManifest, ...(taskGroups ? { taskGroups } : {}), dispose: () => root.fiber.dispose() }
   } catch (error) {
     await root.fiber.dispose()
     throw error

@@ -14,6 +14,7 @@ class LlmService extends Service {
     }
 
     capacity(...args: Parameters<LlmRuntime['capacity']>) { return this.runtime.capacity(...args) }
+    setDispatchGuard(...args: Parameters<LlmRuntime['setDispatchGuard']>) { return this.runtime.setDispatchGuard(...args) }
     models() {
         return this.runtime.models()
     }

@@ -1,6 +1,7 @@
 import { resolveBudget } from './budget.js'
 import { fingerprint } from './file-edit.js'
 import { safeRunMessages } from './model-error.js'
+import { safeId, sha256 } from './content-hash.js'
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const string = (v: unknown) => typeof v === 'string'
 const integer = (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0
@@ -34,6 +35,15 @@ export function validUsage(v: unknown): boolean {
 export function validatePayload(type: string, data: Record<string, unknown>) {
   let valid = false
   switch (type) {
+    case 'group/start': {
+      const policy = data.policy
+      valid = safeId(data.groupId) && integer(data.deadline) && record(policy) && ['maxModelRequests', 'maxToolCalls', 'maxTotalTokens', 'rootTokenFloor', 'rootRequestFloor', 'maxWallDurationMs'].every(key => integer(policy[key])) && Number(policy.rootTokenFloor) <= Number(policy.maxTotalTokens) && Number(policy.rootRequestFloor) <= Number(policy.maxModelRequests) && Number(policy.maxWallDurationMs) > 0
+      break
+    }
+    case 'group/budget-reserved': valid = safeId(data.groupId) && safeId(data.requestId) && safeId(data.agentId) && safeId(data.sessionId) && safeId(data.taskId) && safeId(data.runId) && typeof data.root === 'boolean' && ['main', 'summary'].includes(String(data.purpose)) && integer(data.reserve) && Number(data.reserve) > 0; break
+    case 'group/model-dispatched': case 'group/reservation-released': case 'group/usage-unknown': valid = safeId(data.groupId) && safeId(data.requestId); break
+    case 'group/budget-settled': valid = safeId(data.groupId) && safeId(data.requestId) && validUsage(data.usage) && record(data.usage) && data.usage.source === 'provider' && data.usage.uncertain === false && typeof data.overrun === 'boolean'; break
+    case 'group/tool-admitted': valid = safeId(data.groupId) && sha256(data.key) && safeId(data.agentId) && safeId(data.sessionId) && safeId(data.runId) && safeId(data.toolCallId); break
     case 'verification/start': valid = string(data.verificationId) && string(data.command) && !!data.command.trim() && string(data.cwd) && optionalString(data.toolCallId) && validVerificationFiles(data.files, false); break
     case 'verification/result': valid = string(data.verificationId) && validCommand(data.commandResult) && validVerificationFiles(data.files, true); break
     case 'file/baseline': valid = filePath(data.path) && validSnapshot(data.snapshot); break

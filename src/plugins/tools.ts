@@ -33,6 +33,7 @@ class ToolsService extends Service {
         return this.runtime.setAuthorization(...args)
     }
     setCapabilities(...args: Parameters<ToolRuntime['setCapabilities']>) { return this.runtime.setCapabilities(...args) }
+    setAdmission(...args: Parameters<ToolRuntime['setAdmission']>) { return this.runtime.setAdmission(...args) }
 }
 
 export const name = 'mini-tools'

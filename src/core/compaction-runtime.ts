@@ -189,6 +189,7 @@ export class CompactionRuntime {
       try {
         response = await this.#llm.chat({
           purpose: 'summary', maxOutputTokens, system: attempt.system, messages, tools: attempt.tools, signal: attempt.signal,
+          dispatchScope: { sessionId, taskId: state.taskId, runId: state.runId, requestId },
           onReasoning: chunk => { if (attempt.signal.aborted || journal.closed) return; journal.add('reasoning', chunk) },
           onContent: chunk => { if (attempt.signal.aborted || journal.closed) return; journal.add('content', chunk) },
         }, attempt.model)
