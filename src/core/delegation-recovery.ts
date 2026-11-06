@@ -28,7 +28,7 @@ export function delegationRecovery(deps: DelegationDependencies): DelegationReco
       if (bytes) {
         let parsed: unknown
         try { parsed = JSON.parse(bytes.toString('utf8')) } catch { return undefined }
-        if (!recordObject(parsed) || parsed.delegationId !== planned.delegationId || parsed.childSessionId !== childSessionId || !['completed', 'failed', 'cancelled', 'interrupted', 'invalid_result', 'skipped'].includes(String(parsed.status))) return undefined
+        if (!recordObject(parsed) || parsed.delegationId !== planned.delegationId || parsed.childSessionId !== childSessionId || !['completed', 'failed', 'cancelled', 'interrupted', 'invalid_result', 'skipped', 'stale'].includes(String(parsed.status))) return undefined
         try { parseChildFindings(JSON.stringify({ findings: parsed.findings, unresolved: parsed.unresolved }), start.data.limits) } catch { return undefined }
         result = parsed as unknown as DelegationResult
         if (result.status === 'completed' && !childSessionId) return undefined
