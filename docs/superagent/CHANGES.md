@@ -1,5 +1,32 @@
 # 多 Agent 编排改动与证据
 
+## M2-① 计划校验与判定（2026-11-07）
+
+**改动**
+
+- 新增 `src/orchestration/plan.ts`：计划结构校验（复用 `planInputError`）、写集重复与保护路径（`.git/`、`.mini-dsh/`、可配置项）、Kahn 拓扑分层与环检测、同波次写集两两相交检查（文件精确、目录前缀、Windows 大小写）、验收命令经 `SandboxRuntime.inspectCommand` 形状检查、`single`/`parallel` 判定与理由。
+- 跨波次写集允许重叠：后一波次的 attempt 以整合 head 为基线，能看到前一波次的已整合结果。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-plan.test.js
+# tests 7 / pass 7 / fail 0
+```
+
+**测试覆盖**
+
+- 三子任务 DAG 分层为 `[[st-1, st-2], [st-3]]` 并判定 `parallel`；依赖深度而非声明顺序决定波次。
+- 环、同波次文件/目录前缀相交、重复写集条目、保护路径均被拒绝；跨波次重叠允许。
+- 验收命令形状拒绝（注入闸门与真实 `SandboxRuntime`）；`auto`/`single`/`parallel` 判定与强制并行拒绝。
+- `maxSubtasks` 与结构错误有界。
+
+**未包含**
+
+- planner、审批队列、波次调度与冲突处置（M2-②—⑤）。
+
 ## M1-④ 单 attempt 编排闭环与 CLI（2026-11-07）
 
 **改动**

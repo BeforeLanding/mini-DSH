@@ -24,8 +24,17 @@
   - 证据：`src/orchestration/{worker,integrator,verifier,orchestrator,inspect}.ts`、`src/app/orchestrate-cli.ts`、`test/orchestration-e2e.test.ts`、`test/orchestration-worker.test.ts`、`test/orchestration-integrator.test.ts`。
   - M1 边界：只执行一个子任务、只接受计划文件（planner 与并行波次属 M2）；`resume`/`list` 之外的恢复与冲突处置属 M3/M2。
 
-## M2–M4：待开始
+## M2：并行与整合（进行中）
 
-- [ ] M2 并行与整合（计划校验、planner、审批队列、波次并发、多 attempt 整合与冲突）
+- [x] ① 计划校验与判定
+  - 验收：DAG 环、同波次写集相交、保护路径与验收命令形状被拒绝；跨波次重叠允许；`single`/`parallel` 判定稳定。
+  - 证据：`src/orchestration/plan.ts`、`test/orchestration-plan.test.ts`。
+- [ ] ② 只读 planner（基线快照、一次纠正重试）
+- [ ] ③ 审批 FIFO 队列（策略、显示计时、取消与关闭）
+- [ ] ④ 并行波次调度（并发池、依赖基线、波次预算）
+- [ ] ⑤ 多 attempt 整合与冲突处置（`rerun-serially`/`skip-subtask`/`abort`）
+
+## M3–M4：待开始
+
 - [ ] M3 失败、取消与恢复（故障注入、停止语义、账本恢复与 429 冷却）
 - [ ] M4 评测、演示与文档（组合 fixture、演示脚本、四臂对照离线装配；付费批次需单独授权）
