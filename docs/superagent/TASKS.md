@@ -24,7 +24,7 @@
   - 证据：`src/orchestration/{worker,integrator,verifier,orchestrator,inspect}.ts`、`src/app/orchestrate-cli.ts`、`test/orchestration-e2e.test.ts`、`test/orchestration-worker.test.ts`、`test/orchestration-integrator.test.ts`。
   - M1 边界：只执行一个子任务、只接受计划文件（planner 与并行波次属 M2）；`resume`/`list` 之外的恢复与冲突处置属 M3/M2。
 
-## M2：并行与整合（进行中）
+## M2：并行与整合（已完成）
 
 - [x] ① 计划校验与判定
   - 验收：DAG 环、同波次写集相交、保护路径与验收命令形状被拒绝；跨波次重叠允许；`single`/`parallel` 判定稳定。
@@ -38,7 +38,9 @@
 - [x] ④ 并行波次调度（并发池、依赖基线、波次预算）
   - 验收：三子任务组合计划中两个 worker 的 started/finished 区间重叠，第三个在第二波次以整合 head 为基线执行；`single` 模式逐个执行；没有计划文件时 planner 可替代；波次预算按根余额切分；在途上限生效。
   - 证据：`src/orchestration/{orchestrator,planner,integrator,worktrees,git,state}.ts`、`src/core/task-group-budget.ts`、`test/orchestration-e2e.test.ts`、`test/orchestration-ledger.test.ts`。
-- [ ] ⑤ 多 attempt 整合与冲突处置（`rerun-serially`/`skip-subtask`/`abort`）
+- [x] ⑤ 多 attempt 整合与冲突处置（`rerun-serially`/`skip-subtask`/`abort`）
+  - 验收：人为构造的文件/目录冲突产生 `human.request(conflict)`；跳过冲突子任务得到 `partial`；中止得到 `cancelled` 且整合现场保留；`rerun-serially` 在整合 head 上新建 attempt；无决定时停在 `needs_human`。
+  - 证据：`src/orchestration/{orchestrator,state,integrator}.ts`、`src/app/orchestrate-cli.ts`、`test/orchestration-e2e.test.ts`、`test/orchestration-worker.test.ts`。
 
 ## M3–M4：待开始
 

@@ -246,13 +246,12 @@ function foldEvent(state: OrchestrationState, event: OrchestrationEventUnion) {
       requireAttempt(state, event.data.attemptId)
       if (integration.conflicts.some(item => item.attemptId === event.data.attemptId)) throw new Error('duplicate integration conflict')
       integration.conflicts.push({ attemptId: event.data.attemptId, files: [...event.data.files] })
-      integration.status = 'blocked'
+      // 冲突后整合仍可继续：人工选择 skip-subtask 后其余 attempt 继续应用，最后由 integration/finished 关闭。
       state.status = 'needs_human'
       return
     }
     case 'integration/finished': {
       const integration = requireOpenIntegration(state, event.data.integrationId)
-      if (integration.conflicts.length) throw new Error('conflicted integration cannot finish')
       integration.status = 'finished'
       integration.head = event.data.head
       integration.tree = event.data.tree
@@ -279,6 +278,9 @@ function foldEvent(state: OrchestrationState, event: OrchestrationEventUnion) {
       if (!human) throw new Error('unknown human request')
       if (human.response) throw new Error('human request already resolved')
       human.response = structuredClone(event.data)
+      if (state.status === 'needs_human' && Object.values(state.human).every(item => item.response)) {
+        state.status = state.integration?.status === 'started' ? 'integrating' : 'running'
+      }
       return
     }
     case 'approval/requested': {

@@ -6,14 +6,14 @@ import { CLI_BUDGET } from '../core/budget.js'
 import type { ApprovalRequest } from '../core/contracts.js'
 import type { CommandOptions, CommandResult } from '../core/command-runner.js'
 import type { HarnessAdapter } from '../app/create-harness.js'
-import type { AttemptBudget, AttemptOutcome, PlanInput, RootBudget, RootStatus, SubtaskSpec } from './contracts.js'
+import type { AttemptBudget, AttemptOutcome, HumanRequestData, PlanInput, RootBudget, RootStatus, SubtaskSpec } from './contracts.js'
 import { DEFAULT_PROTECTED_PATHS, validatePlan } from './plan.js'
 import { planInputError } from './validation.js'
 import { newRootId, OrchestrationStore, orchestrationDirectory, writeArtifact } from './store.js'
 import { OrchestrationGroupJournal } from './group-journal.js'
 import { foldOrchestration, orchestrationTotals } from './state.js'
 import type { OrchestrationState } from './state.js'
-import { repositoryRoot } from './git.js'
+import { headCommit, repositoryRoot } from './git.js'
 import { attemptBranch, integrationBranchName, WorktreeManager } from './worktrees.js'
 import { runWorker } from './worker.js'
 import type { WorkerAssignment, WorkerOutcome } from './worker.js'
@@ -66,6 +66,8 @@ export interface OrchestrateOptions {
   verifyCommands?: string[]
   allowDirty?: boolean
   approval?: ApprovalPolicy
+  // 冲突处置：返回请求 options 中的一项；缺省或无效返回表示无法决定，根任务停在 needs_human。
+  decide?: (request: HumanRequestData) => Promise<string | undefined>
   commandRunner?: (options: CommandOptions) => Promise<CommandResult>
   signal?: AbortSignal
   clock?: () => number
@@ -150,6 +152,10 @@ function taskDependencies(state: OrchestrationState, subtask: SubtaskSpec) {
   })
 }
 function formatError(error: unknown) { return bounded(error instanceof Error ? error.message : String(error), 1024) }
+// 冲突处置选项：已用 attempt 数达到上限时不再提供串行重跑。
+export function conflictOptions(attemptsUsed: number, maxAttempts: number): string[] {
+  return attemptsUsed < maxAttempts ? ['rerun-serially', 'skip-subtask', 'abort'] : ['skip-subtask', 'abort']
+}
 // 简单并发池：最多 limit 个 worker 同时运行；某个 attempt 结束后再补位。
 async function pool<T, R>(items: readonly T[], limit: number, work: (item: T, index: number) => Promise<R>): Promise<R[]> {
   const results = new Array<R>(items.length)
@@ -339,55 +345,92 @@ export async function orchestrate(options: OrchestrateOptions): Promise<Orchestr
       if (!successes.length) continue
       const opened = await openIntegration({ store, manager, wave: waveIndex, baseCommit: currentHead, ...(options.signal ? { signal: options.signal } : {}) })
       integrationPath = opened.path
-      for (const result of successes) {
-        const applied = await applyAttempt({
-          store, integrationId: opened.integrationId, path: opened.path,
-          attempt: { attemptId: result.attemptId, subtaskId: result.subtaskId, commit: result.commit! },
-          ...(options.signal ? { signal: options.signal } : {}),
-        })
-        if (applied.status === 'conflict') {
-          await store.append('human/requested', {
-            requestId: `hr_${randomUUID()}`, kind: 'conflict', attemptId: result.attemptId,
-            prompt: `${result.subtaskId} 与已整合内容冲突：${applied.conflict.files.join(', ')}。`,
-            options: ['rerun-serially', 'skip-subtask', 'abort'],
+      for (const original of successes) {
+        let candidate = original
+        for (;;) {
+          const applied = await applyAttempt({
+            store, integrationId: opened.integrationId, path: opened.path,
+            attempt: { attemptId: candidate.attemptId, subtaskId: candidate.subtaskId, commit: candidate.commit! },
+            ...(options.signal ? { signal: options.signal } : {}),
           })
-          finalStatus = 'needs_human'
-          progress(`integration conflict on ${result.subtaskId}: ${applied.conflict.files.join(', ')}`)
-          break outer
+          if (applied.status === 'applied') { integrated.add(candidate.subtaskId); break }
+          const conflictState = foldOrchestration(await store.read())
+          const request: HumanRequestData = {
+            requestId: `hr_${randomUUID()}`, kind: 'conflict', attemptId: candidate.attemptId,
+            prompt: `${candidate.subtaskId} 与已整合内容冲突：${applied.conflict.files.join(', ')}。`,
+            options: conflictOptions(epochFor(conflictState, candidate.subtaskId) - 1, maxAttemptsPerSubtask),
+          }
+          await store.append('human/requested', request)
+          progress(`integration conflict on ${candidate.subtaskId}: ${applied.conflict.files.join(', ')}`)
+          const choice = await options.decide?.(request)
+          if (!choice || !request.options.includes(choice)) {
+            finalStatus = 'needs_human'
+            break outer
+          }
+          await store.append('human/resolved', { requestId: request.requestId, choice, actor: 'local-user' })
+          if (choice === 'abort') {
+            await store.append('control/stop', { scope: 'running', reason: 'conflict aborted by user' })
+            finalStatus = 'cancelled'
+            break outer
+          }
+          if (choice === 'skip-subtask') {
+            progress(`skipped ${candidate.subtaskId}; it stays unintegrated`)
+            break
+          }
+          const rerunState = foldOrchestration(await store.read())
+          const epoch = epochFor(rerunState, candidate.subtaskId)
+          if (epoch > maxAttemptsPerSubtask) {
+            progress(`no attempt budget left for ${candidate.subtaskId}; it stays unintegrated`)
+            break
+          }
+          const subtask = selectedPlan.subtasks.find(item => item.id === candidate.subtaskId)!
+          const rerunBase = await headCommit(opened.path)
+          const rerun = await executeAttempt({
+            subtask, wave: waveIndex, epoch, baseCommit: rerunBase, budget: waveBudget(budget, rerunState, 1, options.workerBudget), state: rerunState,
+          })
+          if (rerun.outcome !== 'succeeded' || !rerun.commit) {
+            progress(`rerun ${rerun.attemptId} ${rerun.outcome}; ${candidate.subtaskId} stays unintegrated`)
+            break
+          }
+          candidate = rerun
         }
-        integrated.add(result.subtaskId)
       }
       const finished = await finishIntegration({ store, integrationId: opened.integrationId, path: opened.path })
       currentHead = finished.head
       integrationBranch = integrationBranchName(rootId)
       progress(`integration wave ${waveIndex + 1} ${finished.head}`)
     }
-    const state = foldOrchestration(await store.read())
-    if (state.integration?.status === 'finished' && integrationPath && state.integration.head && state.integration.tree) {
-      const commands = new Set<string>()
-      for (const subtaskId of integrated) {
-        const subtask = selectedPlan.subtasks.find(item => item.id === subtaskId)
-        for (const command of subtask?.acceptance.commands ?? []) commands.add(command)
+    // 人工中止或等待决定时，整合保持开启、不要用验收结果覆盖根任务状态。
+    if (finalStatus !== 'needs_human' && finalStatus !== 'cancelled') {
+      const state = foldOrchestration(await store.read())
+      if (state.integration?.status === 'finished' && integrationPath && state.integration.head && state.integration.tree) {
+        const commands = new Set<string>()
+        for (const subtaskId of integrated) {
+          const subtask = selectedPlan.subtasks.find(item => item.id === subtaskId)
+          for (const command of subtask?.acceptance.commands ?? []) commands.add(command)
+        }
+        for (const command of options.verifyCommands ?? []) commands.add(command)
+        const verification = await verifyIntegration({
+          store, worktree: integrationPath, head: state.integration.head, tree: state.integration.tree,
+          commands: [...commands], ...(options.signal ? { signal: options.signal } : {}),
+        })
+        progress(`verification ${verification.passed ? 'passed' : 'failed'}`)
+        const complete = decision.waves.flat().every(id => integrated.has(id))
+        if (!verification.passed) { finalStatus = 'failed'; failureDetail = 'integrated verification failed' }
+        else if (complete) finalStatus = 'completed'
+        else if (integrated.size > 0) finalStatus = 'partial'
+        else { finalStatus = 'failed'; failureDetail = 'no subtask was integrated' }
+      } else {
+        finalStatus = 'failed'
+        failureDetail ??= 'no attempt produced an integrable change'
       }
-      for (const command of options.verifyCommands ?? []) commands.add(command)
-      const verification = await verifyIntegration({
-        store, worktree: integrationPath, head: state.integration.head, tree: state.integration.tree,
-        commands: [...commands], ...(options.signal ? { signal: options.signal } : {}),
-      })
-      progress(`verification ${verification.passed ? 'passed' : 'failed'}`)
-      const complete = decision.waves.flat().every(id => integrated.has(id))
-      if (!verification.passed) { finalStatus = 'failed'; failureDetail = 'integrated verification failed' }
-      else if (complete) finalStatus = 'completed'
-      else if (integrated.size > 0) finalStatus = 'partial'
-      else { finalStatus = 'failed'; failureDetail = 'no subtask was integrated' }
-    } else {
-      finalStatus = 'failed'
-      failureDetail ??= 'no attempt produced an integrable change'
     }
   } catch (error) {
     failureDetail = formatError(error)
     finalStatus = 'failed'
   } finally {
+    // 先关闭审批通道：关闭时被拒绝的请求仍会写审计事件，必须发生在 root/finish 之前。
+    await broker.close().catch(() => {})
     try {
       const events = await store.read()
       const state = foldOrchestration(events)
@@ -404,7 +447,6 @@ export async function orchestrate(options: OrchestrateOptions): Promise<Orchestr
     } catch (error) {
       failureDetail ??= formatError(error)
     } finally {
-      await broker.close().catch(() => {})
       await store.close().catch(() => {})
     }
   }

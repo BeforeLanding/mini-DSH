@@ -25,7 +25,7 @@
 1. 以 [v0.2.0 Release](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.2.0) 交付；源码验收见 [DELIVERY-20261030](docs/DELIVERY-20261030.md)，其后的演示标题与文档改动由上述 CI 覆盖。后续再有代码变化时重新验收并另发版本，不继续复用旧绿灯。
 2. 核对本地简历锚点与五题问答；个人实际贡献和 AI 辅助范围由本人确认，不根据 Git 作者名代作身份判断。
 3. 完整讲解视频待用户安排录制；记忆/协作后续开发、付费实验和 npm 发布由后续明确任务决定。
-4. 多 Agent 编排 M1（单 attempt 纵向闭环）已在 `feat/orchestration-m1` 完成（2026-11-07），待评审合并；验收证据见 [docs/superagent/CHANGES.md](docs/superagent/CHANGES.md)。M2 的并行波次、planner、审批队列与冲突处置尚未开始；main 尚未包含编排入口。
+4. 多 Agent 编排 M1 已在 `feat/orchestration-m1` 完成；M2（计划校验、只读 planner、审批队列、并行波次、多 attempt 整合与冲突处置）已在 `feat/orchestration-m2` 完成（2026-11-07），待评审合并。验收证据见 [docs/superagent/CHANGES.md](docs/superagent/CHANGES.md)。M3 的 `resume`/崩溃恢复/停止语义尚未开始；main 尚未包含编排入口。
 
 ## 历史记录
 

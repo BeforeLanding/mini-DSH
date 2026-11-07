@@ -1,5 +1,35 @@
 # 多 Agent 编排改动与证据
 
+## M2-⑤ 多 attempt 整合与冲突处置（2026-11-07）
+
+**改动**
+
+- 冲突不再立即终止整合：`integration/conflict` 只记录冲突并把根任务置为 `needs_human`，整合周期保持开启；人工决定后继续应用同波次剩余 attempt，最后写 `integration/finished`。状态折叠允许带冲突记录的整合完成，并在 `human/resolved` 且无其他未决请求时恢复根状态。
+- 编排器新增 `decide` 钩子与 `conflictOptions`：`rerun-serially` 以当前整合 head 为基线创建 epoch+1 的新 attempt（新 worktree/会话，受 `maxAttemptsPerSubtask` 限制），`skip-subtask` 保持该子任务未整合，`abort` 写 `control/stop` 并以 `cancelled` 收尾。无决定或无效决定时停在 `needs_human`，不写 `root/finish`。
+- 最终验收只运行已整合子任务的验收命令与根级 `--verify`；被跳过的子任务不参与。根状态：全部子任务整合且验收通过为 `completed`；至少一个整合且验收通过为 `partial`；验收失败为 `failed`。
+- CLI 在交互终端询问冲突处置；非交互运行保留 `needs_human` 现场并提示 `resume` 属 M3。`inspect` 显示每个波次的整合、applied/conflicts、计划来源与审批统计。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-e2e.test.js dist/test/orchestration-worker.test.js
+# tests 24 / pass 24 / fail 0（含既有 M1/M2-④ 用例）
+```
+
+**测试覆盖**
+
+- 真实 git 的文件/目录冲突（`blocked` 文件与 `blocked/x.txt`；按写集定义两者不相交）：并行两个 worker 都成功，第二波次 cherry-pick 冲突并写 `human/requested(conflict)`；选择 `skip-subtask` 后整合完成、验收 exit 0、根任务 `partial`，用户工作树不变。
+- 选择 `abort`：根任务 `cancelled`、`control/stop` 落盘、整合保持 `started` 供检查、没有验收证据。
+- 无决定：根任务 `needs_human`、请求保持 pending、无 `root/finish`。
+- 选择 `rerun-serially`：新建 epoch=2 的 attempt，baseCommit 等于当前整合 head；该重跑因目标路径不可写以 `no_changes` 结束，根任务仍为 `partial`（重跑失败不会伪造成整合）。
+- `conflictOptions` 在 attempt 上限处移除串行重跑；`inspect` 文本可渲染多波次整合。
+
+**未包含**
+
+- 整合修复 attempt（核心扩展）；`resume` 与崩溃窗口（M3）。串行重跑在重跑仍失败时不会再次询问，根任务最多 `partial`/`failed`。
+
 ## M2-④ 并行波次调度（2026-11-07）
 
 **改动**

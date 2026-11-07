@@ -6,9 +6,9 @@ import path from 'node:path'
 import type { ChatRequest, ChatResponse, ToolCall } from '../src/core/contracts.js'
 import { branchExists, commitAll, findCommitByTrailer, git, headCommit, stageAll, statusPorcelain } from '../src/orchestration/git.js'
 import { orchestrate } from '../src/orchestration/orchestrator.js'
-import { loadOrchestration } from '../src/orchestration/inspect.js'
+import { formatOrchestration, loadOrchestration } from '../src/orchestration/inspect.js'
 import { integrationBranchName } from '../src/orchestration/worktrees.js'
-import type { PlanInput } from '../src/orchestration/contracts.js'
+import type { HumanRequestData, PlanInput } from '../src/orchestration/contracts.js'
 import { parseOrchestrateArgs } from '../src/app/orchestrate-cli.js'
 import { inspectSession } from '../src/core/session-inspect.js'
 
@@ -184,6 +184,10 @@ test('two workers run in the same wave and a dependent third runs after integrat
   assert.equal(await fs.readFile(path.join(indexAttempt.worktree!, 'src', 'a.txt'), 'utf8'), 'a\n')
   assert.equal(report.state.verifications.length, 1)
   assert.equal(report.state.verifications[0]?.exitCode, 0)
+  const formatted = formatOrchestration({ ...report, events: report.events.length })
+  assert.match(formatted, /integration\[0\] finished/)
+  assert.match(formatted, /integration\[1\] finished/)
+  assert.match(formatted, /approvals: total=/)
   assert.equal(await headCommit(repo), baseCommit)
   assert.deepEqual(await statusPorcelain(repo), [])
 })
@@ -201,6 +205,124 @@ test('single mode executes the same plan one worker at a time', async t => {
   const finished = (attemptId: string) => report.events.find(event => event.type === 'attempt/finished' && event.data.attemptId === attemptId)!.at
   const started = (attemptId: string) => report.events.find(event => event.type === 'attempt/started' && event.data.attemptId === attemptId)!.at
   assert.ok(Date.parse(finished(waveOne[0]!.attemptId)) <= Date.parse(started(waveOne[1]!.attemptId)))
+})
+
+const conflictPlan: PlanInput = {
+  version: 1, rationale: 'two independent paths that collide at the file/directory level',
+  subtasks: [
+    { id: 'st-1', title: 'write file', objective: 'create the blocked file', writeSet: ['blocked'], acceptance: { commands: ['node check.mjs'] } },
+    { id: 'st-2', title: 'write nested', objective: 'create blocked/x.txt', writeSet: ['blocked/x.txt'], acceptance: { commands: ['node check.mjs'] } },
+  ],
+}
+async function conflictRepository(t: import('node:test').TestContext) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'orch-conflict-'))
+  t.after(async () => { await fs.rm(root, { recursive: true, force: true }) })
+  const repo = path.join(root, 'repo')
+  await fs.mkdir(repo)
+  await git(repo, ['init', '--quiet'])
+  await git(repo, ['config', 'core.autocrlf', 'false'])
+  await fs.writeFile(path.join(repo, 'check.mjs'), `import fs from 'node:fs'\nconst text = fs.readFileSync(new URL('./blocked', import.meta.url), 'utf8')\nif (text !== 'file\\n') { console.error('FAIL'); process.exit(1) }\nconsole.log('PASS')\n`)
+  await fs.writeFile(path.join(repo, 'base.txt'), 'base\n')
+  await stageAll(repo)
+  const baseCommit = await commitAll(repo, 'initial')
+  return { root, repo, baseCommit, baseDirectory: path.join(root, 'orch') }
+}
+function conflictAdapter() {
+  return {
+    provider: 'scripted', model: 'test', capabilities: { test: { contextWindowTokens: 100_000 } },
+    chat: async (request: ChatRequest): Promise<ChatResponse> => {
+      const messages = request.messages ?? []
+      const text = messages.map(message => typeof message.content === 'string' ? message.content : '').join('\n')
+      if (text.includes('Subtask st-2')) {
+        return messages.some(message => message.role === 'tool')
+          ? { usage, content: reportFor('blocked/x.txt'), complete: true, finishReason: 'stop' }
+          : { usage, toolCalls: [write('blocked/x.txt', 'x\n')], complete: true }
+      }
+      return messages.some(message => message.role === 'tool')
+        ? { usage, content: reportFor('blocked'), complete: true, finishReason: 'stop' }
+        : { usage, toolCalls: [write('blocked', 'file\n')], complete: true }
+    },
+  }
+}
+function conflictOptionsFor(choice: string, decisions: HumanRequestData[]) {
+  return async (request: HumanRequestData) => { decisions.push(request); return choice }
+}
+
+test('a file/directory conflict asks the host; skip-subtask yields partial', async t => {
+  const { repo, baseCommit, baseDirectory } = await conflictRepository(t)
+  const decisions: HumanRequestData[] = []
+  const result = await orchestrate({
+    repository: repo, goal: 'create both paths', plan: conflictPlan, baseDirectory, adapter: conflictAdapter(), model: 'scripted/test',
+    maxWorkers: 2, decide: conflictOptionsFor('skip-subtask', decisions), approval: { writes: 'auto', bash: 'ask', approve: async () => true },
+  })
+  assert.equal(result.status, 'partial', result.error)
+  const report = await loadOrchestration(result.directory)
+  assert.equal(report.state.status, 'partial')
+  assert.equal(report.state.finished?.status, 'partial')
+  assert.equal(decisions.length, 1)
+  assert.equal(decisions[0]?.kind, 'conflict')
+  assert.deepEqual(decisions[0]?.options, ['rerun-serially', 'skip-subtask', 'abort'])
+  const human = Object.values(report.state.human)[0]!
+  assert.equal(human.response?.choice, 'skip-subtask')
+  assert.equal(report.state.integrations.length, 1)
+  assert.equal(report.state.integrations[0]?.status, 'finished')
+  assert.equal(report.state.integrations[0]?.conflicts.length, 1)
+  const applied = report.state.integrations[0]!.applied.map(item => report.state.attempts[item.attemptId]!.subtaskId)
+  assert.deepEqual(applied, ['st-1'])
+  assert.equal(report.state.verifications.length, 1)
+  assert.equal(report.state.verifications[0]?.exitCode, 0)
+  assert.equal(await headCommit(repo), baseCommit)
+  assert.deepEqual(await statusPorcelain(repo), [])
+})
+
+test('abort after a conflict stops the root as cancelled and keeps the integration for inspection', async t => {
+  const { repo, baseDirectory } = await conflictRepository(t)
+  const decisions: HumanRequestData[] = []
+  const result = await orchestrate({
+    repository: repo, goal: 'create both paths', plan: conflictPlan, baseDirectory, adapter: conflictAdapter(), model: 'scripted/test',
+    maxWorkers: 2, decide: conflictOptionsFor('abort', decisions), approval: { writes: 'auto', bash: 'ask', approve: async () => true },
+  })
+  assert.equal(result.status, 'cancelled', result.error)
+  const report = await loadOrchestration(result.directory)
+  assert.equal(report.state.status, 'cancelled')
+  assert.equal(report.state.finished?.status, 'cancelled')
+  assert.equal(Object.values(report.state.human)[0]?.response?.choice, 'abort')
+  assert.equal(report.state.integrations[0]?.status, 'started')
+  assert.equal(report.state.verifications.length, 0)
+  assert.ok(report.events.some(event => event.type === 'control/stop'))
+})
+
+test('without a decision the root stops at needs_human with the request pending', async t => {
+  const { repo, baseDirectory } = await conflictRepository(t)
+  const result = await orchestrate({
+    repository: repo, goal: 'create both paths', plan: conflictPlan, baseDirectory, adapter: conflictAdapter(), model: 'scripted/test',
+    maxWorkers: 2, decide: async () => undefined, approval: { writes: 'auto', bash: 'ask', approve: async () => true },
+  })
+  assert.equal(result.status, 'needs_human', result.error)
+  const report = await loadOrchestration(result.directory)
+  assert.equal(report.state.status, 'needs_human')
+  assert.equal(report.state.finished, undefined)
+  assert.equal(report.state.integrations[0]?.status, 'started')
+  assert.equal(Object.values(report.state.human)[0]?.response, undefined)
+})
+
+test('rerun-serially creates a new attempt on the integration head', async t => {
+  const { repo, baseDirectory } = await conflictRepository(t)
+  const decisions: HumanRequestData[] = []
+  const result = await orchestrate({
+    repository: repo, goal: 'create both paths', plan: conflictPlan, baseDirectory, adapter: conflictAdapter(), model: 'scripted/test',
+    maxWorkers: 2, decide: conflictOptionsFor('rerun-serially', decisions), approval: { writes: 'auto', bash: 'ask', approve: async () => true },
+  })
+  assert.equal(result.status, 'partial', result.error)
+  const report = await loadOrchestration(result.directory)
+  assert.equal(Object.values(report.state.human)[0]?.response?.choice, 'rerun-serially')
+  const attempts = report.state.attemptOrder.map(id => report.state.attempts[id]!).filter(attempt => attempt.subtaskId === 'st-2')
+  assert.equal(attempts.length, 2)
+  assert.deepEqual(attempts.map(attempt => attempt.epoch), [1, 2])
+  assert.equal(attempts[1]?.outcome, 'no_changes')
+  assert.equal(attempts[1]?.baseCommit, report.state.integrations[0]?.head)
+  assert.equal(report.state.integrations[0]?.status, 'finished')
+  assert.equal(report.state.verifications[0]?.exitCode, 0)
 })
 
 test('the read-only planner can replace a plan file and its session stays inspectable', async t => {

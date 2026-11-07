@@ -4,7 +4,7 @@ import path from 'node:path'
 import readline from 'node:readline'
 import type { Writable } from 'node:stream'
 import type { ApprovalRequest } from '../core/contracts.js'
-import type { PlanInput, RootBudget } from '../orchestration/contracts.js'
+import type { HumanRequestData, PlanInput, RootBudget } from '../orchestration/contracts.js'
 import { assertPlanInput } from '../orchestration/validation.js'
 import { orchestrate } from '../orchestration/orchestrator.js'
 import { formatOrchestration, loadOrchestration } from '../orchestration/inspect.js'
@@ -110,6 +110,21 @@ function terminalApprover(output: Writable) {
       rl.once('line', onLine)
       request.signal?.addEventListener('abort', onAbort, { once: true })
     }),
+    decide: (request: HumanRequestData) => new Promise<string | undefined>(resolve => {
+      if (closed) return resolve(undefined)
+      output.write(`\n[human ${request.kind}] ${request.prompt}\nOptions: ${request.options.join(' / ')}\nDecision: `)
+      const onLine = (line: string) => {
+        rl.removeListener('close', onClose)
+        const choice = line.trim()
+        resolve(request.options.includes(choice) ? choice : undefined)
+      }
+      const onClose = () => {
+        rl.removeListener('line', onLine)
+        resolve(undefined)
+      }
+      rl.once('line', onLine)
+      rl.once('close', onClose)
+    }),
     close: () => rl.close(),
   }
 }
@@ -138,7 +153,8 @@ async function executeRun(args: OrchestrateRunArgs, output: Writable) {
   const { createDeepSeekAdapter } = await import('../models/deepseek.js')
   const model = process.env.MINI_DSH_MODEL ?? 'deepseek-v4-pro'
   const base = createDeepSeekAdapter({ defaultModel: model })
-  const approver = args.approveWrites === 'ask' || args.approveBash === 'ask' ? terminalApprover(output) : undefined
+  const interactive = Boolean((output as NodeJS.WriteStream).isTTY)
+  const approver = args.approveWrites === 'ask' || args.approveBash === 'ask' || interactive ? terminalApprover(output) : undefined
   try {
     const result = await orchestrate({
       repository: process.env.MINI_DSH_WORKSPACE ?? process.cwd(), goal, ...(plan ? { plan } : {}), baseDirectory: orchestrationBaseDirectory(),
@@ -147,6 +163,7 @@ async function executeRun(args: OrchestrateRunArgs, output: Writable) {
       ...(args.prepareCommand ? { prepareCommand: args.prepareCommand } : {}),
       verifyCommands: args.verifyCommands, allowDirty: args.allowDirty,
       approval: { writes: args.approveWrites, bash: args.approveBash, ...(approver ? { approve: approver.ask } : {}) },
+      ...(approver && interactive ? { decide: approver.decide } : {}),
       onProgress: line => output.write(`${line}\n`),
     })
     output.write(`\norchestration ${result.status}\nroot: ${result.rootId}\nbase: ${result.baseCommit}\nlog: ${result.directory}\n`)
@@ -155,7 +172,7 @@ async function executeRun(args: OrchestrateRunArgs, output: Writable) {
     if (result.status === 'needs_human') {
       const report = await loadOrchestration(result.directory)
       output.write(`${formatOrchestration({ ...report, events: report.events.length })}\n`)
-      output.write('Resolve the human request before continuing; conflict decisions and resume land in M2/M3.\n')
+      output.write('Resolve the pending human request in an interactive terminal; `orchestrate resume` lands in M3.\n')
     }
     if (result.error) output.write(`error: ${result.error}\n`)
     return result.status === 'completed' ? 0 : 1

@@ -135,22 +135,27 @@ v2.1 的 Full/Baseline 是冻结开发协议里的两条实验臂，不是生产
 
 项目记忆及其专属配置/命令仅保留在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2，不在 main 启用。关闭委派（默认）时，工具清单与 v0.2.0 相同。含委派事件的会话日志请用同一版本恢复。
 
-## 多 Agent 编排（M1，分支 `feat/orchestration-m1`，尚未合入 main）
+## 多 Agent 编排（M2，分支 `feat/orchestration-m2`，尚未合入 main）
 
-本节的 `orchestrate` 子命令只在分支上存在；M1 接受计划文件、一次执行一个子任务。模型 planner、并行波次、审批队列与 `resume` 属 M2/M3，当前命令会明确拒绝或不存在，不伪装成已支持。
+本节的 `orchestrate` 子命令只在分支上存在；M2 支持计划文件或只读 planner、同波次并行、FIFO 审批与冲突处置。崩溃恢复 `resume` 仍在 M3，当前命令不存在。
 
 ```text
-mini-dsh orchestrate run --task "<text>" --plan <plan.json> [--verify <cmd>]...
+mini-dsh orchestrate run (--task "<text>" | --task-file <path>) [--plan <plan.json>]
+                         [--mode auto|single|parallel] [--max-workers 1..4] [--root-budget <json>]
+                         [--verify <cmd>]... [--prepare <cmd>]
+                         [--approve-writes auto|ask] [--approve-bash ask|auto] [--allow-dirty]
 mini-dsh orchestrate inspect <rootId|log-path> [--json]
 mini-dsh orchestrate list
 mini-dsh orchestrate cleanup <rootId>
 ```
 
-- 编排日志与 worktree 位于 `~/.mini-dsh/orchestrations/<rootId>/`；`MINI_DSH_ORCHESTRATION_DIR` 指定根目录（默认 `~/.mini-dsh/orchestrations`）。
-- `MINI_DSH_ROOT_BUDGET` 是 JSON，键与默认值见 [DEVELOPMENT.md](superagent/DEVELOPMENT.md) §7.1；命令行 `--root-budget` 覆盖同名键。M1 执行请求数、token、wall 与工具数上限；planner/fix 份额尚未有对应组件。
-- 需要干净工作树；`--allow-dirty` 继续执行，但未提交改动不在基线内。宿主不在用户工作树提交，交付物是 `mini-dsh/<root8>/integration` 分支。
-- 审批按 D8：worktree 内文件写入默认自动批准，Bash 默认询问；`--approve-writes ask` 可逐条询问写入，`--approve-bash auto` 仅建议在评测的隔离 runner 中使用。
-- `--prepare` 在每个 worker worktree 内运行一次（如依赖安装）；`--verify` 在整合 worktree 中追加根级验收命令。`MINI_DSH_MODEL` 与 `MINI_DSH_WORKSPACE` 沿用既有含义。
+- 省略 `--plan` 时，只读 planner 在基线快照 worktree 中读仓库并提出计划；计划必须通过宿主校验（DAG、同波次写集两两不相交、保护路径、验收命令形状）才会执行。planner 连续两次输出无效计划时任务失败，可改用 `--plan`。
+- `--mode auto`（默认）在存在 ≥2 个同波次子任务时并行，否则逐个执行；`single` 强制逐个执行；`parallel` 在计划无法并行时拒绝。同时运行的 worker 不超过 `--max-workers`；后一波次以当前整合 head 为基线。
+- 每次 attempt 独占 worktree、分支与会话目录；宿主按计划顺序 cherry-pick。整合冲突时在交互终端询问 `rerun-serially` / `skip-subtask` / `abort`：跳过使根任务最多 `partial`，中止以 `cancelled` 收尾并保留现场，串行重跑在整合 head 上新建 attempt。非交互运行遇到冲突会停在 `needs_human`。
+- 审批按 D8：worktree 内文件写入默认自动批准，Bash 默认询问，经单一 FIFO 队列逐条显示；`--approve-writes ask` 可逐条询问写入，`--approve-bash auto` 仅建议在评测的隔离 runner 中使用。
+- 全部波次完成后，在整合 worktree 运行已整合子任务的验收命令与 `--verify`；证据绑定最终 tree SHA。全部子任务整合且通过为 `completed`，部分整合且通过为 `partial`。
+- 编排日志与 worktree 位于 `~/.mini-dsh/orchestrations/<rootId>/`；`MINI_DSH_ORCHESTRATION_DIR` 指定根目录，`MINI_DSH_ROOT_BUDGET` JSON 覆盖根预算（键与默认值见 [DEVELOPMENT.md](superagent/DEVELOPMENT.md) §7.1）。`inspect` 只读显示计划来源、波次、attempt、审批统计、整合冲突与验收证据。
+- `--prepare` 在每个 worker worktree 内运行一次（如依赖安装）。需要干净工作树；`--allow-dirty` 继续执行，但未提交改动不在基线内。宿主不在用户工作树提交，交付物是 `mini-dsh/<root8>/integration` 分支。`MINI_DSH_MODEL` 与 `MINI_DSH_WORKSPACE` 沿用既有含义。
 
 ## 本地打包与安装
 

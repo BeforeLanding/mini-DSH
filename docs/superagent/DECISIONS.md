@@ -12,6 +12,15 @@
 - **测试锚点：** `test/orchestration-approval.test.ts`、`test/orchestration-e2e.test.ts`。
 - **状态：** 已实现（M2-③）；CLI 终端显示随 M2-④ 接线。
 
+## M2-⑤ 冲突处置
+
+- **决定：** 冲突时 `git cherry-pick --abort` 回到整合 head，记录 `integration/conflict`，等待 `decide` 返回 `rerun-serially`/`skip-subtask`/`abort`。整合周期保持开启，人工决定后继续应用同波次剩余 attempt，最后统一 `integration/finished`；因此 `integration/finished` 允许保留历史冲突记录，`integration/conflict` 不再把整合状态改成 `blocked`。
+- **决定：** `skip-subtask` 只把该子任务留在未整合集合，最终验收不运行它的验收命令；根任务最多 `partial`。`abort` 写 `control/stop(scope=running)` 并以 `cancelled` 收尾，不写 `integration/finished`，保留 worktree/分支供检查。
+- **决定：** `rerun-serially` 以当前整合 head 为基线创建 epoch+1 的新 attempt（新 worktree、新会话，受 `maxAttemptsPerSubtask` 约束）；成功则在同一整合周期继续 cherry-pick，失败则不整合、继续处理其余 attempt。重跑再次冲突时重新询问，达到 attempt 上限后选项只保留 `skip-subtask`/`abort`。
+- **决定：** 没有 `decide` 或返回无效值时，根任务停在 `needs_human`，不写 `root/finish`；非交互 CLI 因此保留现场，恢复入口在 M3。
+- **代码锚点：** `src/orchestration/orchestrator.ts`、`src/orchestration/state.ts`、`src/app/orchestrate-cli.ts`。
+- **测试锚点：** `test/orchestration-e2e.test.ts`、`test/orchestration-worker.test.ts`。
+
 ## M2-④ 并行波次与多波次整合
 
 - **决定：** 一个根任务只有一个整合分支/worktree；每个波次写一组 `integration/started`/`applied`/`finished`，后续波次从既有整合 head 继续。状态折叠保留 `integrations[]` 历史，`completed` 用全部周期的 applied 并集判断，最终验收只绑定最后一个整合周期的 tree。
