@@ -13,11 +13,12 @@ test('child roles register only read tools, use distinct Harness state and never
   t.after(() => fs.rm(workspace, { recursive: true, force: true }))
   const parent = await createHarness({ workspace, profile: 'coding', autoApprove: true })
   try {
-    for (const agentRole of ['analyst', 'test_designer', 'reviewer'] as const) {
+    for (const agentRole of ['planner', 'analyst', 'test_designer', 'reviewer'] as const) {
       const child = await createHarness({ workspace, profile: 'coding', agentRole, autoApprove: true })
       const childTools = child.root.tools
       try {
         assert.notEqual(child.root.sessions, parent.root.sessions)
+        assert.equal(child.capabilityManifest.role, agentRole)
         assert.ok(child.capabilityManifest.tools.every(name => READ_ONLY_TOOLS.includes(name)))
         for (const name of ['write_file', 'edit_file', 'bash', 'task_report', 'task_changes', 'delegate_tasks']) assert.equal(child.root.tools.get(name), undefined)
         const identity = await child.root.systemPrompt.assemble({})

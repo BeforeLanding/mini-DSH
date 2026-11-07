@@ -1,5 +1,32 @@
 # 多 Agent 编排改动与证据
 
+## M2-② 只读 planner（2026-11-07）
+
+**改动**
+
+- `src/core/agent-capabilities.ts` 新增 `planner` 角色：与 `analyst` 同档位，使用 `READ_ONLY_TOOLS`，不注册 Bash、写工具、MCP 或委派。
+- 新增 `src/orchestration/planner.ts`：在基线快照 worktree 上装配只读 Harness，会话目录为 `sessions/planner/<sessionId>`；计划 JSON 从最后一个代码块或整段文本解析，结构错误时在同一会话追加一次纠正消息；连续两次无效抛出带校验错误的异常。
+- planner 的 `parentTaskGroup` 接入根账本；预算由调用方按 `plannerShare` 分配（编排器接线见 M2-④）。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-planner.test.js dist/test/agent-capabilities.test.js
+# tests 7 / pass 7 / fail 0
+```
+
+**测试覆盖**
+
+- `planner` 与 `analyst`/`test_designer`/`reviewer` 一样只注册读工具，能力清单角色为 `planner`。
+- 脚本模型首次返回非计划、第二次返回合法计划：计划被接受；会话日志由 `inspectSession` 完整读取，meta 记录 `rootId` 与 `planner: true`。
+- 连续两次无效：以 `invalid plan twice` 失败；解析器接受围栏与裸 JSON，并拒绝错误版本。
+
+**未包含**
+
+- 编排入口在缺少 `--plan` 时调用 planner、`plannerShare` 的实际预算分配与 CLI 文案（M2-④）。
+
 ## M2-① 计划校验与判定（2026-11-07）
 
 **改动**
