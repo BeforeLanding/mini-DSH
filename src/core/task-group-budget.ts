@@ -16,7 +16,8 @@ export interface GroupStart { groupId: string; policy: TaskGroupPolicy; deadline
 export type GroupBudgetEvent =
   | { type: 'group/start'; data: GroupStart }
   | { type: 'group/budget-reserved'; data: GroupReservation & { groupId: string } }
-  | { type: 'group/model-dispatched' | 'group/reservation-released' | 'group/usage-unknown'; data: { groupId: string; requestId: string } }
+  | { type: 'group/model-dispatched' | 'group/reservation-released'; data: { groupId: string; requestId: string } }
+  | { type: 'group/usage-unknown'; data: { groupId: string; requestId: string; cause?: 'crash' | 'cancel' | 'no_usage' } }
   | { type: 'group/budget-settled'; data: { groupId: string; requestId: string; usage: Usage; overrun: boolean } }
   | { type: 'group/tool-admitted'; data: { groupId: string; key: string; agentId: string; sessionId: string; runId: string; toolCallId: string } }
 type Reservation = GroupReservation & { status: 'reserved' | 'dispatched' | 'released' | 'settled' | 'unknown'; usage?: Usage }

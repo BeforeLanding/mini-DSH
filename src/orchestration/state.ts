@@ -29,11 +29,13 @@ export interface AttemptState {
   resultRef?: string
   summary?: string
   detail?: string
+  unknownSideEffects?: boolean
 }
 
 export interface LedgerReservation extends GroupReservation {
   groupId: string
   status: 'reserved' | 'dispatched' | 'released' | 'settled' | 'unknown'
+  cause?: 'crash' | 'cancel' | 'no_usage'
   usage?: Usage
 }
 
@@ -177,11 +179,14 @@ function foldEvent(state: OrchestrationState, event: OrchestrationEventUnion) {
       attempt.resultRef = data.resultRef
       attempt.summary = data.summary
       attempt.detail = data.detail
+      attempt.unknownSideEffects = data.unknownSideEffects
       return
     }
     case 'attempt/late': {
       const attempt = requireAttempt(state, event.data.attemptId)
       if (!TERMINAL.has(attempt.status)) throw new Error('late attempt result requires a terminal attempt')
+      // 迟到的旧 epoch 只作为记录：状态与账本都不再变化（I10）。
+      if (event.data.epoch !== undefined && event.data.epoch !== attempt.epoch) throw new Error('late attempt epoch does not match its attempt')
       return
     }
     case 'group/start': {
@@ -210,6 +215,7 @@ function foldEvent(state: OrchestrationState, event: OrchestrationEventUnion) {
       } else if (event.type === 'group/usage-unknown') {
         if (reservation.status !== 'dispatched') throw new Error('invalid group unknown transition')
         reservation.status = 'unknown'
+        reservation.cause = event.data.cause ?? 'no_usage'
       } else {
         if (reservation.status !== 'dispatched') throw new Error('invalid group settlement transition')
         if (event.data.overrun !== (event.data.usage.totalTokens > reservation.reserve)) throw new Error('group settlement overrun mismatch')

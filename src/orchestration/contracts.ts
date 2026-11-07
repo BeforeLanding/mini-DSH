@@ -92,8 +92,10 @@ export interface AttemptFinished {
   resultRef?: string
   summary?: string
   detail?: string
+  // 中断时的外部副作用风险：会话里出现过 status=unknown 的工具结果，或 Bash 已开始但未收尾。
+  unknownSideEffects?: boolean
 }
-export interface AttemptLate { attemptId: string; summary: string }
+export interface AttemptLate { attemptId: string; summary: string; epoch?: number }
 
 export interface IntegrationStarted { integrationId: string; wave: number; baseCommit: string }
 export interface IntegrationApplied { integrationId: string; attemptId: string; sourceCommit: string; commit: string }
@@ -141,7 +143,7 @@ export type OrchEventData = {
   'group/budget-reserved': GroupReservation & { groupId: string }
   'group/model-dispatched': { groupId: string; requestId: string }
   'group/reservation-released': { groupId: string; requestId: string }
-  'group/usage-unknown': { groupId: string; requestId: string }
+  'group/usage-unknown': { groupId: string; requestId: string; cause?: 'crash' | 'cancel' | 'no_usage' }
   'group/budget-settled': { groupId: string; requestId: string; usage: Usage; overrun: boolean }
   'group/tool-admitted': { groupId: string; key: string; agentId: string; sessionId: string; runId: string; toolCallId: string }
 }

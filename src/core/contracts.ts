@@ -70,7 +70,7 @@ export interface EventData {
   'group/budget-reserved': import('./task-group-budget.js').GroupReservation & { groupId: string }
   'group/model-dispatched': { groupId: string; requestId: string }
   'group/reservation-released': { groupId: string; requestId: string }
-  'group/usage-unknown': { groupId: string; requestId: string }
+  'group/usage-unknown': { groupId: string; requestId: string; cause?: 'crash' | 'cancel' | 'no_usage' }
   'group/budget-settled': { groupId: string; requestId: string; usage: Usage; overrun: boolean }
   'group/tool-admitted': { groupId: string; key: string; agentId: string; sessionId: string; runId: string; toolCallId: string }
   'verification/start': import('./task-verification.js').VerificationStart

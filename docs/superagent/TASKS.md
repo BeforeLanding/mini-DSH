@@ -42,7 +42,16 @@
   - 验收：人为构造的文件/目录冲突产生 `human.request(conflict)`；跳过冲突子任务得到 `partial`；中止得到 `cancelled` 且整合现场保留；`rerun-serially` 在整合 head 上新建 attempt；无决定时停在 `needs_human`。
   - 证据：`src/orchestration/{orchestrator,state,integrator}.ts`、`src/app/orchestrate-cli.ts`、`test/orchestration-e2e.test.ts`、`test/orchestration-worker.test.ts`。
 
-## M3–M4：待开始
+## M3：失败、取消与恢复（进行中）
 
-- [ ] M3 失败、取消与恢复（故障注入、停止语义、账本恢复与 429 冷却）
+- [ ] ① 状态折叠的迟到/过期/重复规则
+  - 验收：`attempt/late` 只接受已终结 attempt，旧 epoch 只记录不改变状态；`attempt/finished` 保留 `unknownSideEffects`，`group/usage-unknown` 保留 `cause`。
+  - 证据：`test/orchestration-state.test.ts`、`test/task-group-budget.test.ts`。
+- [ ] ② 停止语义（两级 Ctrl-C 与 wall 截止）
+- [ ] ③ attempt 与整合恢复（故障注入与 `resume`）
+- [ ] ④ 账本恢复与 429 冷却
+- [ ] ⑤ 崩溃演示脚本
+
+## M4：待开始
+
 - [ ] M4 评测、演示与文档（组合 fixture、演示脚本、四臂对照离线装配；付费批次需单独授权）

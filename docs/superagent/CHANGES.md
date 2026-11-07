@@ -1,5 +1,26 @@
 # 多 Agent 编排改动与证据
 
+## M3-① 状态折叠的迟到/过期/重复规则（2026-11-07）
+
+**改动**
+
+- `attempt/finished` 新增可选 `unknownSideEffects`：仅在 `interrupted` 结局上允许为真，表示会话中出现过 `status=unknown` 的工具结果或已开始但未收尾的 Bash。状态折叠把它保留到 `AttemptState`。
+- `group/usage-unknown` 新增可选 `cause`（`crash`/`cancel`/`no_usage`），折叠后写入 `LedgerReservation.cause`；旧日志缺省按 `no_usage`。会话日志与编排日志的校验同时接受该可选字段。
+- `attempt/late` 新增可选 `epoch`：只接受已终结 attempt，且 epoch 必须与对应 attempt 一致；迟到结果仍只记录、不改变状态或账本（I10）。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-state.test.js dist/test/orchestration-ledger.test.js dist/test/task-group-budget.test.js
+# tests 21 / pass 21 / fail 0
+```
+
+**测试覆盖**
+
+- 中断 attempt 的 `unknownSideEffects` 与未知预留的 `cause=crash` 在折叠后仍可读；同 epoch 的迟到结果被接受且不改变状态，错误 epoch 被拒绝。
+
 ## M2-⑤ 多 attempt 整合与冲突处置（2026-11-07）
 
 **改动**
