@@ -12,6 +12,17 @@
 - **测试锚点：** `test/orchestration-approval.test.ts`、`test/orchestration-e2e.test.ts`。
 - **状态：** 已实现（M2-③）；CLI 终端显示随 M2-④ 接线。
 
+## M2-④ 并行波次与多波次整合
+
+- **决定：** 一个根任务只有一个整合分支/worktree；每个波次写一组 `integration/started`/`applied`/`finished`，后续波次从既有整合 head 继续。状态折叠保留 `integrations[]` 历史，`completed` 用全部周期的 applied 并集判断，最终验收只绑定最后一个整合周期的 tree。
+- **决定：** `plan/decision` 判定为 `single` 时，按计划顺序逐个子任务执行（并发 1），**不把多个子任务合并成一个 worker**。DEVELOPMENT.md §4.4(6) 的合并写法会破坏 attempt 与 subtask 的一一对应，以及 `completed` 要求每个子任务都有自己的 succeeded attempt 且已整合的不变量；串行执行同样满足“一次只运行一个 worker”的观察结果。该偏差记录在此，若后续要支持合并需要修改事件契约。
+- **决定：** 波次预算按根余额 ÷ 本波次待启动 attempt 数切分，并受 `DEFAULT_WORKER_BUDGET`/`--worker-budget` 上限约束；根账本仍是外层硬约束。依赖未整合的子任务记录 `planned → finished(skipped)`，不创建 worktree。
+- **决定：** 在途上限计入 `reserved` 与 `dispatched` 两种状态；预留到派发之间的窗口也占名额，否则两个并发 `dispatch` 会先后读到同一余额。会话委派的默认值为 0（不限制），只有编排根组启用。
+- **决定：** planner 预算为 `maxTotalTokens × plannerShare`（默认 10%），最多 16 次请求；planner 在 worker 波次开始前结束，不与 worker 并发。planner 的纠正重试仍走同一个根账本。
+- **决定：** 依赖子任务的基线是当前整合 head；`task.assign` 携带依赖的 commit、changedFiles 与宿主记录的报告摘要。wave worker 因此能看到前一波次的已整合结果。
+- **代码锚点：** `src/orchestration/{orchestrator,planner,integrator,worktrees,git,state}.ts`、`src/core/task-group-budget.ts`。
+- **测试锚点：** `test/orchestration-e2e.test.ts`、`test/orchestration-ledger.test.ts`、`test/orchestration-state.test.ts`。
+
 ## M1-④ 单 attempt 编排与 CLI
 
 - **决定：** M1 的 `orchestrate run` 只接受计划文件且一次只执行一个子任务；planner、DAG 波次与并行写入者按里程碑留在 M2。CLI 在缺少 `--plan` 时明确拒绝，不伪装成已支持模型规划。

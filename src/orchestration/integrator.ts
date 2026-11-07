@@ -45,6 +45,48 @@ export async function collectAndCommit(input: CollectInput) {
   return { outcome: 'succeeded' as const, changedFiles, scopeViolations, commit, tree: await treeOf(input.worktree, commit) }
 }
 export interface IntegrationAttempt { attemptId: string; subtaskId: string; commit: string }
+export interface OpenIntegrationInput {
+  store: OrchestrationStore
+  manager: WorktreeManager
+  baseCommit: string
+  wave: number
+  signal?: AbortSignal
+}
+// 跨波次复用同一整合分支：首次从 baseCommit 创建，之后从既有分支的 head 继续。
+export async function openIntegration(input: OpenIntegrationInput) {
+  const integrationId = `ig_${randomUUID()}`
+  const opened = await input.manager.ensureIntegration(input.baseCommit)
+  await input.store.append('integration/started', { integrationId, wave: input.wave, baseCommit: opened.baseCommit })
+  return { integrationId, path: opened.path, baseCommit: opened.baseCommit }
+}
+export interface ApplyIntegrationInput {
+  store: OrchestrationStore
+  integrationId: string
+  path: string
+  attempt: IntegrationAttempt
+  signal?: AbortSignal
+}
+export async function applyAttempt(input: ApplyIntegrationInput) {
+  const options: GitRunOptions = input.signal ? { signal: input.signal } : {}
+  const picked = await cherryPick(input.path, input.attempt.commit, options)
+  if (!picked.ok) {
+    const files = await unmergedFiles(input.path)
+    await cherryPickAbort(input.path)
+    await input.store.append('integration/conflict', { integrationId: input.integrationId, attemptId: input.attempt.attemptId, files: files.length ? files : ['(unknown)'] })
+    return { status: 'conflict' as const, conflict: { attemptId: input.attempt.attemptId, files } }
+  }
+  const commit = await headCommit(input.path)
+  await input.store.append('integration/applied', {
+    integrationId: input.integrationId, attemptId: input.attempt.attemptId, sourceCommit: input.attempt.commit, commit,
+  })
+  return { status: 'applied' as const, commit }
+}
+export async function finishIntegration(input: { store: OrchestrationStore; integrationId: string; path: string }) {
+  const head = await headCommit(input.path), tree = await treeOf(input.path, head)
+  await input.store.append('integration/finished', { integrationId: input.integrationId, head, tree })
+  return { head, tree }
+}
+// 单波次的便捷入口；冲突即停并返回 blocked，由编排器决定人工处置。
 export interface IntegrateInput {
   store: OrchestrationStore
   manager: WorktreeManager
@@ -55,26 +97,20 @@ export interface IntegrateInput {
   signal?: AbortSignal
 }
 export async function integrateAttempts(input: IntegrateInput) {
-  const integrationId = `ig_${randomUUID()}`
-  const options: GitRunOptions = input.signal ? { signal: input.signal } : {}
-  await input.store.append('integration/started', { integrationId, wave: input.wave, baseCommit: input.baseCommit })
-  const integration = await input.manager.createIntegration(input.baseCommit)
+  const opened = await openIntegration(input)
   const applied: { attemptId: string; sourceCommit: string; commit: string }[] = []
   const skipped = new Set(input.alreadyApplied ?? [])
   for (const attempt of input.attempts) {
     if (skipped.has(attempt.attemptId)) continue
-    const picked = await cherryPick(integration.path, attempt.commit, options)
-    if (!picked.ok) {
-      const files = await unmergedFiles(integration.path)
-      await cherryPickAbort(integration.path)
-      await input.store.append('integration/conflict', { integrationId, attemptId: attempt.attemptId, files: files.length ? files : ['(unknown)'] })
-      return { status: 'blocked' as const, integrationId, applied, conflict: { attemptId: attempt.attemptId, files } }
+    const result = await applyAttempt({
+      store: input.store, integrationId: opened.integrationId, path: opened.path, attempt,
+      ...(input.signal ? { signal: input.signal } : {}),
+    })
+    if (result.status === 'conflict') {
+      return { status: 'blocked' as const, integrationId: opened.integrationId, applied, conflict: result.conflict }
     }
-    const commit = await headCommit(integration.path)
-    await input.store.append('integration/applied', { integrationId, attemptId: attempt.attemptId, sourceCommit: attempt.commit, commit })
-    applied.push({ attemptId: attempt.attemptId, sourceCommit: attempt.commit, commit })
+    applied.push({ attemptId: attempt.attemptId, sourceCommit: attempt.commit, commit: result.commit })
   }
-  const head = await headCommit(integration.path), tree = await treeOf(integration.path, head)
-  await input.store.append('integration/finished', { integrationId, head, tree })
-  return { status: 'finished' as const, integrationId, head, tree, applied }
+  const finished = await finishIntegration({ store: input.store, integrationId: opened.integrationId, path: opened.path })
+  return { status: 'finished' as const, integrationId: opened.integrationId, ...finished, applied }
 }

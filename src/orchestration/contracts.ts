@@ -90,6 +90,7 @@ export interface AttemptFinished {
   run: { sessionId?: string; status: string; stopReason?: string }
   code: { commit?: string; tree?: string; changedFiles: string[]; scopeViolations: string[] }
   resultRef?: string
+  summary?: string
   detail?: string
 }
 export interface AttemptLate { attemptId: string; summary: string }

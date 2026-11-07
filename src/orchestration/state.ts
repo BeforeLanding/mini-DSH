@@ -27,6 +27,7 @@ export interface AttemptState {
   changedFiles: string[]
   scopeViolations: string[]
   resultRef?: string
+  summary?: string
   detail?: string
 }
 
@@ -74,6 +75,8 @@ export interface OrchestrationState {
   attemptOrder: string[]
   ledger: LedgerState
   integration?: IntegrationState
+  // 每个波次一个整合周期；completed 判定看全部周期的并集，最终验收只绑定最后一个周期的 tree。
+  integrations: IntegrationState[]
   verifications: VerificationState[]
   human: Record<string, HumanState>
   approvals: Record<string, ApprovalState>
@@ -93,7 +96,7 @@ export function foldOrchestration(events: readonly OrchestrationEventUnion[]): O
     rootId: events[0]!.rootId, goal: root.goal, repository: root.repository, baseCommit: root.baseCommit,
     config: structuredClone(root.config), budget: structuredClone(root.budget), status: 'planning',
     stop: { dispatch: false, running: false }, attempts: {}, attemptOrder: [],
-    ledger: { reservations: {}, tools: [] }, verifications: [], human: {}, approvals: {},
+    ledger: { reservations: {}, tools: [] }, integrations: [], verifications: [], human: {}, approvals: {},
   }
   const ids = new Set<string>()
   for (const [index, event] of events.entries()) {
@@ -172,6 +175,7 @@ function foldEvent(state: OrchestrationState, event: OrchestrationEventUnion) {
       attempt.changedFiles = [...data.code.changedFiles]
       attempt.scopeViolations = [...data.code.scopeViolations]
       attempt.resultRef = data.resultRef
+      attempt.summary = data.summary
       attempt.detail = data.detail
       return
     }
@@ -223,7 +227,9 @@ function foldEvent(state: OrchestrationState, event: OrchestrationEventUnion) {
     case 'integration/started': {
       if (state.integration && state.integration.status === 'started') throw new Error('integration already in progress')
       if (!state.decision || event.data.wave >= state.decision.waves.length) throw new Error('integration wave is outside the plan')
-      state.integration = { ...structuredClone(event.data), status: 'started', applied: [], conflicts: [] }
+      const integration: IntegrationState = { ...structuredClone(event.data), status: 'started', applied: [], conflicts: [] }
+      state.integrations.push(integration)
+      state.integration = integration
       state.status = 'integrating'
       return
     }
@@ -301,7 +307,7 @@ function foldEvent(state: OrchestrationState, event: OrchestrationEventUnion) {
       if (data.status === 'completed') {
         if (!state.decision || state.integration?.status !== 'finished') throw new Error('completed root requires a finished integration')
         if (!state.verifications.length || state.verifications.some(item => item.exitCode !== 0)) throw new Error('completed root requires passing verification evidence')
-        const applied = new Set(state.integration.applied.map(item => item.attemptId))
+        const applied = new Set(state.integrations.flatMap(item => item.applied.map(appliedItem => appliedItem.attemptId)))
         const subtasks = state.decision.waves.flat()
         if (!subtasks.every(id => state.attemptOrder.some(attemptId => { const attempt = state.attempts[attemptId]!; return attempt.subtaskId === id && attempt.outcome === 'succeeded' && applied.has(attemptId) }))) throw new Error('completed root requires every subtask integrated')
       }

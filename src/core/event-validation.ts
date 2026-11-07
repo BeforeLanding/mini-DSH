@@ -49,7 +49,7 @@ export function validatePayload(type: string, data: Record<string, unknown>) {
     case 'delegation/finish': valid = safeId(data.batchId) && safeId(data.toolCallId) && integer(data.toolSequence) && typeof data.result === 'string' && Buffer.byteLength(data.result) <= 16384; break
     case 'group/start': {
       const policy = data.policy
-      valid = safeId(data.groupId) && integer(data.deadline) && record(policy) && ['maxModelRequests', 'maxToolCalls', 'maxTotalTokens', 'rootTokenFloor', 'rootRequestFloor', 'maxWallDurationMs'].every(key => integer(policy[key])) && Number(policy.rootTokenFloor) <= Number(policy.maxTotalTokens) && Number(policy.rootRequestFloor) <= Number(policy.maxModelRequests) && Number(policy.maxWallDurationMs) > 0
+      valid = safeId(data.groupId) && integer(data.deadline) && record(policy) && ['maxModelRequests', 'maxToolCalls', 'maxTotalTokens', 'rootTokenFloor', 'rootRequestFloor', 'maxWallDurationMs'].every(key => integer(policy[key])) && (policy.maxInFlightRequests === undefined || integer(policy.maxInFlightRequests)) && Number(policy.rootTokenFloor) <= Number(policy.maxTotalTokens) && Number(policy.rootRequestFloor) <= Number(policy.maxModelRequests) && Number(policy.maxWallDurationMs) > 0
       break
     }
     case 'group/budget-reserved': valid = safeId(data.groupId) && safeId(data.requestId) && safeId(data.agentId) && safeId(data.sessionId) && safeId(data.taskId) && safeId(data.runId) && typeof data.root === 'boolean' && ['main', 'summary'].includes(String(data.purpose)) && integer(data.reserve) && Number(data.reserve) > 0; break

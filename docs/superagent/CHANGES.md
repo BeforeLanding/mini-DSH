@@ -1,5 +1,39 @@
 # 多 Agent 编排改动与证据
 
+## M2-④ 并行波次调度（2026-11-07）
+
+**改动**
+
+- 重写 `src/orchestration/orchestrator.ts`：计划文件或只读 planner 二选一；按 `plan/decision` 的波次执行，`parallel` 模式用并发池（上限 `maxWorkers`），`single` 模式逐个执行；每个 attempt 独立 worktree/分支/会话；依赖子任务的 commit、changedFiles 与摘要进入 worker 的 `task.assign`；波次 attempt 以当前整合 head 为基线。
+- `src/orchestration/integrator.ts` 拆出 `openIntegration`/`applyAttempt`/`finishIntegration`；`WorktreeManager.ensureIntegration` 跨波次复用同一整合分支（首次从基线创建，之后从既有 head 继续）。`git.ts` 增加 `worktreeCheckout`。
+- 状态折叠保留 `integrations[]` 历史：每个波次一个整合周期，`completed` 判定使用全部周期的 applied 并集；最终验收只绑定最后一个周期的 tree。
+- 波次预算 = `min(worker 上限, 根余额 ÷ 本波次待启动 attempt 数)`；依赖未整合的子任务写 `planned → finished(skipped)`，不启动 worker。
+- `TaskGroupPolicy` 新增 `maxInFlightRequests`（0 = 不限制，保持会话委派既有行为）；根组设置为 `maxWorkers + 1`，准入时统计 `reserved` 与 `dispatched`，避免并发 dispatch 同时越界。
+- CLI：`--plan` 改为可选，省略时由 planner 生成；审批提示标注 attempt 与写集。
+- 冲突仍按 M1 行为停在 `needs_human`；三选一处置在 M2-⑤。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-e2e.test.js dist/test/orchestration-ledger.test.js \
+  dist/test/orchestration-state.test.js dist/test/orchestration-git.test.js
+# pass：既有 14 项 + 并行/单模式/planner 端到端 3 项，全部通过
+```
+
+**测试覆盖**
+
+- 三子任务组合计划（真实 git + 脚本模型）：两波次 `[[st-1, st-2], [st-3]]`；第一波两个 attempt 的 started/finished 时间区间重叠；第二波 worker 的 worktree 中能看到依赖产物；两次整合共应用 3 个 attempt；验收命令只在最终 tree 上运行一次且 exit 0；用户工作树 HEAD/内容/状态不变。
+- `single` 模式按声明顺序逐个执行，区间不重叠。
+- 省略 `--plan` 时 planner 会话被记录为 `plan.source=model` 且日志可被 `inspectSession` 完整读取。
+- 根账本在途上限：`reserved` 与 `dispatched` 都占名额，结清后释放。
+- 既有 M1 单 attempt、无改动、写集越界、预算停止、脏工作树、状态折叠与 git 测试全部保持通过。
+
+**未包含**
+
+- 冲突三选一（`rerun-serially`/`skip-subtask`/`abort`）与 `partial` 终态（M2-⑤）；`resume`（M3）；整合修复 attempt（核心扩展）。
+
 ## M2-③ 审批 FIFO 队列（2026-11-07）
 
 **改动**

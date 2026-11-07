@@ -126,6 +126,7 @@ function validateAttemptFinished(data: Record<string, unknown>) {
   pathList(code.changedFiles, 'code.changedFiles', 0, 10_000)
   pathList(code.scopeViolations, 'code.scopeViolations', 0, 10_000)
   if (data.resultRef !== undefined) ref(data.resultRef, 'resultRef')
+  optionalText(data.summary, 'summary', 1024)
   optionalText(data.detail, 'detail', 1024)
   if (data.outcome === 'succeeded' && (code.commit === undefined || code.tree === undefined || !(code.changedFiles as unknown[]).length || (code.scopeViolations as unknown[]).length))
     throw new Error('succeeded attempt requires a commit/tree, changed files and no scope violations')

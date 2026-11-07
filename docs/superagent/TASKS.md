@@ -35,7 +35,9 @@
 - [x] ③ 审批 FIFO 队列（策略、显示计时、取消与关闭）
   - 验收：不同时显示两条；写入按 D8 自动批准、Bash 询问；超时从显示时开始；取消 attempt 与关闭通道立即拒绝；审批审计事件落编排日志。
   - 证据：`src/orchestration/approval-broker.ts`、`test/orchestration-approval.test.ts`、`src/orchestration/{contracts,validation,state,inspect,orchestrator}.ts`。
-- [ ] ④ 并行波次调度（并发池、依赖基线、波次预算）
+- [x] ④ 并行波次调度（并发池、依赖基线、波次预算）
+  - 验收：三子任务组合计划中两个 worker 的 started/finished 区间重叠，第三个在第二波次以整合 head 为基线执行；`single` 模式逐个执行；没有计划文件时 planner 可替代；波次预算按根余额切分；在途上限生效。
+  - 证据：`src/orchestration/{orchestrator,planner,integrator,worktrees,git,state}.ts`、`src/core/task-group-budget.ts`、`test/orchestration-e2e.test.ts`、`test/orchestration-ledger.test.ts`。
 - [ ] ⑤ 多 attempt 整合与冲突处置（`rerun-serially`/`skip-subtask`/`abort`）
 
 ## M3–M4：待开始

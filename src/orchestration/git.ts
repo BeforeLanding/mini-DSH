@@ -53,6 +53,10 @@ export async function worktreeAdd(repository: string, target: string, branch: st
 export async function worktreeAddDetached(repository: string, target: string, startPoint: string, options: GitRunOptions = {}) {
   await git(repository, ['worktree', 'add', '--detach', target, startPoint], options)
 }
+// 分支已存在时重新挂载（例如 worktree 目录曾被清理）：不带 -b，避免把已有分支误当新分支。
+export async function worktreeCheckout(repository: string, target: string, branch: string, options: GitRunOptions = {}) {
+  await git(repository, ['worktree', 'add', target, branch], options)
+}
 export async function worktreeList(repository: string) {
   const text = await git(repository, ['worktree', 'list', '--porcelain'])
   return text.split(/\r?\n\r?\n/).flatMap(block => {

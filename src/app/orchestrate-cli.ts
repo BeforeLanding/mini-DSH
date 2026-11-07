@@ -13,9 +13,10 @@ import { WorktreeManager } from '../orchestration/worktrees.js'
 import { repositoryRoot } from '../orchestration/git.js'
 
 const USAGE = `usage:
-  mini-dsh orchestrate run (--task <text> | --task-file <path>) --plan <plan.json>
+  mini-dsh orchestrate run (--task <text> | --task-file <path>) [--plan <plan.json>]
     [--mode auto|single|parallel] [--max-workers 1..4] [--root-budget <json>]
     [--verify <cmd>]... [--prepare <cmd>] [--approve-writes auto|ask] [--approve-bash ask|auto] [--allow-dirty]
+    (omit --plan to let the read-only planner propose the plan)
   mini-dsh orchestrate inspect <rootId|log-path> [--json]
   mini-dsh orchestrate list
   mini-dsh orchestrate cleanup <rootId>`
@@ -69,7 +70,6 @@ export function parseOrchestrateArgs(args: string[]): OrchestrateCommand {
       else throw new Error(`unknown orchestrate run option: ${flag}\n${USAGE}`)
     }
     if (Boolean(result.task) === Boolean(result.taskFile)) throw new Error('exactly one of --task and --task-file is required')
-    if (!result.planPath) throw new Error('--plan is required (the planner lands in M2)')
     return result
   }
   if (command === 'inspect') {
@@ -95,9 +95,11 @@ function terminalApprover(output: Writable) {
   let closed = false
   rl.on('close', () => { closed = true })
   return {
-    ask: (request: ApprovalRequest) => new Promise<boolean>(resolve => {
+    ask: (request: ApprovalRequest, meta?: { attemptId?: string; writeSet?: string[] }) => new Promise<boolean>(resolve => {
       if (closed || request.signal?.aborted) return resolve(false)
-      output.write(`\n[approval] ${request.summary}\nAllow this? [Y/n] `)
+      const label = meta?.attemptId ? `[${meta.attemptId.slice(0, 11)}] ` : ''
+      const writeSet = meta?.writeSet?.length ? `\nwrite set: ${meta.writeSet.join(', ')}` : ''
+      output.write(`\n[approval] ${label}${request.summary}${writeSet}\nAllow this? [Y/n] `)
       const done = (allowed: boolean) => {
         rl.removeListener('line', onLine)
         request.signal?.removeEventListener('abort', onAbort)
@@ -128,7 +130,7 @@ async function readGoal(args: OrchestrateRunArgs) {
 async function executeRun(args: OrchestrateRunArgs, output: Writable) {
   const { default: dotenv } = await import('dotenv')
   dotenv.config({ quiet: true })
-  const goal = await readGoal(args), plan = await readPlan(args.planPath)
+  const goal = await readGoal(args), plan = args.planPath ? await readPlan(args.planPath) : undefined
   const budget: Partial<RootBudget> = {
     ...(process.env.MINI_DSH_ROOT_BUDGET ? parseObject(process.env.MINI_DSH_ROOT_BUDGET, 'MINI_DSH_ROOT_BUDGET') : {}),
     ...args.rootBudget,
@@ -139,7 +141,7 @@ async function executeRun(args: OrchestrateRunArgs, output: Writable) {
   const approver = args.approveWrites === 'ask' || args.approveBash === 'ask' ? terminalApprover(output) : undefined
   try {
     const result = await orchestrate({
-      repository: process.env.MINI_DSH_WORKSPACE ?? process.cwd(), goal, plan, baseDirectory: orchestrationBaseDirectory(),
+      repository: process.env.MINI_DSH_WORKSPACE ?? process.cwd(), goal, ...(plan ? { plan } : {}), baseDirectory: orchestrationBaseDirectory(),
       adapter: { provider: 'deepseek', model, chat: base.chat, ...(base.capabilities ? { capabilities: base.capabilities } : {}) },
       model: `deepseek/${model}`, mode: args.mode, maxWorkers: args.maxWorkers, rootBudget: budget,
       ...(args.prepareCommand ? { prepareCommand: args.prepareCommand } : {}),
