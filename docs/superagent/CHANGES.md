@@ -22,7 +22,7 @@ node --test dist/test/orchestration-e2e.test.js dist/test/orchestration-worker.t
 
 **测试覆盖**
 
-- 离线端到端（脚本模型 + 真实 git）：worker 在 worktree 写入、宿主提交（带 trailer）、cherry-pick 整合、验收 exit 0、`root/finish(completed)`；用户工作树 HEAD/内容/状态不变。
+- 离线端到端（脚本模型 + 真实 git）：worker 在 worktree 写入、宿主提交（带 trailer）、cherry-pick 整合、验收 exit 0、`root/finish(completed)`；用户工作树 HEAD/内容/状态不变；worker 会话日志由现有 `inspectSession` 完整读取（`integrity.complete`）。
 - `no_changes`、写集越界、根预算在第二次 provider 请求前停止、脏工作树在创建任何编排状态前拒绝。
 - worker 报告无效/超长/`needs_input`；写集文件与目录前缀；CLI 参数接受与拒绝。
 - worker 绕过提示自行提交时，宿主软回基线并生成单一带 trailer 提交。

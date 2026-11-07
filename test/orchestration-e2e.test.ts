@@ -10,6 +10,7 @@ import { loadOrchestration } from '../src/orchestration/inspect.js'
 import { integrationBranchName } from '../src/orchestration/worktrees.js'
 import type { PlanInput } from '../src/orchestration/contracts.js'
 import { parseOrchestrateArgs } from '../src/app/orchestrate-cli.js'
+import { inspectSession } from '../src/core/session-inspect.js'
 
 const usage = { inputTokens: 100, outputTokens: 10, totalTokens: 110, source: 'provider' as const, uncertain: false }
 const doneReport = '```json\n{"status":"done","summary":"wrote the file","uncertainties":[],"sources":[{"path":"src/a.txt"}]}\n```'
@@ -68,6 +69,10 @@ test('single-attempt orchestration commits in a worktree, integrates, verifies a
   assert.ok(result.reportRef)
   const artifact = path.join(result.directory, 'artifacts', `sha256-${result.reportRef!.slice(7)}.json`)
   assert.equal(JSON.parse(await fs.readFile(artifact, 'utf8')).status, 'completed')
+  // worker 会话仍是普通会话日志：现有只读 inspect 必须能完整读取。
+  const inspection = await inspectSession(path.join(result.directory, 'sessions', attemptId, attempt.sessionId!, 'events.jsonl'))
+  assert.equal(inspection.integrity.complete, true)
+  assert.equal(inspection.session.id, attempt.sessionId)
 })
 
 test('a worker that changes nothing is recorded as no_changes and is not integrated', async t => {
