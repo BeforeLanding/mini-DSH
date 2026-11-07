@@ -10,6 +10,7 @@
 - [计划](docs/context-budget/PLAN.md)：当前源码基线、里程碑、技术取舍、默认参数和官方依据。
 - [设计取舍](docs/context-budget/DECISIONS.md)：五条关键选择的替代方案、代码锚点与测试锚点。**非规范性说明**——决策与数值仍以计划为准，改决策请改计划。
 - [任务清单](docs/context-budget/TASKS.md)：行为、验证、状态和证据。
+- [多 Agent 编排开发文档](docs/superagent/DEVELOPMENT.md)：M1–M4 的领域契约与计划唯一来源；[需求](docs/superagent/REQUIREMENTS.md)、[决策](docs/superagent/DECISIONS.md)、[任务](docs/superagent/TASKS.md)、[证据](docs/superagent/CHANGES.md) 见同目录。
 - [进度](PROGRESS.md)：已完成、验证、阻塞和下一步。
 
 ## 运行与检查
