@@ -1,5 +1,33 @@
 # 多 Agent 编排改动与证据
 
+## M1-③ git 与 worktree 管理（2026-11-07）
+
+**改动**
+
+- 新增 `src/orchestration/git.ts`：有界 git 调用（超时、输出上限、错误形状）；仓库根、HEAD/tree、porcelain 状态、worktree 增删与列举、暂存、按基线列出改动、宿主提交（`-c` 临时身份、`--no-verify`、attempt trailer）、按 trailer 查提交、cherry-pick 与冲突状态/中止、分支列举与命名空间内删除。
+- 新增 `src/orchestration/worktrees.ts`：目录布局、`mini-dsh/<root8>/<subtask>-<epoch>` 与整合分支命名、脏工作树拒绝/`--allow-dirty`、base 快照、attempt/整合 worktree、prepare 命令（10 分钟默认超时）、只清理本根任务 worktree 与命名空间分支。
+- cherry-pick 与宿主提交使用同一临时身份：临时 HOME 下没有用户 `user.email`，否则整合提交会失败。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-git.test.js
+# tests 3 / pass 3 / fail 0
+```
+
+**测试覆盖**
+
+- 仓库识别、tree SHA、干净/脏状态与 `--allow-dirty`。
+- base 快照 detached；attempt worktree 与分支；重复分支拒绝；暂存后按基线列出改动；宿主提交与 trailer 查询。
+- cherry-pick 成功、冲突检测与中止回到整合 head；清理后 worktree/分支消失，用户工作树内容与状态不变。
+- prepare 在 worktree 内运行；失败命令带 stderr 阻止该 attempt。
+
+**未包含**
+
+- worker 执行、宿主整合编排与 CLI（M1-④）；冲突的人工处置与串行重跑（M2）。
+
 ## M1-② 编排存储、状态折叠与根账本日志（2026-11-07）
 
 **改动**

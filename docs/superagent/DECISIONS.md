@@ -10,6 +10,13 @@
 - **测试锚点（拟）：** `test/orchestration-approval.test.ts`（M2）。
 - **状态：** 策略已确认；编排入口尚未实现审批队列，M2 落地时必须同时更新本文件与需求记录。
 
+## M1-③ git 与 worktree
+
+- **决定：** 所有宿主 git 调用经 `runGit`，统一 30 秒默认超时与 4 MiB 输出上限；提交与 cherry-pick 都用 `-c user.name=mini-dsh -c user.email=mini-dsh@localhost` 临时身份。原因是 `runCommand` 使用临时 HOME，用户全局 git 身份不可见；不修改任何 git 配置文件。
+- **决定：** 清理只删除编排目录 `worktrees/` 前缀下的 worktree 与 `mini-dsh/<root8>/*` 分支；分支删除前再次校验命名空间，避免误删用户分支。
+- **代码锚点：** `src/orchestration/git.ts`、`src/orchestration/worktrees.ts`。
+- **测试锚点：** `test/orchestration-git.test.ts`（真实 git 临时仓库）。
+
 ## M1-② 编排日志与根账本落点
 
 - **决定：** 编排日志使用独立目录与独立信封 `{v, rootId, seq, id, at, type, data}`；`src/core/` 不新增编排逻辑，`EventData` 会话契约不变。
