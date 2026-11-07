@@ -2,6 +2,17 @@
 
 **非规范性说明：** 方向性决策与数值以 [DEVELOPMENT.md](DEVELOPMENT.md) §2.8 为准；本文件记录开发过程中落实这些决策的具体选择、代码锚点与测试锚点，避免把实现事实只留在提交信息里。
 
+## M3-③ 恢复与 resume
+
+- **决定：** 恢复只采用**已确认的结果**：worker 会话 run 为 completed 时，优先找 attempt 分支上带 `Mini-DSH-Attempt` trailer 的提交；没有提交则从 worktree 用宿主身份重新收集并提交。两条路径都不调用 provider，恢复前后 provider 调用数不变。未完成的 run 一律记 `interrupted`，不自动重跑。
+- **决定：** 未知副作用只在会话证据支持时成立：存在 `tool/result(status=unknown)`，或 Bash 已 `tool/start` 而无对应结果。没有会话文件但 attempt 已 running 时保守按未知处理。未知副作用的 interrupted attempt 生成 `unknown_side_effects`，选项 `retry`/`abandon`；没有未知副作用的 interrupted attempt 在 attempt 上限内自动重试。
+- **决定：** 整合恢复采用“重置+重放”而不是信任残留 cherry-pick：`cherry-pick --abort`（若有）、`reset --hard` 到 `integration/started` 的基线、按 `integration/applied` 顺序重放，然后补写 `integration/finished`。未记录的 attempt 由正常波次逻辑在新整合周期重新应用。
+- **决定：** 验收证据按 `(head, tree, command)` 去重：恢复时只运行当前整合 tree 上缺失的命令；已有证据（包括失败）直接复用。tree 改变后旧证据不匹配，自然重新运行。
+- **决定：** `resume --retry <subtask>` / `--skip <subtask>` 同时是人工决定入口：优先把对应的 pending `unknown_side_effects` 解析为 `retry`/`abandon`，把 `conflict` 解析为 `rerun-serially`/`skip-subtask`；仍有未决请求时停在 `needs_human`，不写 `root/finish`。`--accept-unknown-usage` 只解除账本准入，不替用户决定 attempt 的副作用。
+- **决定：** 编排日志尾部半行继续由操作者显式隔离（`OrchestrationStore.quarantineTail`）；`resume` 明确拒绝且不改写日志。恢复使用日志中持久化的 budget/config/verify/prepare，不重新解释 `MINI_DSH_ROOT_BUDGET`。
+- **代码锚点：** `src/orchestration/{faults,recovery,orchestrator}.ts`、`src/app/orchestrate-cli.ts`。
+- **测试锚点：** `test/orchestration-recovery.test.ts`、`test/orchestration-e2e.test.ts`。
+
 ## M3-④ 未知用量与 429
 
 - **决定：** `group/usage-unknown` 保留 `cause`。取消产生的未知只会计入报告，不中止根组也不阻断后续派发；`crash`/`no_usage` 继续沿用 M0 的保守规则，恢复时必须经 `acceptUnknownUsage()` 明确确认。确认只改变准入，不改变已记录的用量。

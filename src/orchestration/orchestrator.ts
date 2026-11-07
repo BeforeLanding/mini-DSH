@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { utf8Prefix } from '../core/tool-result-store.js'
@@ -9,7 +10,7 @@ import type { HarnessAdapter } from '../app/create-harness.js'
 import type { AttemptBudget, AttemptOutcome, HumanRequestData, PlanInput, PlanDecision, RootBudget, RootStatus, RootTerminalStatus, SubtaskSpec } from './contracts.js'
 import { DEFAULT_PROTECTED_PATHS, validatePlan } from './plan.js'
 import { planInputError } from './validation.js'
-import { newRootId, OrchestrationStore, orchestrationDirectory, writeArtifact } from './store.js'
+import { assertRootId, newRootId, OrchestrationStore, orchestrationDirectory, writeArtifact } from './store.js'
 import { OrchestrationGroupJournal } from './group-journal.js'
 import { foldOrchestration, orchestrationTotals } from './state.js'
 import type { AttemptState, OrchestrationState } from './state.js'
@@ -23,6 +24,9 @@ import { runPlanner } from './planner.js'
 import { ApprovalBroker } from './approval-broker.js'
 import { noFaults, SimulatedCrash } from './faults.js'
 import type { FaultInjector } from './faults.js'
+import {
+  blockingUnknownUsage, pendingHumanRequests, reconcileAttempts, recoverOpenIntegration, resolvePendingHumans,
+} from './recovery.js'
 
 export const DEFAULT_ROOT_BUDGET: Readonly<RootBudget> = Object.freeze({
   maxModelRequests: 96, maxTotalTokens: 2_000_000, maxWallMs: 1_800_000, maxToolCalls: 256,
@@ -79,6 +83,13 @@ export interface OrchestrateOptions extends OrchestrateCommonOptions {
   maxSubtasks?: number
   maxAttemptsPerSubtask?: number
   allowDirty?: boolean
+}
+export interface ResumeOptions extends OrchestrateCommonOptions {
+  rootId: string
+  acceptUnknownUsage?: boolean
+  retry?: string[]
+  skip?: string[]
+  plan?: PlanInput
 }
 export interface OrchestrateResult {
   rootId: string
@@ -232,7 +243,7 @@ class StopController {
     if (options.runningSignal?.aborted) void this.stopRunning('interrupt signal')
   }
   get signal() { return this.#abort.signal }
-  abort() { if (!this.#abort.signal.aborted) this.#abort.abort() }
+  abort(reason?: unknown) { if (!this.#abort.signal.aborted) this.#abort.abort(reason) }
   stopDispatch(reason: string) {
     if (this.#closed) return this.#pending
     if (this.dispatch) return this.#pending
@@ -330,6 +341,7 @@ async function executeRoot(ctx: RootContext): Promise<RootOutcome> {
     let code: CollectedCode = { changedFiles: [], scopeViolations: [] }
     let summary: string | undefined, detail: string | undefined
     let recorded = false
+    const crashAbort = () => stop.signal.aborted && (stop.signal.reason as { name?: unknown } | undefined)?.name === 'SimulatedCrash'
     try {
       if (stop.running || ctx.signal.aborted) {
         classification = 'cancelled'
@@ -354,7 +366,10 @@ async function executeRoot(ctx: RootContext): Promise<RootOutcome> {
         await ctx.faults.checkpoint('after-worker-run')
         runStatus = outcome.runStatus
         stopReason = outcome.stopReason
-        if (runStatus !== 'completed') classification = runStatus === 'cancelled' ? 'cancelled' : BUDGET_STOPS.has(runStatus) ? 'budget_stopped' : 'run_failed'
+        if (crashAbort()) {
+          // 进程内模拟崩溃中止的兄弟 worker：按 interrupted + 未知副作用处理，恢复时走人工决定。
+          classification = 'interrupted'
+        } else if (runStatus !== 'completed') classification = runStatus === 'cancelled' ? 'cancelled' : BUDGET_STOPS.has(runStatus) ? 'budget_stopped' : 'run_failed'
         else if (outcome.report.valid && outcome.report.status !== 'done') classification = 'needs_input'
         else {
           const collected = await collectAndCommit({
@@ -378,6 +393,7 @@ async function executeRoot(ctx: RootContext): Promise<RootOutcome> {
           attemptId, outcome: classification,
           run: { sessionId: outcome.sessionId, status: runStatus, ...(stopReason ? { stopReason } : {}) },
           code, ...(artifact ? { resultRef: artifact.ref } : {}), ...(summary ? { summary } : {}), ...(detail ? { detail } : {}),
+          ...(classification === 'interrupted' ? { unknownSideEffects: true } : {}),
         })
         recorded = true
         progress(`attempt ${attemptId} ${classification}`)
@@ -389,13 +405,20 @@ async function executeRoot(ctx: RootContext): Promise<RootOutcome> {
       await ctx.faults.checkpoint('after-attempt-finished')
     } catch (error) {
       if (error instanceof SimulatedCrash) {
-        stop.abort()
+        group.markCrashed()
+        stop.abort(error)
         throw error
       }
       detail = formatError(error)
-      classification = stop.running ? 'cancelled' : 'failed'
+      const interrupted = crashAbort()
+      classification = interrupted ? 'interrupted' : stop.running ? 'cancelled' : 'failed'
       if (!recorded) {
-        try { await store.append('attempt/finished', { attemptId, outcome: classification, run: { status: 'error' }, code: { changedFiles: [], scopeViolations: [] }, detail }) } catch { /* the root report carries the failure */ }
+        try {
+          await store.append('attempt/finished', {
+            attemptId, outcome: classification, run: { status: 'error' }, code: { changedFiles: [], scopeViolations: [] }, detail,
+            ...(interrupted ? { unknownSideEffects: true } : {}),
+          })
+        } catch { /* the root report carries the failure */ }
       }
     } finally {
       broker.cancelAttempt(attemptId)
@@ -430,21 +453,20 @@ async function executeRoot(ctx: RootContext): Promise<RootOutcome> {
       }
       runnable.push({ subtask, ...(planned ? { planned } : {}) })
     }
-    if (!runnable.length) {
-      if (stop.dispatch) break
-      continue
+    if (runnable.length) {
+      const allocation = waveBudget(ctx.budget, state, runnable.length, options.workerBudget)
+      progress(`wave ${waveIndex + 1}/${ctx.decision.waves.length}: ${runnable.map(item => item.subtask.id).join(', ')} (${ctx.decision.mode})`)
+      await pool(runnable, ctx.decision.mode === 'parallel' ? ctx.maxWorkers : 1, async item => {
+        if (stop.dispatch || ctx.signal.aborted) {
+          await skippedAttempt(item.subtask, waveIndex, 'dispatch stopped')
+          return undefined
+        }
+        return executeAttempt({ subtask: item.subtask, wave: waveIndex, ...(item.planned ? { planned: item.planned } : {}), baseCommit: currentHead, budget: allocation, state })
+      })
+      if (stop.running) break
     }
-    const allocation = waveBudget(ctx.budget, state, runnable.length, options.workerBudget)
-    progress(`wave ${waveIndex + 1}/${ctx.decision.waves.length}: ${runnable.map(item => item.subtask.id).join(', ')} (${ctx.decision.mode})`)
-    await pool(runnable, ctx.decision.mode === 'parallel' ? ctx.maxWorkers : 1, async item => {
-      if (stop.dispatch || ctx.signal.aborted) {
-        await skippedAttempt(item.subtask, waveIndex, 'dispatch stopped')
-        return undefined
-      }
-      return executeAttempt({ subtask: item.subtask, wave: waveIndex, ...(item.planned ? { planned: item.planned } : {}), baseCommit: currentHead, budget: allocation, state })
-    })
-    if (stop.running) break
-    // 以日志为准收集本波次已成功但尚未整合的 attempt；这同时覆盖崩溃后重新进入的波次。
+    // 以日志为准收集本波次已成功但尚未整合的 attempt；即使本波次没有新 attempt，
+    // 恢复后已采用的结果也必须在这里进入整合。
     state = await load()
     const appliedIds = new Set(state.integrations.flatMap(integration => integration.applied.map(item => item.attemptId)))
     const order = new Map(waveIds.map((id, index) => [id, index]))
@@ -551,6 +573,40 @@ async function executeRoot(ctx: RootContext): Promise<RootOutcome> {
   return { status: finalStatus, ...(failureDetail ? { failureDetail } : {}), ...(integrationBranch ? { integrationBranch } : {}) }
 }
 
+interface FinalizeInput {
+  store: OrchestrationStore
+  rootId: string
+  status: RootStatus
+  goal: string
+  baseCommit: string
+  repository: string
+  failureDetail?: string
+  crashed?: boolean
+  directory: string
+  worktrees: string
+  dirty: number
+}
+// 报告与 root/finish 只在正常收尾时写；模拟崩溃保留日志现场，供 resume 重建。
+async function finalizeRoot(input: FinalizeInput): Promise<{ reportRef?: string; failure?: string }> {
+  if (input.crashed) return {}
+  try {
+    const state = foldOrchestration(await input.store.read())
+    const report = {
+      rootId: input.rootId, status: input.status, goal: input.goal, baseCommit: input.baseCommit, repository: input.repository,
+      ...(input.failureDetail ? { failure: input.failureDetail } : {}),
+      plan: state.plan, decision: state.decision, attempts: state.attemptOrder.map(id => state.attempts[id]),
+      integrations: state.integrations, verification: state.verifications, approvals: state.approvals,
+      human: state.human, ledger: orchestrationTotals(state),
+      dirtyBaseline: input.dirty > 0, paths: { directory: input.directory, worktrees: input.worktrees, sessions: path.join(input.directory, 'sessions') },
+    }
+    const reportRef = (await writeArtifact(path.join(input.store.directory, 'artifacts'), report)).ref
+    if (input.status !== 'needs_human' && !state.finished) await input.store.append('root/finish', { status: input.status as RootTerminalStatus, reportRef })
+    return { reportRef }
+  } catch (error) {
+    return { failure: formatError(error) }
+  }
+}
+
 export async function orchestrate(options: OrchestrateOptions): Promise<OrchestrateResult> {
   const progress = options.onProgress ?? (() => {})
   const maxWorkers = options.maxWorkers ?? 2, maxSubtasks = options.maxSubtasks ?? 4, maxAttemptsPerSubtask = options.maxAttemptsPerSubtask ?? 2
@@ -653,23 +709,178 @@ export async function orchestrate(options: OrchestrateOptions): Promise<Orchestr
     await stop?.flush()
     // 先关闭审批通道：关闭时被拒绝的请求仍会写审计事件，必须发生在 root/finish 之前。
     await broker.close().catch(() => {})
-    if (!crashed) {
-      try {
-        const events = await store.read()
-        const state = foldOrchestration(events)
-        const report = {
-          rootId, status: finalStatus, goal: options.goal, baseCommit, repository,
-          ...(failureDetail ? { failure: failureDetail } : {}),
-          plan: state.plan, decision: state.decision, attempts: state.attemptOrder.map(id => state.attempts[id]),
-          integrations: state.integrations, verification: state.verifications, approvals: state.approvals,
-          human: state.human, ledger: orchestrationTotals(state),
-          dirtyBaseline: clean.dirty > 0, paths: { directory, worktrees: manager.layout.worktrees, sessions: path.join(directory, 'sessions') },
+    const finalized = await finalizeRoot({
+      store, rootId, status: finalStatus, goal: options.goal, baseCommit, repository,
+      ...(failureDetail ? { failureDetail } : {}), crashed, directory,
+      worktrees: manager.layout.worktrees, dirty: clean.dirty,
+    })
+    reportRef = finalized.reportRef
+    failureDetail ??= finalized.failure
+    await store.close().catch(() => {})
+  }
+  return { rootId, status: finalStatus, directory, baseCommit, ...(integrationBranch ? { integrationBranch } : {}), ...(reportRef ? { reportRef } : {}), ...(failureDetail ? { error: failureDetail } : {}) }
+}
+
+// 恢复：同一根任务、同一编排日志、同一账本。恢复不重跑已确认的 attempt；
+// 崩溃窗口按 recovery.ts 对账，旧验收证据只有在同一 tree 上才复用。
+export async function resumeOrchestrate(options: ResumeOptions): Promise<OrchestrateResult> {
+  assertRootId(options.rootId)
+  const progress = options.onProgress ?? (() => {})
+  const rootId = options.rootId, directory = orchestrationDirectory(options.baseDirectory, rootId)
+  const store = await OrchestrationStore.open(directory, rootId)
+  const writeSets = new Map<string, string[]>()
+  const perRequestTimeoutMs = options.approval?.perRequestTimeoutMs ?? CLI_BUDGET.approvalTimeoutMs ?? 300_000
+  const { broker } = applyBroker(options, store, writeSets, perRequestTimeoutMs)
+  const faults = options.faults ?? noFaults
+  const clock = options.clock ?? Date.now
+  const model = options.model ?? `${options.adapter.provider}/${options.adapter.model}`
+  let finalStatus: RootStatus = 'failed', reportRef: string | undefined, integrationBranch: string | undefined
+  let failureDetail: string | undefined, crashed = false, alreadyFinished = false
+  let stop: StopController | undefined, stopTimer: ReturnType<typeof setInterval> | undefined
+  let state: OrchestrationState | undefined, manager: WorktreeManager | undefined
+  let goal = '', baseCommit = '', repository = ''
+  try {
+    state = foldOrchestration(await store.read())
+    goal = state.goal; baseCommit = state.baseCommit; repository = state.repository
+    manager = new WorktreeManager(repository, rootId, directory, {
+      ...(state.prepareCommand ?? options.prepareCommand ? { prepareCommand: state.prepareCommand ?? options.prepareCommand! } : {}),
+      ...(options.signal ? { signal: options.signal } : {}),
+    })
+    if (state.finished) {
+      alreadyFinished = true
+      finalStatus = state.finished.status
+      reportRef = state.finished.reportRef
+    } else {
+      const group = await TaskGroupBudgetCoordinator.openJournal(new OrchestrationGroupJournal(store), {
+        maxModelRequests: state.budget.maxModelRequests, maxToolCalls: state.budget.maxToolCalls, maxTotalTokens: state.budget.maxTotalTokens,
+        rootTokenFloor: 0, rootRequestFloor: 0, maxWallDurationMs: state.budget.maxWallMs, maxInFlightRequests: state.budget.maxInFlightRequests,
+      }, clock)
+      state = foldOrchestration(await store.read())
+      // 崩溃留下的 dispatched 预留已在 openJournal 中转为 unknown(cause=crash)；继续派发前需要人工确认。
+      if (blockingUnknownUsage(state)) {
+        if (!options.acceptUnknownUsage) {
+          if (!pendingHumanRequests(state).some(request => request.kind === 'budget_extension')) {
+            await store.append('human/requested', {
+              requestId: `hr_${randomUUID()}`, kind: 'budget_extension',
+              prompt: '存在崩溃导致的未知 token 用量；确认后才会继续派发。',
+              options: ['accept-unknown-usage', 'abort'],
+            })
+          }
+          finalStatus = 'needs_human'
+        } else {
+          group.acceptUnknownUsage()
         }
-        reportRef = (await writeArtifact(path.join(store.directory, 'artifacts'), report)).ref
-        if (finalStatus !== 'needs_human' && !state.finished) await store.append('root/finish', { status: finalStatus as RootTerminalStatus, reportRef })
-      } catch (error) {
-        failureDetail ??= formatError(error)
       }
+      if (finalStatus !== 'needs_human') {
+        stop = new StopController(store, clock, group.start.deadline, {
+          ...(options.dispatchSignal ? { dispatchSignal: options.dispatchSignal } : {}),
+          ...(options.signal ? { runningSignal: options.signal } : {}),
+          initial: { dispatch: state.stop.dispatch, running: state.stop.running, ...(state.stop.reason ? { reason: state.stop.reason } : {}) },
+        })
+        stopTimer = setInterval(() => stop?.tick(), 50)
+        stopTimer.unref?.()
+        const signal = AbortSignal.any([group.signal, stop.signal, ...(options.signal ? [options.signal] : [])])
+        let plan = state.plan?.plan, decision = state.decision
+        if (plan && !state.plan!.validation.ok) throw new Error('recorded plan is invalid; resume cannot repair it')
+        if (!plan) {
+          plan = options.plan
+          if (plan) { const structural = planInputError(plan); if (structural) throw new Error(structural) }
+          let plannerSessionId: string | undefined
+          if (!plan) {
+            if (!(await fs.stat(manager.layout.base).catch(() => undefined))) await manager.createBaseSnapshot(baseCommit)
+            const planned = await runPlanner({
+              goal: bounded(goal, 4096), rootId, worktree: manager.layout.base, layout: manager.layout, adapter: options.adapter,
+              model, rootGroup: group, budget: plannerBudget(state.budget), signal, maxSubtasks: state.config.maxSubtasks,
+              protectedPaths: DEFAULT_PROTECTED_PATHS,
+              onSession: sessionId => { plannerSessionId = sessionId; progress(`planner session ${sessionId}`) },
+            })
+            plan = planned.plan
+            plannerSessionId = planned.sessionId
+          }
+          const validation = validatePlan(plan, {
+            maxSubtasks: state.config.maxSubtasks, mode: state.config.mode, protectedPaths: DEFAULT_PROTECTED_PATHS, workspace: repository,
+          })
+          await store.append('plan/recorded', {
+            planId: `pl_${randomUUID()}`, planVersion: 1, source: options.plan ? 'file' : 'model',
+            ...(plannerSessionId ? { plannerSessionId } : {}), plan,
+            validation: validation.ok ? { ok: true, waves: validation.decision.waves } : { ok: false, errors: validation.errors },
+          })
+          if (!validation.ok) throw new Error(bounded(`invalid plan: ${validation.errors.join('; ')}`, 1024))
+          decision = { planVersion: 1, mode: validation.decision.mode, reason: validation.decision.reason, waves: validation.decision.waves }
+          await store.append('plan/decision', decision)
+        } else if (!decision) {
+          const validation = validatePlan(plan, {
+            maxSubtasks: state.config.maxSubtasks, mode: state.config.mode, protectedPaths: DEFAULT_PROTECTED_PATHS, workspace: repository,
+          })
+          if (!validation.ok) throw new Error(bounded(`invalid plan: ${validation.errors.join('; ')}`, 1024))
+          decision = { planVersion: state.plan!.planVersion, mode: validation.decision.mode, reason: validation.decision.reason, waves: validation.decision.waves }
+          await store.append('plan/decision', decision)
+        }
+        const selectedPlan = plan
+        state = foldOrchestration(await store.read())
+        if (state.stop.running) {
+          finalStatus = 'cancelled'
+        } else {
+          const retryInput = new Set(options.retry ?? []), skipInput = new Set(options.skip ?? [])
+          for (const id of [...retryInput, ...skipInput])
+            if (!selectedPlan.subtasks.some(subtask => subtask.id === id)) throw new Error(`resume flags reference unknown subtask: ${id}`)
+          const resolved = await resolvePendingHumans({
+            store, state, acceptUnknownUsage: Boolean(options.acceptUnknownUsage), retry: retryInput, skip: skipInput,
+          })
+          if (resolved.remaining.length) {
+            finalStatus = 'needs_human'
+          } else {
+            state = foldOrchestration(await store.read())
+            await recoverOpenIntegration({ store, manager, state, ...(options.signal ? { signal: options.signal } : {}) })
+            state = foldOrchestration(await store.read())
+            const reconciled = await reconcileAttempts({
+              store, manager, repository, rootId, plan: selectedPlan, state, retry: resolved.retry,
+              ...(options.signal ? { signal: options.signal } : {}),
+            })
+            state = foldOrchestration(await store.read())
+            if (reconciled.pending.length || pendingHumanRequests(state).length) finalStatus = 'needs_human'
+            else if (stop.running) finalStatus = 'cancelled'
+            else {
+              const verifyCommands = state.verifyCommands.length ? state.verifyCommands : options.verifyCommands ?? []
+              const outcome = await executeRoot({
+                options, store, manager, broker, group, stop, budget: state.budget, plan: selectedPlan,
+                decision: decision!, writeSets, verifyCommands, maxWorkers: state.config.maxWorkers,
+                maxAttemptsPerSubtask: state.config.maxAttemptsPerSubtask, repository, rootId, directory, goal,
+                baseCommit, clean: { baseCommit, dirty: 0 }, model, progress, faults, signal,
+                retry: reconciled.retry, skip: skipInput,
+              })
+              finalStatus = outcome.status
+              failureDetail = outcome.failureDetail
+              integrationBranch = outcome.integrationBranch
+            }
+          }
+        }
+      }
+    }
+    state = foldOrchestration(await store.read())
+    if (!integrationBranch && state.integrations.length) integrationBranch = integrationBranchName(rootId)
+  } catch (error) {
+    if (error instanceof SimulatedCrash) {
+      crashed = true
+      failureDetail = error.message
+      progress(error.message)
+    } else {
+      failureDetail = formatError(error)
+      finalStatus = 'failed'
+    }
+  } finally {
+    stop?.close()
+    if (stopTimer) clearInterval(stopTimer)
+    await stop?.flush()
+    await broker.close().catch(() => {})
+    if (!alreadyFinished) {
+      const finalized = await finalizeRoot({
+        store, rootId, status: finalStatus, goal, baseCommit, repository,
+        ...(failureDetail ? { failureDetail } : {}), crashed, directory,
+        worktrees: manager?.layout.worktrees ?? path.join(directory, 'worktrees'), dirty: 0,
+      })
+      reportRef = finalized.reportRef ?? reportRef
+      failureDetail ??= finalized.failure
     }
     await store.close().catch(() => {})
   }

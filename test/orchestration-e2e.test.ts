@@ -370,5 +370,14 @@ test('orchestrate CLI parser accepts plan files or the read-only planner and rej
   if (planner.kind === 'run') assert.equal(planner.planPath, '')
   assert.throws(() => parseOrchestrateArgs(['run', '--task', 'a', '--task-file', 'b', '--plan', 'p']), /exactly one/)
   assert.throws(() => parseOrchestrateArgs(['run', '--task', 'a', '--plan', 'p', '--max-workers', '9']), /1\.\.4/)
+  const resume = parseOrchestrateArgs(['resume', 'rt_00000000-0000-4000-8000-000000000001', '--accept-unknown-usage', '--retry', 'st-2', '--skip', 'st-3'])
+  assert.equal(resume.kind, 'resume')
+  if (resume.kind === 'resume') {
+    assert.equal(resume.acceptUnknownUsage, true)
+    assert.deepEqual(resume.retry, ['st-2'])
+    assert.deepEqual(resume.skip, ['st-3'])
+  }
+  assert.throws(() => parseOrchestrateArgs(['resume']), /usage:/)
+  assert.throws(() => parseOrchestrateArgs(['resume', 'rt_x', '--unknown']), /unknown orchestrate resume option/)
   assert.throws(() => parseOrchestrateArgs(['unknown']), /usage:/)
 })

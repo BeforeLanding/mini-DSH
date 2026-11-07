@@ -1,5 +1,42 @@
 # 多 Agent 编排改动与证据
 
+## M3-③ attempt 与整合恢复（2026-11-07）
+
+**改动**
+
+- 新增 `src/orchestration/faults.ts`：命名检查点抛出 `SimulatedCrash`，只在测试/演示注入；`integrator.applyAttempt` 与 `verifier` 接受故障钩子，可分别制造“cherry-pick 成功但未记 applied”与“验收已跑但未记证据”的窗口。
+- 新增 `src/orchestration/recovery.ts`：
+  - 只读解析 worker 会话的已确认前缀，判断 run 是否 completed、是否有 `status=unknown` 的工具结果或已开始未收尾的 Bash。
+  - `recoverOpenIntegration`：中止残留 cherry-pick，回到 `integration/started` 记录的基线，按 `applied` 重放，再写 `integration/finished`。
+  - `reconcileAttempts`：completed run 优先用带 trailer 的提交采用；否则从 worktree 收集提交；不可采用时记 `interrupted`；未知副作用生成 `unknown_side_effects` 人工请求，无未知副作用且未达上限时自动重试。已有人工决定（retry/abandon）优先，不重复询问。
+  - `resolvePendingHumans` 把 `resume --retry/--skip` 映射为 `human/resolved`；`blockingUnknownUsage` 区分崩溃/无 usage 与取消。
+- `resumeOrchestrate`：打开既有编排日志与账本；补做未记录的计划；未知用量未确认时停在 `needs_human`；恢复整合与 attempt 后从当前波次继续；只在同一 head/tree 上缺少证据时运行验收命令；已有 `root/finish` 时直接返回。
+- CLI 增加 `orchestrate resume <rootId> [--accept-unknown-usage] [--retry]... [--skip]... [--plan] [审批选项]`；两级 Ctrl-C 同样适用；输出 pending 请求与建议命令。`root/start` 持久化 `verifyCommands`/`prepareCommand` 供恢复使用。
+- 编排器在崩溃注入时 `markCrashed()` 再 abort 兄弟 worker；被中止的 sibling 记 `interrupted + unknownSideEffects`，日志关闭前等待全部 worker 收尾。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-recovery.test.js dist/test/orchestration-e2e.test.js
+# recovery 7 / pass 7；e2e 13 / pass 13（含 resume 参数解析）
+```
+
+**测试覆盖**
+
+- `after-worker-run` 崩溃：resume 采用 completed run 的 worktree 改动，provider 调用数不变，只有一个 attempt/worktree，整合与验收完成。
+- `after-cherry-pick` / `after-integration-started`：从记录基线重置并关闭旧整合，已成功 attempt 在新周期重新应用。
+- `after-attempt-planned`：resume 原地启动既有 planned attempt，不新建 attempt/worktree。
+- `after-verify-command`：无证据时重跑验收命令，只记录一条 exit 0 证据。
+- 两个 worker 中一个崩溃、一个在途：在途调用记 `unknown(cause=crash)`；未确认时 `needs_human`；确认后中断 sibling 产生人工请求；`--retry st-2` 完成根任务，采用 st-1 不增加 provider 调用。
+- 编排日志尾部半行：`resume` 明确拒绝且不改写日志，需按既有规则显式隔离。
+
+**未包含**
+
+- 真实进程崩溃（测试用故障注入模拟）；已开始的 Bash 在仓库外的影响仍需人工核实。
+- 价格表与费用上限；`maxUsd` 仍只做配置校验。
+
 ## M3-④ 账本恢复与 429 冷却（2026-11-07）
 
 **改动**
