@@ -177,12 +177,6 @@ function plannerBudget(root: RootBudget): AttemptBudget {
 function epochFor(state: OrchestrationState, subtaskId: string) {
   return state.attemptOrder.filter(attemptId => state.attempts[attemptId]!.subtaskId === subtaskId).length + 1
 }
-function hasTerminalAttempt(state: OrchestrationState, subtaskId: string) {
-  return state.attemptOrder.some(attemptId => {
-    const attempt = state.attempts[attemptId]!
-    return attempt.subtaskId === subtaskId && TERMINAL_ATTEMPTS.has(attempt.status)
-  })
-}
 function dependenciesIntegrated(subtask: SubtaskSpec, integrated: ReadonlySet<string>) {
   return (subtask.dependsOn ?? []).every(id => integrated.has(id))
 }

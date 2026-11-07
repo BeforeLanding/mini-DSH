@@ -1,5 +1,27 @@
 # 多 Agent 编排改动与证据
 
+## M3-⑤ 崩溃演示（2026-11-07）
+
+**改动**
+
+- 新增 `scripts/demo-orchestrate-crash.ts` 与 `pnpm demo:orchestrate-crash`：临时 git 仓库 + 脚本模型，不配置 provider、不发起付费请求。
+- 演示序列：两个并行子任务中 st-1 完成、st-2 先执行 Bash 后停在未返回的 provider 调用；`after-worker-run` 注入崩溃。随后不带确认的 `resume` 因崩溃未知用量停在 `needs_human`；带 `--accept-unknown-usage` 后采用 st-1、为 st-2 生成 `unknown_side_effects`；带 `--retry st-2` 完成第二 epoch、整合与验收。
+- 断言：崩溃前无 `root/finish`；st-1 采用时 provider 调用数不增加；最终 `completed`；用户工作树 HEAD/状态不变。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm check                     # syntax ok: 256 files
+pnpm lint                      # 287 files, no warnings
+pnpm demo:orchestrate-crash    # PASS；scripted provider requests=6；user worktree unchanged
+pnpm test                      # tests 654 / pass 624 / fail 0 / 30 platform-skipped
+```
+
+**未包含**
+
+- 演示只覆盖一个指定的崩溃点；§8.4 其余窗口由 `test/orchestration-recovery.test.ts` 覆盖。演示使用脚本模型与合成 usage，不代表模型能力或真实账单。
+
 ## M3-③ attempt 与整合恢复（2026-11-07）
 
 **改动**

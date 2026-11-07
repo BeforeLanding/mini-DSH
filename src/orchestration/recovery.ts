@@ -55,7 +55,7 @@ export async function recoverOpenIntegration(input: {
   signal?: AbortSignal
 }) {
   const integration = input.state.integration
-  if (!integration || integration.status !== 'started') return undefined
+  if (integration?.status !== 'started') return undefined
   const opened = await input.manager.ensureIntegration(integration.baseCommit)
   const options: GitRunOptions = input.signal ? { signal: input.signal } : {}
   if (await cherryPickInProgress(opened.path)) await cherryPickAbort(opened.path)

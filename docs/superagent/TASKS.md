@@ -42,7 +42,7 @@
   - 验收：人为构造的文件/目录冲突产生 `human.request(conflict)`；跳过冲突子任务得到 `partial`；中止得到 `cancelled` 且整合现场保留；`rerun-serially` 在整合 head 上新建 attempt；无决定时停在 `needs_human`。
   - 证据：`src/orchestration/{orchestrator,state,integrator}.ts`、`src/app/orchestrate-cli.ts`、`test/orchestration-e2e.test.ts`、`test/orchestration-worker.test.ts`。
 
-## M3：失败、取消与恢复（进行中）
+## M3：失败、取消与恢复（已完成）
 
 - [x] ① 状态折叠的迟到/过期/重复规则
   - 验收：`attempt/late` 只接受已终结 attempt，旧 epoch 只记录不改变状态；`attempt/finished` 保留 `unknownSideEffects`，`group/usage-unknown` 保留 `cause`。
@@ -56,7 +56,10 @@
 - [x] ④ 账本恢复与 429 冷却
   - 验收：崩溃留下的 `dispatched` 预留转为 `unknown(cause=crash)`；取消产生的未知不阻断后续派发；人工确认后可继续；429 释放预留并让同组下一次派发等待共享冷却。
   - 证据：`src/core/task-group-budget.ts`、`test/orchestration-ledger.test.ts`、`test/task-group-budget.test.ts`。
-- [ ] ⑤ 崩溃演示脚本
+- [x] ⑤ 崩溃演示脚本
+  - 验收：`pnpm demo:orchestrate-crash` 离线通过；演示崩溃前已完成 run 被采用、未知用量需确认、未知副作用需人工决定，最终恢复为 `completed`。
+  - 证据：`scripts/demo-orchestrate-crash.ts`、`package.json`。
+  - 命令：`pnpm demo:orchestrate-crash`。
 
 ## M4：待开始
 
