@@ -1,6 +1,6 @@
 # 多 Agent 编排需求（Super Agent 方向）
 
-- **状态：** M0 已完成；M1 进行中。本文件只记录目标、范围与验收，领域契约以 [DEVELOPMENT.md](DEVELOPMENT.md) 为唯一来源。
+- **状态：** M0 已完成；M1 在 `feat/orchestration-m1` 完成，待合并。本文件只记录目标、范围与验收，领域契约以 [DEVELOPMENT.md](DEVELOPMENT.md) 为唯一来源。
 - **基线：** `main@91de468`（v0.2.0）；开发分支 `feat/orchestration-m1`。
 - **日期：** 2026-11-07。
 

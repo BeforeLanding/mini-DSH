@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import type { FileHandle } from 'node:fs/promises'
 import { decodeOrchestrationLog, validateOrchestrationData } from './validation.js'
 import type { OrchEventData, OrchEventType, OrchestrationEvent, OrchestrationEventUnion } from './contracts.js'
@@ -13,6 +13,22 @@ export function assertRootId(rootId: string) {
 export const orchestrationDirectory = (baseDirectory: string, rootId: string) => {
   assertRootId(rootId)
   return path.join(baseDirectory, rootId)
+}
+// 内容寻址的有界制品：结果、验证摘要与报告。文件名由内容哈希决定，重复写入天然幂等。
+export async function writeArtifact(directory: string, value: unknown, maxBytes = 64 * 1024) {
+  const text = JSON.stringify(value)
+  const bytes = Buffer.byteLength(text)
+  if (bytes > maxBytes) throw new Error(`artifact exceeds ${maxBytes} bytes`)
+  const hash = createHash('sha256').update(text).digest('hex')
+  const dir = path.resolve(directory)
+  await fs.mkdir(dir, { recursive: true, mode: 0o700 })
+  const target = path.join(dir, `sha256-${hash}.json`)
+  const handle = await fs.open(target, 'wx', 0o600).catch(error => {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return undefined
+    throw error
+  })
+  if (handle) { try { await handle.writeFile(text); await handle.sync() } finally { await handle.close() } }
+  return { ref: `sha256:${hash}`, path: target, bytes }
 }
 
 // 编排日志：单写入者、逐条 fsync、写前日志。与会话日志（core/event-store.ts）分开存放，

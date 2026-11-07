@@ -94,12 +94,19 @@ export async function cherryPickInProgress(worktree: string) {
   const result = await runGit(worktree, ['rev-parse', '--verify', 'CHERRY_PICK_HEAD'])
   return result.status === 'exited' && result.exitCode === 0
 }
+export async function unmergedFiles(worktree: string) {
+  const text = await git(worktree, ['diff', '--name-only', '--diff-filter=U', '-z'])
+  return text.split('\0').filter(Boolean)
+}
 export async function cherryPickAbort(worktree: string) {
   const result = await runGit(worktree, ['cherry-pick', '--abort'])
   if (result.status !== 'exited' || result.exitCode !== 0) throw new GitCommandError(['cherry-pick', '--abort'], result)
 }
 export async function resetHard(worktree: string, revision: string) {
   await git(worktree, ['reset', '--hard', revision])
+}
+export async function resetSoft(worktree: string, revision: string) {
+  await git(worktree, ['reset', '--soft', revision])
 }
 export async function listBranches(repository: string, pattern: string) {
   const text = await git(repository, ['branch', '--list', pattern, '--format=%(refname:short)'])

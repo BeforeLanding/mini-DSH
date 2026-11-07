@@ -19,8 +19,10 @@
 - [x] ③ git/worktree 管理
   - 验收：脏工作树拒绝；base 快照与 attempt/integration worktree 创建、分支命名、prepare、清理；真实 git 临时仓库测试。
   - 证据：`src/orchestration/git.ts`、`src/orchestration/worktrees.ts`、`test/orchestration-git.test.ts`。
-- [ ] ④ 单 attempt 编排 + CLI + inspect
+- [x] ④ 单 attempt 编排 + CLI + inspect
   - 验收：离线端到端通过；整合分支存在且验收命令 exit 0；用户工作树前后一致；会话日志可被现有 `inspect` 读取。
+  - 证据：`src/orchestration/{worker,integrator,verifier,orchestrator,inspect}.ts`、`src/app/orchestrate-cli.ts`、`test/orchestration-e2e.test.ts`、`test/orchestration-worker.test.ts`、`test/orchestration-integrator.test.ts`。
+  - M1 边界：只执行一个子任务、只接受计划文件（planner 与并行波次属 M2）；`resume`/`list` 之外的恢复与冲突处置属 M3/M2。
 
 ## M2–M4：待开始
 

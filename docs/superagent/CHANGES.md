@@ -1,5 +1,37 @@
 # 多 Agent 编排改动与证据
 
+## M1-④ 单 attempt 编排闭环与 CLI（2026-11-07）
+
+**改动**
+
+- 新增 `src/orchestration/worker.ts`：worker Harness 装配（独立 root/worktree/会话、`parentTaskGroup`、只读之外唯一的可写角色、无委派工具、显式 `autoApprove: false`）、`task.assign` 渲染、有界 worker 报告解析（8 KiB 正文 / 2 KiB 摘要）。
+- 新增 `src/orchestration/integrator.ts`：写集覆盖判断（文件精确匹配、目录前缀、Windows 大小写）、宿主提交与 attempt trailer、worker 自行提交时软回基线后重新提交、按计划顺序 cherry-pick 与冲突中止。
+- 新增 `src/orchestration/verifier.ts`：在整合 worktree 运行验收命令，日志落内容寻址制品，事件绑定整合 head/tree。
+- 新增 `src/orchestration/orchestrator.ts`：根预算解析与 `TaskGroupBudgetCoordinator` 接入、单 attempt 调度、失败分类、整合、复验、报告与 `root/finish`。
+- 新增 `src/orchestration/inspect.ts` 与 `src/app/orchestrate-cli.ts`；`src/index.ts` 增加 `orchestrate` 子命令（run/inspect/list/cleanup）；更新 `--help`。
+- D8 落地为编排入口的审批函数：文件写入默认自动、Bash 默认询问，`--approve-writes ask` / `--approve-bash auto` 可调；单 Agent CLI 未改。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-e2e.test.js dist/test/orchestration-worker.test.js dist/test/orchestration-integrator.test.js
+# tests 11 / pass 11 / fail 0
+```
+
+**测试覆盖**
+
+- 离线端到端（脚本模型 + 真实 git）：worker 在 worktree 写入、宿主提交（带 trailer）、cherry-pick 整合、验收 exit 0、`root/finish(completed)`；用户工作树 HEAD/内容/状态不变。
+- `no_changes`、写集越界、根预算在第二次 provider 请求前停止、脏工作树在创建任何编排状态前拒绝。
+- worker 报告无效/超长/`needs_input`；写集文件与目录前缀；CLI 参数接受与拒绝。
+- worker 绕过提示自行提交时，宿主软回基线并生成单一带 trailer 提交。
+
+**未包含**
+
+- 并行波次、planner、审批队列、冲突处置（M2）；`resume`、崩溃窗口与 unknown 用量确认（M3）；演示与评测（M4）。
+- `plannerShare`、`fixReserveTokens`、`maxInFlightRequests` 已进入配置与契约，但 M1 尚未执行对应准入逻辑（随 planner/修复/并发上限在 M2/M4 落地）。
+
 ## M1-③ git 与 worktree 管理（2026-11-07）
 
 **改动**

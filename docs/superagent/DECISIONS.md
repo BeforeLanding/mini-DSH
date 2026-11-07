@@ -10,6 +10,15 @@
 - **测试锚点（拟）：** `test/orchestration-approval.test.ts`（M2）。
 - **状态：** 策略已确认；编排入口尚未实现审批队列，M2 落地时必须同时更新本文件与需求记录。
 
+## M1-④ 单 attempt 编排与 CLI
+
+- **决定：** M1 的 `orchestrate run` 只接受计划文件且一次只执行一个子任务；planner、DAG 波次与并行写入者按里程碑留在 M2。CLI 在缺少 `--plan` 时明确拒绝，不伪装成已支持模型规划。
+- **决定：** 审批策略在编排入口实现为 `writes: auto|ask`、`bash: ask|auto` 的函数；M1 不建 FIFO 队列（M2 落地 `ApprovalBroker`）。未提供审批通道时，需要人工的请求一律拒绝。
+- **决定：** 若 worker 违反提示自行提交，宿主在 attempt worktree 内 `git reset --soft <baseCommit>` 后重新提交；整合对象始终是单一带 `Mini-DSH-*` trailer 的宿主提交，避免恢复依赖 worker 的提交习惯。
+- **决定：** `plannerShare`、`fixReserveTokens`、`maxInFlightRequests` 先进入配置与事件契约，M1 不执行对应准入；在实现 planner、整合修复与并发上限时接入，并在本文件更新锚点。
+- **代码锚点：** `src/orchestration/{worker,integrator,verifier,orchestrator,inspect}.ts`、`src/app/orchestrate-cli.ts`、`src/index.ts`。
+- **测试锚点：** `test/orchestration-e2e.test.ts`、`test/orchestration-worker.test.ts`、`test/orchestration-integrator.test.ts`。
+
 ## M1-③ git 与 worktree
 
 - **决定：** 所有宿主 git 调用经 `runGit`，统一 30 秒默认超时与 4 MiB 输出上限；提交与 cherry-pick 都用 `-c user.name=mini-dsh -c user.email=mini-dsh@localhost` 临时身份。原因是 `runCommand` 使用临时 HOME，用户全局 git 身份不可见；不修改任何 git 配置文件。
