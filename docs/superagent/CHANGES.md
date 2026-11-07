@@ -1,5 +1,32 @@
 # 多 Agent 编排改动与证据
 
+## M3-④ 账本恢复与 429 冷却（2026-11-07）
+
+**改动**
+
+- `group/usage-unknown` 的 `cause` 进入根组状态：`cancel` 不中止组、不阻断后续派发；`crash`/`no_usage` 保持 M0 的保守规则。`acceptUnknownUsage()` 在人工确认后允许继续，未知量仍按预留额计入总量。
+- `openJournal` 恢复时把 `reserved` 释放、`dispatched` 记为 `unknown(cause=crash)`；恢复流程可据此要求确认。
+- 429：根组记录共享冷却 `max(retryAfterMs, 2s)`，下一次派发在准入后等待；被 429 明确拒绝的预留释放而不计费，Loop 的退避重试得以继续。编排器的进程内崩溃注入在 abort 兄弟 worker 前调用 `markCrashed()`，使被中止的在途调用按 crash 记账。
+- `snapshot()` 增加 `blockingUnknown`、`acceptedUnknown`、`cooldownUntil`；`stopReason`/`#check` 只对未被确认的 blocking unknown 报错。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-ledger.test.js dist/test/task-group-budget.test.js
+# tests 16 / pass 16 / fail 0
+```
+
+**测试覆盖**
+
+- `cancel` 未知后仍可预留；`crash` 未知拒绝继续，`acceptUnknownUsage()` 后恢复；折叠日志保留各自 cause。
+- 429 释放预留（`requests=0`），冷却为 `max(retryAfterMs, 2s)`，下一次派发等待 2000 ms 后成功结算。
+
+**未包含**
+
+- 持久化冷却截止时间（进程内共享即可）；429 之外的 provider 错误仍按 M0 的未知规则处理。
+
 ## M3-② 两级停止语义（2026-11-07）
 
 **改动**

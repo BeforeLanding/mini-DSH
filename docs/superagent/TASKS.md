@@ -51,7 +51,9 @@
   - 验收：第一次 Ctrl-C 只停止派发，未启动 attempt 记 `skipped`，运行中的继续并整合/验收；第二次 Ctrl-C 与 wall 截止中止运行中 run，attempt 记 `cancelled`，不整合，根任务 `cancelled`。
   - 证据：`src/orchestration/orchestrator.ts`、`src/app/orchestrate-cli.ts`、`test/orchestration-stop.test.ts`。
 - [ ] ③ attempt 与整合恢复（故障注入与 `resume`）
-- [ ] ④ 账本恢复与 429 冷却
+- [x] ④ 账本恢复与 429 冷却
+  - 验收：崩溃留下的 `dispatched` 预留转为 `unknown(cause=crash)`；取消产生的未知不阻断后续派发；人工确认后可继续；429 释放预留并让同组下一次派发等待共享冷却。
+  - 证据：`src/core/task-group-budget.ts`、`test/orchestration-ledger.test.ts`、`test/task-group-budget.test.ts`。
 - [ ] ⑤ 崩溃演示脚本
 
 ## M4：待开始

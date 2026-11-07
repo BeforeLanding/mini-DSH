@@ -2,6 +2,14 @@
 
 **非规范性说明：** 方向性决策与数值以 [DEVELOPMENT.md](DEVELOPMENT.md) §2.8 为准；本文件记录开发过程中落实这些决策的具体选择、代码锚点与测试锚点，避免把实现事实只留在提交信息里。
 
+## M3-④ 未知用量与 429
+
+- **决定：** `group/usage-unknown` 保留 `cause`。取消产生的未知只会计入报告，不中止根组也不阻断后续派发；`crash`/`no_usage` 继续沿用 M0 的保守规则，恢复时必须经 `acceptUnknownUsage()` 明确确认。确认只改变准入，不改变已记录的用量。
+- **决定：** provider 明确以 429 拒绝时释放预留而不按未知计费，并设置根组共享冷却 `max(retryAfterMs, 2s)`；下一次派发（包括 Loop 的退避重试）在准入后等待冷却。这样既不让一次限流永久毒化账本，也不让多个 worker 同时撞限流。
+- **决定：** 进程内模拟崩溃与用户取消都可能表现为 abort。编排器在 abort 前调用 `markCrashed()`，让被中止的在途调用按 `cause=crash` 记账；这是测试/演示的故障注入路径，正常取消不会调用。
+- **代码锚点：** `src/core/task-group-budget.ts`（`acceptUnknownUsage`、`markCrashed`、`noteRateLimit`、`#waitCooldown`）、`src/orchestration/orchestrator.ts`。
+- **测试锚点：** `test/orchestration-ledger.test.ts`、`test/task-group-budget.test.ts`。
+
 ## M3-② 停止语义
 
 - **决定：** `dispatchSignal`（第一次 Ctrl-C）只停止派发：当前已在运行的 attempt 继续到自然结束，队列中未启动的 attempt 记 `skipped`；随后按正常路径整合已完成部分并验收，根任务为 `completed`/`partial`，没有整合则为 `failed`。
