@@ -1,4 +1,4 @@
-import { recordObject, safeId } from '../core/content-hash.js'
+import { recordObject, safeId, sha256 } from '../core/content-hash.js'
 import { validatePayload } from '../core/event-validation.js'
 import type { OrchEventType, OrchestrationEventUnion, PlanInput } from './contracts.js'
 
@@ -177,6 +177,20 @@ export function validateOrchestrationData(type: OrchEventType, data: Record<stri
       break
     }
     case 'human/resolved': if (!safeId(data.requestId)) throw new Error('requestId is invalid'); text(data.choice, 'choice', 200); optionalText(data.note, 'note', 1024); if (data.actor !== 'local-user') throw new Error('human/resolved actor must be local-user'); break
+    case 'approval/requested': {
+      if (!safeId(data.requestId) || !safeId(data.attemptId)) throw new Error('approval request/attempt id is invalid')
+      text(data.tool, 'tool', 64)
+      if (!sha256(data.summaryHash)) throw new Error('approval summaryHash must be a sha256 hex digest')
+      if (data.writeSet !== undefined) pathList(data.writeSet, 'writeSet', 0, 64)
+      break
+    }
+    case 'approval/resolved': {
+      if (!safeId(data.requestId) || !safeId(data.attemptId)) throw new Error('approval request/attempt id is invalid')
+      text(data.tool, 'tool', 64)
+      if (typeof data.allowed !== 'boolean') throw new Error('approval allowed must be boolean')
+      oneOf(data.source, new Set(['auto', 'user', 'timeout', 'cancelled']), 'approval source')
+      break
+    }
     case 'control/stop': oneOf(data.scope, new Set(['accepting', 'dispatch', 'running']), 'scope'); text(data.reason, 'reason', 512); break
     case 'root/finish': oneOf(data.status, TERMINAL, 'status'); if (data.reportRef !== undefined) ref(data.reportRef, 'reportRef'); break
     case 'group/start': case 'group/budget-reserved': case 'group/model-dispatched': case 'group/reservation-released': case 'group/usage-unknown': case 'group/budget-settled': case 'group/tool-admitted':
@@ -200,7 +214,8 @@ const EVENT_TYPES: Record<OrchEventType, true> = {
   'root/start': true, 'plan/recorded': true, 'plan/decision': true, 'attempt/planned': true, 'attempt/started': true,
   'attempt/session': true, 'attempt/finished': true, 'attempt/late': true, 'integration/started': true,
   'integration/applied': true, 'integration/conflict': true, 'integration/finished': true, 'verification/finished': true,
-  'human/requested': true, 'human/resolved': true, 'control/stop': true, 'root/finish': true, 'group/start': true,
+  'human/requested': true, 'human/resolved': true, 'approval/requested': true, 'approval/resolved': true,
+  'control/stop': true, 'root/finish': true, 'group/start': true,
   'group/budget-reserved': true, 'group/model-dispatched': true, 'group/reservation-released': true,
   'group/usage-unknown': true, 'group/budget-settled': true, 'group/tool-admitted': true,
 }

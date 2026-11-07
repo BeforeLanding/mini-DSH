@@ -6,9 +6,11 @@
 
 - **决定：** `orchestrate` 模式下，worktree 内的 `write_file` / `edit_file` 默认自动批准；Bash 默认仍需人工批准，所有请求经单一 FIFO 队列逐条显示；`--approve-writes ask` 可恢复逐条审批。单 Agent CLI 的审批行为不变。
 - **理由：** worktree 内写入不触及用户工作树、可整体丢弃，且 attempt 结束后仍有写集检查；Bash 可越出 worktree，不能自动批准。
-- **代码锚点（拟）：** `src/orchestration/approval-broker.ts`（M2）、`src/orchestration/worker.ts` 的 `autoApprove: false` 与 `sandbox.setApprover`。
-- **测试锚点（拟）：** `test/orchestration-approval.test.ts`（M2）。
-- **状态：** 策略已确认；编排入口尚未实现审批队列，M2 落地时必须同时更新本文件与需求记录。
+- **M2-③ 实现：** `ApprovalBroker` 为单一 FIFO 队列，`write_file`/`edit_file` 与 Bash 各按策略决定是否进入队列；未知工具一律询问。每条请求的超时从显示时开始；`cancelAttempt` 立即拒绝该 attempt 的队列请求并中止正在显示的请求；`close` 拒绝全部剩余请求。审批等待不计入主动执行时间仍由现有 run 预算维持；worker 的 `approvalTimeoutMs` 放大为 `perRequestTimeoutMs × (maxWorkers + 1)`。
+- **审计口径：** `approval/requested` / `approval/resolved` 只用于统计与展示，写入失败被吞掉，绝不阻塞工具收到的决定；来源分为 `auto`/`user`/`timeout`/`cancelled`。
+- **代码锚点：** `src/orchestration/approval-broker.ts`、`src/orchestration/orchestrator.ts`、`src/orchestration/worker.ts` 的 `autoApprove: false` 与 `sandbox.setApprover`。
+- **测试锚点：** `test/orchestration-approval.test.ts`、`test/orchestration-e2e.test.ts`。
+- **状态：** 已实现（M2-③）；CLI 终端显示随 M2-④ 接线。
 
 ## M1-④ 单 attempt 编排与 CLI
 

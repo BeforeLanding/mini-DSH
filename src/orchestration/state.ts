@@ -1,8 +1,8 @@
 import type { Usage } from '../core/budget.js'
 import type { GroupReservation, TaskGroupPolicy } from '../core/task-group-budget.js'
 import type {
-  AttemptBudget, AttemptOutcome, HumanRequestData, HumanResolvedData, IntegrationApplied, OrchestrationConfig,
-  OrchestrationEventUnion, PlanDecision, PlanRecorded, RootBudget, RootStatus,
+  ApprovalRequestedData, ApprovalResolvedData, AttemptBudget, AttemptOutcome, HumanRequestData, HumanResolvedData,
+  IntegrationApplied, OrchestrationConfig, OrchestrationEventUnion, PlanDecision, PlanRecorded, RootBudget, RootStatus,
 } from './contracts.js'
 
 export type AttemptStatus = 'planned' | 'starting' | 'running' | 'finished' | 'cancelled' | 'interrupted' | 'skipped' | 'failed'
@@ -57,6 +57,7 @@ export interface IntegrationState {
 
 export interface VerificationState { head: string; tree: string; command: string; exitCode: number | null; logRef?: string }
 export interface HumanState { request: HumanRequestData; response?: HumanResolvedData }
+export interface ApprovalState { request: ApprovalRequestedData; response?: ApprovalResolvedData }
 
 export interface OrchestrationState {
   rootId: string
@@ -75,6 +76,7 @@ export interface OrchestrationState {
   integration?: IntegrationState
   verifications: VerificationState[]
   human: Record<string, HumanState>
+  approvals: Record<string, ApprovalState>
   finished?: { status: RootStatus; reportRef?: string }
 }
 
@@ -91,7 +93,7 @@ export function foldOrchestration(events: readonly OrchestrationEventUnion[]): O
     rootId: events[0]!.rootId, goal: root.goal, repository: root.repository, baseCommit: root.baseCommit,
     config: structuredClone(root.config), budget: structuredClone(root.budget), status: 'planning',
     stop: { dispatch: false, running: false }, attempts: {}, attemptOrder: [],
-    ledger: { reservations: {}, tools: [] }, verifications: [], human: {},
+    ledger: { reservations: {}, tools: [] }, verifications: [], human: {}, approvals: {},
   }
   const ids = new Set<string>()
   for (const [index, event] of events.entries()) {
@@ -271,6 +273,20 @@ function foldEvent(state: OrchestrationState, event: OrchestrationEventUnion) {
       if (!human) throw new Error('unknown human request')
       if (human.response) throw new Error('human request already resolved')
       human.response = structuredClone(event.data)
+      return
+    }
+    case 'approval/requested': {
+      requireAttempt(state, event.data.attemptId)
+      if (state.approvals[event.data.requestId]) throw new Error('duplicate approval request')
+      state.approvals[event.data.requestId] = { request: structuredClone(event.data) }
+      return
+    }
+    case 'approval/resolved': {
+      const approval = state.approvals[event.data.requestId]
+      if (!approval) throw new Error('unknown approval request')
+      if (approval.response) throw new Error('approval request already resolved')
+      if (approval.request.attemptId !== event.data.attemptId) throw new Error('approval attempt mismatch')
+      approval.response = structuredClone(event.data)
       return
     }
     case 'control/stop': {

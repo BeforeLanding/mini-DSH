@@ -32,7 +32,6 @@ export interface PlannerOutcome {
   requests: number
   tokens: number
 }
-const PROMPT_LIMIT = 8 * 1024
 const REPAIR_LIMIT = 2 * 1024
 const bounded = (text: string, limit: number) => Buffer.byteLength(text) <= limit ? text : utf8Prefix(Buffer.from(text), limit).toString('utf8')
 

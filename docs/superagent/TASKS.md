@@ -32,7 +32,9 @@
 - [x] ② 只读 planner（基线快照、一次纠正重试）
   - 验收：`planner` 角色只有读工具；脚本模型首次无效、第二次有效时得到计划；连续两次无效明确失败；会话日志可被现有 `inspect` 读取。
   - 证据：`src/core/agent-capabilities.ts`、`src/orchestration/planner.ts`、`test/orchestration-planner.test.ts`、`test/agent-capabilities.test.ts`。
-- [ ] ③ 审批 FIFO 队列（策略、显示计时、取消与关闭）
+- [x] ③ 审批 FIFO 队列（策略、显示计时、取消与关闭）
+  - 验收：不同时显示两条；写入按 D8 自动批准、Bash 询问；超时从显示时开始；取消 attempt 与关闭通道立即拒绝；审批审计事件落编排日志。
+  - 证据：`src/orchestration/approval-broker.ts`、`test/orchestration-approval.test.ts`、`src/orchestration/{contracts,validation,state,inspect,orchestrator}.ts`。
 - [ ] ④ 并行波次调度（并发池、依赖基线、波次预算）
 - [ ] ⑤ 多 attempt 整合与冲突处置（`rerun-serially`/`skip-subtask`/`abort`）
 

@@ -2,6 +2,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { utf8Prefix } from '../core/tool-result-store.js'
 import { TaskGroupBudgetCoordinator } from '../core/task-group-budget.js'
+import { CLI_BUDGET } from '../core/budget.js'
 import type { ApprovalRequest } from '../core/contracts.js'
 import type { CommandOptions, CommandResult } from '../core/command-runner.js'
 import type { HarnessAdapter } from '../app/create-harness.js'
@@ -16,6 +17,7 @@ import { runWorker } from './worker.js'
 import type { WorkerAssignment, WorkerOutcome } from './worker.js'
 import { collectAndCommit, integrateAttempts } from './integrator.js'
 import { verifyIntegration } from './verifier.js'
+import { ApprovalBroker } from './approval-broker.js'
 
 export const DEFAULT_ROOT_BUDGET: Readonly<RootBudget> = Object.freeze({
   maxModelRequests: 96, maxTotalTokens: 2_000_000, maxWallMs: 1_800_000, maxToolCalls: 256,
@@ -39,6 +41,7 @@ export function resolveRootBudget(overrides: Partial<RootBudget> = {}, maxWorker
 export interface ApprovalPolicy {
   writes: 'auto' | 'ask'
   bash: 'ask' | 'auto'
+  perRequestTimeoutMs?: number
   approve?: (request: ApprovalRequest) => Promise<boolean>
 }
 export interface OrchestrateOptions {
@@ -111,12 +114,16 @@ export async function orchestrate(options: OrchestrateOptions): Promise<Orchestr
   const baseCommit = clean.baseCommit
   const store = await OrchestrationStore.open(directory, rootId)
   const approval = options.approval ?? { writes: 'auto', bash: 'ask' }
-  const approve = async (request: ApprovalRequest) => {
-    const automatic = request.tool === 'write_file' || request.tool === 'edit_file'
-      ? approval.writes === 'auto' : request.tool === 'bash' ? approval.bash === 'auto' : false
-    if (automatic) return true
-    return approval.approve ? approval.approve(request) : false
-  }
+  const perRequestTimeoutMs = approval.perRequestTimeoutMs ?? CLI_BUDGET.approvalTimeoutMs ?? 300_000
+  const writeSets = new Map<string, string[]>()
+  // 审批审计事件只追加、不参与恢复；事件写入失败不影响工具得到的审批决定。
+  const broker = new ApprovalBroker({
+    policy: { writes: approval.writes, bash: approval.bash, perRequestTimeoutMs },
+    ...(approval.approve ? { prompt: approval.approve } : {}),
+    writeSetFor: attemptId => writeSets.get(attemptId),
+    onRequested: async data => { await store.append('approval/requested', data) },
+    onResolved: async data => { await store.append('approval/resolved', data) },
+  })
   const subtask = plan.subtasks[0]!
   const attemptBudget = allocateBudget(budget, options.workerBudget)
   let finalStatus: RootStatus = 'failed', reportRef: string | undefined, integrationBranch: string | undefined
@@ -154,10 +161,13 @@ export async function orchestrate(options: OrchestrateOptions): Promise<Orchestr
         writeSet: subtask.writeSet, readHints: subtask.readHints ?? [], acceptance: subtask.acceptance,
         ...(plan.sharedNotes ? { sharedNotes: plan.sharedNotes } : {}), baseCommit, planVersion: 1,
       }
+      writeSets.set(attemptId, subtask.writeSet)
       outcome = await runWorker({
         assignment, rootId, attemptId, worktree, layout: manager.layout, adapter: options.adapter,
         model: options.model ?? `${options.adapter.provider}/${options.adapter.model}`, rootGroup: group,
-        budget: attemptBudget, signal, approve, onSession: async sessionId => { await store.append('attempt/session', { attemptId, sessionId }) },
+        budget: attemptBudget, signal, approve: request => broker.request(attemptId, request),
+        approvalTimeoutMs: perRequestTimeoutMs * (maxWorkers + 1),
+        onSession: async sessionId => { await store.append('attempt/session', { attemptId, sessionId }) },
         ...(options.commandRunner ? { commandRunner: options.commandRunner } : {}),
       })
       runStatus = outcome.runStatus
@@ -239,6 +249,7 @@ export async function orchestrate(options: OrchestrateOptions): Promise<Orchestr
     } catch (error) {
       failureDetail ??= formatError(error)
     } finally {
+      await broker.close().catch(() => {})
       await store.close().catch(() => {})
     }
   }

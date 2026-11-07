@@ -1,5 +1,34 @@
 # 多 Agent 编排改动与证据
 
+## M2-③ 审批 FIFO 队列（2026-11-07）
+
+**改动**
+
+- 新增 `src/orchestration/approval-broker.ts`：单一 FIFO 队列、一次只显示一条；`write_file`/`edit_file` 按 `writes` 策略自动批准，Bash 按 `bash` 策略询问，未知工具一律询问；每条请求从**显示时**开始计时；`cancelAttempt` 立即拒绝该 attempt 的队列请求并中止正在显示的请求；`close` 拒绝全部剩余请求。
+- 新增审计事件 `approval/requested`（requestId、attemptId、tool、summaryHash、writeSet）与 `approval/resolved`（allowed、source: auto/user/timeout/cancelled）；只追加、不参与恢复，审计写入失败不影响工具收到的决定。
+- 编排器接入 broker：M1 单 attempt 路径改为统一走队列；worker 的 `approvalTimeoutMs = perRequestTimeoutMs × (maxWorkers + 1)`，避免在队列中等待时先触发 worker 自身的审批超时。
+- `inspect` 增加审批统计（total/pending/auto/user/timeout/cancelled/denied）。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-approval.test.js dist/test/orchestration-e2e.test.js
+# tests 11 / pass 11 / fail 0
+```
+
+**测试覆盖**
+
+- 三个并发 Bash 审批的显示顺序严格为 FIFO，峰值并发为 1；每个决定都对应一条审计。
+- D8 策略：写入自动批准且不提示；Bash 提示；`writes: ask` 时编辑需人工且被拒绝时返回 false；未知工具默认询问。
+- 显示超时（20 ms）返回 false 且审计来源为 `timeout`；取消 attempt 使活动与排队请求都返回 false；关闭通道把剩余请求标为 `cancelled`。
+- M1 端到端行为不变：写入自动批准的审计事件进入编排日志，状态折叠与 `inspect` 正常。
+
+**未包含**
+
+- 终端显示（CLI 接线在 M2-④）；审批等待计入主动执行时间的口径仍由现有 run 预算维持。
+
 ## M2-② 只读 planner（2026-11-07）
 
 **改动**
