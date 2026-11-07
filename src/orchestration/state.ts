@@ -69,6 +69,8 @@ export interface OrchestrationState {
   baseCommit: string
   config: OrchestrationConfig
   budget: RootBudget
+  verifyCommands: string[]
+  prepareCommand?: string
   status: RootStatus
   stop: { dispatch: boolean; running: boolean; reason?: string }
   plan?: PlanRecorded
@@ -96,7 +98,8 @@ export function foldOrchestration(events: readonly OrchestrationEventUnion[]): O
   const root = events[0]!.data
   const state: OrchestrationState = {
     rootId: events[0]!.rootId, goal: root.goal, repository: root.repository, baseCommit: root.baseCommit,
-    config: structuredClone(root.config), budget: structuredClone(root.budget), status: 'planning',
+    config: structuredClone(root.config), budget: structuredClone(root.budget),
+    verifyCommands: [...(root.verifyCommands ?? [])], ...(root.prepareCommand ? { prepareCommand: root.prepareCommand } : {}), status: 'planning',
     stop: { dispatch: false, running: false }, attempts: {}, attemptOrder: [],
     ledger: { reservations: {}, tools: [] }, integrations: [], verifications: [], human: {}, approvals: {},
   }

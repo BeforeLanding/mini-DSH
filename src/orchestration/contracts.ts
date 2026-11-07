@@ -32,6 +32,9 @@ export interface RootStart {
   baseCommit: string
   config: OrchestrationConfig
   budget: RootBudget
+  // 恢复时重建命令上下文；旧日志可以没有这两项。
+  verifyCommands?: string[]
+  prepareCommand?: string
 }
 
 export interface SubtaskAcceptance { commands: string[] }

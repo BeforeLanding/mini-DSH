@@ -44,10 +44,12 @@
 
 ## M3：失败、取消与恢复（进行中）
 
-- [ ] ① 状态折叠的迟到/过期/重复规则
+- [x] ① 状态折叠的迟到/过期/重复规则
   - 验收：`attempt/late` 只接受已终结 attempt，旧 epoch 只记录不改变状态；`attempt/finished` 保留 `unknownSideEffects`，`group/usage-unknown` 保留 `cause`。
   - 证据：`test/orchestration-state.test.ts`、`test/task-group-budget.test.ts`。
-- [ ] ② 停止语义（两级 Ctrl-C 与 wall 截止）
+- [x] ② 停止语义（两级 Ctrl-C 与 wall 截止）
+  - 验收：第一次 Ctrl-C 只停止派发，未启动 attempt 记 `skipped`，运行中的继续并整合/验收；第二次 Ctrl-C 与 wall 截止中止运行中 run，attempt 记 `cancelled`，不整合，根任务 `cancelled`。
+  - 证据：`src/orchestration/orchestrator.ts`、`src/app/orchestrate-cli.ts`、`test/orchestration-stop.test.ts`。
 - [ ] ③ attempt 与整合恢复（故障注入与 `resume`）
 - [ ] ④ 账本恢复与 429 冷却
 - [ ] ⑤ 崩溃演示脚本

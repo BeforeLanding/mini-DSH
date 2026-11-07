@@ -2,6 +2,7 @@ import path from 'node:path'
 import { runCommand } from '../core/command-runner.js'
 import { utf8Prefix } from '../core/tool-result-store.js'
 import { writeArtifact } from './store.js'
+import type { FaultInjector } from './faults.js'
 import type { OrchestrationStore } from './store.js'
 
 const LOG_LIMIT = 16 * 1024
@@ -16,6 +17,7 @@ export interface VerifyInput {
   commands: readonly string[]
   signal?: AbortSignal
   timeoutMs?: number
+  faults?: FaultInjector
 }
 export async function verifyIntegration(input: VerifyInput) {
   const commands = [...new Set(input.commands.map(command => command.trim()).filter(Boolean))]
@@ -36,6 +38,8 @@ export async function verifyIntegration(input: VerifyInput) {
       stderr: bounded(result.stderr.text), stderrTruncated: result.stderr.truncated,
       ...(result.error ? { error: result.error } : {}),
     })
+    // 崩溃点位于命令已运行、证据未落盘：恢复时必须重新运行，旧日志不复用。
+    await input.faults?.checkpoint('after-verify-command')
     await input.store.append('verification/finished', { head: input.head, tree: input.tree, command, exitCode, logRef: artifact.ref })
     results.push({ command, exitCode, logRef: artifact.ref })
     if (exitCode !== 0) passed = false

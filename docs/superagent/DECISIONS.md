@@ -2,6 +2,15 @@
 
 **非规范性说明：** 方向性决策与数值以 [DEVELOPMENT.md](DEVELOPMENT.md) §2.8 为准；本文件记录开发过程中落实这些决策的具体选择、代码锚点与测试锚点，避免把实现事实只留在提交信息里。
 
+## M3-② 停止语义
+
+- **决定：** `dispatchSignal`（第一次 Ctrl-C）只停止派发：当前已在运行的 attempt 继续到自然结束，队列中未启动的 attempt 记 `skipped`；随后按正常路径整合已完成部分并验收，根任务为 `completed`/`partial`，没有整合则为 `failed`。
+- **决定：** `signal`（第二次 Ctrl-C）与 wall 截止走同一条“停止运行中”路径：写 `control/stop(running)`、中止全部运行中 run、不打开整合、根任务 `cancelled` 并写 `root/finish`。wall 截止由 50 ms 看门狗检查注入时钟，保证可控时钟测试能打断运行中的 worker；账本自身的 wall 检查仍只在准入时生效。
+- **决定：** 并发池等待全部 runner 收尾后再抛出失败（`Promise.allSettled`）。进程内模拟崩溃时先中止兄弟 worker，再让编排器关闭日志；真实进程崩溃不需要该步骤，但离线测试需要避免写入已关闭的日志。
+- **决定：** `root/start` 记录 `verifyCommands` 与 `prepareCommand`，`resume` 不再依赖调用者重复提供；旧日志缺省为空。
+- **代码锚点：** `src/orchestration/orchestrator.ts` 的 `StopController`、`src/app/orchestrate-cli.ts`、`src/orchestration/contracts.ts`。
+- **测试锚点：** `test/orchestration-stop.test.ts`。
+
 ## D8 编排模式的审批策略（用户已确认，2026-11-06）
 
 - **决定：** `orchestrate` 模式下，worktree 内的 `write_file` / `edit_file` 默认自动批准；Bash 默认仍需人工批准，所有请求经单一 FIFO 队列逐条显示；`--approve-writes ask` 可恢复逐条审批。单 Agent CLI 的审批行为不变。

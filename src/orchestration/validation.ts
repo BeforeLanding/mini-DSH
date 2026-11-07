@@ -112,6 +112,8 @@ function validateRootStart(data: Record<string, unknown>) {
   if (typeof budget.plannerShare !== 'number' || !Number.isFinite(budget.plannerShare) || budget.plannerShare < 0 || budget.plannerShare > 1) throw new Error('budget.plannerShare is invalid')
   integer(budget.maxInFlightRequests, 'budget.maxInFlightRequests', 1)
   if (budget.maxUsd !== undefined && (typeof budget.maxUsd !== 'number' || !Number.isFinite(budget.maxUsd) || budget.maxUsd <= 0)) throw new Error('budget.maxUsd is invalid')
+  if (data.verifyCommands !== undefined) stringList(data.verifyCommands, 'verifyCommands', 0, 8, 1024)
+  optionalText(data.prepareCommand, 'prepareCommand', 1024)
 }
 function validateAttemptFinished(data: Record<string, unknown>) {
   if (!safeId(data.attemptId)) throw new Error('attemptId is invalid')

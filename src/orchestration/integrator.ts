@@ -3,6 +3,7 @@ import {
   cherryPick, cherryPickAbort, commitAll, headCommit, resetSoft, stageAll, stagedChangedFiles, treeOf, unmergedFiles,
 } from './git.js'
 import type { GitRunOptions } from './git.js'
+import type { FaultInjector } from './faults.js'
 import type { OrchestrationStore } from './store.js'
 import type { WorktreeManager } from './worktrees.js'
 
@@ -65,6 +66,7 @@ export interface ApplyIntegrationInput {
   path: string
   attempt: IntegrationAttempt
   signal?: AbortSignal
+  faults?: FaultInjector
 }
 export async function applyAttempt(input: ApplyIntegrationInput) {
   const options: GitRunOptions = input.signal ? { signal: input.signal } : {}
@@ -75,6 +77,9 @@ export async function applyAttempt(input: ApplyIntegrationInput) {
     await input.store.append('integration/conflict', { integrationId: input.integrationId, attemptId: input.attempt.attemptId, files: files.length ? files : ['(unknown)'] })
     return { status: 'conflict' as const, conflict: { attemptId: input.attempt.attemptId, files } }
   }
+  // 崩溃点位于 cherry-pick 成功之后、applied 事件落盘之前：整合分支已有提交，日志不知道。
+  // 恢复时从 integration/started 的基线重放 applied 记录，再重新应用未记录的 attempt。
+  await input.faults?.checkpoint('after-cherry-pick')
   const commit = await headCommit(input.path)
   await input.store.append('integration/applied', {
     integrationId: input.integrationId, attemptId: input.attempt.attemptId, sourceCommit: input.attempt.commit, commit,

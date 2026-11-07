@@ -155,6 +155,20 @@ async function executeRun(args: OrchestrateRunArgs, output: Writable) {
   const base = createDeepSeekAdapter({ defaultModel: model })
   const interactive = Boolean((output as NodeJS.WriteStream).isTTY)
   const approver = args.approveWrites === 'ask' || args.approveBash === 'ask' || interactive ? terminalApprover(output) : undefined
+  // 两级 Ctrl-C：第一次只停止派发，第二次中止运行中的 worker。
+  const dispatch = new AbortController(), running = new AbortController()
+  let interrupts = 0
+  const onSigint = () => {
+    interrupts++
+    if (interrupts === 1) {
+      output.write('\n[orchestrate] stopping dispatch; running attempts finish first (Ctrl-C again to abort them)\n')
+      dispatch.abort()
+    } else if (interrupts === 2) {
+      output.write('\n[orchestrate] aborting running attempts\n')
+      running.abort()
+    }
+  }
+  process.on('SIGINT', onSigint)
   try {
     const result = await orchestrate({
       repository: process.env.MINI_DSH_WORKSPACE ?? process.cwd(), goal, ...(plan ? { plan } : {}), baseDirectory: orchestrationBaseDirectory(),
@@ -164,6 +178,7 @@ async function executeRun(args: OrchestrateRunArgs, output: Writable) {
       verifyCommands: args.verifyCommands, allowDirty: args.allowDirty,
       approval: { writes: args.approveWrites, bash: args.approveBash, ...(approver ? { approve: approver.ask } : {}) },
       ...(approver && interactive ? { decide: approver.decide } : {}),
+      dispatchSignal: dispatch.signal, signal: running.signal,
       onProgress: line => output.write(`${line}\n`),
     })
     output.write(`\norchestration ${result.status}\nroot: ${result.rootId}\nbase: ${result.baseCommit}\nlog: ${result.directory}\n`)
@@ -177,6 +192,7 @@ async function executeRun(args: OrchestrateRunArgs, output: Writable) {
     if (result.error) output.write(`error: ${result.error}\n`)
     return result.status === 'completed' ? 0 : 1
   } finally {
+    process.off('SIGINT', onSigint)
     approver?.close()
   }
 }

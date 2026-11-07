@@ -1,5 +1,34 @@
 # 多 Agent 编排改动与证据
 
+## M3-② 两级停止语义（2026-11-07）
+
+**改动**
+
+- 新增 `StopController`：第一次 `dispatchSignal` 只写 `control/stop(dispatch)`，不再启动新 attempt；第二次 `signal` 或 wall 截止写 `control/stop(running)`、中止运行中 run，并在整合前退出。
+- 编排器按日志而不是本地结果收集本波次的成功 attempt，使停止派发后仍能整合已完成部分并运行验收；停止运行中不打开整合、不复用旧验收证据。
+- CLI `orchestrate run` 注册 SIGINT：第一次提示并停止派发，第二次中止运行中；退出时移除监听。
+- `root/start` 增加可选的 `verifyCommands` 与 `prepareCommand`，为 M3-③ 的 `resume` 重建命令上下文。
+- 并发池改为等待全部 worker 收尾后再抛出失败，崩溃时兄弟 worker 先收到中止，避免编排日志关闭后继续写入。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-stop.test.js dist/test/orchestration-e2e.test.js
+# stop tests 3 / pass 3；既有 e2e 13 项保持通过
+```
+
+**测试覆盖**
+
+- 两子任务同波次、`maxWorkers=1`：第一次 Ctrl-C 在 st-1 运行时触发，st-1 完成并整合、st-2 记 `skipped`，验收 exit 0，根任务 `partial`，用户工作树不变。
+- 第二次 Ctrl-C：st-1 记 `cancelled`，无整合、无验收，`control/stop(running)` 落盘，根任务 `cancelled` 并写 `root/finish`。
+- 可控时钟越过 wall 截止：看门狗写 `control/stop(running)`、中止运行中 attempt，根任务 `cancelled`。
+
+**未包含**
+
+- 崩溃后的恢复与 `resume`（M3-③）；恢复窗口的失败注入。
+
 ## M3-① 状态折叠的迟到/过期/重复规则（2026-11-07）
 
 **改动**
