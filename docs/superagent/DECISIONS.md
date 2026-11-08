@@ -2,6 +2,15 @@
 
 **非规范性说明：** 方向性决策与数值以 [DEVELOPMENT.md](DEVELOPMENT.md) §2.8 为准；本文件记录开发过程中落实这些决策的具体选择、代码锚点与测试锚点，避免把实现事实只留在提交信息里。
 
+## M4-② 单/并行演示
+
+- **决定：** 两个演示都走真实入口：只读 planner 用脚本模型生成计划（`plan.source=model`），worker 与宿主整合/复验走正常路径；演示只在模型侧用脚本，不伪造 plan 事件或验收证据。
+- **决定：** 演示的**最终验收结论来自工作区之外的隐藏验收器**；宿主计划里的冒烟检查只证明整合后命令可复跑。二者都通过才打印 PASS。这与 M4-① 的两套验收分工一致。
+- **决定：** 并行演示的并行性用编排日志里 `attempt/started` 与 `attempt/finished` 的 `at` 断言，第一波两个脚本 worker 各有 200 ms 延迟以保证区间重叠；第二波依赖用 **st-3 worktree 的实际文件内容**断言（归一化实现与去重实现已整合），不采信提示词里「dependencies」文案。
+- **决定：** 演示不提供保留临时目录/跳过断言之类的隐藏开关；失败时仍清理临时目录，现场由编排日志与 CHANGES 的命令输出承担。需要复查时用 `orchestrate inspect`/`loadOrchestration` 的既有入口。
+- **代码锚点：** `scripts/demo-orchestrate.ts`、`package.json` 的 `demo:orchestrate-single` / `demo:orchestrate-parallel`。
+- **测试锚点：** 两个 `pnpm demo:*` 命令（脚本内断言 completed、波次、区间重叠、依赖可见、隐藏验收、用户工作树不变）。
+
 ## M4-① 组合夹具与验收器
 
 - **决定：** 组合夹具把既有 coding fixture 的参考解与验收器搬到 `packages/<id>`；`parallel-composite` 的三个写集互不相交，`st-3` 依赖前两者因而进入第二波次。`single-repair` 复用 `repair` 的项目规则与公开 `check.mjs`，只用于 single 判定与 planner 开销演示。

@@ -1,5 +1,34 @@
 # 多 Agent 编排改动与证据
 
+## M4-② 单/并行演示（2026-11-08）
+
+**改动**
+
+- 新增 `scripts/demo-orchestrate.ts` 与 `demo:orchestrate-single`、`demo:orchestrate-parallel`：脚本模型 + 真实 git，不配置 provider、不发起付费请求。
+- `single`：只读 planner 判定 `single`，一个 worker 完成 repair；报告打印 planner 请求/用量。
+- `parallel`：planner 生成两波次计划；第一波两个 worker 的区间重叠，第二波 `st-3` 在整合 head 上读取前两个包的真实实现；报告打印两次整合与三条验收命令。
+- 两个演示最后都在整合 worktree 上运行隐藏验收器，且断言用户工作树 HEAD/状态不变。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+pnpm lint                      # 290 files, no warnings
+pnpm demo:orchestrate-single   # PASS；scripted requests=3；planner requests=1；用户工作树不变
+pnpm demo:orchestrate-parallel # PASS；scripted requests=7；planner requests=1；两波次整合；用户工作树不变
+```
+
+**测试覆盖**
+
+- `single`：`plan.source=model`、`mode=single`、一个 attempt、整合 applied=st-1、验收 exit 0、隐藏验收 1/1。
+- `parallel`：`waves=[[st-1,st-2],[st-3]]`、波次一区间重叠、三次 applied、`st-3` worktree 可见依赖实现、隐藏验收 3/3、验收三条均 exit 0。
+- 两个演示均断言用户工作树 `HEAD` 与 `status --porcelain` 不变。
+
+**未包含**
+
+- 真实模型版本（需单独授权后再录制）；冲突演示（M3 的崩溃演示与 e2e 已覆盖冲突处置）。
+
 ## M4-① 组合夹具与验收器（2026-11-08）
 
 **改动**

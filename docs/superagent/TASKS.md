@@ -66,7 +66,9 @@
 - [x] ① 组合 fixture 与验收器
   - 验收：初始态被隐藏验收器拒绝、参考态通过；`parallel-composite` 分层为两波次；隐藏验收器不在工作区；计划验收命令使用工作区内相对路径。
   - 证据：`scripts/orchestration-fixtures.ts`、`test/fixtures/orchestration/`、`test/orchestration-fixtures.test.ts`。
-- [ ] ② 演示脚本（`demo:orchestrate-single` / `demo:orchestrate-parallel`）
+- [x] ② 演示脚本（`demo:orchestrate-single` / `demo:orchestrate-parallel`）
+  - 验收：单任务演示由 planner 判定 `single`；并行演示第一波区间重叠、第二波依赖整合结果；演示以隐藏验收器为最终结论，用户工作树不变。
+  - 证据：`scripts/demo-orchestrate.ts`、`package.json`。
 - [ ] ③ 评测执行器（离线装配与 `--validate-only`）
 - [ ] ④ 文档与里程碑收尾
 - [ ] 付费小批次（需单独授权；未授权时交付只含离线证据）
