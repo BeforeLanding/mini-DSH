@@ -75,4 +75,14 @@
 - [x] ④ 文档与里程碑收尾
   - 验收：README、REQUIREMENTS、TASKS、CHANGES、DECISIONS 与 PROGRESS 同步；全量 `pnpm check` / `pnpm test` / `pnpm lint` 通过。
   - 证据：本目录文档与 README；命令见 [CHANGES.md](CHANGES.md) 的 M4-④。
-- [ ] 付费小批次（需单独授权；未授权时交付只含离线证据）
+- [ ] ⑤ 付费小批次（需单独授权；未授权时交付只含离线证据）——**进行中：零付费准备**（2026-11-08 起）
+  - 已定：R/R-serial 用夹具固定计划（不评测 planner）；每 run 1M tokens / 96 requests / 192 tool calls / 30 min，四臂相同；模型 `deepseek/deepseek-flash`；2 夹具 × 4 臂 × 2 重复 = 16 runs；D′、冲突型、负对照仍未装配。
+  - [x] ⑤-1 批次 manifest、成本上限与 `--plan-only`
+    - 验收：manifest 冻结 git commit、价格快照、模型与矩阵 digest，`wx` 不覆盖；上限按每 run `1M × 最高单价 × 1.2 + 满额末请求` × 16 + 探测预留计算；provider 请求 0。
+    - 证据：`scripts/eval-orchestrate-batch.ts`、`scripts/eval-orchestrate.ts`、`test/eval-orchestrate-batch.test.ts`；命令见 CHANGES 的 M4-⑤-1。
+  - [ ] ⑤-2 四臂执行器、并发安全金额守卫、按 worktree 的隔离包装与 `--rehearse`
+    - 验收：守卫计入在途预留，两个并发请求不能合计越过上限；缺 provider usage 后全部拒发；`--rehearse` 以脚本模型跑完 16 runs、隐藏验收全过、provider 请求 0。
+  - [ ] ⑤-3 `--execute` 闸门、协议探测、停批规则与报告
+    - 验收：缺参、已存在的证据目录、脏树或 HEAD 与 manifest 不符均拒绝；未知用量、基础设施错误、金额无法预留时立即停批；全部用脚本模型测试。
+  - [ ] ⑤-4 文档与授权申请（命令原文、模型、价格快照、`--max-usd`）
+  - [ ] ⑤-5 付费执行与结果（仅在用户对该次批次授权后；复跑另行授权）

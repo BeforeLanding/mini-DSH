@@ -5,6 +5,7 @@ import {
   fixturePlan, orchestrationFixtureIds, orchestrationFixtures, validateOrchestrationFixture,
   type FixtureValidation, type OrchestrationFixtureId,
 } from './orchestration-fixtures.js'
+import { batchModel, freezeBatchManifest, gitState, manifestDigest, writeBatchManifest } from './eval-orchestrate-batch.js'
 
 // 四臂对照的**离线装配**（DEVELOPMENT.md §14.3、M4-③）。本步只做装配与零付费校验：
 // 不创建真实模型适配器、不发起 provider 请求。真实模型批次需要按 §14.4 对**该次批次**单独授权，
@@ -163,22 +164,53 @@ export async function validateOfflineBatch({ model = 'unset' }: { model?: string
   }
 }
 
-export interface CliOptions { mode: 'validate-only'; model: string }
+export type EvalMode = 'validate-only' | 'plan-only'
+export interface CliOptions { mode: EvalMode; model: string; manifestOut?: string }
 export function parseEvalArgs(argv: readonly string[], env: NodeJS.ProcessEnv = process.env): CliOptions {
   let model = env.MINI_DSH_EVAL_MODEL ?? 'unset'
-  let validateOnly = false
+  const modes: EvalMode[] = []
+  let manifestOut: string | undefined
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index]
-    if (arg === '--validate-only') validateOnly = true
-    else if (arg === '--model') {
+    if (arg === '--validate-only') modes.push('validate-only')
+    else if (arg === '--plan-only') modes.push('plan-only')
+    else if (arg === '--model' || arg === '--manifest-out') {
       const value = argv[++index]
-      if (!value) throw new Error('--model requires a provider/model value')
-      model = value
+      if (!value || value.startsWith('--')) throw new Error(`${arg} requires a value`)
+      if (arg === '--model') model = value
+      else manifestOut = value
     } else if (arg === '--execute') throw new Error('refusing --execute: paid batches require separate authorization for that batch (§14.4)')
     else throw new Error(`unknown argument: ${arg}`)
   }
-  if (!validateOnly) throw new Error('only --validate-only is implemented in M4-③; paid execution is not wired')
-  return { mode: 'validate-only', model }
+  if (modes.length !== 1) throw new Error('choose exactly one of --validate-only or --plan-only')
+  const mode = modes[0]!
+  if (manifestOut !== undefined && mode !== 'plan-only') throw new Error('--manifest-out is only valid with --plan-only')
+  if (mode === 'plan-only') {
+    if (model === 'unset') model = batchModel
+    if (model !== batchModel) throw new Error(`this batch is preregistered for ${batchModel}; got ${model}`)
+  }
+  return { mode, model, ...(manifestOut === undefined ? {} : { manifestOut }) }
+}
+
+const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url))
+// 只打印将要执行的批次（矩阵、预算、模型、价格快照、金额上限）；给出 --manifest-out 时冻结 manifest。
+// 两者都不创建适配器、不读 API key。冻结要求干净工作树，记录的 commit 才是将要执行的代码。
+export async function planBatch({ model = batchModel, manifestOut, repository = repositoryRoot, now = () => new Date() }: {
+  model?: string; manifestOut?: string; repository?: string; now?: () => Date
+} = {}) {
+  const specs = assembleRunMatrix({ model })
+  const matrix = validateRunMatrix(specs)
+  if (!matrix.passed) throw new Error(`run matrix is invalid: ${matrix.errors.join('; ')}`)
+  const git = gitState(repository)
+  const manifest = freezeBatchManifest({ specs, gitCommit: git.head, createdAt: now().toISOString(), model })
+  if (manifestOut !== undefined) {
+    if (git.dirty) throw new Error('refusing to freeze a batch manifest from a dirty working tree')
+    await writeBatchManifest(manifestOut, manifest)
+  }
+  return {
+    mode: 'plan-only' as const, providerRequests: 0 as const, dirty: git.dirty,
+    manifestWritten: manifestOut ?? null, manifestDigest: manifestDigest(manifest), manifest,
+  }
 }
 
 async function main() {
@@ -186,6 +218,15 @@ async function main() {
   try { options = parseEvalArgs(process.argv.slice(2)) } catch (error) {
     console.error(error instanceof Error ? error.message : String(error))
     process.exitCode = 2
+    return
+  }
+  if (options.mode === 'plan-only') {
+    try {
+      console.log(JSON.stringify(await planBatch({ model: options.model, ...(options.manifestOut ? { manifestOut: options.manifestOut } : {}) }), null, 2))
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error))
+      process.exitCode = 1
+    }
     return
   }
   const report = await validateOfflineBatch({ model: options.model })

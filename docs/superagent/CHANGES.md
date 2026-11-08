@@ -1,5 +1,24 @@
 # 多 Agent 编排改动与证据
 
+## M4-⑤-1 批次 manifest、金额上限与 `--plan-only`（2026-11-08）
+
+**改动**
+
+- 新增 `scripts/eval-orchestrate-batch.ts`：价格快照（2026-11-08 从官方价格页核对，峰值与 2026-10-27 快照相同：缓存命中输入 $0.006、未命中输入 $0.30、输出 $1.20 / 百万 token；非峰值为一半，上限一律按峰值）、与 `developmentReserveUsd` 同式的批次上限、按 (任务, 重复) 成块且偶数重复反转臂序的执行顺序、可移植的矩阵 digest、`wx` 不覆盖的 manifest。
+- `pnpm eval:orchestrate --plan-only [--manifest-out FILE]`：打印矩阵、预算、模型、价格与上限；给出 `--manifest-out` 时冻结 manifest，工作树不干净即拒绝。只接受预注册的 `deepseek/deepseek-flash`。`--execute` 仍被拒绝。
+
+**验证（本步实际输出）**
+
+```text
+node dist/scripts/eval-orchestrate.js --plan-only
+# providerRequests=0; runs=16; perRunUsd=1.7597; batchUsd=28.1742
+# 每 run = 1M × $1.20 × 1.2 + (1M × $0.30 + 16,384 × $1.20)/1M；批次另加 16,384 × $1.20/1M 的探测预留
+node dist/scripts/eval-orchestrate.js --validate-only   # passed=true; providerRequests=0; runs=16
+pnpm check                     # syntax ok: 263 files
+pnpm test                      # tests 671 / pass 641 / fail 0 / 30 platform-skipped
+pnpm lint                      # 294 files, no fixes applied
+```
+
 ## v0.3.0 发布（2026-11-08）
 
 **改动**

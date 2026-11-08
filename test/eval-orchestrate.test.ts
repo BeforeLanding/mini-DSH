@@ -43,9 +43,9 @@ test('offline validation runs the verifier positive/negative cases with zero pro
   assert.equal(report.omitted[0]?.id, 'D′')
 })
 
-test('the offline executor refuses paid execution and accepts only --validate-only', () => {
+test('the offline executor refuses paid execution and needs exactly one mode', () => {
   assert.deepEqual(parseEvalArgs(['--validate-only', '--model', 'scripted/test'], {}), { mode: 'validate-only', model: 'scripted/test' })
-  assert.throws(() => parseEvalArgs([], {}), /only --validate-only/)
+  assert.throws(() => parseEvalArgs([], {}), /exactly one of --validate-only or --plan-only/)
   assert.throws(() => parseEvalArgs(['--execute'], {}), /refusing --execute/)
   assert.throws(() => parseEvalArgs(['--validate-only', '--bogus'], {}), /unknown argument/)
   assert.deepEqual(parseEvalArgs(['--validate-only'], { MINI_DSH_EVAL_MODEL: 'env/model' }), { mode: 'validate-only', model: 'env/model' })
