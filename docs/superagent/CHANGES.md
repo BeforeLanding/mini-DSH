@@ -1,5 +1,120 @@
 # 多 Agent 编排改动与证据
 
+## M4-⑤-5 第一批付费执行（2026-11-08）
+
+用户授权的命令（逐字）：
+
+```text
+MINI_DSH_V2_RUNTIME='D:\Agent\tmp\nx42-runtime\unpack' node dist/scripts/eval-orchestrate.js --execute --manifest D:/Agent/outputs/orchestration-four-arm-20261108/manifest.json --evidence-root D:/Agent/outputs/orchestration-four-arm-20261108/batch-01 --max-usd 28.17
+```
+
+**读数**
+
+```text
+manifest 提交 23358c9（干净工作树）；探测回显 deepseek-flash；isolation=wsl-bwrap
+stopReason=completed; executedRuns=16/16; provider calls=201（含探测）; spentPeakUsd=0.3690（上界）
+隐藏验收：S 2/4、D 2/4、R 4/4、R-serial 4/4；编排臂冲突 0、人工请求 0；D 的 delegate_tasks 调用 0
+```
+
+**解读与限制：** 见 [RESULTS-20261108.md](RESULTS-20261108.md)。S/D 只在 `parallel-composite` 的 `st-3` 上失败，原因是隐藏验收器要求的约定只写在固定计划里；S/D 的提示缓存命中 2–3%，编排臂 73–91%，配置不同。这些是本批次设计的不对称，不是编排的收益。机器可读摘要 `docs/samples/orchestration-four-arm-20261108.json` 记录了 manifest 与原始报告的 SHA-256；原始证据留在本机，未提交。
+
+**文档同步与护栏：** README、PROGRESS、讲解提纲与 REQUIREMENTS 改为“第一批已执行、不能说明编排更好”，并指向结果页。`test/progress-sync.test.ts` 新增护栏：存在 `docs/superagent/RESULTS-*.md` 时，用户文档不得再写四臂批次“未执行 / 尚无结果”，也不得再写“模型评测只有 SWE-bench 一项”。先证红：同一规则对改动前的文档命中 9 行（README 2、PROGRESS 1、讲解提纲 5、REQUIREMENTS 1），改动后为 0。展示面（README、讲解提纲）按 `display-policy` 规则不写美元金额，费用只在结果页与 PROGRESS。
+
+```text
+pnpm check                     # syntax ok: 267 files
+pnpm test                      # tests 683 / pass 653 / fail 0 / 30 platform-skipped
+pnpm lint                      # 299 files, no fixes applied
+```
+
+## M4-⑤-4 付费批次文档（2026-11-08）
+
+- DECISIONS 新增 M4-⑤：固定计划、四臂同额预算与两项置 0 的理由、在途预留守卫、不提供 `decide`、复刻而非抽取隔离 preflight、先演练后授权。
+- DEVELOPMENT §14.4 填入第一批的实际数值：每 run 上限 $1.7597，批次上限 $28.1742（峰值价，最坏情况，不是预计花费）。
+- manifest 必须在本提交之后冻结：`--execute` 要求 HEAD 等于 manifest 记录的 commit。
+
+## M4-⑤-3 `--execute` 闸门、协议探测与停批规则（2026-11-08）
+
+**改动**
+
+- `pnpm eval:orchestrate --execute --manifest FILE --evidence-root DIR --max-usd N`：唯一会付费的模式。模型只取自冻结 manifest（传 `--model` 或 `MINI_DSH_EVAL_MODEL` 即拒绝）；`--max-usd` 只接受十进制正数。
+- 闸门全部在创建证据目录、发出任何请求之前完成：manifest 协议、价格、矩阵 digest、执行顺序与金额上限按当前代码重算后逐项一致；工作树干净且 HEAD 等于冻结 commit；`--max-usd` 不低于“探测 + 一个 run”的预留、不高于冻结的批次上限；`DEEPSEEK_API_KEY` 与 `MINI_DSH_V2_RUNTIME` 存在且隔离 preflight 通过；证据目录尚不存在。
+- 协议探测与 eval-v2-run 同形：直连 `max_tokens 16` 校验服务端回显等于 manifest 的 `echoedModel`，流式一次校验 provider usage；失败写 `probe-error.json` 与 `stopReason=protocol_probe_failed` 的报告，不跑任何 run。探测预留整额计入已花费，批次守卫只拿剩余额度。
+- 适配器与 eval-v2-run 同形（显式模型列表与 1M 窗口）；thinking 取适配器缺省，与生产 CLI 相同。真实依赖只在 CLI 中装配，测试全部注入脚本依赖。
+
+**验证（本步实际输出）**
+
+```text
+node --test dist/test/eval-orchestrate*.test.js   # tests 21 / pass 21 / fail 0
+#   每个闸门拒绝时证据目录不存在、探测与模型调用均为 0；探测回显不符即停批且无 run；
+#   探测通过后第一个 run 出现未知用量即停批，报告 executedRuns=1、observedModel 已记录
+pnpm check                     # syntax ok: 267 files
+pnpm test                      # tests 682 / pass 652 / fail 0 / 30 platform-skipped
+pnpm lint                      # 298 files, no fixes applied
+```
+
+本步没有发出任何真实请求；付费执行仍需用户对该次批次授权。
+
+## M4-⑤-2 四臂执行器、并发安全金额守卫、按工作区的隔离与 `--rehearse`（2026-11-08）
+
+代码在 `570bcd5`；该提交漏带本条证据，由后续文档提交补上（不 amend 已推送提交）。
+
+**改动**
+
+- `scripts/eval-orchestrate-arms.ts`：
+  - 金额守卫与 `createSmokeAmountGuard` 同一预留口径（满 1M 上下文输入 + 满输出），另计**在途预留**——R 的两个 worker 并发请求时不会合计越过上限；缺 provider usage 后全部拒发。
+  - 逐 run 计量在适配器层统一数请求、provider token、工具调用与 Bash 次数、峰值价 USD，四臂同一口径。
+  - 按命令 cwd 向上找到所属 git 工作区（`.git` 目录或 worktree 的 `.git` 文件），各建一个隔离 runner——编排只接受一个共享 runner，而 bwrap runner 绑定单一工作区。
+  - S/D 走 `createHarness` + 单 Agent（D 加只读委派与同额任务组预算）；R/R-serial 走 `orchestrate()` 固定计划、`maxWorkers` 2/1、`plannerShare = 0`、`fixReserveTokens = 0`，写入与 Bash 自动批准，不提供 `decide`（冲突即停为需人工，计入该臂）。结论一律由隐藏验收器给出。
+  - 批次按 manifest 顺序串行；金额无法预留、未知用量、基础设施错误立即停批。
+- `scripts/eval-orchestrate-run.ts`：隔离 preflight（与 eval-v2-run 同检查；不改 eval-v2-run，它在 eval-v2 的冻结清单里）、批次报告（逐 (任务, 重复) 配对 + 按臂汇总，不做显著性判断）、证据目录一次一用、`--rehearse`。
+- `pnpm eval:orchestrate --rehearse [--evidence-root DIR]`：脚本模型写参考解并经隔离 runner 跑冒烟检查；给出 `MINI_DSH_V2_RUNTIME` 时用 WSL bwrap，否则在报告中标明 Bash 未隔离。
+
+**验证（本步实际输出）**
+
+```text
+MINI_DSH_V2_RUNTIME='D:\Agent\tmp\nx42-runtime\unpack' node dist/scripts/eval-orchestrate.js --rehearse --evidence-root D:/Agent/tmp/orch-rehearse-01
+# passed=true; providerRequests=0; scriptedRequests=72; isolation=wsl-bwrap; stopReason=completed; executedRuns=16
+# 隐藏验收 S 4/4、D 4/4、R 4/4、R-serial 4/4；会话中 24 次 Bash 全部 isError=false，抽查为沙箱内 exit 0
+node --test dist/test/eval-orchestrate*.test.js   # pass 17 / fail 0
+pnpm check                     # syntax ok: 266 files
+pnpm test                      # tests 678 / pass 648 / fail 0 / 30 platform-skipped
+pnpm lint                      # 297 files, no fixes applied
+```
+
+演练证明的是管线（工作区、git/worktree、隔离、守卫、证据与报告），不是模型能力；脚本模型的 usage 是合成值，只用于驱动守卫。
+
+## 修复：root/start 拒绝 `fixReserveTokens = 0`（2026-11-08）
+
+**现象：** `resolveRootBudget` 有意允许 `fixReserveTokens` 为 0（`src/orchestration/orchestrator.ts`），但 `root/start` 事件校验（`src/orchestration/validation.ts`）要求它 ≥ 1。于是 `--root-budget '{"fixReserveTokens":0}'` 通过入口校验，根却在写第一条事件时失败（`budget.fixReserveTokens must be an integer >= 1`）。在为付费批次装配 R 臂时发现。
+
+**改动：** 校验与 `resolveRootBudget` 对齐，`fixReserveTokens` 下限为 0，其余预算键仍为 1；新增回归测试，同时钉住 -1 与 `maxTotalTokens = 0` 仍被拒绝。
+
+**验证（本步实际输出）**
+
+```text
+修复前  node --test dist/test/orchestration-store.test.js        # pass 4 / fail 1（新增用例）
+修复后  node --test dist/test/orchestration-*.test.js            # tests 70 / pass 70 / fail 0
+```
+
+## M4-⑤-1 批次 manifest、金额上限与 `--plan-only`（2026-11-08）
+
+**改动**
+
+- 新增 `scripts/eval-orchestrate-batch.ts`：价格快照（2026-11-08 从官方价格页核对，峰值与 2026-10-27 快照相同：缓存命中输入 $0.006、未命中输入 $0.30、输出 $1.20 / 百万 token；非峰值为一半，上限一律按峰值）、与 `developmentReserveUsd` 同式的批次上限、按 (任务, 重复) 成块且偶数重复反转臂序的执行顺序、可移植的矩阵 digest、`wx` 不覆盖的 manifest。
+- `pnpm eval:orchestrate --plan-only [--manifest-out FILE]`：打印矩阵、预算、模型、价格与上限；给出 `--manifest-out` 时冻结 manifest，工作树不干净即拒绝。只接受预注册的 `deepseek/deepseek-flash`。`--execute` 仍被拒绝。
+
+**验证（本步实际输出）**
+
+```text
+node dist/scripts/eval-orchestrate.js --plan-only
+# providerRequests=0; runs=16; perRunUsd=1.7597; batchUsd=28.1742
+# 每 run = 1M × $1.20 × 1.2 + (1M × $0.30 + 16,384 × $1.20)/1M；批次另加 16,384 × $1.20/1M 的探测预留
+node dist/scripts/eval-orchestrate.js --validate-only   # passed=true; providerRequests=0; runs=16
+pnpm check                     # syntax ok: 263 files
+pnpm test                      # tests 671 / pass 641 / fail 0 / 30 platform-skipped
+pnpm lint                      # 294 files, no fixes applied
+```
+
 ## v0.3.0 发布（2026-11-08）
 
 **改动**

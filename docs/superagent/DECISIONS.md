@@ -2,6 +2,17 @@
 
 **非规范性说明：** 方向性决策与数值以 [DEVELOPMENT.md](DEVELOPMENT.md) §2.8 为准；本文件记录开发过程中落实这些决策的具体选择、代码锚点与测试锚点，避免把实现事实只留在提交信息里。
 
+## M4-⑤ 付费小批次的准备（2026-11-08）
+
+- **决定：** R/R-serial 用夹具的**固定计划**，不跑 planner（用户选定）。R 与 R-serial 因此共享同一计划，对照只区分并行与串行；planner 的质量与开销不在本批次度量，报告写明。
+- **决定：** 每 run 预算四臂相同（1M tokens / 96 requests / 192 tool calls / 30 min，用户选定保持原值）。R 的根预算设 `plannerShare = 0`、`fixReserveTokens = 0`：前者因为没有 planner，后者因为整合修复 attempt 尚不存在（该字段目前不被任何代码消耗）。已知不对称：编排 worker 沿用 CLI 的每 worker 10 分钟主动时间，S/D 受 30 分钟任务墙钟约束，记入 manifest notes。
+- **决定：** 金额硬上限由批次守卫承担，而不是 `RootBudget.maxUsd`（编排器接受但不执行该字段）。守卫沿用 smoke 守卫的单请求预留口径，并计入**在途预留**：R 的两个 worker 并发时，只看已结算额会让两个请求合计越过上限。
+- **决定：** 不给编排臂提供 `decide`：整合冲突即停为需人工，计入 R 的结果，而不是在批次中途由人裁决。
+- **决定：** 隔离 preflight 在新模块中复刻 eval-v2-run 的检查，而不是抽取共享：eval-v2-run 在 eval-v2 的冻结文件清单里，改动会让旧 manifest 校验失败。
+- **决定：** 先用 `--rehearse` 以脚本模型跑完整 16 runs（真实 WSL bwrap 隔离），证明工作区、git/worktree、隔离、守卫、证据与报告的管线，再申请付费授权；演练不证明模型能力。
+- **代码锚点：** `scripts/eval-orchestrate-batch.ts`、`scripts/eval-orchestrate-arms.ts`、`scripts/eval-orchestrate-run.ts`、`scripts/eval-orchestrate.ts`。
+- **测试锚点：** `test/eval-orchestrate-batch.test.ts`、`test/eval-orchestrate-arms.test.ts`、`test/eval-orchestrate-execute.test.ts`。
+
 ## v0.3.0 发布（2026-11-08）
 
 - **决定：** 编排合入 main 后按次版本号发布 v0.3.0：新增 `orchestrate` 子命令与可选只读委派，默认行为（单 Agent、委派关闭）与 v0.2.0 相同。修订上一节“是否发 v0.3.0 由后续任务决定”。

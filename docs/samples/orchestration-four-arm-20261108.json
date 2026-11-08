@@ -1,0 +1,384 @@
+{
+  "protocol": "orchestration-four-arm-v1",
+  "evidenceKind": "paid-batch-summary",
+  "date": "2026-11-08",
+  "gitCommit": "23358c9d2218609d499f4dcb593b76445eca537d",
+  "manifestSha256": "60134573e04ec8ea1905a26f891693b14273da97561ff930f6574773c0024fed",
+  "reportSha256": "ef8257d80d5c108b19af1077ffdee33b57874e2a94f0496b66a518bcd85a0f90",
+  "rawEvidence": "D:/Agent/outputs/orchestration-four-arm-20261108/batch-01 (local, not committed)",
+  "model": "deepseek/deepseek-flash",
+  "probe": {
+    "requestedModel": "deepseek-flash",
+    "echoedModel": "deepseek-flash",
+    "streamedObservedModel": "deepseek-flash"
+  },
+  "isolation": "wsl-bwrap",
+  "price": {
+    "source": "https://api-docs.deepseek.com/quick_start/pricing/",
+    "capturedAt": "2026-11-08T06:21:23Z",
+    "currency": "USD",
+    "peakCacheReadPerMillion": 0.006,
+    "peakInputPerMillion": 0.3,
+    "peakOutputPerMillion": 1.2
+  },
+  "maxUsd": 28.17,
+  "ceilingUsd": 28.174233599999997,
+  "spentPeakUsdUpperBound": 0.36904232399999987,
+  "startedAt": "2026-11-08T06:43:43.506Z",
+  "finishedAt": "2026-11-08T06:53:24.567Z",
+  "stopReason": "completed",
+  "plannedRuns": 16,
+  "executedRuns": 16,
+  "providerCalls": 201,
+  "runs": [
+    {
+      "runId": "parallel-composite:S:1",
+      "status": "completed",
+      "hiddenPassed": false,
+      "hidden": {
+        "st-1": true,
+        "st-2": true,
+        "st-3": false
+      },
+      "wallMs": 39265,
+      "activeMs": 39265,
+      "requests": 8,
+      "inputTokens": 66891,
+      "cacheReadTokens": 1792,
+      "outputTokens": 6129,
+      "toolCalls": 24,
+      "bashCalls": 4,
+      "peakUsd": 0.026895252
+    },
+    {
+      "runId": "parallel-composite:D:1",
+      "status": "completed",
+      "hiddenPassed": false,
+      "hidden": {
+        "st-1": true,
+        "st-2": true,
+        "st-3": false
+      },
+      "wallMs": 55966,
+      "activeMs": 55966,
+      "requests": 10,
+      "inputTokens": 96860,
+      "cacheReadTokens": 2432,
+      "outputTokens": 8138,
+      "toolCalls": 25,
+      "bashCalls": 6,
+      "peakUsd": 0.038108592
+    },
+    {
+      "runId": "parallel-composite:R:1",
+      "status": "completed",
+      "hiddenPassed": true,
+      "hidden": {
+        "st-1": true,
+        "st-2": true,
+        "st-3": true
+      },
+      "wallMs": 19502,
+      "activeMs": 26484,
+      "requests": 16,
+      "inputTokens": 69863,
+      "cacheReadTokens": 51456,
+      "outputTokens": 2549,
+      "toolCalls": 21,
+      "bashCalls": 3,
+      "peakUsd": 0.008889636,
+      "conflicts": 0,
+      "humanRequests": 0
+    },
+    {
+      "runId": "parallel-composite:R-serial:1",
+      "status": "completed",
+      "hiddenPassed": true,
+      "hidden": {
+        "st-1": true,
+        "st-2": true,
+        "st-3": true
+      },
+      "wallMs": 29245,
+      "activeMs": 28246,
+      "requests": 18,
+      "inputTokens": 81184,
+      "cacheReadTokens": 59904,
+      "outputTokens": 2260,
+      "toolCalls": 21,
+      "bashCalls": 3,
+      "peakUsd": 0.009455424,
+      "conflicts": 0,
+      "humanRequests": 0
+    },
+    {
+      "runId": "parallel-composite:R-serial:2",
+      "status": "completed",
+      "hiddenPassed": true,
+      "hidden": {
+        "st-1": true,
+        "st-2": true,
+        "st-3": true
+      },
+      "wallMs": 48382,
+      "activeMs": 47294,
+      "requests": 24,
+      "inputTokens": 126449,
+      "cacheReadTokens": 100608,
+      "outputTokens": 4551,
+      "toolCalls": 28,
+      "bashCalls": 6,
+      "peakUsd": 0.013817148000000003,
+      "conflicts": 0,
+      "humanRequests": 0
+    },
+    {
+      "runId": "parallel-composite:R:2",
+      "status": "completed",
+      "hiddenPassed": true,
+      "hidden": {
+        "st-1": true,
+        "st-2": true,
+        "st-3": true
+      },
+      "wallMs": 42260,
+      "activeMs": 48254,
+      "requests": 25,
+      "inputTokens": 129538,
+      "cacheReadTokens": 106496,
+      "outputTokens": 4729,
+      "toolCalls": 29,
+      "bashCalls": 10,
+      "peakUsd": 0.013226376,
+      "conflicts": 0,
+      "humanRequests": 0
+    },
+    {
+      "runId": "parallel-composite:D:2",
+      "status": "completed",
+      "hiddenPassed": false,
+      "hidden": {
+        "st-1": true,
+        "st-2": true,
+        "st-3": false
+      },
+      "wallMs": 30802,
+      "activeMs": 30802,
+      "requests": 10,
+      "inputTokens": 78495,
+      "cacheReadTokens": 2432,
+      "outputTokens": 3836,
+      "toolCalls": 21,
+      "bashCalls": 6,
+      "peakUsd": 0.027436692000000002
+    },
+    {
+      "runId": "parallel-composite:S:2",
+      "status": "completed",
+      "hiddenPassed": false,
+      "hidden": {
+        "st-1": true,
+        "st-2": true,
+        "st-3": false
+      },
+      "wallMs": 80704,
+      "activeMs": 80704,
+      "requests": 10,
+      "inputTokens": 115524,
+      "cacheReadTokens": 2432,
+      "outputTokens": 12748,
+      "toolCalls": 26,
+      "bashCalls": 6,
+      "peakUsd": 0.049239792
+    },
+    {
+      "runId": "single-repair:S:1",
+      "status": "completed",
+      "hiddenPassed": true,
+      "hidden": {
+        "st-1": true
+      },
+      "wallMs": 15277,
+      "activeMs": 15277,
+      "requests": 7,
+      "inputTokens": 40456,
+      "cacheReadTokens": 1664,
+      "outputTokens": 2089,
+      "toolCalls": 9,
+      "bashCalls": 2,
+      "peakUsd": 0.014154383999999999
+    },
+    {
+      "runId": "single-repair:D:1",
+      "status": "completed",
+      "hiddenPassed": true,
+      "hidden": {
+        "st-1": true
+      },
+      "wallMs": 64076,
+      "activeMs": 64076,
+      "requests": 17,
+      "inputTokens": 218293,
+      "cacheReadTokens": 4224,
+      "outputTokens": 9621,
+      "toolCalls": 22,
+      "bashCalls": 5,
+      "peakUsd": 0.07579124400000001
+    },
+    {
+      "runId": "single-repair:R:1",
+      "status": "completed",
+      "hiddenPassed": true,
+      "hidden": {
+        "st-1": true
+      },
+      "wallMs": 18982,
+      "activeMs": 18454,
+      "requests": 8,
+      "inputTokens": 47809,
+      "cacheReadTokens": 40576,
+      "outputTokens": 2281,
+      "toolCalls": 12,
+      "bashCalls": 2,
+      "peakUsd": 0.005150556,
+      "conflicts": 0,
+      "humanRequests": 0
+    },
+    {
+      "runId": "single-repair:R-serial:1",
+      "status": "completed",
+      "hiddenPassed": true,
+      "hidden": {
+        "st-1": true
+      },
+      "wallMs": 44987,
+      "activeMs": 44476,
+      "requests": 13,
+      "inputTokens": 137055,
+      "cacheReadTokens": 125312,
+      "outputTokens": 6498,
+      "toolCalls": 18,
+      "bashCalls": 5,
+      "peakUsd": 0.012072372000000001,
+      "conflicts": 0,
+      "humanRequests": 0
+    },
+    {
+      "runId": "single-repair:R-serial:2",
+      "status": "completed",
+      "hiddenPassed": true,
+      "hidden": {
+        "st-1": true
+      },
+      "wallMs": 20337,
+      "activeMs": 19797,
+      "requests": 10,
+      "inputTokens": 62850,
+      "cacheReadTokens": 52352,
+      "outputTokens": 2253,
+      "toolCalls": 12,
+      "bashCalls": 2,
+      "peakUsd": 0.006167112,
+      "conflicts": 0,
+      "humanRequests": 0
+    },
+    {
+      "runId": "single-repair:R:2",
+      "status": "completed",
+      "hiddenPassed": true,
+      "hidden": {
+        "st-1": true
+      },
+      "wallMs": 13808,
+      "activeMs": 13272,
+      "requests": 7,
+      "inputTokens": 42191,
+      "cacheReadTokens": 31872,
+      "outputTokens": 1599,
+      "toolCalls": 11,
+      "bashCalls": 2,
+      "peakUsd": 0.005205731999999999,
+      "conflicts": 0,
+      "humanRequests": 0
+    },
+    {
+      "runId": "single-repair:D:2",
+      "status": "completed",
+      "hiddenPassed": true,
+      "hidden": {
+        "st-1": true
+      },
+      "wallMs": 30546,
+      "activeMs": 30546,
+      "requests": 9,
+      "inputTokens": 68066,
+      "cacheReadTokens": 2176,
+      "outputTokens": 4634,
+      "toolCalls": 14,
+      "bashCalls": 2,
+      "peakUsd": 0.025340856000000002
+    },
+    {
+      "runId": "single-repair:S:2",
+      "status": "completed",
+      "hiddenPassed": true,
+      "hidden": {
+        "st-1": true
+      },
+      "wallMs": 18776,
+      "activeMs": 18776,
+      "requests": 9,
+      "inputTokens": 54535,
+      "cacheReadTokens": 2176,
+      "outputTokens": 2258,
+      "toolCalls": 13,
+      "bashCalls": 2,
+      "peakUsd": 0.018430356000000002
+    }
+  ],
+  "byArm": {
+    "S": {
+      "runs": 4,
+      "hiddenPassed": 2,
+      "meanWallMs": 38505.5,
+      "meanActiveMs": 38505.5,
+      "requests": 34,
+      "bashCalls": 14,
+      "peakUsd": 0.10871978400000001
+    },
+    "D": {
+      "runs": 4,
+      "hiddenPassed": 2,
+      "meanWallMs": 45347.5,
+      "meanActiveMs": 45347.5,
+      "requests": 46,
+      "bashCalls": 19,
+      "peakUsd": 0.166677384
+    },
+    "R": {
+      "runs": 4,
+      "hiddenPassed": 4,
+      "meanWallMs": 23638,
+      "meanActiveMs": 26616,
+      "requests": 56,
+      "bashCalls": 17,
+      "peakUsd": 0.032472299999999996
+    },
+    "R-serial": {
+      "runs": 4,
+      "hiddenPassed": 4,
+      "meanWallMs": 35737.75,
+      "meanActiveMs": 34953.25,
+      "requests": 65,
+      "bashCalls": 16,
+      "peakUsd": 0.041512056000000006
+    }
+  },
+  "delegateTasksCallsInD": 0,
+  "confounds": [
+    "parallel-composite st-3: the hidden verifier requires names over all people; that contract is stated only in the fixed plan objective given to R/R-serial workers. S/D see only the root goal and the one-example public check, and all four S/D runs implemented names over unique people. The S/D failures on st-3 are a fixture asymmetry, not evidence for orchestration.",
+    "prompt caching: orchestration workers run with contextLayout/runtimeClockMode frozen; the S/D runner used the harness defaults (live). Cache-read share was 2-3% for S/D and 73-91% for R/R-serial, so cost and possibly latency are not comparable between S/D and R.",
+    "D never called delegate_tasks in any of its 4 runs, so D measured S plus an unused tool.",
+    "n=2 per task and arm; latency varies widely between repeats (e.g. single-repair R-serial 45.0 s vs 20.3 s) even where no parallelism is possible."
+  ]
+}
