@@ -86,5 +86,5 @@
   - [x] ⑤-3 `--execute` 闸门、协议探测、停批规则与报告
     - 验收：缺参、已存在的证据目录、脏树或 HEAD 与 manifest 不符均拒绝；未知用量、基础设施错误、金额无法预留时立即停批；全部用脚本模型测试。
     - 证据：`scripts/eval-orchestrate-run.ts`、`scripts/eval-orchestrate.ts`、`test/eval-orchestrate-execute.test.ts`；命令见 CHANGES 的 M4-⑤-3。
-  - [ ] ⑤-4 文档与授权申请（命令原文、模型、价格快照、`--max-usd`）
+  - [ ] ⑤-4 文档与授权申请（命令原文、模型、价格快照、`--max-usd`）——文档已完成（DECISIONS M4-⑤、DEVELOPMENT §14.4 数值）；manifest 在本提交之后冻结，授权待用户确认
   - [ ] ⑤-5 付费执行与结果（仅在用户对该次批次授权后；复跑另行授权）
