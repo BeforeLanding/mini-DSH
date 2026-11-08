@@ -2,6 +2,50 @@
 
 **非规范性说明：** 方向性决策与数值以 [DEVELOPMENT.md](DEVELOPMENT.md) §2.8 为准；本文件记录开发过程中落实这些决策的具体选择、代码锚点与测试锚点，避免把实现事实只留在提交信息里。
 
+## 合入 main 后的文档口径（2026-11-08）
+
+- **决定：** M0—M4 的分支链按里程碑分别以 PR #26—#30 合入 main，用 merge commit 保留各步骤的原始提交，不 squash/rebase（[AGENTS.md](../../AGENTS.md) 的提交边界规则）。
+- **决定：** 合入后 README、PROGRESS、USAGE、讲解提纲与 REQUIREMENTS 改写为“已在 main、尚未发版”；v0.2.0 Release 不含编排，是否发 v0.3.0 由后续任务决定。修订 M4-④ 中“开发分支，待评审合并”的口径。
+- **决定：** 用回归测试挡住这类漂移：`src/app/orchestrate-cli.ts` 存在时，上述五份用户文档里提到编排的行不得再写“尚未合入/待评审合并/main 尚未包含入口”等。测试以源码事实为条件，入口被移除时自动失效，而不是永久黑名单。
+- **代码锚点：** 无运行时代码改动。
+- **测试锚点：** `test/progress-sync.test.ts` 的“orchestrate 子命令已在源码中时，用户文档不再写编排未合入 main”。
+
+## M4-④ 里程碑收尾与文档口径
+
+- **决定：** M4 以**离线部分完成**收口；付费小批次保持未执行，文档只写「需单独授权、尚无结果」，不预留结果数字或占位结论。
+- **决定：** README 把编排能力放在“开发分支，待评审合并”下，并明确 main 尚未包含入口；不把分支能力描述成 main 已交付。（合入 main 后由上一节修订。）
+- **决定：** 证据只引用本步实际命令输出（`pnpm check`、`pnpm test`、`pnpm lint`、三个演示与 `eval:orchestrate --validate-only`），不复用 M1–M3 的历史数字；`test` 的 platform-skipped 仍按平台条件计入而非声称本机通过。
+- **代码锚点：** 无运行时代码改动；文档与证据在 `docs/superagent/`、`README.md`、`PROGRESS.md`。
+- **测试锚点：** M4-④ 的验证命令与结果见 [CHANGES.md](CHANGES.md)。
+
+## M4-③ 离线评测执行器
+
+- **决定：** 本步只实现**离线装配与零付费校验**。`eval-orchestrate` 只接受 `--validate-only`；`--execute` 被显式拒绝并提示按 §14.4 对该次批次单独授权。理由：付费批次需要授权、模型回显探测与按价格表计算的上限，且结果必须另成证据提交；把它们塞进离线校验脚本会制造「跑个校验就付费」的通道。
+- **决定：** 四臂是**数据装配**而不是已接线的执行器：S（单 Agent）、D（`delegation.mode=read-only`）、R（完整编排，`maxWorkers=2`）、R-serial（同一计划，`maxWorkers=1`）。D′（关闭治理）与 §14.3 的“冲突型”“负对照”任务类别明确列为未装配，不假装覆盖；它们的预注册随授权批次一起提交。
+- **决定：** 公平性由 `validateRunMatrix` 机械检查：同一任务的目标、整题预算与隐藏验收器在四臂间逐字相同；R 与 R-serial 只差 `maxWorkers` 且共享同一计划；S 与 D 只差 `delegation` 且都不接收编排计划；四臂与重复次数齐全。任一被改动即整体失败。
+- **决定：** 零 provider 请求由哨兵适配器见证：装配阶段放入 spec 的 `chat` 一旦被调用就计数并抛错；`validateOfflineBatch` 结束时要求计数为 0。夹具正反例与隐藏验收器都只读写本地文件。
+- **代码锚点：** `scripts/eval-orchestrate.ts`、`package.json` 的 `eval:orchestrate`。
+- **测试锚点：** `test/eval-orchestrate.test.ts`（矩阵完整性/公平性、篡改检测、零付费、正反例、参数守卫、哨兵）。
+
+## M4-② 单/并行演示
+
+- **决定：** 两个演示都走真实入口：只读 planner 用脚本模型生成计划（`plan.source=model`），worker 与宿主整合/复验走正常路径；演示只在模型侧用脚本，不伪造 plan 事件或验收证据。
+- **决定：** 演示的**最终验收结论来自工作区之外的隐藏验收器**；宿主计划里的冒烟检查只证明整合后命令可复跑。二者都通过才打印 PASS。这与 M4-① 的两套验收分工一致。
+- **决定：** 并行演示的并行性用编排日志里 `attempt/started` 与 `attempt/finished` 的 `at` 断言，第一波两个脚本 worker 各有 200 ms 延迟以保证区间重叠；第二波依赖用 **st-3 worktree 的实际文件内容**断言（归一化实现与去重实现已整合），不采信提示词里「dependencies」文案。
+- **决定：** 演示不提供保留临时目录/跳过断言之类的隐藏开关；失败时仍清理临时目录，现场由编排日志与 CHANGES 的命令输出承担。需要复查时用 `orchestrate inspect`/`loadOrchestration` 的既有入口。
+- **代码锚点：** `scripts/demo-orchestrate.ts`、`package.json` 的 `demo:orchestrate-single` / `demo:orchestrate-parallel`。
+- **测试锚点：** 两个 `pnpm demo:*` 命令（脚本内断言 completed、波次、区间重叠、依赖可见、隐藏验收、用户工作树不变）。
+
+## M4-① 组合夹具与验收器
+
+- **决定：** 组合夹具把既有 coding fixture 的参考解与验收器搬到 `packages/<id>`；`parallel-composite` 的三个写集互不相交，`st-3` 依赖前两者因而进入第二波次。`single-repair` 复用 `repair` 的项目规则与公开 `check.mjs`，只用于 single 判定与 planner 开销演示。
+- **决定（与 §14.3 的一处落差不藏）：** 计划验收命令**不能**引用工作区之外的隐藏验收器：宿主命令闸门拒绝绝对路径和 `..` 越界（`SandboxRuntime.inspectCommand` 的既有规则），而验收命令是普通字符串，没有额外的 trusted-command 通道。因此夹具分两套验收——
+  - `check.mjs`（工作区内，冒烟）：计划里的 `acceptance.commands` 只跑每个包一个例子，作用是让宿主的整合后复验有可机械复跑的形状检查；
+  - `verify.mjs` / `verify/report.mjs`（工作区之外，隐藏）：演示、离线评测与夹具门禁在整合结果上独立运行，**以它的读数作为最终验收结论**。隐藏验收器不进入 plan、编排日志或 worker 提示，worker 无从读取。
+  这避免了「把隐藏判据塞进验收命令、等于公开给 worker」和「完全去掉宿主复验」两种极端。
+- **代码锚点：** `scripts/orchestration-fixtures.ts`、`test/fixtures/orchestration/`。
+- **测试锚点：** `test/orchestration-fixtures.test.ts`（初始态拒收、参考态通过、两波次分层、验收命令相对路径、隐藏验收器不在工作区）。
+
 ## M3-③ 恢复与 resume
 
 - **决定：** 恢复只采用**已确认的结果**：worker 会话 run 为 completed 时，优先找 attempt 分支上带 `Mini-DSH-Attempt` trailer 的提交；没有提交则从 worktree 用宿主身份重新收集并提交。两条路径都不调用 provider，恢复前后 provider 调用数不变。未完成的 run 一律记 `interrupted`，不自动重跑。

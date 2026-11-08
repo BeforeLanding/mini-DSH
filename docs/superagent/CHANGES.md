@@ -1,5 +1,29 @@
 # 多 Agent 编排改动与证据
 
+## 合入 main 与文档同步（2026-11-08）
+
+**改动**
+
+- 分支链按里程碑合入 main：#25（开发文档）、#26（M0）、#27（M1）、#28（M2）、#29（M3）、#30（M4，含本条），均为 merge commit。
+- README、PROGRESS、USAGE、RECRUITER_WALKTHROUGH 与 REQUIREMENTS 从“开发分支、待合并”改为“已在 main、尚未发版（v0.2.0 不含）”。
+- `test/progress-sync.test.ts` 新增文档漂移护栏：`src/app/orchestrate-cli.ts` 存在时，五份用户文档中提到编排的行不得再写未合入 main。
+
+**验证（本步实际输出）**
+
+```text
+# 先证红：只加护栏、未改文档时
+node --test dist/test/progress-sync.test.js   # 1 fail：11 行命中（README 4、PROGRESS 2、USAGE 1、RECRUITER_WALKTHROUGH 3、REQUIREMENTS 1）
+# 改文档后
+node --test dist/test/progress-sync.test.js dist/test/docs-links.test.js   # tests 5 / pass 5 / fail 0
+pnpm check                     # syntax ok: 261 files
+pnpm test                      # tests 664 / pass 634 / fail 0 / 30 platform-skipped
+pnpm lint                      # 292 files, no fixes applied
+```
+
+**未包含**
+
+- 新版本 Release；真实模型四臂付费批次（仍需对该次批次单独授权）。
+
 ## M1 修复：worktree 清理在 8.3 短路径下失效（2026-11-08）
 
 **现象：** PR CI 的 Windows 作业失败两项。runner 的临时目录是 8.3 短名（`C:\Users\RUNNER~1\…`），`git worktree list` 报告长路径（`C:\Users\runneradmin\…`）；`WorktreeManager.cleanup()` 按字符串前缀比对，没有一个 worktree 被认作本根任务的，`git branch -D` 因分支仍被 worktree 占用而失败。本机用户名没有短名，所以本地一直没暴露。
@@ -18,6 +42,122 @@
 修复后  node --test dist/test/*.test.js（短名 TEMP）       # tests 617 / pass 587 / fail 0 / 30 platform-skipped
 pnpm lint                                                # 276 files, no fixes applied
 ```
+
+## M4-④ 里程碑收尾与文档（2026-11-08）
+
+**改动**
+
+- README 新增“多 Agent 编排（开发分支，待评审合并）”与三个离线演示入口；评测与已知边界补充编排的离线装配与“付费批次未执行”。
+- REQUIREMENTS、TASKS、PROGRESS、DECISIONS 同步 M4 离线完成状态；main 尚未合并的边界保持显式。
+- `test/fixtures/orchestration/README.md` 记录两套验收（冒烟检查 vs 隐藏验收器）的分工。
+
+**验证（本步实际输出）**
+
+```text
+pnpm check                     # syntax ok: 261 files
+pnpm test                      # tests 663 / pass 633 / fail 0 / 30 platform-skipped
+pnpm lint                      # 292 files, no warnings
+pnpm demo:orchestrate-single   # PASS；scripted requests=3；planner requests=1；隐藏验收 1/1
+pnpm demo:orchestrate-parallel # PASS；scripted requests=7；planner requests=1；隐藏验收 3/3
+pnpm demo:orchestrate-crash    # PASS；scripted requests=6
+pnpm eval:orchestrate --validate-only
+# mode=validate-only; providerRequests=0; runs=16; passed=true; 初始态全部拒收、参考态全部通过; paidBatch.executed=false
+```
+
+**未包含**
+
+- 真实模型四臂批次、费用上限与结果（需对该次批次单独授权）；D′ 与冲突/负对照任务集的预注册。
+- 30 项 platform-skipped 仍由 CI 的 Linux isolation 作业覆盖，不声称本机通过。
+
+## M4-③ 离线评测执行器（2026-11-08）
+
+**改动**
+
+- 新增 `scripts/eval-orchestrate.ts` 与 `pnpm eval:orchestrate`：四臂矩阵装配（S / D / R / R-serial）、公平性机械校验、`--validate-only` 的夹具正反例与零 provider 请求校验。
+- `--execute` 被显式拒绝：本步未接线真实模型批次；付费批次需按 §14.4 单独授权，结果另成证据提交。
+- D′（关闭治理）与 §14.3 的“冲突型/负对照”任务类别列为未装配，输出中带原因，不默认视为已覆盖。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+pnpm lint                      # 292 files, no warnings
+node --test dist/test/eval-orchestrate.test.js
+# tests 5 / pass 5 / fail 0
+pnpm eval:orchestrate --validate-only
+# mode=validate-only; providerRequests=0; runs=16; task 2; 初始态全部拒收、参考态全部通过
+```
+
+**测试覆盖**
+
+- 矩阵 = 2 个夹具 × 4 臂 × 2 次重复 = 16；同一任务的预算/验收器/目标逐字一致；R 与 R-serial 只差 `maxWorkers` 且共享计划；S/D 不接收编排计划，D 的 delegation 为 read-only。
+- 篡改预算、worker 数或删掉一整臂都会使 `validateRunMatrix` 失败。
+- `--validate-only` 运行隐藏验收器的正反例（初始拒收、参考通过），provider 请求为 0，付费批次标记为未执行。
+- `--execute`、无参数与未知参数均被拒绝；环境变量模型名可进入装配清单。
+- 哨兵适配器一旦被调用就抛错并计数，防止离线装配悄悄接入 provider。
+
+**未包含**
+
+- 真实模型批次与费用上限（需单独授权）；S/D 的执行适配器接线；D′ 与冲突/负对照任务集（随授权批次预注册）。
+
+## M4-② 单/并行演示（2026-11-08）
+
+**改动**
+
+- 新增 `scripts/demo-orchestrate.ts` 与 `demo:orchestrate-single`、`demo:orchestrate-parallel`：脚本模型 + 真实 git，不配置 provider、不发起付费请求。
+- `single`：只读 planner 判定 `single`，一个 worker 完成 repair；报告打印 planner 请求/用量。
+- `parallel`：planner 生成两波次计划；第一波两个 worker 的区间重叠，第二波 `st-3` 在整合 head 上读取前两个包的真实实现；报告打印两次整合与三条验收命令。
+- 两个演示最后都在整合 worktree 上运行隐藏验收器，且断言用户工作树 HEAD/状态不变。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+pnpm lint                      # 290 files, no warnings
+pnpm demo:orchestrate-single   # PASS；scripted requests=3；planner requests=1；用户工作树不变
+pnpm demo:orchestrate-parallel # PASS；scripted requests=7；planner requests=1；两波次整合；用户工作树不变
+```
+
+**测试覆盖**
+
+- `single`：`plan.source=model`、`mode=single`、一个 attempt、整合 applied=st-1、验收 exit 0、隐藏验收 1/1。
+- `parallel`：`waves=[[st-1,st-2],[st-3]]`、波次一区间重叠、三次 applied、`st-3` worktree 可见依赖实现、隐藏验收 3/3、验收三条均 exit 0。
+- 两个演示均断言用户工作树 `HEAD` 与 `status --porcelain` 不变。
+
+**未包含**
+
+- 真实模型版本（需单独授权后再录制）；冲突演示（M3 的崩溃演示与 e2e 已覆盖冲突处置）。
+
+## M4-① 组合夹具与验收器（2026-11-08）
+
+**改动**
+
+- 新增 `test/fixtures/orchestration/`：`parallel-composite`（normalize + dedupe 并行，report 依赖前两者进入第二波次）与 `single-repair`（复用 repair 的单根因任务）。
+- 组合夹具的材料化、计划生成、隐藏验收器执行与正反例校验集中在 `scripts/orchestration-fixtures.ts`；`report` 的参考解与隐藏验收器为本步新增。
+- 两套验收的分工与理由见 [DECISIONS.md](DECISIONS.md) 的 M4-①：计划验收命令只跑工作区内冒烟检查，隐藏验收器在整合结果上独立运行并作为最终结论。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+pnpm lint                      # 289 files, no warnings
+node --test dist/test/orchestration-fixtures.test.js
+# tests 4 / pass 4 / fail 0
+```
+
+**测试覆盖**
+
+- 两份夹具的初始态均被隐藏验收器拒绝，参考态全部通过。
+- `parallel-composite` 计划分层为 `[[st-1, st-2], [st-3]]`、判定 `parallel`；隐藏验收器位于工作区之外，工作区不含 `report` 的实现。
+- `single-repair` 判定 `single`，保留项目规则与公开检查，初始态隐藏验收失败。
+- 所有计划验收命令均为工作区内相对路径（宿主在整合 worktree 中运行）。
+
+**未包含**
+
+- 演示脚本与评测执行器（M4-②/③）；真实模型批次需要单独授权（M4 付费边界）。
 
 ## M3-⑤ 崩溃演示（2026-11-07）
 

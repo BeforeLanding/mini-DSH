@@ -103,6 +103,29 @@ pnpm start
 - `pnpm demo:compact`：单任务压缩、原始事件保留与按事件号回读。
 - `pnpm demo:unknown`：真实崩溃后的未知工具结果与陈旧锁处置。
 - `pnpm demo:team`：可选只读委派（`MINI_DSH_DELEGATION=read-only`）：两个只读子 Agent 并发、共用任务组预算、无效结果与取消可见，只用预设响应。
+- `pnpm demo:orchestrate-single`：只读 planner 判定单任务，一个 worker 在 worktree 中完成后由宿主整合并复验。
+- `pnpm demo:orchestrate-parallel`：两个 worker 并行，第三个子任务在第二波次读取整合后的依赖产物。
+- `pnpm demo:orchestrate-crash`：worker 运行中模拟崩溃，`resume` 采用已完成结果、确认未知用量并为未知副作用要求人工决定。
+
+后三个演示属于多 Agent 编排（已在 main，尚未包含在任何 Release 中）；见下方的[多 Agent 编排](#多-agent-编排)。
+
+## 多 Agent 编排
+
+M1–M4 已经由 PR #27–#30 合入 main（v0.2.0 Release 不含，需从源码运行）；领域契约见 [DEVELOPMENT.md](docs/superagent/DEVELOPMENT.md)，逐项命令与证据见 [CHANGES.md](docs/superagent/CHANGES.md)。
+
+在同一根任务内，宿主校验计划 → 每个 worker 一个独立 Harness + git worktree → 宿主提交、写集检查、按序 cherry-pick 整合 → 整合后复验（证据绑定 tree SHA）。单 Agent 与只读委派的既有行为不变。
+
+```bash
+# 在目标仓库内运行；省略 --plan 时由只读 planner 提出计划
+mini-dsh orchestrate run --task "..." [--plan plan.json] [--max-workers 2]
+mini-dsh orchestrate inspect <rootId>
+mini-dsh orchestrate resume <rootId> [--accept-unknown-usage] [--retry <subtaskId>]...
+```
+
+- **审批（D8）：** worktree 内的 `write_file`/`edit_file` 默认自动批准；Bash 默认询问，所有请求经单一 FIFO 队列逐条显示；`--approve-writes ask` 恢复逐条写入审批。
+- **停止：** 第一次 Ctrl-C 停止派发并整合已完成部分；第二次 Ctrl-C 中止运行中的 worker，根任务取消。
+- **恢复：** `resume` 采用已完成的 worker 结果而不重跑；未知副作用、冲突与崩溃留下的未知用量需要人工决定或确认。
+- **离线装配：** `pnpm eval:orchestrate --validate-only` 校验组合夹具与四臂矩阵（S / D / R / R-serial），不发起任何 provider 请求。真实模型批次需单独授权，尚未执行。
 
 ## 当前状态
 
@@ -116,11 +139,13 @@ pnpm start
 - **预算：** token 为估算值，执行预算不等于费用硬上限；`/compact` 可能请求模型。
 - **验收：** 任务能否完成取决于模型与项目；`/report` 记录检查证据，验收仍由使用者判断。
 - **发布：** 以 GitHub Release 提供 tarball，尚未发布 npm；macOS 安装未验证。ECS 部署仅保留[手动入口](docs/ECS_DEPLOYMENT.md)。
-- **范围：** 演示与离线回归验证的是机制；模型评测只有下面的 SWE-bench 对照一项，其运行器与完整过程在[实验分支](https://github.com/BeforeLanding/mini-DSH/tree/improve/swe-harness-advantage-20261031)。只读委派（默认关闭）已在 main；项目记忆仍只在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2)，不属于 main 交付范围。
+- **范围：** 演示与离线回归验证的是机制；模型评测只有下面的 SWE-bench 对照一项，其运行器与完整过程在[实验分支](https://github.com/BeforeLanding/mini-DSH/tree/improve/swe-harness-advantage-20261031)。只读委派（默认关闭）已在 main；项目记忆仍只在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2)，不属于 main 交付范围。多 Agent 编排的 M1–M4 已在 main，但尚未发版；其真实模型四臂对照未执行，目前只有离线装配与机制演示。
 
 ## 评测
 
 在 90 道未参与调参的 SWE-bench Verified 题上，打开长单任务组件的 mini-DSH 解决 74 题；同模型（`deepseek/deepseek-flash`）、同环境、同 token 上限下，mini-SWE-agent 解决 57 题，同源码但不开组件的 mini-DSH 解决 61 题。代价是成本约为 mini-SWE-agent 的 2.6 倍；没有做逐项消融，差距不能归给单个组件。这些组件在 main 上默认关闭，开关见[使用指南](docs/USAGE.md#长单任务的可选组件)。设置、配对检验与限制见 [SWE-bench 结果](docs/SWE-BENCH-RESULTS.md)。
+
+多 Agent 编排另有一套离线评测装配（组合夹具 × S/D/R/R-serial 四臂）：`pnpm eval:orchestrate --validate-only`。它只校验验收器正反例与矩阵公平性，provider 请求为 0；真实模型小批次需要单独授权，尚无结果可报告。
 
 ## 架构与扩展
 

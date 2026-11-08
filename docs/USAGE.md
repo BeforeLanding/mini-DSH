@@ -135,9 +135,9 @@ v2.1 的 Full/Baseline 是冻结开发协议里的两条实验臂，不是生产
 
 项目记忆及其专属配置/命令仅保留在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2，不在 main 启用。关闭委派（默认）时，工具清单与 v0.2.0 相同。含委派事件的会话日志请用同一版本恢复。
 
-## 多 Agent 编排（M3，分支 `feat/orchestration-m3`，尚未合入 main）
+## 多 Agent 编排
 
-本节的 `orchestrate` 子命令只在分支上存在；M3 支持计划文件或只读 planner、同波次并行、FIFO 审批、冲突处置、两级停止与崩溃恢复。
+`orchestrate` 子命令已在 main（尚未发版，v0.2.0 Release 不含，需从源码运行），支持计划文件或只读 planner、同波次并行、FIFO 审批、冲突处置、两级停止与崩溃恢复。
 
 ```text
 mini-dsh orchestrate run (--task "<text>" | --task-file <path>) [--plan <plan.json>]

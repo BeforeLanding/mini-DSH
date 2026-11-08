@@ -32,3 +32,16 @@ test('文档里的 Release 链接版本与 package.json 一致', () => {
     const stale = links.filter(link => link.tag !== version).map(link => `${link.doc}: v${link.tag}`)
     assert.deepEqual(stale, [], `Release 链接与 package.json 版本 ${version} 不一致`)
 })
+
+test('orchestrate 子命令已在源码中时，用户文档不再写编排未合入 main', () => {
+    if (!fs.existsSync(`${repository}src/app/orchestrate-cli.ts`)) return
+    const docs = ['README.md', 'PROGRESS.md', 'docs/USAGE.md', 'docs/RECRUITER_WALKTHROUGH.md', 'docs/superagent/REQUIREMENTS.md']
+    const stale = docs.flatMap(doc =>
+        read(doc)
+            .split('\n')
+            .map((line, index) => ({ doc, line: index + 1, text: line }))
+            .filter(({ text }) => /编排/.test(text) && /尚未合入|尚未合并|待评审合并|待合并|尚未包含编排入口|只在分支上存在|main 尚未/.test(text))
+            .map(({ doc, line, text }) => `${doc}:${line}: ${text.slice(0, 60)}`),
+    )
+    assert.deepEqual(stale, [], 'src 已含 orchestrate 入口，文档仍写编排未合入 main')
+})
