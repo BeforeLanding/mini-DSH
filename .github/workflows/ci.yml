@@ -193,6 +193,8 @@ jobs:
           cli="$install/node_modules/.bin/mini-dsh"
           "$cli" --version | grep -qxF "$(node -p "require('./package.json').version")"
           "$cli" --help | grep -q 'demo \[fix\]'
+          "$cli" --help | grep -q 'mini-dsh orchestrate run'
+          (cd "$work" && "$cli" orchestrate list | grep -qxF 'no orchestrations')
           (cd "$work" && "$cli" --show-config | grep -q '"readHistory"')
           (cd "$work" && "$cli" demo fix | grep -q 'demo result: PASS')
           "$cli" inspect "$GITHUB_WORKSPACE/docs/samples/provider-recovery/events.jsonl" | grep -q 'complete JSONL'
