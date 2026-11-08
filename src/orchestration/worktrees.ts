@@ -7,6 +7,11 @@ import {
   worktreeAddDetached, worktreeList, worktreePrune, worktreeRemove,
 } from './git.js'
 
+// 存在时取真实长路径（展开 8.3 短名与符号链接）；不存在时退回 path.resolve。
+async function canonicalPath(value: string) {
+  return fs.realpath(value).catch(() => path.resolve(value))
+}
+
 // 目录布局（DEVELOPMENT.md §5.4）：编排目录在仓库外，避免被 glob 扫到或嵌套进用户工作树。
 export interface WorktreeLayout {
   root: string
@@ -84,10 +89,11 @@ export class WorktreeManager {
     }
   }
   // 只清理本根任务目录下的 worktree 与 mini-dsh/<root8>/* 分支；不碰用户检查出的分支。
+  // git 报告的是长路径；layout 可能来自 8.3 短名（如 Windows 的 RUNNER~1 临时目录），两边都规范化后再比前缀。
   async cleanup() {
-    const prefix = path.resolve(this.layout.worktrees) + path.sep
+    const prefix = (await canonicalPath(this.layout.worktrees)) + path.sep
     for (const target of await worktreeList(this.repository)) {
-      if (!(target + path.sep).startsWith(prefix)) continue
+      if (!((await canonicalPath(target)) + path.sep).startsWith(prefix)) continue
       if (await fs.stat(target).catch(() => undefined)) await worktreeRemove(this.repository, target)
     }
     await worktreePrune(this.repository)

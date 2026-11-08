@@ -1,5 +1,24 @@
 # 多 Agent 编排改动与证据
 
+## M1 修复：worktree 清理在 8.3 短路径下失效（2026-11-08）
+
+**现象：** PR CI 的 Windows 作业失败两项。runner 的临时目录是 8.3 短名（`C:\Users\RUNNER~1\…`），`git worktree list` 报告长路径（`C:\Users\runneradmin\…`）；`WorktreeManager.cleanup()` 按字符串前缀比对，没有一个 worktree 被认作本根任务的，`git branch -D` 因分支仍被 worktree 占用而失败。本机用户名没有短名，所以本地一直没暴露。
+
+**改动**
+
+- `src/orchestration/worktrees.ts`：`cleanup()` 比对前把编排目录与 git 报告的路径都经 `fs.realpath` 规范化（不存在时退回 `path.resolve`）。
+- `test/orchestration-git.test.ts`：仓库根与 worktree 列表的期望值改为与 `fs.realpath` 比较，而不是与可能为短名的临时路径比较。
+
+**验证（本步实际输出）**
+
+```text
+# 把 TMP/TEMP 指向 8.3 别名 %LOCALAPPDATA%\Temp\LONGDI~1 复现
+修复前  node --test dist/test/orchestration-git.test.js   # pass 1 / fail 2（与 CI 相同的两项）
+修复后  node --test dist/test/orchestration*.test.js      # tests 28 / pass 28 / fail 0
+修复后  node --test dist/test/*.test.js（短名 TEMP）       # tests 617 / pass 587 / fail 0 / 30 platform-skipped
+pnpm lint                                                # 276 files, no fixes applied
+```
+
 ## M1-④ 单 attempt 编排闭环与 CLI（2026-11-07）
 
 **改动**
