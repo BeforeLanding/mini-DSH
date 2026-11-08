@@ -66,6 +66,18 @@ test('concurrent reservations cannot overspend the root token budget', async t =
   assert.equal(Object.keys(foldOrchestration(await store.read()).ledger.reservations).length, 1)
 })
 
+test('the in-flight limit bounds reserved and dispatched requests', async t => {
+  const { store } = await temporary(t)
+  const group = await TaskGroupBudgetCoordinator.openJournal(new OrchestrationGroupJournal(store), { ...POLICY, maxInFlightRequests: 1 }, () => 1000)
+  await group.reserve(scope('req-a'))
+  await assert.rejects(group.reserve(scope('req-b')), (error: unknown) => error instanceof ModelNotDispatchedError && error.reason === 'request_limit')
+  await group.dispatched('req-a')
+  await assert.rejects(group.reserve(scope('req-c')), /in-flight request limit/)
+  await group.settle('req-a', usage(700))
+  await group.reserve(scope('req-d'))
+  assert.equal(group.snapshot().requests, 2)
+})
+
 test('the root wall deadline is enforced through an injected clock', async t => {
   const { store } = await temporary(t)
   let now = 1000

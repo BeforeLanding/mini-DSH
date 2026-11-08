@@ -90,6 +90,7 @@ export interface AttemptFinished {
   run: { sessionId?: string; status: string; stopReason?: string }
   code: { commit?: string; tree?: string; changedFiles: string[]; scopeViolations: string[] }
   resultRef?: string
+  summary?: string
   detail?: string
 }
 export interface AttemptLate { attemptId: string; summary: string }
@@ -109,6 +110,8 @@ export interface HumanRequestData {
   attemptId?: string
 }
 export interface HumanResolvedData { requestId: string; choice: string; note?: string; actor: 'local-user' }
+export interface ApprovalRequestedData { requestId: string; attemptId: string; tool: string; summaryHash: string; writeSet?: string[] }
+export interface ApprovalResolvedData { requestId: string; attemptId: string; tool: string; allowed: boolean; source: 'auto' | 'user' | 'timeout' | 'cancelled' }
 export interface ControlStop { scope: 'accepting' | 'dispatch' | 'running'; reason: string }
 export interface RootFinish { status: RootTerminalStatus; reportRef?: string }
 
@@ -130,6 +133,8 @@ export type OrchEventData = {
   'verification/finished': VerificationFinished
   'human/requested': HumanRequestData
   'human/resolved': HumanResolvedData
+  'approval/requested': ApprovalRequestedData
+  'approval/resolved': ApprovalResolvedData
   'control/stop': ControlStop
   'root/finish': RootFinish
   'group/start': GroupStart

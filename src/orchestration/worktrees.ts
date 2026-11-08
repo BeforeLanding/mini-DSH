@@ -4,7 +4,7 @@ import { commandFailed, runCommand } from '../core/command-runner.js'
 import { assertRootId } from './store.js'
 import {
   branchExists, deleteBranch, headCommit, listBranches, statusPorcelain, worktreeAdd,
-  worktreeAddDetached, worktreeList, worktreePrune, worktreeRemove,
+  worktreeAddDetached, worktreeCheckout, worktreeList, worktreePrune, worktreeRemove,
 } from './git.js'
 
 // 存在时取真实长路径（展开 8.3 短名与符号链接）；不存在时退回 path.resolve。
@@ -73,6 +73,17 @@ export class WorktreeManager {
     await fs.mkdir(this.layout.worktrees, { recursive: true, mode: 0o700 })
     await worktreeAdd(this.repository, this.layout.integration, branch, baseCommit, this.#gitOptions())
     return { path: this.layout.integration, branch }
+  }
+  // 跨波次复用同一整合分支；worktree 目录仍在时直接使用，缺失时从分支重新挂载。
+  async ensureIntegration(baseCommit: string) {
+    const branch = integrationBranchName(this.rootId)
+    await fs.mkdir(this.layout.worktrees, { recursive: true, mode: 0o700 })
+    if (!(await branchExists(this.repository, branch))) {
+      await worktreeAdd(this.repository, this.layout.integration, branch, baseCommit, this.#gitOptions())
+      return { path: this.layout.integration, branch, baseCommit }
+    }
+    if (!(await fs.stat(this.layout.integration).catch(() => undefined))) await worktreeCheckout(this.repository, this.layout.integration, branch, this.#gitOptions())
+    return { path: this.layout.integration, branch, baseCommit: await headCommit(this.layout.integration) }
   }
   async prepare(worktree: string) {
     const command = this.options.prepareCommand?.trim()

@@ -1,8 +1,8 @@
 import type { Usage } from '../core/budget.js'
 import type { GroupReservation, TaskGroupPolicy } from '../core/task-group-budget.js'
 import type {
-  AttemptBudget, AttemptOutcome, HumanRequestData, HumanResolvedData, IntegrationApplied, OrchestrationConfig,
-  OrchestrationEventUnion, PlanDecision, PlanRecorded, RootBudget, RootStatus,
+  ApprovalRequestedData, ApprovalResolvedData, AttemptBudget, AttemptOutcome, HumanRequestData, HumanResolvedData,
+  IntegrationApplied, OrchestrationConfig, OrchestrationEventUnion, PlanDecision, PlanRecorded, RootBudget, RootStatus,
 } from './contracts.js'
 
 export type AttemptStatus = 'planned' | 'starting' | 'running' | 'finished' | 'cancelled' | 'interrupted' | 'skipped' | 'failed'
@@ -27,6 +27,7 @@ export interface AttemptState {
   changedFiles: string[]
   scopeViolations: string[]
   resultRef?: string
+  summary?: string
   detail?: string
 }
 
@@ -57,6 +58,7 @@ export interface IntegrationState {
 
 export interface VerificationState { head: string; tree: string; command: string; exitCode: number | null; logRef?: string }
 export interface HumanState { request: HumanRequestData; response?: HumanResolvedData }
+export interface ApprovalState { request: ApprovalRequestedData; response?: ApprovalResolvedData }
 
 export interface OrchestrationState {
   rootId: string
@@ -73,8 +75,11 @@ export interface OrchestrationState {
   attemptOrder: string[]
   ledger: LedgerState
   integration?: IntegrationState
+  // 每个波次一个整合周期；completed 判定看全部周期的并集，最终验收只绑定最后一个周期的 tree。
+  integrations: IntegrationState[]
   verifications: VerificationState[]
   human: Record<string, HumanState>
+  approvals: Record<string, ApprovalState>
   finished?: { status: RootStatus; reportRef?: string }
 }
 
@@ -91,7 +96,7 @@ export function foldOrchestration(events: readonly OrchestrationEventUnion[]): O
     rootId: events[0]!.rootId, goal: root.goal, repository: root.repository, baseCommit: root.baseCommit,
     config: structuredClone(root.config), budget: structuredClone(root.budget), status: 'planning',
     stop: { dispatch: false, running: false }, attempts: {}, attemptOrder: [],
-    ledger: { reservations: {}, tools: [] }, verifications: [], human: {},
+    ledger: { reservations: {}, tools: [] }, integrations: [], verifications: [], human: {}, approvals: {},
   }
   const ids = new Set<string>()
   for (const [index, event] of events.entries()) {
@@ -170,6 +175,7 @@ function foldEvent(state: OrchestrationState, event: OrchestrationEventUnion) {
       attempt.changedFiles = [...data.code.changedFiles]
       attempt.scopeViolations = [...data.code.scopeViolations]
       attempt.resultRef = data.resultRef
+      attempt.summary = data.summary
       attempt.detail = data.detail
       return
     }
@@ -221,7 +227,9 @@ function foldEvent(state: OrchestrationState, event: OrchestrationEventUnion) {
     case 'integration/started': {
       if (state.integration && state.integration.status === 'started') throw new Error('integration already in progress')
       if (!state.decision || event.data.wave >= state.decision.waves.length) throw new Error('integration wave is outside the plan')
-      state.integration = { ...structuredClone(event.data), status: 'started', applied: [], conflicts: [] }
+      const integration: IntegrationState = { ...structuredClone(event.data), status: 'started', applied: [], conflicts: [] }
+      state.integrations.push(integration)
+      state.integration = integration
       state.status = 'integrating'
       return
     }
@@ -238,13 +246,12 @@ function foldEvent(state: OrchestrationState, event: OrchestrationEventUnion) {
       requireAttempt(state, event.data.attemptId)
       if (integration.conflicts.some(item => item.attemptId === event.data.attemptId)) throw new Error('duplicate integration conflict')
       integration.conflicts.push({ attemptId: event.data.attemptId, files: [...event.data.files] })
-      integration.status = 'blocked'
+      // 冲突后整合仍可继续：人工选择 skip-subtask 后其余 attempt 继续应用，最后由 integration/finished 关闭。
       state.status = 'needs_human'
       return
     }
     case 'integration/finished': {
       const integration = requireOpenIntegration(state, event.data.integrationId)
-      if (integration.conflicts.length) throw new Error('conflicted integration cannot finish')
       integration.status = 'finished'
       integration.head = event.data.head
       integration.tree = event.data.tree
@@ -271,6 +278,23 @@ function foldEvent(state: OrchestrationState, event: OrchestrationEventUnion) {
       if (!human) throw new Error('unknown human request')
       if (human.response) throw new Error('human request already resolved')
       human.response = structuredClone(event.data)
+      if (state.status === 'needs_human' && Object.values(state.human).every(item => item.response)) {
+        state.status = state.integration?.status === 'started' ? 'integrating' : 'running'
+      }
+      return
+    }
+    case 'approval/requested': {
+      requireAttempt(state, event.data.attemptId)
+      if (state.approvals[event.data.requestId]) throw new Error('duplicate approval request')
+      state.approvals[event.data.requestId] = { request: structuredClone(event.data) }
+      return
+    }
+    case 'approval/resolved': {
+      const approval = state.approvals[event.data.requestId]
+      if (!approval) throw new Error('unknown approval request')
+      if (approval.response) throw new Error('approval request already resolved')
+      if (approval.request.attemptId !== event.data.attemptId) throw new Error('approval attempt mismatch')
+      approval.response = structuredClone(event.data)
       return
     }
     case 'control/stop': {
@@ -285,7 +309,7 @@ function foldEvent(state: OrchestrationState, event: OrchestrationEventUnion) {
       if (data.status === 'completed') {
         if (!state.decision || state.integration?.status !== 'finished') throw new Error('completed root requires a finished integration')
         if (!state.verifications.length || state.verifications.some(item => item.exitCode !== 0)) throw new Error('completed root requires passing verification evidence')
-        const applied = new Set(state.integration.applied.map(item => item.attemptId))
+        const applied = new Set(state.integrations.flatMap(item => item.applied.map(appliedItem => appliedItem.attemptId)))
         const subtasks = state.decision.waves.flat()
         if (!subtasks.every(id => state.attemptOrder.some(attemptId => { const attempt = state.attempts[attemptId]!; return attempt.subtaskId === id && attempt.outcome === 'succeeded' && applied.has(attemptId) }))) throw new Error('completed root requires every subtask integrated')
       }

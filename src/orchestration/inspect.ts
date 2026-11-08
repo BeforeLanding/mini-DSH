@@ -33,6 +33,7 @@ export function formatOrchestration(report: OrchestrationReport) {
     `repository: ${state.repository} @ ${state.baseCommit}`,
     `events: ${report.events}  log: ${report.logPath}`,
   ]
+  if (state.plan) lines.push(`plan source: ${state.plan.source}${state.plan.plannerSessionId ? ` planner=${state.plan.plannerSessionId}` : ''}`)
   if (state.decision) lines.push(`plan: version=${state.decision.planVersion} mode=${state.decision.mode} waves=${state.decision.waves.length}`)
   for (const attemptId of state.attemptOrder) {
     const attempt = state.attempts[attemptId]!
@@ -43,9 +44,19 @@ export function formatOrchestration(report: OrchestrationReport) {
     if (attempt.worktree) lines.push(`  worktree: ${attempt.worktree}`)
   }
   lines.push(`ledger: requests=${totals.requests} provider=${totals.providerTokens} estimated=${totals.estimatedTokens} unknown=${totals.unknownChargedTokens} outstanding=${totals.outstandingTokens} cacheRead=${totals.cacheReadTokens}`)
-  if (state.integration) lines.push(`integration: ${state.integration.status} wave=${state.integration.wave} applied=${state.integration.applied.length} head=${state.integration.head ?? '-'} tree=${state.integration.tree ?? '-'}`)
+  for (const [index, integration] of state.integrations.entries()) {
+    const applied = integration.applied.map(item => state.attempts[item.attemptId]?.subtaskId ?? item.attemptId).join(',') || '-'
+    const conflicts = integration.conflicts.map(item => item.attemptId).join(',') || '-'
+    lines.push(`integration[${index}] ${integration.status} wave=${integration.wave} applied=${applied} conflicts=${conflicts} head=${integration.head ?? '-'} tree=${integration.tree ?? '-'}`)
+  }
   for (const verification of state.verifications) lines.push(`verify: exit=${verification.exitCode ?? 'null'} ${verification.command}`)
   for (const human of Object.values(state.human)) lines.push(`human: ${human.request.kind} ${human.response ? `-> ${human.response.choice}` : '(pending)'} ${human.request.prompt}`)
+  const approvals = Object.values(state.approvals)
+  if (approvals.length) {
+    const count = (source: string) => approvals.filter(item => item.response?.source === source).length
+    const denied = approvals.filter(item => item.response && !item.response.allowed).length
+    lines.push(`approvals: total=${approvals.length} pending=${approvals.filter(item => !item.response).length} auto=${count('auto')} user=${count('user')} timeout=${count('timeout')} cancelled=${count('cancelled')} denied=${denied}`)
+  }
   if (state.finished) lines.push(`finished: ${state.finished.status}${state.finished.reportRef ? ` report=${state.finished.reportRef}` : ''}`)
   return lines.join('\n')
 }

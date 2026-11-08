@@ -19,6 +19,153 @@
 pnpm lint                                                # 276 files, no fixes applied
 ```
 
+## M2-⑤ 多 attempt 整合与冲突处置（2026-11-07）
+
+**改动**
+
+- 冲突不再立即终止整合：`integration/conflict` 只记录冲突并把根任务置为 `needs_human`，整合周期保持开启；人工决定后继续应用同波次剩余 attempt，最后写 `integration/finished`。状态折叠允许带冲突记录的整合完成，并在 `human/resolved` 且无其他未决请求时恢复根状态。
+- 编排器新增 `decide` 钩子与 `conflictOptions`：`rerun-serially` 以当前整合 head 为基线创建 epoch+1 的新 attempt（新 worktree/会话，受 `maxAttemptsPerSubtask` 限制），`skip-subtask` 保持该子任务未整合，`abort` 写 `control/stop` 并以 `cancelled` 收尾。无决定或无效决定时停在 `needs_human`，不写 `root/finish`。
+- 最终验收只运行已整合子任务的验收命令与根级 `--verify`；被跳过的子任务不参与。根状态：全部子任务整合且验收通过为 `completed`；至少一个整合且验收通过为 `partial`；验收失败为 `failed`。
+- CLI 在交互终端询问冲突处置；非交互运行保留 `needs_human` 现场并提示 `resume` 属 M3。`inspect` 显示每个波次的整合、applied/conflicts、计划来源与审批统计。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-e2e.test.js dist/test/orchestration-worker.test.js
+# tests 24 / pass 24 / fail 0（含既有 M1/M2-④ 用例）
+```
+
+**测试覆盖**
+
+- 真实 git 的文件/目录冲突（`blocked` 文件与 `blocked/x.txt`；按写集定义两者不相交）：并行两个 worker 都成功，第二波次 cherry-pick 冲突并写 `human/requested(conflict)`；选择 `skip-subtask` 后整合完成、验收 exit 0、根任务 `partial`，用户工作树不变。
+- 选择 `abort`：根任务 `cancelled`、`control/stop` 落盘、整合保持 `started` 供检查、没有验收证据。
+- 无决定：根任务 `needs_human`、请求保持 pending、无 `root/finish`。
+- 选择 `rerun-serially`：新建 epoch=2 的 attempt，baseCommit 等于当前整合 head；该重跑因目标路径不可写以 `no_changes` 结束，根任务仍为 `partial`（重跑失败不会伪造成整合）。
+- `conflictOptions` 在 attempt 上限处移除串行重跑；`inspect` 文本可渲染多波次整合。
+
+**未包含**
+
+- 整合修复 attempt（核心扩展）；`resume` 与崩溃窗口（M3）。串行重跑在重跑仍失败时不会再次询问，根任务最多 `partial`/`failed`。
+
+## M2-④ 并行波次调度（2026-11-07）
+
+**改动**
+
+- 重写 `src/orchestration/orchestrator.ts`：计划文件或只读 planner 二选一；按 `plan/decision` 的波次执行，`parallel` 模式用并发池（上限 `maxWorkers`），`single` 模式逐个执行；每个 attempt 独立 worktree/分支/会话；依赖子任务的 commit、changedFiles 与摘要进入 worker 的 `task.assign`；波次 attempt 以当前整合 head 为基线。
+- `src/orchestration/integrator.ts` 拆出 `openIntegration`/`applyAttempt`/`finishIntegration`；`WorktreeManager.ensureIntegration` 跨波次复用同一整合分支（首次从基线创建，之后从既有 head 继续）。`git.ts` 增加 `worktreeCheckout`。
+- 状态折叠保留 `integrations[]` 历史：每个波次一个整合周期，`completed` 判定使用全部周期的 applied 并集；最终验收只绑定最后一个周期的 tree。
+- 波次预算 = `min(worker 上限, 根余额 ÷ 本波次待启动 attempt 数)`；依赖未整合的子任务写 `planned → finished(skipped)`，不启动 worker。
+- `TaskGroupPolicy` 新增 `maxInFlightRequests`（0 = 不限制，保持会话委派既有行为）；根组设置为 `maxWorkers + 1`，准入时统计 `reserved` 与 `dispatched`，避免并发 dispatch 同时越界。
+- CLI：`--plan` 改为可选，省略时由 planner 生成；审批提示标注 attempt 与写集。
+- 冲突仍按 M1 行为停在 `needs_human`；三选一处置在 M2-⑤。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-e2e.test.js dist/test/orchestration-ledger.test.js \
+  dist/test/orchestration-state.test.js dist/test/orchestration-git.test.js
+# pass：既有 14 项 + 并行/单模式/planner 端到端 3 项，全部通过
+```
+
+**测试覆盖**
+
+- 三子任务组合计划（真实 git + 脚本模型）：两波次 `[[st-1, st-2], [st-3]]`；第一波两个 attempt 的 started/finished 时间区间重叠；第二波 worker 的 worktree 中能看到依赖产物；两次整合共应用 3 个 attempt；验收命令只在最终 tree 上运行一次且 exit 0；用户工作树 HEAD/内容/状态不变。
+- `single` 模式按声明顺序逐个执行，区间不重叠。
+- 省略 `--plan` 时 planner 会话被记录为 `plan.source=model` 且日志可被 `inspectSession` 完整读取。
+- 根账本在途上限：`reserved` 与 `dispatched` 都占名额，结清后释放。
+- 既有 M1 单 attempt、无改动、写集越界、预算停止、脏工作树、状态折叠与 git 测试全部保持通过。
+
+**未包含**
+
+- 冲突三选一（`rerun-serially`/`skip-subtask`/`abort`）与 `partial` 终态（M2-⑤）；`resume`（M3）；整合修复 attempt（核心扩展）。
+
+## M2-③ 审批 FIFO 队列（2026-11-07）
+
+**改动**
+
+- 新增 `src/orchestration/approval-broker.ts`：单一 FIFO 队列、一次只显示一条；`write_file`/`edit_file` 按 `writes` 策略自动批准，Bash 按 `bash` 策略询问，未知工具一律询问；每条请求从**显示时**开始计时；`cancelAttempt` 立即拒绝该 attempt 的队列请求并中止正在显示的请求；`close` 拒绝全部剩余请求。
+- 新增审计事件 `approval/requested`（requestId、attemptId、tool、summaryHash、writeSet）与 `approval/resolved`（allowed、source: auto/user/timeout/cancelled）；只追加、不参与恢复，审计写入失败不影响工具收到的决定。
+- 编排器接入 broker：M1 单 attempt 路径改为统一走队列；worker 的 `approvalTimeoutMs = perRequestTimeoutMs × (maxWorkers + 1)`，避免在队列中等待时先触发 worker 自身的审批超时。
+- `inspect` 增加审批统计（total/pending/auto/user/timeout/cancelled/denied）。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-approval.test.js dist/test/orchestration-e2e.test.js
+# tests 11 / pass 11 / fail 0
+```
+
+**测试覆盖**
+
+- 三个并发 Bash 审批的显示顺序严格为 FIFO，峰值并发为 1；每个决定都对应一条审计。
+- D8 策略：写入自动批准且不提示；Bash 提示；`writes: ask` 时编辑需人工且被拒绝时返回 false；未知工具默认询问。
+- 显示超时（20 ms）返回 false 且审计来源为 `timeout`；取消 attempt 使活动与排队请求都返回 false；关闭通道把剩余请求标为 `cancelled`。
+- M1 端到端行为不变：写入自动批准的审计事件进入编排日志，状态折叠与 `inspect` 正常。
+
+**未包含**
+
+- 终端显示（CLI 接线在 M2-④）；审批等待计入主动执行时间的口径仍由现有 run 预算维持。
+
+## M2-② 只读 planner（2026-11-07）
+
+**改动**
+
+- `src/core/agent-capabilities.ts` 新增 `planner` 角色：与 `analyst` 同档位，使用 `READ_ONLY_TOOLS`，不注册 Bash、写工具、MCP 或委派。
+- 新增 `src/orchestration/planner.ts`：在基线快照 worktree 上装配只读 Harness，会话目录为 `sessions/planner/<sessionId>`；计划 JSON 从最后一个代码块或整段文本解析，结构错误时在同一会话追加一次纠正消息；连续两次无效抛出带校验错误的异常。
+- planner 的 `parentTaskGroup` 接入根账本；预算由调用方按 `plannerShare` 分配（编排器接线见 M2-④）。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-planner.test.js dist/test/agent-capabilities.test.js
+# tests 7 / pass 7 / fail 0
+```
+
+**测试覆盖**
+
+- `planner` 与 `analyst`/`test_designer`/`reviewer` 一样只注册读工具，能力清单角色为 `planner`。
+- 脚本模型首次返回非计划、第二次返回合法计划：计划被接受；会话日志由 `inspectSession` 完整读取，meta 记录 `rootId` 与 `planner: true`。
+- 连续两次无效：以 `invalid plan twice` 失败；解析器接受围栏与裸 JSON，并拒绝错误版本。
+
+**未包含**
+
+- 编排入口在缺少 `--plan` 时调用 planner、`plannerShare` 的实际预算分配与 CLI 文案（M2-④）。
+
+## M2-① 计划校验与判定（2026-11-07）
+
+**改动**
+
+- 新增 `src/orchestration/plan.ts`：计划结构校验（复用 `planInputError`）、写集重复与保护路径（`.git/`、`.mini-dsh/`、可配置项）、Kahn 拓扑分层与环检测、同波次写集两两相交检查（文件精确、目录前缀、Windows 大小写）、验收命令经 `SandboxRuntime.inspectCommand` 形状检查、`single`/`parallel` 判定与理由。
+- 跨波次写集允许重叠：后一波次的 attempt 以整合 head 为基线，能看到前一波次的已整合结果。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-plan.test.js
+# tests 7 / pass 7 / fail 0
+```
+
+**测试覆盖**
+
+- 三子任务 DAG 分层为 `[[st-1, st-2], [st-3]]` 并判定 `parallel`；依赖深度而非声明顺序决定波次。
+- 环、同波次文件/目录前缀相交、重复写集条目、保护路径均被拒绝；跨波次重叠允许。
+- 验收命令形状拒绝（注入闸门与真实 `SandboxRuntime`）；`auto`/`single`/`parallel` 判定与强制并行拒绝。
+- `maxSubtasks` 与结构错误有界。
+
+**未包含**
+
+- planner、审批队列、波次调度与冲突处置（M2-②—⑤）。
+
 ## M1-④ 单 attempt 编排闭环与 CLI（2026-11-07）
 
 **改动**

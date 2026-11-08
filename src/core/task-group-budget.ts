@@ -7,8 +7,9 @@ import type { ChatRequest, ChatResponse, EventData } from './contracts.js'
 import type { SessionRuntime } from './session-runtime.js'
 import type { Usage } from './budget.js'
 
-export interface TaskGroupPolicy { maxModelRequests: number; maxToolCalls: number; maxTotalTokens: number; rootTokenFloor: number; rootRequestFloor: number; maxWallDurationMs: number }
-export const TASK_GROUP_POLICY: Readonly<TaskGroupPolicy> = Object.freeze({ maxModelRequests: 64, maxToolCalls: 128, maxTotalTokens: 2_000_000, rootTokenFloor: 1_000_000, rootRequestFloor: 32, maxWallDurationMs: 900_000 })
+export interface TaskGroupPolicy { maxModelRequests: number; maxToolCalls: number; maxTotalTokens: number; rootTokenFloor: number; rootRequestFloor: number; maxWallDurationMs: number; maxInFlightRequests: number }
+// maxInFlightRequests = 0 表示不额外限制（会话委派的既有行为）；编排根组按 maxWorkers + 1 设置。
+export const TASK_GROUP_POLICY: Readonly<TaskGroupPolicy> = Object.freeze({ maxModelRequests: 64, maxToolCalls: 128, maxTotalTokens: 2_000_000, rootTokenFloor: 1_000_000, rootRequestFloor: 32, maxWallDurationMs: 900_000, maxInFlightRequests: 0 })
 export interface DispatchScope { sessionId: string; taskId: string; runId: string; requestId: string }
 export interface GroupReservation extends DispatchScope { agentId: string; root: boolean; purpose: 'main' | 'summary'; reserve: number }
 export interface GroupStart { groupId: string; policy: TaskGroupPolicy; deadline: number }
@@ -42,6 +43,7 @@ export function groupPolicy(overrides: Partial<TaskGroupPolicy> = {}): Readonly<
   const policy = { ...TASK_GROUP_POLICY, ...overrides }
   for (const [key, value] of Object.entries(policy)) if (!(key in TASK_GROUP_POLICY) || !Number.isSafeInteger(value) || value < (key === 'maxWallDurationMs' ? 1 : 0)) throw new Error(`invalid task group policy: ${key}`)
   if (policy.rootTokenFloor > policy.maxTotalTokens || policy.rootRequestFloor > policy.maxModelRequests || policy.maxWallDurationMs > 2_147_483_647) throw new Error('invalid root floor or group duration')
+  if (policy.maxInFlightRequests > 64) throw new Error('invalid task group in-flight limit')
   return Object.freeze(policy)
 }
 export class TaskGroupBudgetCoordinator {
@@ -140,6 +142,11 @@ export class TaskGroupBudgetCoordinator {
       if (!Number.isSafeInteger(reservation.reserve) || reservation.reserve < 1) throw new ModelNotDispatchedError('invalid group reservation', 'other_limit')
       const floorRequests = reservation.root ? 0 : Math.max(0, policy.rootRequestFloor - state.rootRequests)
       const floorTokens = reservation.root ? 0 : Math.max(0, policy.rootTokenFloor - state.rootTokens)
+      // 在途上限按“已预留或已派发、尚未结清”计：预留到派发之间的窗口也占名额，否则并发 dispatch 会同时越过上限。
+      if (policy.maxInFlightRequests > 0) {
+        const inFlight = [...this.#reservations.values()].filter(item => item.status === 'reserved' || item.status === 'dispatched').length
+        if (inFlight >= policy.maxInFlightRequests) throw new ModelNotDispatchedError('task group in-flight request limit', 'request_limit')
+      }
       if (state.requests + 1 + floorRequests > policy.maxModelRequests) throw new ModelNotDispatchedError('task group request limit', 'request_limit')
       if (state.settledTokens + state.outstandingTokens + reservation.reserve + floorTokens > policy.maxTotalTokens) throw new ModelNotDispatchedError('task group token reservation limit', 'other_limit')
       await this.#persist({ type: 'group/budget-reserved', data: { ...reservation, groupId: this.start.groupId } })

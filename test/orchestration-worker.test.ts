@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { parseWorkerReport, workerGuidance } from '../src/orchestration/worker.js'
 import { findScopeViolations, writeSetCovers } from '../src/orchestration/integrator.js'
-import { resolveRootBudget } from '../src/orchestration/orchestrator.js'
+import { conflictOptions, resolveRootBudget } from '../src/orchestration/orchestrator.js'
 
 test('worker reports are bounded, optional and never trusted beyond their fields', () => {
   const report = parseWorkerReport('done\n```json\n{"status":"done","summary":"wrote a","uncertainties":["bom"],"sources":[{"path":"src/a.txt"}]}\n```')
@@ -35,6 +35,11 @@ test('worker guidance states the write set, acceptance and report contract', () 
   assert.match(guidance, /node check\.mjs/)
   assert.match(guidance, /Do not run git commit/)
   assert.match(guidance, /"status":"done"/)
+})
+
+test('conflict options drop serial rerun when the attempt limit is reached', () => {
+  assert.deepEqual(conflictOptions(1, 2), ['rerun-serially', 'skip-subtask', 'abort'])
+  assert.deepEqual(conflictOptions(2, 2), ['skip-subtask', 'abort'])
 })
 
 test('root budget defaults and validation are explicit', () => {
