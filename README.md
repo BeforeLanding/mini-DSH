@@ -125,7 +125,7 @@ mini-dsh orchestrate resume <rootId> [--accept-unknown-usage] [--retry <subtaskI
 - **审批（D8）：** worktree 内的 `write_file`/`edit_file` 默认自动批准；Bash 默认询问，所有请求经单一 FIFO 队列逐条显示；`--approve-writes ask` 恢复逐条写入审批。
 - **停止：** 第一次 Ctrl-C 停止派发并整合已完成部分；第二次 Ctrl-C 中止运行中的 worker，根任务取消。
 - **恢复：** `resume` 采用已完成的 worker 结果而不重跑；未知副作用、冲突与崩溃留下的未知用量需要人工决定或确认。
-- **离线装配：** `pnpm eval:orchestrate --validate-only` 校验组合夹具与四臂矩阵（S / D / R / R-serial），不发起任何 provider 请求。真实模型批次需单独授权，尚未执行。
+- **离线装配：** `pnpm eval:orchestrate --validate-only` 校验组合夹具与四臂矩阵（S / D / R / R-serial），不发起任何 provider 请求。真实模型第一批（2026-11-08，16 runs）已执行，但因夹具规格不对称、提示缓存配置不同且 D 臂未委派，不能说明编排优于单 Agent；唯一干净的对照 R 对 R-serial 两臂均 4/4。见[结果页](docs/superagent/RESULTS-20261108.md)。
 
 ## 当前状态
 
@@ -139,13 +139,13 @@ mini-dsh orchestrate resume <rootId> [--accept-unknown-usage] [--retry <subtaskI
 - **预算：** token 为估算值，执行预算不等于费用硬上限；`/compact` 可能请求模型。
 - **验收：** 任务能否完成取决于模型与项目；`/report` 记录检查证据，验收仍由使用者判断。
 - **发布：** 以 GitHub Release 提供 tarball，尚未发布 npm；macOS 安装未验证。ECS 部署仅保留[手动入口](docs/ECS_DEPLOYMENT.md)。
-- **范围：** 演示与离线回归验证的是机制；模型评测只有下面的 SWE-bench 对照一项，其运行器与完整过程在[实验分支](https://github.com/BeforeLanding/mini-DSH/tree/improve/swe-harness-advantage-20261031)。只读委派（默认关闭）已在 main；项目记忆仍只在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2)，不属于 main 交付范围。多 Agent 编排的 M1–M4 自 v0.3.0 起发布；其真实模型四臂对照未执行，目前只有离线装配与机制演示。
+- **范围：** 演示与离线回归验证的是机制；模型评测有下面的 SWE-bench 对照，以及编排四臂第一批（[结果页](docs/superagent/RESULTS-20261108.md)，结论见该页）；SWE 运行器与完整过程在[实验分支](https://github.com/BeforeLanding/mini-DSH/tree/improve/swe-harness-advantage-20261031)。只读委派（默认关闭）已在 main；项目记忆仍只在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2)，不属于 main 交付范围。多 Agent 编排的 M1–M4 自 v0.3.0 起发布；其真实模型四臂第一批不支持“编排更好”的结论（混杂因素见结果页）。
 
 ## 评测
 
 在 90 道未参与调参的 SWE-bench Verified 题上，打开长单任务组件的 mini-DSH 解决 74 题；同模型（`deepseek/deepseek-flash`）、同环境、同 token 上限下，mini-SWE-agent 解决 57 题，同源码但不开组件的 mini-DSH 解决 61 题。代价是成本约为 mini-SWE-agent 的 2.6 倍；没有做逐项消融，差距不能归给单个组件。这些组件在 main 上默认关闭，开关见[使用指南](docs/USAGE.md#长单任务的可选组件)。设置、配对检验与限制见 [SWE-bench 结果](docs/SWE-BENCH-RESULTS.md)。
 
-多 Agent 编排另有一套离线评测装配（组合夹具 × S/D/R/R-serial 四臂）：`pnpm eval:orchestrate --validate-only`。它只校验验收器正反例与矩阵公平性，provider 请求为 0；真实模型小批次需要单独授权，尚无结果可报告。
+多 Agent 编排另有一套离线评测装配（组合夹具 × S/D/R/R-serial 四臂）：`pnpm eval:orchestrate --validate-only`。它只校验验收器正反例与矩阵公平性，provider 请求为 0。真实模型第一批（16 runs）已执行：编排臂 4/4、单 Agent 臂 2/4，但差异来自夹具规格只写在固定计划里与提示缓存配置不同，不支持“编排更好”；唯一干净的对照 R 对 R-serial 两臂均 4/4。见[编排结果](docs/superagent/RESULTS-20261108.md)。
 
 ## 架构与扩展
 

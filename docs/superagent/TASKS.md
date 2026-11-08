@@ -75,7 +75,7 @@
 - [x] ④ 文档与里程碑收尾
   - 验收：README、REQUIREMENTS、TASKS、CHANGES、DECISIONS 与 PROGRESS 同步；全量 `pnpm check` / `pnpm test` / `pnpm lint` 通过。
   - 证据：本目录文档与 README；命令见 [CHANGES.md](CHANGES.md) 的 M4-④。
-- [ ] ⑤ 付费小批次（需单独授权；未授权时交付只含离线证据）——**进行中：零付费准备**（2026-11-08 起）
+- [x] ⑤ 付费小批次——第一批已执行（2026-11-08）；下一批需先修正规格与缓存不对称并重新授权
   - 已定：R/R-serial 用夹具固定计划（不评测 planner）；每 run 1M tokens / 96 requests / 192 tool calls / 30 min，四臂相同；模型 `deepseek/deepseek-flash`；2 夹具 × 4 臂 × 2 重复 = 16 runs；D′、冲突型、负对照仍未装配。
   - [x] ⑤-1 批次 manifest、成本上限与 `--plan-only`
     - 验收：manifest 冻结 git commit、价格快照、模型与矩阵 digest，`wx` 不覆盖；上限按每 run `1M × 最高单价 × 1.2 + 满额末请求` × 16 + 探测预留计算；provider 请求 0。
@@ -86,5 +86,6 @@
   - [x] ⑤-3 `--execute` 闸门、协议探测、停批规则与报告
     - 验收：缺参、已存在的证据目录、脏树或 HEAD 与 manifest 不符均拒绝；未知用量、基础设施错误、金额无法预留时立即停批；全部用脚本模型测试。
     - 证据：`scripts/eval-orchestrate-run.ts`、`scripts/eval-orchestrate.ts`、`test/eval-orchestrate-execute.test.ts`；命令见 CHANGES 的 M4-⑤-3。
-  - [ ] ⑤-4 文档与授权申请（命令原文、模型、价格快照、`--max-usd`）——文档已完成（DECISIONS M4-⑤、DEVELOPMENT §14.4 数值）；manifest 在本提交之后冻结，授权待用户确认
-  - [ ] ⑤-5 付费执行与结果（仅在用户对该次批次授权后；复跑另行授权）
+  - [x] ⑤-4 文档与授权申请（命令原文、模型、价格快照、`--max-usd`）——用户 2026-11-08 授权 `--max-usd 28.17` 的这一批
+  - [x] ⑤-5 付费执行与结果（仅在用户对该次批次授权后；复跑另行授权）
+    - 结果：16/16 执行、`stopReason=completed`、峰值价上界 $0.37；不支持“编排更好”（夹具规格不对称、缓存配置不同、D 未委派）。见 [RESULTS-20261108.md](RESULTS-20261108.md)。

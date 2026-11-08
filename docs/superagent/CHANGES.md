@@ -1,5 +1,31 @@
 # 多 Agent 编排改动与证据
 
+## M4-⑤-5 第一批付费执行（2026-11-08）
+
+用户授权的命令（逐字）：
+
+```text
+MINI_DSH_V2_RUNTIME='D:\Agent\tmp\nx42-runtime\unpack' node dist/scripts/eval-orchestrate.js --execute --manifest D:/Agent/outputs/orchestration-four-arm-20261108/manifest.json --evidence-root D:/Agent/outputs/orchestration-four-arm-20261108/batch-01 --max-usd 28.17
+```
+
+**读数**
+
+```text
+manifest 提交 23358c9（干净工作树）；探测回显 deepseek-flash；isolation=wsl-bwrap
+stopReason=completed; executedRuns=16/16; provider calls=201（含探测）; spentPeakUsd=0.3690（上界）
+隐藏验收：S 2/4、D 2/4、R 4/4、R-serial 4/4；编排臂冲突 0、人工请求 0；D 的 delegate_tasks 调用 0
+```
+
+**解读与限制：** 见 [RESULTS-20261108.md](RESULTS-20261108.md)。S/D 只在 `parallel-composite` 的 `st-3` 上失败，原因是隐藏验收器要求的约定只写在固定计划里；S/D 的提示缓存命中 2–3%，编排臂 73–91%，配置不同。这些是本批次设计的不对称，不是编排的收益。机器可读摘要 `docs/samples/orchestration-four-arm-20261108.json` 记录了 manifest 与原始报告的 SHA-256；原始证据留在本机，未提交。
+
+**文档同步与护栏：** README、PROGRESS、讲解提纲与 REQUIREMENTS 改为“第一批已执行、不能说明编排更好”，并指向结果页。`test/progress-sync.test.ts` 新增护栏：存在 `docs/superagent/RESULTS-*.md` 时，用户文档不得再写四臂批次“未执行 / 尚无结果”，也不得再写“模型评测只有 SWE-bench 一项”。先证红：同一规则对改动前的文档命中 9 行（README 2、PROGRESS 1、讲解提纲 5、REQUIREMENTS 1），改动后为 0。展示面（README、讲解提纲）按 `display-policy` 规则不写美元金额，费用只在结果页与 PROGRESS。
+
+```text
+pnpm check                     # syntax ok: 267 files
+pnpm test                      # tests 683 / pass 653 / fail 0 / 30 platform-skipped
+pnpm lint                      # 299 files, no fixes applied
+```
+
 ## M4-⑤-4 付费批次文档（2026-11-08）
 
 - DECISIONS 新增 M4-⑤：固定计划、四臂同额预算与两项置 0 的理由、在途预留守卫、不提供 `decide`、复刻而非抽取隔离 preflight、先演练后授权。

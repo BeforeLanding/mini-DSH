@@ -59,3 +59,16 @@ test('package.json 版本已含编排时，用户文档不再写编排尚未发�
     const stale = orchestrationLines(/尚未发版|Release 不含|尚未包含在任何 Release|需从源码运行/)
     assert.deepEqual(stale, [], `package.json 为 ${version}，文档仍写编排尚未发版`)
 })
+
+// 四臂付费批次一旦有结果页，用户文档不得再写“未执行 / 尚无结果”，也不得再说模型评测只有 SWE-bench 一项。
+test('编排四臂已有结果页时，用户文档不再写付费批次未执行', () => {
+    const results = fs.readdirSync(`${repository}docs/superagent`).filter(name => /^RESULTS-\d{8}\.md$/.test(name))
+    if (!results.length) return
+    const stale = [
+        ...orchestrationLines(/(四臂|小批次|付费批次).{0,24}(未执行|尚未执行|未授权|尚无结果)|尚无结果可讲/),
+        ...orchestrationDocs.flatMap(doc => read(doc).split('\n').map((text, index) => ({ doc, line: index + 1, text })))
+            .filter(({ text }) => /模型评测只有.{0,40}SWE-bench.{0,24}一项/.test(text))
+            .map(({ doc, line, text }) => `${doc}:${line}: ${text.slice(0, 60)}`),
+    ]
+    assert.deepEqual(stale, [], `已有 ${results.join(', ')}，文档仍写四臂批次未执行`)
+})
