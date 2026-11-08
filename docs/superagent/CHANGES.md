@@ -1,5 +1,18 @@
 # 多 Agent 编排改动与证据
 
+## 修复：root/start 拒绝 `fixReserveTokens = 0`（2026-11-08）
+
+**现象：** `resolveRootBudget` 有意允许 `fixReserveTokens` 为 0（`src/orchestration/orchestrator.ts`），但 `root/start` 事件校验（`src/orchestration/validation.ts`）要求它 ≥ 1。于是 `--root-budget '{"fixReserveTokens":0}'` 通过入口校验，根却在写第一条事件时失败（`budget.fixReserveTokens must be an integer >= 1`）。在为付费批次装配 R 臂时发现。
+
+**改动：** 校验与 `resolveRootBudget` 对齐，`fixReserveTokens` 下限为 0，其余预算键仍为 1；新增回归测试，同时钉住 -1 与 `maxTotalTokens = 0` 仍被拒绝。
+
+**验证（本步实际输出）**
+
+```text
+修复前  node --test dist/test/orchestration-store.test.js        # pass 4 / fail 1（新增用例）
+修复后  node --test dist/test/orchestration-*.test.js            # tests 70 / pass 70 / fail 0
+```
+
 ## M4-⑤-1 批次 manifest、金额上限与 `--plan-only`（2026-11-08）
 
 **改动**

@@ -108,7 +108,8 @@ function validateRootStart(data: Record<string, unknown>) {
   integer(config.maxSubtasks, 'config.maxSubtasks', 1)
   integer(config.maxAttemptsPerSubtask, 'config.maxAttemptsPerSubtask', 1)
   const budget = record(data.budget, 'budget')
-  for (const key of ['maxModelRequests', 'maxTotalTokens', 'maxWallMs', 'maxToolCalls', 'fixReserveTokens']) integer(budget[key], `budget.${key}`, 1)
+  // 与 resolveRootBudget 一致：fixReserveTokens 可为 0（没有整合修复预留），其余至少为 1。
+  for (const key of ['maxModelRequests', 'maxTotalTokens', 'maxWallMs', 'maxToolCalls', 'fixReserveTokens']) integer(budget[key], `budget.${key}`, key === 'fixReserveTokens' ? 0 : 1)
   if (typeof budget.plannerShare !== 'number' || !Number.isFinite(budget.plannerShare) || budget.plannerShare < 0 || budget.plannerShare > 1) throw new Error('budget.plannerShare is invalid')
   integer(budget.maxInFlightRequests, 'budget.maxInFlightRequests', 1)
   if (budget.maxUsd !== undefined && (typeof budget.maxUsd !== 'number' || !Number.isFinite(budget.maxUsd) || budget.maxUsd <= 0)) throw new Error('budget.maxUsd is invalid')

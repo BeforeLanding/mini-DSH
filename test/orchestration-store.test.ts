@@ -4,7 +4,8 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { OrchestrationStore, newRootId } from '../src/orchestration/store.js'
-import { decodeOrchestrationLog } from '../src/orchestration/validation.js'
+import { decodeOrchestrationLog, validateOrchestrationData } from '../src/orchestration/validation.js'
+import { resolveRootBudget } from '../src/orchestration/orchestrator.js'
 import { rootStart, planRecorded } from './orchestration-fixtures.js'
 
 async function tempRoot(t: import('node:test').TestContext) {
@@ -64,4 +65,13 @@ test('a half-written tail is refused and can be quarantined explicitly', async t
   assert.match(await fs.readFile(backup, 'utf8'), /\{"v":1,"rootId":$/)
   const reopened = await open()
   assert.equal((await reopened.read()).length, 1)
+})
+
+// resolveRootBudget 有意允许 fixReserveTokens = 0；root/start 的校验曾要求 >= 1，导致这样的根在启动时失败。
+test('root/start accepts every root budget that resolveRootBudget accepts, including a zero fix reserve', () => {
+  const zero = resolveRootBudget({ fixReserveTokens: 0, plannerShare: 0 })
+  validateOrchestrationData('root/start', { ...rootStart(), budget: zero })
+  assert.throws(() => resolveRootBudget({ fixReserveTokens: -1 }), /invalid root budget fixReserveTokens/)
+  assert.throws(() => validateOrchestrationData('root/start', { ...rootStart(), budget: { ...zero, fixReserveTokens: -1 } }), /fixReserveTokens/)
+  assert.throws(() => validateOrchestrationData('root/start', { ...rootStart(), budget: { ...zero, maxTotalTokens: 0 } }), /maxTotalTokens/)
 })
