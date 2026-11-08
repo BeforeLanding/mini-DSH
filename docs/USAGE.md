@@ -137,7 +137,7 @@ v2.1 的 Full/Baseline 是冻结开发协议里的两条实验臂，不是生产
 
 ## 多 Agent 编排
 
-`orchestrate` 子命令已在 main（尚未发版，v0.2.0 Release 不含，需从源码运行），支持计划文件或只读 planner、同波次并行、FIFO 审批、冲突处置、两级停止与崩溃恢复。
+`orchestrate` 子命令自 v0.3.0 起提供（源码与 Release tarball 均可），支持计划文件或只读 planner、同波次并行、FIFO 审批、冲突处置、两级停止与崩溃恢复。
 
 ```text
 mini-dsh orchestrate run (--task "<text>" | --task-file <path>) [--plan <plan.json>]

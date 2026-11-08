@@ -33,15 +33,29 @@ test('文档里的 Release 链接版本与 package.json 一致', () => {
     assert.deepEqual(stale, [], `Release 链接与 package.json 版本 ${version} 不一致`)
 })
 
-test('orchestrate 子命令已在源码中时，用户文档不再写编排未合入 main', () => {
-    if (!fs.existsSync(`${repository}src/app/orchestrate-cli.ts`)) return
-    const docs = ['README.md', 'PROGRESS.md', 'docs/USAGE.md', 'docs/RECRUITER_WALKTHROUGH.md', 'docs/superagent/REQUIREMENTS.md']
-    const stale = docs.flatMap(doc =>
+const orchestrationDocs = ['README.md', 'PROGRESS.md', 'docs/USAGE.md', 'docs/RECRUITER_WALKTHROUGH.md', 'docs/superagent/REQUIREMENTS.md']
+const orchestrationLines = (claim: RegExp) =>
+    orchestrationDocs.flatMap(doc =>
         read(doc)
             .split('\n')
             .map((line, index) => ({ doc, line: index + 1, text: line }))
-            .filter(({ text }) => /编排/.test(text) && /尚未合入|尚未合并|待评审合并|待合并|尚未包含编排入口|只在分支上存在|main 尚未/.test(text))
+            // 主语可能写成“编排”、子命令名或里程碑区间（如“M1–M4 已经由 PR … 合入”）。
+            .filter(({ text }) => /编排|orchestrate|M[0-4]\s*[–—-]\s*M[0-4]/.test(text) && claim.test(text))
             .map(({ doc, line, text }) => `${doc}:${line}: ${text.slice(0, 60)}`),
     )
+const hasOrchestrate = () => fs.existsSync(`${repository}src/app/orchestrate-cli.ts`)
+
+test('orchestrate 子命令已在源码中时，用户文档不再写编排未合入 main', () => {
+    if (!hasOrchestrate()) return
+    const stale = orchestrationLines(/尚未合入|尚未合并|待评审合并|待合并|尚未包含编排入口|只在分支上存在|main 尚未/)
     assert.deepEqual(stale, [], 'src 已含 orchestrate 入口，文档仍写编排未合入 main')
+})
+
+// v0.3.0 是第一个从含 orchestrate 的源码打包的版本；此后 package.json 的版本一定含编排。
+test('package.json 版本已含编排时，用户文档不再写编排尚未发版', () => {
+    const { version } = JSON.parse(read('package.json')) as { version: string }
+    const [major, minor] = version.split('.').map(Number)
+    if (!hasOrchestrate() || (major === 0 && minor < 3)) return
+    const stale = orchestrationLines(/尚未发版|Release 不含|尚未包含在任何 Release|需从源码运行/)
+    assert.deepEqual(stale, [], `package.json 为 ${version}，文档仍写编排尚未发版`)
 })
