@@ -98,4 +98,8 @@ test('plan-only is preregistered for deepseek-flash and manifest-out needs plan-
   assert.throws(() => parseEvalArgs(['--validate-only', '--manifest-out', 'm.json'], {}), /only valid with --plan-only/)
   assert.throws(() => parseEvalArgs(['--validate-only', '--plan-only'], {}), /exactly one/)
   assert.throws(() => parseEvalArgs(['--plan-only', '--manifest-out'], {}), /requires a value/)
+  assert.deepEqual(parseEvalArgs(['--rehearse'], {}), { mode: 'rehearse', model: batchModel })
+  assert.deepEqual(parseEvalArgs(['--rehearse', '--evidence-root', 'ev'], {}), { mode: 'rehearse', model: batchModel, evidenceRoot: 'ev' })
+  assert.throws(() => parseEvalArgs(['--plan-only', '--evidence-root', 'ev'], {}), /only valid with --rehearse/)
+  assert.throws(() => parseEvalArgs(['--rehearse', '--model', 'other/model'], {}), /preregistered/)
 })

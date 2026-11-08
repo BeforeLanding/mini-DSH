@@ -113,7 +113,7 @@ export function freezeBatchManifest({ specs, gitCommit, createdAt, model = batch
     matrixDigest: matrixDigest(specs), reserve: batchReserveUsd(specs, price),
     notes: [
       'R and R-serial run the fixture plan; the planner is not evaluated',
-      'plannerShare=0 and fixReserveTokens=0 so R gets the same root token budget as S',
+      'plannerShare=0 (no planner runs) and fixReserveTokens=0 (no integration-fix attempt exists); R and S share the same 1M root token budget',
       'orchestration workers keep the CLI 10-minute active-time limit per worker; S/D are bounded by the 30-minute task wall',
       'token categories are worker/summary only (no planner, no integration fix); duplicate-work metrics are not measured',
     ],

@@ -5,7 +5,9 @@ import {
   fixturePlan, orchestrationFixtureIds, orchestrationFixtures, validateOrchestrationFixture,
   type FixtureValidation, type OrchestrationFixtureId,
 } from './orchestration-fixtures.js'
+import os from 'node:os'
 import { batchModel, freezeBatchManifest, gitState, manifestDigest, writeBatchManifest } from './eval-orchestrate-batch.js'
+import { rehearseBatch } from './eval-orchestrate-run.js'
 
 // 四臂对照的**离线装配**（DEVELOPMENT.md §14.3、M4-③）。本步只做装配与零付费校验：
 // 不创建真实模型适配器、不发起 provider 请求。真实模型批次需要按 §14.4 对**该次批次**单独授权，
@@ -164,32 +166,35 @@ export async function validateOfflineBatch({ model = 'unset' }: { model?: string
   }
 }
 
-export type EvalMode = 'validate-only' | 'plan-only'
-export interface CliOptions { mode: EvalMode; model: string; manifestOut?: string }
+export type EvalMode = 'validate-only' | 'plan-only' | 'rehearse'
+export interface CliOptions { mode: EvalMode; model: string; manifestOut?: string; evidenceRoot?: string }
 export function parseEvalArgs(argv: readonly string[], env: NodeJS.ProcessEnv = process.env): CliOptions {
   let model = env.MINI_DSH_EVAL_MODEL ?? 'unset'
   const modes: EvalMode[] = []
-  let manifestOut: string | undefined
+  let manifestOut: string | undefined, evidenceRoot: string | undefined
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index]
     if (arg === '--validate-only') modes.push('validate-only')
     else if (arg === '--plan-only') modes.push('plan-only')
-    else if (arg === '--model' || arg === '--manifest-out') {
+    else if (arg === '--rehearse') modes.push('rehearse')
+    else if (arg === '--model' || arg === '--manifest-out' || arg === '--evidence-root') {
       const value = argv[++index]
       if (!value || value.startsWith('--')) throw new Error(`${arg} requires a value`)
       if (arg === '--model') model = value
-      else manifestOut = value
+      else if (arg === '--manifest-out') manifestOut = value
+      else evidenceRoot = value
     } else if (arg === '--execute') throw new Error('refusing --execute: paid batches require separate authorization for that batch (§14.4)')
     else throw new Error(`unknown argument: ${arg}`)
   }
-  if (modes.length !== 1) throw new Error('choose exactly one of --validate-only or --plan-only')
+  if (modes.length !== 1) throw new Error('choose exactly one of --validate-only, --plan-only or --rehearse')
   const mode = modes[0]!
   if (manifestOut !== undefined && mode !== 'plan-only') throw new Error('--manifest-out is only valid with --plan-only')
-  if (mode === 'plan-only') {
+  if (evidenceRoot !== undefined && mode !== 'rehearse') throw new Error('--evidence-root is only valid with --rehearse')
+  if (mode === 'plan-only' || mode === 'rehearse') {
     if (model === 'unset') model = batchModel
     if (model !== batchModel) throw new Error(`this batch is preregistered for ${batchModel}; got ${model}`)
   }
-  return { mode, model, ...(manifestOut === undefined ? {} : { manifestOut }) }
+  return { mode, model, ...(manifestOut === undefined ? {} : { manifestOut }), ...(evidenceRoot === undefined ? {} : { evidenceRoot }) }
 }
 
 const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url))
@@ -218,6 +223,22 @@ async function main() {
   try { options = parseEvalArgs(process.argv.slice(2)) } catch (error) {
     console.error(error instanceof Error ? error.message : String(error))
     process.exitCode = 2
+    return
+  }
+  if (options.mode === 'rehearse') {
+    try {
+      const specs = assembleRunMatrix({ model: options.model })
+      const manifest = freezeBatchManifest({ specs, gitCommit: gitState(repositoryRoot).head, createdAt: new Date().toISOString(), model: options.model })
+      const evidenceRoot = options.evidenceRoot ?? path.join(os.tmpdir(), `mini-dsh-orch-rehearse-${Date.now()}`)
+      const runtimeRoot = process.env.MINI_DSH_V2_RUNTIME
+      const result = await rehearseBatch({ manifest, specs, evidenceRoot, ...(runtimeRoot ? { runtimeRoot } : {}), onProgress: line => console.error(line) })
+      const { report } = result
+      console.log(JSON.stringify({ mode: 'rehearse', passed: result.passed, providerRequests: 0, scriptedRequests: result.scriptedRequests, isolation: report.isolation, stopReason: report.stopReason, executedRuns: report.executedRuns, byArm: report.summary.byArm, evidenceRoot: result.evidenceRoot }, null, 2))
+      if (!result.passed) process.exitCode = 1
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error))
+      process.exitCode = 1
+    }
     return
   }
   if (options.mode === 'plan-only') {
