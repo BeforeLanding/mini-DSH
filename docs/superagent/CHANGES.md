@@ -1,5 +1,34 @@
 # 多 Agent 编排改动与证据
 
+## M4-① 组合夹具与验收器（2026-11-08）
+
+**改动**
+
+- 新增 `test/fixtures/orchestration/`：`parallel-composite`（normalize + dedupe 并行，report 依赖前两者进入第二波次）与 `single-repair`（复用 repair 的单根因任务）。
+- 组合夹具的材料化、计划生成、隐藏验收器执行与正反例校验集中在 `scripts/orchestration-fixtures.ts`；`report` 的参考解与隐藏验收器为本步新增。
+- 两套验收的分工与理由见 [DECISIONS.md](DECISIONS.md) 的 M4-①：计划验收命令只跑工作区内冒烟检查，隐藏验收器在整合结果上独立运行并作为最终结论。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+pnpm lint                      # 289 files, no warnings
+node --test dist/test/orchestration-fixtures.test.js
+# tests 4 / pass 4 / fail 0
+```
+
+**测试覆盖**
+
+- 两份夹具的初始态均被隐藏验收器拒绝，参考态全部通过。
+- `parallel-composite` 计划分层为 `[[st-1, st-2], [st-3]]`、判定 `parallel`；隐藏验收器位于工作区之外，工作区不含 `report` 的实现。
+- `single-repair` 判定 `single`，保留项目规则与公开检查，初始态隐藏验收失败。
+- 所有计划验收命令均为工作区内相对路径（宿主在整合 worktree 中运行）。
+
+**未包含**
+
+- 演示脚本与评测执行器（M4-②/③）；真实模型批次需要单独授权（M4 付费边界）。
+
 ## M3-⑤ 崩溃演示（2026-11-07）
 
 **改动**

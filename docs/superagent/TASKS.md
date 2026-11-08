@@ -10,7 +10,7 @@
 - [x] ④ reviewer 候选版本 — `bf20603`
 - [x] ⑤ CLI 开关、`demo:team` 与文档同步 — `db85fe6`
 
-## M1：最小纵向闭环（进行中）
+## M1：最小纵向闭环（已完成）
 
 - [x] ① `GroupJournal` 抽象（A 的行为与测试不变） — `cfbc09f`
 - [x] ② 编排存储、状态折叠与 `OrchestrationGroupJournal`
@@ -61,6 +61,12 @@
   - 证据：`scripts/demo-orchestrate-crash.ts`、`package.json`。
   - 命令：`pnpm demo:orchestrate-crash`。
 
-## M4：待开始
+## M4：评测、演示与文档（进行中）
 
-- [ ] M4 评测、演示与文档（组合 fixture、演示脚本、四臂对照离线装配；付费批次需单独授权）
+- [x] ① 组合 fixture 与验收器
+  - 验收：初始态被隐藏验收器拒绝、参考态通过；`parallel-composite` 分层为两波次；隐藏验收器不在工作区；计划验收命令使用工作区内相对路径。
+  - 证据：`scripts/orchestration-fixtures.ts`、`test/fixtures/orchestration/`、`test/orchestration-fixtures.test.ts`。
+- [ ] ② 演示脚本（`demo:orchestrate-single` / `demo:orchestrate-parallel`）
+- [ ] ③ 评测执行器（离线装配与 `--validate-only`）
+- [ ] ④ 文档与里程碑收尾
+- [ ] 付费小批次（需单独授权；未授权时交付只含离线证据）

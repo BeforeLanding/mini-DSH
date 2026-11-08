@@ -2,6 +2,16 @@
 
 **非规范性说明：** 方向性决策与数值以 [DEVELOPMENT.md](DEVELOPMENT.md) §2.8 为准；本文件记录开发过程中落实这些决策的具体选择、代码锚点与测试锚点，避免把实现事实只留在提交信息里。
 
+## M4-① 组合夹具与验收器
+
+- **决定：** 组合夹具把既有 coding fixture 的参考解与验收器搬到 `packages/<id>`；`parallel-composite` 的三个写集互不相交，`st-3` 依赖前两者因而进入第二波次。`single-repair` 复用 `repair` 的项目规则与公开 `check.mjs`，只用于 single 判定与 planner 开销演示。
+- **决定（与 §14.3 的一处落差不藏）：** 计划验收命令**不能**引用工作区之外的隐藏验收器：宿主命令闸门拒绝绝对路径和 `..` 越界（`SandboxRuntime.inspectCommand` 的既有规则），而验收命令是普通字符串，没有额外的 trusted-command 通道。因此夹具分两套验收——
+  - `check.mjs`（工作区内，冒烟）：计划里的 `acceptance.commands` 只跑每个包一个例子，作用是让宿主的整合后复验有可机械复跑的形状检查；
+  - `verify.mjs` / `verify/report.mjs`（工作区之外，隐藏）：演示、离线评测与夹具门禁在整合结果上独立运行，**以它的读数作为最终验收结论**。隐藏验收器不进入 plan、编排日志或 worker 提示，worker 无从读取。
+  这避免了「把隐藏判据塞进验收命令、等于公开给 worker」和「完全去掉宿主复验」两种极端。
+- **代码锚点：** `scripts/orchestration-fixtures.ts`、`test/fixtures/orchestration/`。
+- **测试锚点：** `test/orchestration-fixtures.test.ts`（初始态拒收、参考态通过、两波次分层、验收命令相对路径、隐藏验收器不在工作区）。
+
 ## M3-③ 恢复与 resume
 
 - **决定：** 恢复只采用**已确认的结果**：worker 会话 run 为 completed 时，优先找 attempt 分支上带 `Mini-DSH-Attempt` trailer 的提交；没有提交则从 worktree 用宿主身份重新收集并提交。两条路径都不调用 provider，恢复前后 provider 调用数不变。未完成的 run 一律记 `interrupted`，不自动重跑。
