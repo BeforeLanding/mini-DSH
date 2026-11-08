@@ -26,7 +26,8 @@ async function repository(t: import('node:test').TestContext) {
 
 test('git helpers report the repository, tree and clean/dirty state', async t => {
   const { repo, baseCommit } = await repository(t)
-  assert.equal(await repositoryRoot(repo), path.resolve(repo))
+  // git 返回长路径；临时目录在 Windows 上可能是 8.3 短名，所以与 realpath 比较。
+  assert.equal(await repositoryRoot(repo), await fs.realpath(repo))
   assert.equal(await headCommit(repo), baseCommit)
   assert.match(await treeOf(repo, baseCommit), /^[a-f0-9]{40,64}$/)
   const manager = new WorktreeManager(repo, newRootId(), path.join(repo, '..', 'orch'))
@@ -79,7 +80,7 @@ ${conflict.result.stderr.text}`)
   await manager.cleanup()
   assert.equal(await branchExists(repo, first.branch), false)
   assert.equal(await branchExists(repo, integration.branch), false)
-  assert.deepEqual(await worktreeList(repo), [path.resolve(repo)])
+  assert.deepEqual(await worktreeList(repo), [await fs.realpath(repo)])
   assert.equal(await fs.readFile(path.join(repo, 'a.txt'), 'utf8'), 'base\n')
   assert.deepEqual(await manager.assertClean(), { baseCommit, dirty: 0 })
 })
