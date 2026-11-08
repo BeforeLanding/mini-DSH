@@ -1,5 +1,31 @@
 # 多 Agent 编排改动与证据
 
+## M4-④ 里程碑收尾与文档（2026-11-08）
+
+**改动**
+
+- README 新增“多 Agent 编排（开发分支，待评审合并）”与三个离线演示入口；评测与已知边界补充编排的离线装配与“付费批次未执行”。
+- REQUIREMENTS、TASKS、PROGRESS、DECISIONS 同步 M4 离线完成状态；main 尚未合并的边界保持显式。
+- `test/fixtures/orchestration/README.md` 记录两套验收（冒烟检查 vs 隐藏验收器）的分工。
+
+**验证（本步实际输出）**
+
+```text
+pnpm check                     # syntax ok: 261 files
+pnpm test                      # tests 663 / pass 633 / fail 0 / 30 platform-skipped
+pnpm lint                      # 292 files, no warnings
+pnpm demo:orchestrate-single   # PASS；scripted requests=3；planner requests=1；隐藏验收 1/1
+pnpm demo:orchestrate-parallel # PASS；scripted requests=7；planner requests=1；隐藏验收 3/3
+pnpm demo:orchestrate-crash    # PASS；scripted requests=6
+pnpm eval:orchestrate --validate-only
+# mode=validate-only; providerRequests=0; runs=16; passed=true; 初始态全部拒收、参考态全部通过; paidBatch.executed=false
+```
+
+**未包含**
+
+- 真实模型四臂批次、费用上限与结果（需对该次批次单独授权）；D′ 与冲突/负对照任务集的预注册。
+- 30 项 platform-skipped 仍由 CI 的 Linux isolation 作业覆盖，不声称本机通过。
+
 ## M4-③ 离线评测执行器（2026-11-08）
 
 **改动**

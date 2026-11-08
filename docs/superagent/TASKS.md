@@ -61,7 +61,7 @@
   - 证据：`scripts/demo-orchestrate-crash.ts`、`package.json`。
   - 命令：`pnpm demo:orchestrate-crash`。
 
-## M4：评测、演示与文档（进行中）
+## M4：评测、演示与文档（离线部分已完成）
 
 - [x] ① 组合 fixture 与验收器
   - 验收：初始态被隐藏验收器拒绝、参考态通过；`parallel-composite` 分层为两波次；隐藏验收器不在工作区；计划验收命令使用工作区内相对路径。
@@ -72,5 +72,7 @@
 - [x] ③ 评测执行器（离线装配与 `--validate-only`）
   - 验收：四臂矩阵与公平性断言在零 provider 请求下通过；隐藏验收器正反例通过；`--execute` 明确拒绝。
   - 证据：`scripts/eval-orchestrate.ts`、`test/eval-orchestrate.test.ts`、`package.json`。
-- [ ] ④ 文档与里程碑收尾
+- [x] ④ 文档与里程碑收尾
+  - 验收：README、REQUIREMENTS、TASKS、CHANGES、DECISIONS 与 PROGRESS 同步；全量 `pnpm check` / `pnpm test` / `pnpm lint` 通过。
+  - 证据：本目录文档与 README；命令见 [CHANGES.md](CHANGES.md) 的 M4-④。
 - [ ] 付费小批次（需单独授权；未授权时交付只含离线证据）
