@@ -54,6 +54,7 @@
     "demo:orchestrate-crash": "pnpm build && node dist/scripts/demo-orchestrate-crash.js",
     "demo:orchestrate-single": "pnpm build && node dist/scripts/demo-orchestrate.js --mode single",
     "demo:orchestrate-parallel": "pnpm build && node dist/scripts/demo-orchestrate.js --mode parallel",
+    "eval:orchestrate": "pnpm build && node dist/scripts/eval-orchestrate.js",
     "session:lock": "pnpm build && node dist/scripts/session-lock.js",
     "check": "pnpm build && node scripts/check-syntax.js",
     "lint": "biome check .",

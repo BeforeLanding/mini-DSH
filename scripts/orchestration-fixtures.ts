@@ -148,7 +148,7 @@ export interface FixtureValidation {
   mode: 'single' | 'parallel'
   waves: string[][]
   commands: string[]
-  nextSteps: string[]
+  readings: string[]
 }
 // 零付费校验：只读写文件与运行隐藏验收器，不装配任何模型适配器。
 export async function validateOrchestrationFixture(id: OrchestrationFixtureId): Promise<FixtureValidation> {
@@ -170,7 +170,7 @@ export async function validateOrchestrationFixture(id: OrchestrationFixtureId): 
       mode: validation.decision.mode,
       waves: validation.decision.waves,
       commands: plan.subtasks.flatMap(subtask => subtask.acceptance.commands),
-      nextSteps: [initialResult, referenceResult].flatMap(result => result.results.map(item => `${item.taskId}: exit=${item.exitCode}`)),
+      readings: [initialResult, referenceResult].flatMap(result => result.results.map(item => `${item.taskId}: exit=${item.exitCode}`)),
     }
   } finally {
     await fs.rm(directory, { recursive: true, force: true })

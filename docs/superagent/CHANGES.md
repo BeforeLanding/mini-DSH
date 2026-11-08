@@ -1,5 +1,37 @@
 # 多 Agent 编排改动与证据
 
+## M4-③ 离线评测执行器（2026-11-08）
+
+**改动**
+
+- 新增 `scripts/eval-orchestrate.ts` 与 `pnpm eval:orchestrate`：四臂矩阵装配（S / D / R / R-serial）、公平性机械校验、`--validate-only` 的夹具正反例与零 provider 请求校验。
+- `--execute` 被显式拒绝：本步未接线真实模型批次；付费批次需按 §14.4 单独授权，结果另成证据提交。
+- D′（关闭治理）与 §14.3 的“冲突型/负对照”任务类别列为未装配，输出中带原因，不默认视为已覆盖。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+pnpm lint                      # 292 files, no warnings
+node --test dist/test/eval-orchestrate.test.js
+# tests 5 / pass 5 / fail 0
+pnpm eval:orchestrate --validate-only
+# mode=validate-only; providerRequests=0; runs=16; task 2; 初始态全部拒收、参考态全部通过
+```
+
+**测试覆盖**
+
+- 矩阵 = 2 个夹具 × 4 臂 × 2 次重复 = 16；同一任务的预算/验收器/目标逐字一致；R 与 R-serial 只差 `maxWorkers` 且共享计划；S/D 不接收编排计划，D 的 delegation 为 read-only。
+- 篡改预算、worker 数或删掉一整臂都会使 `validateRunMatrix` 失败。
+- `--validate-only` 运行隐藏验收器的正反例（初始拒收、参考通过），provider 请求为 0，付费批次标记为未执行。
+- `--execute`、无参数与未知参数均被拒绝；环境变量模型名可进入装配清单。
+- 哨兵适配器一旦被调用就抛错并计数，防止离线装配悄悄接入 provider。
+
+**未包含**
+
+- 真实模型批次与费用上限（需单独授权）；S/D 的执行适配器接线；D′ 与冲突/负对照任务集（随授权批次预注册）。
+
 ## M4-② 单/并行演示（2026-11-08）
 
 **改动**

@@ -2,6 +2,15 @@
 
 **非规范性说明：** 方向性决策与数值以 [DEVELOPMENT.md](DEVELOPMENT.md) §2.8 为准；本文件记录开发过程中落实这些决策的具体选择、代码锚点与测试锚点，避免把实现事实只留在提交信息里。
 
+## M4-③ 离线评测执行器
+
+- **决定：** 本步只实现**离线装配与零付费校验**。`eval-orchestrate` 只接受 `--validate-only`；`--execute` 被显式拒绝并提示按 §14.4 对该次批次单独授权。理由：付费批次需要授权、模型回显探测与按价格表计算的上限，且结果必须另成证据提交；把它们塞进离线校验脚本会制造「跑个校验就付费」的通道。
+- **决定：** 四臂是**数据装配**而不是已接线的执行器：S（单 Agent）、D（`delegation.mode=read-only`）、R（完整编排，`maxWorkers=2`）、R-serial（同一计划，`maxWorkers=1`）。D′（关闭治理）与 §14.3 的“冲突型”“负对照”任务类别明确列为未装配，不假装覆盖；它们的预注册随授权批次一起提交。
+- **决定：** 公平性由 `validateRunMatrix` 机械检查：同一任务的目标、整题预算与隐藏验收器在四臂间逐字相同；R 与 R-serial 只差 `maxWorkers` 且共享同一计划；S 与 D 只差 `delegation` 且都不接收编排计划；四臂与重复次数齐全。任一被改动即整体失败。
+- **决定：** 零 provider 请求由哨兵适配器见证：装配阶段放入 spec 的 `chat` 一旦被调用就计数并抛错；`validateOfflineBatch` 结束时要求计数为 0。夹具正反例与隐藏验收器都只读写本地文件。
+- **代码锚点：** `scripts/eval-orchestrate.ts`、`package.json` 的 `eval:orchestrate`。
+- **测试锚点：** `test/eval-orchestrate.test.ts`（矩阵完整性/公平性、篡改检测、零付费、正反例、参数守卫、哨兵）。
+
 ## M4-② 单/并行演示
 
 - **决定：** 两个演示都走真实入口：只读 planner 用脚本模型生成计划（`plan.source=model`），worker 与宿主整合/复验走正常路径；演示只在模型侧用脚本，不伪造 plan 事件或验收证据。

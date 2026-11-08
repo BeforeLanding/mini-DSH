@@ -69,6 +69,8 @@
 - [x] ② 演示脚本（`demo:orchestrate-single` / `demo:orchestrate-parallel`）
   - 验收：单任务演示由 planner 判定 `single`；并行演示第一波区间重叠、第二波依赖整合结果；演示以隐藏验收器为最终结论，用户工作树不变。
   - 证据：`scripts/demo-orchestrate.ts`、`package.json`。
-- [ ] ③ 评测执行器（离线装配与 `--validate-only`）
+- [x] ③ 评测执行器（离线装配与 `--validate-only`）
+  - 验收：四臂矩阵与公平性断言在零 provider 请求下通过；隐藏验收器正反例通过；`--execute` 明确拒绝。
+  - 证据：`scripts/eval-orchestrate.ts`、`test/eval-orchestrate.test.ts`、`package.json`。
 - [ ] ④ 文档与里程碑收尾
 - [ ] 付费小批次（需单独授权；未授权时交付只含离线证据）
