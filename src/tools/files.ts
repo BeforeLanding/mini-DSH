@@ -29,7 +29,7 @@ export function matchFilePattern(filename: string, pattern = '') {
   return new RegExp(`^(?:${pattern.includes('/') ? '' : '(?:.*/)?'}${expression})$`).test(normalized)
 }
 
-export interface FilesConfig { workspace?: string; maxLines?: number; maxOutputBytes?: number; maxScanBytes?: number; maxResults?: number; maxEntries?: number; maxDepth?: number; maxFileBytes?: number; maxEditBytes?: number; maxTrackedFiles?: number }
+export interface FilesConfig { allowedTools?: readonly string[]; workspace?: string; maxLines?: number; maxOutputBytes?: number; maxScanBytes?: number; maxResults?: number; maxEntries?: number; maxDepth?: number; maxFileBytes?: number; maxEditBytes?: number; maxTrackedFiles?: number }
 
 export function apply(ctx: Context, config: FilesConfig = {}) {
   const limits = {
@@ -171,7 +171,7 @@ export function apply(ctx: Context, config: FilesConfig = {}) {
       async execute(args, exec) { return searchFiles(resolve, matchFilePattern, args, searchLimits, exec.signal, true) },
     },
   ]
-  for (const definition of definitions) ctx.effect(() => ctx.tools.register({ ...definition, origin: 'builtin',
+  for (const definition of definitions.filter(definition => !config.allowedTools || config.allowedTools.includes(definition.name))) ctx.effect(() => ctx.tools.register({ ...definition, origin: 'builtin',
     effect: definition.name === 'write_file' || definition.name === 'edit_file' ? 'write' : 'read',
     resources: args => ['read_file', 'write_file', 'edit_file'].includes(definition.name) ? [args.path as string] :
       ['glob', 'grep'].includes(definition.name) ? [typeof args.path === 'string' ? args.path : '.'] : [],

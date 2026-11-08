@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### M0 只读委派移植回 main（2026-11-06）
+
+按 [多 Agent 编排开发文档](../superagent/DEVELOPMENT.md) §13 的 M0，把 `feat/memory-team-eval-v2@2f2dca9` 中的方案 A 按文件移植到 main（分支 `feat/orchestration-m0`）：只读角色（MA-01）、任务组预算含 run guard（MA-02/02b、REV-01）、批次委派（MA-03/03b）、不重跑恢复与兄弟任务收尾（MA-04、REV-02）、reviewer 候选版本（MA-05）、CLI 开关与 `demo:team`（EV-01 的团队部分）。不移植记忆与 memory-team 评测执行器；`memoryHash`/`sha256`/`recordObject` 移到 `src/core/content-hash.ts`，有界读取移到 `src/core/bounded-file.ts`，委派中的记忆快照参数与 `memory_*` 只读工具项已删除。
+
+提交：`e9b8a8e`、`f9b7adf`、`d20abeb`、`0dfe548`、`bf20603` 与随后的 CLI/`demo:team`/文档提交各自可单独 revert。验收：`pnpm check`、`pnpm lint`、全量 `node --test dist/test/*.test.js`（含新增的默认能力清单哈希钉住 `47105100…d6c1`、production 配置与委派/恢复/reviewer/预算测试）通过；`pnpm demo:team` 离线 PASS。默认关闭时行为与 v0.2.0 一致；未执行付费请求，CI 六项待推送后核对。
+
 ### PORT-13 v0.2.0 版本号与发布链接（2026-11-01）
 
 PORT-12 新增可选组件与 SWE-bench 结果页，按次版本号发布：`package.json` 0.1.1 → 0.2.0；README（快速开始、当前状态）、PROGRESS（版本条目与下一步）与讲解页的 Release 链接改为 v0.2.0，PROGRESS 以纯文本保留 v0.1.0、v0.1.1 的说明。与 PORT-12 同一 PR，避免多一轮 CI。

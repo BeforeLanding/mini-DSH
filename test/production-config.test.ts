@@ -252,3 +252,21 @@ test('CLI metadata commands ignore workspace config, and interactive startup exp
     assert.equal(await fs.stat(sessionDirectory).then(() => true, () => false), false)
   } finally { await fs.rm(workspace, { recursive: true, force: true }) }
 })
+
+test('read-only delegation is opt-in through the environment and invalid values fail before assembly', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'mini-dsh-team-config-'))
+  try {
+    assert.equal(productionHarnessConfig({}, workspace).delegation, undefined)
+    assert.equal(productionHarnessConfig({ MINI_DSH_DELEGATION: 'off' }, workspace).delegation, undefined)
+    const enabled = productionHarnessConfig({ MINI_DSH_DELEGATION: 'read-only', MINI_DSH_TEAM_DIR: path.join(workspace, 'teams'), MINI_DSH_TASK_GROUP_BUDGET: '{"maxModelRequests":64}' }, workspace)
+    assert.equal(enabled.delegation?.mode, 'read-only')
+    const harness = await createHarness(enabled)
+    try {
+      assert.ok(harness.capabilityManifest.tools.includes('delegate_tasks'))
+      assert.equal(harness.capabilityManifest.delegation?.mode, 'read-only')
+    } finally { await harness.dispose() }
+    assert.throws(() => productionHarnessConfig({ MINI_DSH_DELEGATION: 'write' }, workspace), /MINI_DSH_DELEGATION/)
+    assert.throws(() => productionHarnessConfig({ MINI_DSH_DELEGATION: 'read-only', MINI_DSH_TEAM_LIMITS: '[]' }, workspace), /MINI_DSH_TEAM_LIMITS/)
+    assert.throws(() => productionHarnessConfig({ MINI_DSH_TASK_GROUP_BUDGET: 'nope' }, workspace), /MINI_DSH_TASK_GROUP_BUDGET/)
+  } finally { await fs.rm(workspace, { recursive: true, force: true }) }
+})

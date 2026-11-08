@@ -102,6 +102,7 @@ pnpm start
 - `pnpm demo:resume`：预算停止后在同一任务续跑。
 - `pnpm demo:compact`：单任务压缩、原始事件保留与按事件号回读。
 - `pnpm demo:unknown`：真实崩溃后的未知工具结果与陈旧锁处置。
+- `pnpm demo:team`：可选只读委派（`MINI_DSH_DELEGATION=read-only`）：两个只读子 Agent 并发、共用任务组预算、无效结果与取消可见，只用预设响应。
 
 ## 当前状态
 
@@ -115,7 +116,7 @@ pnpm start
 - **预算：** token 为估算值，执行预算不等于费用硬上限；`/compact` 可能请求模型。
 - **验收：** 任务能否完成取决于模型与项目；`/report` 记录检查证据，验收仍由使用者判断。
 - **发布：** 以 GitHub Release 提供 tarball，尚未发布 npm；macOS 安装未验证。ECS 部署仅保留[手动入口](docs/ECS_DEPLOYMENT.md)。
-- **范围：** 演示与离线回归验证的是机制；模型评测只有下面的 SWE-bench 对照一项，其运行器与完整过程在[实验分支](https://github.com/BeforeLanding/mini-DSH/tree/improve/swe-harness-advantage-20261031)。项目记忆与只读协作在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2)，不属于 main 交付范围。
+- **范围：** 演示与离线回归验证的是机制；模型评测只有下面的 SWE-bench 对照一项，其运行器与完整过程在[实验分支](https://github.com/BeforeLanding/mini-DSH/tree/improve/swe-harness-advantage-20261031)。只读委派（默认关闭）已在 main；项目记忆仍只在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2)，不属于 main 交付范围。
 
 ## 评测
 
