@@ -2,6 +2,34 @@
 
 **非规范性说明：** 方向性决策与数值以 [DEVELOPMENT.md](DEVELOPMENT.md) §2.8 为准；本文件记录开发过程中落实这些决策的具体选择、代码锚点与测试锚点，避免把实现事实只留在提交信息里。
 
+## M3-③ 恢复与 resume
+
+- **决定：** 恢复只采用**已确认的结果**：worker 会话 run 为 completed 时，优先找 attempt 分支上带 `Mini-DSH-Attempt` trailer 的提交；没有提交则从 worktree 用宿主身份重新收集并提交。两条路径都不调用 provider，恢复前后 provider 调用数不变。未完成的 run 一律记 `interrupted`，不自动重跑。
+- **决定：** 未知副作用只在会话证据支持时成立：存在 `tool/result(status=unknown)`，或 Bash 已 `tool/start` 而无对应结果。没有会话文件但 attempt 已 running 时保守按未知处理。未知副作用的 interrupted attempt 生成 `unknown_side_effects`，选项 `retry`/`abandon`；没有未知副作用的 interrupted attempt 在 attempt 上限内自动重试。
+- **决定：** 整合恢复采用“重置+重放”而不是信任残留 cherry-pick：`cherry-pick --abort`（若有）、`reset --hard` 到 `integration/started` 的基线、按 `integration/applied` 顺序重放，然后补写 `integration/finished`。未记录的 attempt 由正常波次逻辑在新整合周期重新应用。
+- **决定：** 验收证据按 `(head, tree, command)` 去重：恢复时只运行当前整合 tree 上缺失的命令；已有证据（包括失败）直接复用。tree 改变后旧证据不匹配，自然重新运行。
+- **决定：** `resume --retry <subtask>` / `--skip <subtask>` 同时是人工决定入口：优先把对应的 pending `unknown_side_effects` 解析为 `retry`/`abandon`，把 `conflict` 解析为 `rerun-serially`/`skip-subtask`；仍有未决请求时停在 `needs_human`，不写 `root/finish`。`--accept-unknown-usage` 只解除账本准入，不替用户决定 attempt 的副作用。
+- **决定：** 编排日志尾部半行继续由操作者显式隔离（`OrchestrationStore.quarantineTail`）；`resume` 明确拒绝且不改写日志。恢复使用日志中持久化的 budget/config/verify/prepare，不重新解释 `MINI_DSH_ROOT_BUDGET`。
+- **代码锚点：** `src/orchestration/{faults,recovery,orchestrator}.ts`、`src/app/orchestrate-cli.ts`。
+- **测试锚点：** `test/orchestration-recovery.test.ts`、`test/orchestration-e2e.test.ts`。
+
+## M3-④ 未知用量与 429
+
+- **决定：** `group/usage-unknown` 保留 `cause`。取消产生的未知只会计入报告，不中止根组也不阻断后续派发；`crash`/`no_usage` 继续沿用 M0 的保守规则，恢复时必须经 `acceptUnknownUsage()` 明确确认。确认只改变准入，不改变已记录的用量。
+- **决定：** provider 明确以 429 拒绝时释放预留而不按未知计费，并设置根组共享冷却 `max(retryAfterMs, 2s)`；下一次派发（包括 Loop 的退避重试）在准入后等待冷却。这样既不让一次限流永久毒化账本，也不让多个 worker 同时撞限流。
+- **决定：** 进程内模拟崩溃与用户取消都可能表现为 abort。编排器在 abort 前调用 `markCrashed()`，让被中止的在途调用按 `cause=crash` 记账；这是测试/演示的故障注入路径，正常取消不会调用。
+- **代码锚点：** `src/core/task-group-budget.ts`（`acceptUnknownUsage`、`markCrashed`、`noteRateLimit`、`#waitCooldown`）、`src/orchestration/orchestrator.ts`。
+- **测试锚点：** `test/orchestration-ledger.test.ts`、`test/task-group-budget.test.ts`。
+
+## M3-② 停止语义
+
+- **决定：** `dispatchSignal`（第一次 Ctrl-C）只停止派发：当前已在运行的 attempt 继续到自然结束，队列中未启动的 attempt 记 `skipped`；随后按正常路径整合已完成部分并验收，根任务为 `completed`/`partial`，没有整合则为 `failed`。
+- **决定：** `signal`（第二次 Ctrl-C）与 wall 截止走同一条“停止运行中”路径：写 `control/stop(running)`、中止全部运行中 run、不打开整合、根任务 `cancelled` 并写 `root/finish`。wall 截止由 50 ms 看门狗检查注入时钟，保证可控时钟测试能打断运行中的 worker；账本自身的 wall 检查仍只在准入时生效。
+- **决定：** 并发池等待全部 runner 收尾后再抛出失败（`Promise.allSettled`）。进程内模拟崩溃时先中止兄弟 worker，再让编排器关闭日志；真实进程崩溃不需要该步骤，但离线测试需要避免写入已关闭的日志。
+- **决定：** `root/start` 记录 `verifyCommands` 与 `prepareCommand`，`resume` 不再依赖调用者重复提供；旧日志缺省为空。
+- **代码锚点：** `src/orchestration/orchestrator.ts` 的 `StopController`、`src/app/orchestrate-cli.ts`、`src/orchestration/contracts.ts`。
+- **测试锚点：** `test/orchestration-stop.test.ts`。
+
 ## D8 编排模式的审批策略（用户已确认，2026-11-06）
 
 - **决定：** `orchestrate` 模式下，worktree 内的 `write_file` / `edit_file` 默认自动批准；Bash 默认仍需人工批准，所有请求经单一 FIFO 队列逐条显示；`--approve-writes ask` 可恢复逐条审批。单 Agent CLI 的审批行为不变。

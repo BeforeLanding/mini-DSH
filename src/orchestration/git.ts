@@ -78,6 +78,10 @@ export async function stagedChangedFiles(worktree: string, baseCommit: string, o
   const text = await git(worktree, ['diff', '--cached', '--name-only', '--no-renames', '-z', baseCommit], options)
   return text.split('\0').filter(Boolean)
 }
+export async function changedFilesBetween(repository: string, from: string, to: string, options: GitRunOptions = {}) {
+  const text = await git(repository, ['diff', '--name-only', '--no-renames', '-z', from, to], options)
+  return text.split('\0').filter(Boolean)
+}
 export async function commitAll(worktree: string, message: string, trailers: string[] = [], options: GitRunOptions = {}) {
   const body = trailers.length ? `${message.trimEnd()}\n\n${trailers.join('\n')}` : message
   await git(worktree, ['-c', 'user.name=mini-dsh', '-c', 'user.email=mini-dsh@localhost', 'commit', '--no-verify', '-m', body], options)

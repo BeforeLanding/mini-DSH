@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { estimateInput } from './token-estimator.js'
 import { validUsage } from './event-validation.js'
 import { ModelNotDispatchedError } from './model-dispatch.js'
-import { ModelStreamError } from './model-error.js'
+import { ModelStreamError, ProviderError } from './model-error.js'
 import type { ChatRequest, ChatResponse, EventData } from './contracts.js'
 import type { SessionRuntime } from './session-runtime.js'
 import type { Usage } from './budget.js'
@@ -16,10 +16,11 @@ export interface GroupStart { groupId: string; policy: TaskGroupPolicy; deadline
 export type GroupBudgetEvent =
   | { type: 'group/start'; data: GroupStart }
   | { type: 'group/budget-reserved'; data: GroupReservation & { groupId: string } }
-  | { type: 'group/model-dispatched' | 'group/reservation-released' | 'group/usage-unknown'; data: { groupId: string; requestId: string } }
+  | { type: 'group/model-dispatched' | 'group/reservation-released'; data: { groupId: string; requestId: string } }
+  | { type: 'group/usage-unknown'; data: { groupId: string; requestId: string; cause?: 'crash' | 'cancel' | 'no_usage' } }
   | { type: 'group/budget-settled'; data: { groupId: string; requestId: string; usage: Usage; overrun: boolean } }
   | { type: 'group/tool-admitted'; data: { groupId: string; key: string; agentId: string; sessionId: string; runId: string; toolCallId: string } }
-type Reservation = GroupReservation & { status: 'reserved' | 'dispatched' | 'released' | 'settled' | 'unknown'; usage?: Usage }
+type Reservation = GroupReservation & { status: 'reserved' | 'dispatched' | 'released' | 'settled' | 'unknown'; usage?: Usage; cause?: 'crash' | 'cancel' | 'no_usage' }
 type Sessions = Pick<SessionRuntime, 'get' | 'latestRun' | 'append' | 'flush'>
 // 任务组事件的持久化位置：会话日志（单 Agent 委派）或独立的编排日志（多 Agent 编排）。
 // append 返回时必须已落盘；read 只返回本组已可见的 group/* 事件。
@@ -46,33 +47,51 @@ export function groupPolicy(overrides: Partial<TaskGroupPolicy> = {}): Readonly<
   if (policy.maxInFlightRequests > 64) throw new Error('invalid task group in-flight limit')
   return Object.freeze(policy)
 }
+export type GroupCooldownWait = (ms: number) => Promise<void>
 export class TaskGroupBudgetCoordinator {
   #queue: Promise<void> = Promise.resolve()
   #reservations = new Map<string, Reservation>()
   #tools = new Set<string>()
   #failure: unknown
   #overrun = false
+  #acceptedUnknown = false
+  #crashed = false
+  #cooldownUntil = 0
   #abort = new AbortController()
   #signal?: AbortSignal
   readonly start: GroupStart
-  private constructor(readonly journal: GroupJournal, start: GroupStart, private now: () => number) { this.start = Object.freeze({ ...start, policy: groupPolicy(start.policy) }) }
+  private constructor(readonly journal: GroupJournal, start: GroupStart, private now: () => number, private wait?: GroupCooldownWait) { this.start = Object.freeze({ ...start, policy: groupPolicy(start.policy) }) }
   static open(sessions: Sessions, rootSessionId: string, rootTaskId: string, overrides: Partial<TaskGroupPolicy> = {}, now = Date.now) {
     return TaskGroupBudgetCoordinator.openJournal(new SessionGroupJournal(sessions, rootSessionId, rootTaskId), overrides, now)
   }
-  static async openJournal(journal: GroupJournal, overrides: Partial<TaskGroupPolicy> = {}, now = Date.now) {
+  static async openJournal(journal: GroupJournal, overrides: Partial<TaskGroupPolicy> = {}, now = Date.now, wait?: GroupCooldownWait) {
     const events = journal.read()
     const saved = events.find(event => event.type === 'group/start')
     const start: GroupStart = saved?.type === 'group/start' ? saved.data : { groupId: randomUUID(), policy: { ...groupPolicy(overrides) }, deadline: now() + groupPolicy(overrides).maxWallDurationMs }
-    const group = new TaskGroupBudgetCoordinator(journal, start, now)
+    const group = new TaskGroupBudgetCoordinator(journal, start, now, wait)
     if (!saved) await group.#persist({ type: 'group/start', data: start })
     else for (const event of events) group.#fold(event)
     // Crash before a durable dispatch intent: release. After intent: retain the reservation as unknown.
     for (const [requestId, reservation] of group.#reservations) {
       if (reservation.status === 'reserved') await group.#persist({ type: 'group/reservation-released', data: { groupId: start.groupId, requestId } })
-      if (reservation.status === 'dispatched') await group.#persist({ type: 'group/usage-unknown', data: { groupId: start.groupId, requestId } })
+      if (reservation.status === 'dispatched') await group.#persist({ type: 'group/usage-unknown', data: { groupId: start.groupId, requestId, cause: 'crash' } })
     }
     return group
   }
+  // 人工确认崩溃/无 usage 的未知预留后，允许后续派发；未知量仍按预留额计入总量，
+  // 取消产生的未知量本来就不阻断。
+  acceptUnknownUsage() {
+    this.#acceptedUnknown = true
+    this.#abort = new AbortController()
+    this.#signal = undefined
+  }
+  // 429 冷却由根组共享：所有 worker 的下一次派发都等待到同一时间点。
+  noteRateLimit(retryAfterMs?: number) {
+    this.#cooldownUntil = Math.max(this.#cooldownUntil, this.now() + Math.max(retryAfterMs ?? 0, 2_000))
+  }
+  // 编排器的进程内崩溃注入在 abort 兄弟 worker 前调用；之后被中止的在途调用按 crash 记账，
+  // 而不是用户取消，恢复时才需要人工确认。
+  markCrashed() { this.#crashed = true }
   #serial<T>(work: () => Promise<T>) {
     const operation = this.#queue.then(async () => { if (this.#failure) throw new Error('group persistence failed', { cause: this.#failure }); return work() })
     this.#queue = operation.then(() => {}, () => {}); return operation
@@ -104,7 +123,10 @@ export class TaskGroupBudgetCoordinator {
       reservation.status = 'released'
     } else if (event.type === 'group/usage-unknown') {
       if (reservation.status !== 'dispatched') throw new Error('invalid unknown group usage')
-      reservation.status = 'unknown'; this.#abort.abort()
+      reservation.status = 'unknown'
+      reservation.cause = event.data.cause ?? 'no_usage'
+      // 取消时 provider 已返回但 usage 未知，不代表账本失真；只有 crash/no_usage 需要中止并人工确认。
+      if (reservation.cause !== 'cancel') this.#abort.abort()
     } else if (event.type === 'group/budget-settled') {
       if (reservation.status !== 'dispatched' || !validUsage(event.data.usage) || event.data.usage.source !== 'provider' || event.data.usage.uncertain) throw new Error('invalid group settlement')
       reservation.status = 'settled'; reservation.usage = structuredClone(event.data.usage)
@@ -117,7 +139,9 @@ export class TaskGroupBudgetCoordinator {
     return { ...structuredClone(this.start), requests: requests.length, tools: this.#tools.size,
       settledTokens: requests.reduce((sum, item) => sum + (item.usage?.totalTokens ?? 0), 0), outstandingTokens: requests.filter(item => !item.usage).reduce((sum, item) => sum + item.reserve, 0),
       rootRequests: requests.filter(item => item.root).length, rootTokens: requests.filter(item => item.root).reduce((sum, item) => sum + spent(item), 0),
-      usageUnknown: requests.some(item => item.status === 'unknown'), overrun: this.#overrun }
+      usageUnknown: requests.some(item => item.status === 'unknown'),
+      blockingUnknown: requests.some(item => item.status === 'unknown' && item.cause !== 'cancel'),
+      acceptedUnknown: this.#acceptedUnknown, cooldownUntil: this.#cooldownUntil, overrun: this.#overrun }
   }
   get signal() {
     this.#signal ??= AbortSignal.any([this.#abort.signal, AbortSignal.timeout(Math.max(1, this.start.deadline - this.now()))])
@@ -126,12 +150,13 @@ export class TaskGroupBudgetCoordinator {
   get stopReason(): 'timeout' | 'token_budget' | 'error' | undefined {
     if (this.now() >= this.start.deadline) return 'timeout'
     if (this.#overrun) return 'token_budget'
-    if (this.#failure || this.snapshot().usageUnknown) return 'error'
+    const state = this.snapshot()
+    if (this.#failure || (state.blockingUnknown && !this.#acceptedUnknown)) return 'error'
     return undefined
   }
   #check() {
     const state = this.snapshot()
-    if (state.usageUnknown) throw new ModelNotDispatchedError('task group has unknown provider usage', 'usage_unknown')
+    if (state.blockingUnknown && !this.#acceptedUnknown) throw new ModelNotDispatchedError('task group has unknown provider usage', 'usage_unknown')
     if (state.overrun || this.now() >= this.start.deadline) throw new ModelNotDispatchedError('task group token overrun or wall deadline', 'other_limit')
     return state
   }
@@ -161,7 +186,7 @@ export class TaskGroupBudgetCoordinator {
     if (!['reserved', 'dispatched'].includes(this.#reservations.get(requestId)?.status ?? '')) throw new Error('group release requires an outstanding request')
     await this.#persist({ type: 'group/reservation-released', data: { groupId: this.start.groupId, requestId } })
   }) }
-  async settle(requestId: string, usage?: Usage) {
+  async settle(requestId: string, usage?: Usage, cause: 'crash' | 'cancel' | 'no_usage' = 'no_usage') {
     return this.#serial(async () => {
       const reservation = this.#reservations.get(requestId)
       if (!reservation) throw new Error('unknown group request')
@@ -172,7 +197,7 @@ export class TaskGroupBudgetCoordinator {
       if (reservation.status === 'unknown') return
       if (reservation.status !== 'dispatched') throw new Error('group settlement requires a dispatched request')
       if (!usage || !validUsage(usage) || usage.source !== 'provider' || usage.uncertain) {
-        await this.#persist({ type: 'group/usage-unknown', data: { groupId: this.start.groupId, requestId } }); return
+        await this.#persist({ type: 'group/usage-unknown', data: { groupId: this.start.groupId, requestId, cause } }); return
       }
       const overrun = usage.totalTokens > reservation.reserve
       await this.#persist({ type: 'group/budget-settled', data: { groupId: this.start.groupId, requestId, usage, overrun } })
@@ -186,6 +211,17 @@ export class TaskGroupBudgetCoordinator {
       await this.#persist({ type: 'group/tool-admitted', data: { ...data, groupId: this.start.groupId } })
     })
   }
+  async #waitCooldown(signal: AbortSignal) {
+    const remaining = this.#cooldownUntil - this.now()
+    if (remaining <= 0) return
+    if (this.wait) { await this.wait(remaining); signal.throwIfAborted(); return }
+    await new Promise<void>((resolve, reject) => {
+      const abort = () => { clearTimeout(timer); reject(new ModelNotDispatchedError('cancelled during rate-limit cooldown', 'other_limit')) }
+      const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve() }, remaining)
+      signal.addEventListener('abort', abort, { once: true })
+      if (signal.aborted) abort()
+    })
+  }
   async dispatch(request: ChatRequest, identity: { agentId: string; root: boolean }, invoke: (request: ChatRequest) => Promise<ChatResponse>) {
     const scope = request.dispatchScope
     if (!scope) throw new ModelNotDispatchedError('group model request requires explicit scope', 'other_limit')
@@ -195,6 +231,7 @@ export class TaskGroupBudgetCoordinator {
     try { await this.dispatched(scope.requestId) } catch (error) { await this.release(scope.requestId); throw error }
     const signal = AbortSignal.any([this.#abort.signal, AbortSignal.timeout(Math.max(1, this.start.deadline - this.now())), ...(request.signal ? [request.signal] : [])])
     if (signal.aborted) { await this.release(scope.requestId); throw new ModelNotDispatchedError('cancelled before provider invocation', 'other_limit') }
+    try { await this.#waitCooldown(signal) } catch (error) { await this.release(scope.requestId); throw error }
     try {
       const response = await new Promise<ChatResponse>((resolve, reject) => {
         const abort = () => reject(new ModelStreamError('group request cancelled; provider usage unknown', { complete: false }))
@@ -203,13 +240,19 @@ export class TaskGroupBudgetCoordinator {
       })
       await this.settle(scope.requestId, response.usage)
       const state = this.snapshot()
-      if (state.usageUnknown || state.overrun) throw new ModelStreamError('group usage is unknown or exceeded its reservation', { ...response, complete: false })
+      if (state.blockingUnknown && !state.acceptedUnknown || state.overrun) throw new ModelStreamError('group usage is unknown or exceeded its reservation', { ...response, complete: false })
       return response
     } catch (error) {
+      const rateLimited = error instanceof ProviderError && error.kind === 'rate_limit'
+      if (rateLimited) this.noteRateLimit((error as ProviderError).retryAfterMs)
       const status = this.#reservations.get(scope.requestId)?.status
       if (status === 'dispatched') {
-        if (error instanceof ModelNotDispatchedError) await this.release(scope.requestId)
-        else await this.settle(scope.requestId, error instanceof ModelStreamError ? error.partial.usage : undefined)
+        // 进程内模拟崩溃用 name=SimulatedCrash 的 abort reason 区分于用户取消：
+        // 两者都没有可信 usage，但只有崩溃需要在恢复时人工确认。
+        const crashed = this.#crashed || signal.aborted && (signal.reason as { name?: unknown } | undefined)?.name === 'SimulatedCrash'
+        // provider 明确以 429 拒绝时没有可计费用量：释放预留，让 Loop 的退避重试在冷却后继续。
+        if (error instanceof ModelNotDispatchedError || rateLimited) await this.release(scope.requestId)
+        else await this.settle(scope.requestId, error instanceof ModelStreamError ? error.partial.usage : undefined, crashed ? 'crash' : signal.aborted ? 'cancel' : 'no_usage')
       }
       throw error
     }

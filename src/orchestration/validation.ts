@@ -112,6 +112,8 @@ function validateRootStart(data: Record<string, unknown>) {
   if (typeof budget.plannerShare !== 'number' || !Number.isFinite(budget.plannerShare) || budget.plannerShare < 0 || budget.plannerShare > 1) throw new Error('budget.plannerShare is invalid')
   integer(budget.maxInFlightRequests, 'budget.maxInFlightRequests', 1)
   if (budget.maxUsd !== undefined && (typeof budget.maxUsd !== 'number' || !Number.isFinite(budget.maxUsd) || budget.maxUsd <= 0)) throw new Error('budget.maxUsd is invalid')
+  if (data.verifyCommands !== undefined) stringList(data.verifyCommands, 'verifyCommands', 0, 8, 1024)
+  optionalText(data.prepareCommand, 'prepareCommand', 1024)
 }
 function validateAttemptFinished(data: Record<string, unknown>) {
   if (!safeId(data.attemptId)) throw new Error('attemptId is invalid')
@@ -128,6 +130,8 @@ function validateAttemptFinished(data: Record<string, unknown>) {
   if (data.resultRef !== undefined) ref(data.resultRef, 'resultRef')
   optionalText(data.summary, 'summary', 1024)
   optionalText(data.detail, 'detail', 1024)
+  if (data.unknownSideEffects !== undefined && (typeof data.unknownSideEffects !== 'boolean' || (data.unknownSideEffects && data.outcome !== 'interrupted')))
+    throw new Error('unknownSideEffects is only valid on an interrupted attempt')
   if (data.outcome === 'succeeded' && (code.commit === undefined || code.tree === undefined || !(code.changedFiles as unknown[]).length || (code.scopeViolations as unknown[]).length))
     throw new Error('succeeded attempt requires a commit/tree, changed files and no scope violations')
   if (data.outcome === 'no_changes' && (code.changedFiles as unknown[]).length) throw new Error('no_changes attempt cannot report changed files')
@@ -159,7 +163,7 @@ export function validateOrchestrationData(type: OrchEventType, data: Record<stri
     }
     case 'attempt/session': if (!safeId(data.attemptId)) throw new Error('attemptId is invalid'); sessionId(data.sessionId); break
     case 'attempt/finished': validateAttemptFinished(data); break
-    case 'attempt/late': if (!safeId(data.attemptId)) throw new Error('attemptId is invalid'); text(data.summary, 'summary', 2048); break
+    case 'attempt/late': if (!safeId(data.attemptId)) throw new Error('attemptId is invalid'); text(data.summary, 'summary', 2048); if (data.epoch !== undefined) integer(data.epoch, 'epoch', 1); break
     case 'integration/started': if (!safeId(data.integrationId)) throw new Error('integrationId is invalid'); integer(data.wave, 'wave', 0); sha(data.baseCommit, 'baseCommit'); break
     case 'integration/applied': if (!safeId(data.integrationId) || !safeId(data.attemptId)) throw new Error('integration/attempt id is invalid'); sha(data.sourceCommit, 'sourceCommit'); sha(data.commit, 'commit'); break
     case 'integration/conflict': if (!safeId(data.integrationId) || !safeId(data.attemptId)) throw new Error('integration/attempt id is invalid'); pathList(data.files, 'files', 1, 10_000); break

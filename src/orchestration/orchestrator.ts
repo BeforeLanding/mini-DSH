@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { utf8Prefix } from '../core/tool-result-store.js'
@@ -6,13 +7,13 @@ import { CLI_BUDGET } from '../core/budget.js'
 import type { ApprovalRequest } from '../core/contracts.js'
 import type { CommandOptions, CommandResult } from '../core/command-runner.js'
 import type { HarnessAdapter } from '../app/create-harness.js'
-import type { AttemptBudget, AttemptOutcome, HumanRequestData, PlanInput, RootBudget, RootStatus, SubtaskSpec } from './contracts.js'
+import type { AttemptBudget, AttemptOutcome, HumanRequestData, PlanInput, PlanDecision, RootBudget, RootStatus, RootTerminalStatus, SubtaskSpec } from './contracts.js'
 import { DEFAULT_PROTECTED_PATHS, validatePlan } from './plan.js'
 import { planInputError } from './validation.js'
-import { newRootId, OrchestrationStore, orchestrationDirectory, writeArtifact } from './store.js'
+import { assertRootId, newRootId, OrchestrationStore, orchestrationDirectory, writeArtifact } from './store.js'
 import { OrchestrationGroupJournal } from './group-journal.js'
 import { foldOrchestration, orchestrationTotals } from './state.js'
-import type { OrchestrationState } from './state.js'
+import type { AttemptState, OrchestrationState } from './state.js'
 import { headCommit, repositoryRoot } from './git.js'
 import { attemptBranch, integrationBranchName, WorktreeManager } from './worktrees.js'
 import { runWorker } from './worker.js'
@@ -21,6 +22,11 @@ import { applyAttempt, collectAndCommit, finishIntegration, openIntegration } fr
 import { verifyIntegration } from './verifier.js'
 import { runPlanner } from './planner.js'
 import { ApprovalBroker } from './approval-broker.js'
+import { noFaults, SimulatedCrash } from './faults.js'
+import type { FaultInjector } from './faults.js'
+import {
+  blockingUnknownUsage, pendingHumanRequests, reconcileAttempts, recoverOpenIntegration, resolvePendingHumans,
+} from './recovery.js'
 
 export const DEFAULT_ROOT_BUDGET: Readonly<RootBudget> = Object.freeze({
   maxModelRequests: 96, maxTotalTokens: 2_000_000, maxWallMs: 1_800_000, maxToolCalls: 256,
@@ -48,30 +54,42 @@ export interface ApprovalPolicy {
   perRequestTimeoutMs?: number
   approve?: (request: ApprovalRequest) => Promise<boolean>
 }
-export interface OrchestrateOptions {
-  repository: string
-  goal: string
-  // 缺省时由只读 planner 生成计划；提供时以计划文件为准。
-  plan?: PlanInput
+export interface OrchestrateCommonOptions {
   baseDirectory: string
   adapter: HarnessAdapter
   model?: string
-  mode?: 'auto' | 'single' | 'parallel'
-  maxWorkers?: number
-  maxSubtasks?: number
-  maxAttemptsPerSubtask?: number
   rootBudget?: Partial<RootBudget>
   workerBudget?: Partial<AttemptBudget>
   prepareCommand?: string
   verifyCommands?: string[]
-  allowDirty?: boolean
   approval?: ApprovalPolicy
-  // 冲突处置：返回请求 options 中的一项；缺省或无效返回表示无法决定，根任务停在 needs_human。
   decide?: (request: HumanRequestData) => Promise<string | undefined>
   commandRunner?: (options: CommandOptions) => Promise<CommandResult>
+  // 第一次 Ctrl-C：停止派发，运行中的 attempt 继续到自然结束。
+  dispatchSignal?: AbortSignal
+  // 第二次 Ctrl-C / 外部取消：中止运行中的 run，不整合。
   signal?: AbortSignal
   clock?: () => number
   onProgress?: (line: string) => void
+  faults?: FaultInjector
+}
+export interface OrchestrateOptions extends OrchestrateCommonOptions {
+  repository: string
+  goal: string
+  // 缺省时由只读 planner 生成计划；提供时以计划文件为准。
+  plan?: PlanInput
+  mode?: 'auto' | 'single' | 'parallel'
+  maxWorkers?: number
+  maxSubtasks?: number
+  maxAttemptsPerSubtask?: number
+  allowDirty?: boolean
+}
+export interface ResumeOptions extends OrchestrateCommonOptions {
+  rootId: string
+  acceptUnknownUsage?: boolean
+  retry?: string[]
+  skip?: string[]
+  plan?: PlanInput
 }
 export interface OrchestrateResult {
   rootId: string
@@ -98,6 +116,34 @@ interface AttemptResult {
   sessionId?: string
   runStatus: string
 }
+interface RootContext {
+  options: OrchestrateCommonOptions
+  store: OrchestrationStore
+  manager: WorktreeManager
+  broker: ApprovalBroker
+  writeSets: Map<string, string[]>
+  group: TaskGroupBudgetCoordinator
+  stop: StopController
+  budget: RootBudget
+  plan: PlanInput
+  decision: PlanDecision
+  verifyCommands: readonly string[]
+  maxWorkers: number
+  maxAttemptsPerSubtask: number
+  repository: string
+  rootId: string
+  directory: string
+  goal: string
+  baseCommit: string
+  clean: { baseCommit: string; dirty: number }
+  model: string
+  progress: (line: string) => void
+  faults: FaultInjector
+  signal: AbortSignal
+  retry: ReadonlySet<string>
+  skip: ReadonlySet<string>
+}
+interface RootOutcome { status: RootStatus; failureDetail?: string; integrationBranch?: string; crashed?: boolean }
 function allocateBudget(root: RootBudget, worker: Partial<AttemptBudget> = {}): AttemptBudget {
   for (const [key, value] of Object.entries(worker)) {
     if (!['maxModelRequests', 'maxToolCalls', 'maxTotalTokens'].includes(key)) throw new Error(`unknown worker budget key: ${key}`)
@@ -131,12 +177,6 @@ function plannerBudget(root: RootBudget): AttemptBudget {
 function epochFor(state: OrchestrationState, subtaskId: string) {
   return state.attemptOrder.filter(attemptId => state.attempts[attemptId]!.subtaskId === subtaskId).length + 1
 }
-function hasTerminalAttempt(state: OrchestrationState, subtaskId: string) {
-  return state.attemptOrder.some(attemptId => {
-    const attempt = state.attempts[attemptId]!
-    return attempt.subtaskId === subtaskId && TERMINAL_ATTEMPTS.has(attempt.status)
-  })
-}
 function dependenciesIntegrated(subtask: SubtaskSpec, integrated: ReadonlySet<string>) {
   return (subtask.dependsOn ?? []).every(id => integrated.has(id))
 }
@@ -157,6 +197,7 @@ export function conflictOptions(attemptsUsed: number, maxAttempts: number): stri
   return attemptsUsed < maxAttempts ? ['rerun-serially', 'skip-subtask', 'abort'] : ['skip-subtask', 'abort']
 }
 // 简单并发池：最多 limit 个 worker 同时运行；某个 attempt 结束后再补位。
+// 崩溃时等待兄弟 worker 收到中止并收尾后再抛出，避免它们在编排日志关闭后继续写。
 async function pool<T, R>(items: readonly T[], limit: number, work: (item: T, index: number) => Promise<R>): Promise<R[]> {
   const results = new Array<R>(items.length)
   let next = 0
@@ -167,31 +208,66 @@ async function pool<T, R>(items: readonly T[], limit: number, work: (item: T, in
       results[index] = await work(items[index]!, index)
     }
   })
-  await Promise.all(runners)
+  const settled = await Promise.allSettled(runners)
+  const rejected = settled.find((item): item is PromiseRejectedResult => item.status === 'rejected')
+  if (rejected) throw rejected.reason
   return results
 }
 
-export async function orchestrate(options: OrchestrateOptions): Promise<OrchestrateResult> {
-  const progress = options.onProgress ?? (() => {})
-  const maxWorkers = options.maxWorkers ?? 2, maxSubtasks = options.maxSubtasks ?? 4, maxAttemptsPerSubtask = options.maxAttemptsPerSubtask ?? 2
-  if (!Number.isSafeInteger(maxWorkers) || maxWorkers < 1 || maxWorkers > 4) throw new Error('maxWorkers must be 1..4')
-  if (!Number.isSafeInteger(maxSubtasks) || maxSubtasks < 1 || maxSubtasks > 6) throw new Error('maxSubtasks must be 1..6')
-  if (!Number.isSafeInteger(maxAttemptsPerSubtask) || maxAttemptsPerSubtask < 1 || maxAttemptsPerSubtask > 8) throw new Error('maxAttemptsPerSubtask must be 1..8')
-  const budget = resolveRootBudget(options.rootBudget, maxWorkers)
-  if (options.plan) {
-    const structural = planInputError(options.plan)
-    if (structural) throw new Error(structural)
+// 两级停止：第一次 Ctrl-C 只停止派发，第二次中止运行中的 run。wall 截止按同一路径停止运行中。
+// control/stop 按发生顺序落盘；信号监听在 close 后不再写日志。
+class StopController {
+  dispatch = false
+  running = false
+  reason?: string
+  #abort = new AbortController()
+  #pending: Promise<void> = Promise.resolve()
+  #closed = false
+  constructor(private store: OrchestrationStore, private clock: () => number, private deadline: number, options: {
+    dispatchSignal?: AbortSignal
+    runningSignal?: AbortSignal
+    initial?: { dispatch: boolean; running: boolean; reason?: string }
+  } = {}) {
+    if (options.initial?.dispatch) this.dispatch = true
+    if (options.initial?.running) { this.running = true; this.dispatch = true; this.#abort.abort() }
+    if (options.initial?.reason) this.reason = options.initial.reason
+    options.dispatchSignal?.addEventListener('abort', () => { void this.stopDispatch('interrupt signal') }, { once: true })
+    options.runningSignal?.addEventListener('abort', () => { void this.stopRunning('interrupt signal') }, { once: true })
+    if (options.dispatchSignal?.aborted) void this.stopDispatch('interrupt signal')
+    if (options.runningSignal?.aborted) void this.stopRunning('interrupt signal')
   }
-  const repository = await repositoryRoot(options.repository)
-  const rootId = newRootId(), directory = orchestrationDirectory(options.baseDirectory, rootId)
-  const manager = new WorktreeManager(repository, rootId, directory, { ...(options.prepareCommand ? { prepareCommand: options.prepareCommand } : {}), ...(options.signal ? { signal: options.signal } : {}) })
-  const clean = await manager.assertClean({ allowDirty: options.allowDirty })
-  const baseCommit = clean.baseCommit
-  const store = await OrchestrationStore.open(directory, rootId)
+  get signal() { return this.#abort.signal }
+  abort(reason?: unknown) { if (!this.#abort.signal.aborted) this.#abort.abort(reason) }
+  stopDispatch(reason: string) {
+    if (this.#closed) return this.#pending
+    if (this.dispatch) return this.#pending
+    this.dispatch = true
+    this.reason ??= reason
+    this.#pending = this.#pending.then(async () => { await this.store.append('control/stop', { scope: 'dispatch', reason: bounded(reason, 512) }) })
+    return this.#pending
+  }
+  stopRunning(reason: string) {
+    if (this.#closed) return this.#pending
+    if (this.running) return this.#pending
+    this.running = true
+    this.dispatch = true
+    this.reason ??= reason
+    this.abort()
+    this.#pending = this.#pending.then(async () => { await this.store.append('control/stop', { scope: 'running', reason: bounded(reason, 512) }) })
+    return this.#pending
+  }
+  tick() {
+    if (!this.running && this.clock() >= this.deadline) void this.stopRunning('wall deadline')
+  }
+  close() { this.#closed = true }
+  async flush() { await this.#pending.catch(() => {}) }
+}
+
+function applyBroker(
+  options: OrchestrateCommonOptions, store: OrchestrationStore, writeSets: Map<string, string[]>,
+  perRequestTimeoutMs: number,
+) {
   const approval = options.approval ?? { writes: 'auto', bash: 'ask' }
-  const perRequestTimeoutMs = approval.perRequestTimeoutMs ?? CLI_BUDGET.approvalTimeoutMs ?? 300_000
-  const writeSets = new Map<string, string[]>()
-  // 审批审计事件只追加、不参与恢复；事件写入失败不影响工具得到的审批决定。
   const broker = new ApprovalBroker({
     policy: { writes: approval.writes, bash: approval.bash, perRequestTimeoutMs },
     ...(approval.approve ? { prompt: approval.approve } : {}),
@@ -199,84 +275,99 @@ export async function orchestrate(options: OrchestrateOptions): Promise<Orchestr
     onRequested: async data => { await store.append('approval/requested', data) },
     onResolved: async data => { await store.append('approval/resolved', data) },
   })
-  const model = options.model ?? `${options.adapter.provider}/${options.adapter.model}`
-  const protectedPaths = DEFAULT_PROTECTED_PATHS
-  let finalStatus: RootStatus = 'failed', reportRef: string | undefined, integrationBranch: string | undefined
-  let failureDetail: string | undefined
-  let currentHead = baseCommit, integrationPath: string | undefined
+  return { broker, perRequestTimeoutMs }
+}
+
+async function executeRoot(ctx: RootContext): Promise<RootOutcome> {
+  const { store, manager, broker, group, stop, options, plan, progress, writeSets } = ctx
+  const load = async () => foldOrchestration(await store.read())
+  let state = await load()
   const integrated = new Set<string>()
-  const rootData = { goal: bounded(options.goal, 4096), repository, baseCommit, config: { mode: options.mode ?? 'auto' as const, maxWorkers, maxSubtasks, maxAttemptsPerSubtask }, budget }
-  try {
-    await store.append('root/start', rootData)
-    progress(`root ${rootId} @ ${baseCommit}`)
-    const group = await TaskGroupBudgetCoordinator.openJournal(new OrchestrationGroupJournal(store), {
-      maxModelRequests: budget.maxModelRequests, maxToolCalls: budget.maxToolCalls, maxTotalTokens: budget.maxTotalTokens,
-      rootTokenFloor: 0, rootRequestFloor: 0, maxWallDurationMs: budget.maxWallMs, maxInFlightRequests: budget.maxInFlightRequests,
-    }, options.clock ?? Date.now)
-    const signal = options.signal ? AbortSignal.any([group.signal, options.signal]) : group.signal
-    // 规划：计划文件优先；没有文件时由只读 planner 在基线快照中提出计划。
-    let plan = options.plan
-    let planSource: 'file' | 'model' = 'file'
-    let plannerSessionId: string | undefined
-    if (!plan) {
-      const baseWorktree = await manager.createBaseSnapshot(baseCommit)
-      progress(`planner reading ${baseWorktree}`)
-      const planned = await runPlanner({
-        goal: bounded(options.goal, 4096), rootId, worktree: baseWorktree, layout: manager.layout, adapter: options.adapter,
-        model, rootGroup: group, budget: plannerBudget(budget), signal, maxSubtasks, protectedPaths,
-        onSession: sessionId => { plannerSessionId = sessionId; progress(`planner session ${sessionId}`) },
-      })
-      plan = planned.plan
-      planSource = 'model'
-      plannerSessionId = planned.sessionId
+  for (const integration of state.integrations)
+    for (const applied of integration.applied) {
+      const attempt = state.attempts[applied.attemptId]
+      if (attempt?.outcome === 'succeeded') integrated.add(attempt.subtaskId)
     }
-    const selectedPlan: PlanInput = plan
-    const validation = validatePlan(selectedPlan, { maxSubtasks, mode: options.mode ?? 'auto', protectedPaths, workspace: repository })
-    await store.append('plan/recorded', {
-      planId: `pl_${randomUUID()}`, planVersion: 1, source: planSource, ...(plannerSessionId ? { plannerSessionId } : {}),
-      plan: selectedPlan, validation: validation.ok ? { ok: true, waves: validation.decision.waves } : { ok: false, errors: validation.errors },
-    })
-    if (!validation.ok) throw new Error(bounded(`invalid plan: ${validation.errors.join('; ')}`, 1024))
-    const decision = validation.decision
-    await store.append('plan/decision', { planVersion: 1, mode: decision.mode, reason: decision.reason, waves: decision.waves })
-    progress(`plan ${decision.mode}: ${decision.reason}`)
-    const executeAttempt = async (input: { subtask: SubtaskSpec; wave: number; epoch: number; baseCommit: string; budget: AttemptBudget; state: OrchestrationState }): Promise<AttemptResult> => {
-      const attemptId = `at_${randomUUID()}`, branch = attemptBranch(rootId, input.subtask.id, input.epoch)
-      const worktree = manager.layout.attempt(attemptId)
-      const sessionDirectory = path.join(manager.layout.root, 'sessions', attemptId)
-      await store.append('attempt/planned', { attemptId, subtaskId: input.subtask.id, epoch: input.epoch, wave: input.wave, baseCommit: input.baseCommit, budget: input.budget })
-      await store.append('attempt/started', { attemptId, worktree, branch, sessionDirectory })
-      writeSets.set(attemptId, [...input.subtask.writeSet])
-      progress(`attempt ${attemptId} ${input.subtask.id} epoch=${input.epoch} on ${branch}`)
-      let outcome: WorkerOutcome | undefined
-      let classification: AttemptOutcome = 'failed', runStatus = 'setup_failed', stopReason: string | undefined
-      let code: CollectedCode = { changedFiles: [], scopeViolations: [] }
-      let summary: string | undefined, detail: string | undefined
-      let recorded = false
-      try {
-        await manager.createAttempt({ attemptId, subtaskId: input.subtask.id, epoch: input.epoch, baseCommit: input.baseCommit })
+  let currentHead = ctx.baseCommit
+  for (const integration of state.integrations) if (integration.status === 'finished' && integration.head) currentHead = integration.head
+  let integrationPath: string | undefined = state.integrations.length ? manager.layout.integration : undefined
+  let finalStatus: RootStatus = 'failed'
+  let failureDetail: string | undefined
+  let integrationBranch: string | undefined
+  let needsHuman = false
+
+  const skippedAttempt = async (subtask: SubtaskSpec, wave: number, reason: string) => {
+    const current = await load()
+    const planned = current.attemptOrder.map(id => current.attempts[id]!).find(item => item.subtaskId === subtask.id && item.status === 'planned')
+    if (planned) {
+      await store.append('attempt/finished', { attemptId: planned.attemptId, outcome: 'skipped', run: { status: 'skipped' }, code: { changedFiles: [], scopeViolations: [] }, detail: bounded(reason, 1024) })
+      return
+    }
+    const epoch = epochFor(current, subtask.id)
+    if (epoch > ctx.maxAttemptsPerSubtask) return
+    const attemptId = `at_${randomUUID()}`
+    await store.append('attempt/planned', { attemptId, subtaskId: subtask.id, epoch, wave, baseCommit: currentHead, budget: { maxModelRequests: 1, maxToolCalls: 1, maxTotalTokens: 1 } })
+    await store.append('attempt/finished', { attemptId, outcome: 'skipped', run: { status: 'skipped' }, code: { changedFiles: [], scopeViolations: [] }, detail: bounded(reason, 1024) })
+    progress(`attempt ${attemptId} ${subtask.id} skipped: ${reason}`)
+  }
+
+  const executeAttempt = async (input: {
+    subtask: SubtaskSpec; wave: number; planned?: AttemptState; baseCommit: string; budget: AttemptBudget; state: OrchestrationState
+  }): Promise<AttemptResult> => {
+    const planned = input.planned
+    const attemptId = planned?.attemptId ?? `at_${randomUUID()}`
+    const epoch = planned?.epoch ?? epochFor(input.state, input.subtask.id)
+    const baseCommit = planned?.baseCommit ?? input.baseCommit
+    const budget = planned?.budget ?? input.budget
+    const branch = attemptBranch(ctx.rootId, input.subtask.id, epoch)
+    const worktree = manager.layout.attempt(attemptId)
+    const sessionDirectory = path.join(manager.layout.root, 'sessions', attemptId)
+    if (!planned) {
+      await store.append('attempt/planned', { attemptId, subtaskId: input.subtask.id, epoch, wave: input.wave, baseCommit, budget })
+      await ctx.faults.checkpoint('after-attempt-planned')
+    }
+    await store.append('attempt/started', { attemptId, worktree, branch, sessionDirectory })
+    writeSets.set(attemptId, [...input.subtask.writeSet])
+    progress(`attempt ${attemptId} ${input.subtask.id} epoch=${epoch} on ${branch}`)
+    await ctx.faults.checkpoint('after-attempt-started')
+    let outcome: WorkerOutcome | undefined
+    let classification: AttemptOutcome = 'failed', runStatus = 'setup_failed', stopReason: string | undefined
+    let code: CollectedCode = { changedFiles: [], scopeViolations: [] }
+    let summary: string | undefined, detail: string | undefined
+    let recorded = false
+    const crashAbort = () => stop.signal.aborted && (stop.signal.reason as { name?: unknown } | undefined)?.name === 'SimulatedCrash'
+    try {
+      if (stop.running || ctx.signal.aborted) {
+        classification = 'cancelled'
+        runStatus = 'cancelled'
+      } else {
+        await manager.createAttempt({ attemptId, subtaskId: input.subtask.id, epoch, baseCommit })
         await manager.prepare(worktree)
         const dependencies = taskDependencies(input.state, input.subtask)
         const assignment: WorkerAssignment = {
-          rootGoal: options.goal, subtaskId: input.subtask.id, title: input.subtask.title, objective: input.subtask.objective,
+          rootGoal: ctx.goal, subtaskId: input.subtask.id, title: input.subtask.title, objective: input.subtask.objective,
           writeSet: input.subtask.writeSet, readHints: input.subtask.readHints ?? [], acceptance: input.subtask.acceptance,
-          ...(selectedPlan.sharedNotes ? { sharedNotes: selectedPlan.sharedNotes } : {}), baseCommit: input.baseCommit, planVersion: 1,
+          ...(ctx.plan.sharedNotes ? { sharedNotes: ctx.plan.sharedNotes } : {}), baseCommit, planVersion: 1,
           ...(dependencies.length ? { dependencies } : {}),
         }
         outcome = await runWorker({
-          assignment, rootId, attemptId, worktree, layout: manager.layout, adapter: options.adapter, model, rootGroup: group,
-          budget: input.budget, signal, approve: request => broker.request(attemptId, request),
-          approvalTimeoutMs: perRequestTimeoutMs * (maxWorkers + 1),
+          assignment, rootId: ctx.rootId, attemptId, worktree, layout: manager.layout, adapter: options.adapter, model: ctx.model, rootGroup: group,
+          budget, signal: ctx.signal, approve: request => broker.request(attemptId, request),
+          approvalTimeoutMs: (options.approval?.perRequestTimeoutMs ?? CLI_BUDGET.approvalTimeoutMs ?? 300_000) * (ctx.maxWorkers + 1),
           onSession: async sessionId => { await store.append('attempt/session', { attemptId, sessionId }) },
           ...(options.commandRunner ? { commandRunner: options.commandRunner } : {}),
         })
+        await ctx.faults.checkpoint('after-worker-run')
         runStatus = outcome.runStatus
         stopReason = outcome.stopReason
-        if (runStatus !== 'completed') classification = runStatus === 'cancelled' ? 'cancelled' : BUDGET_STOPS.has(runStatus) ? 'budget_stopped' : 'run_failed'
+        if (crashAbort()) {
+          // 进程内模拟崩溃中止的兄弟 worker：按 interrupted + 未知副作用处理，恢复时走人工决定。
+          classification = 'interrupted'
+        } else if (runStatus !== 'completed') classification = runStatus === 'cancelled' ? 'cancelled' : BUDGET_STOPS.has(runStatus) ? 'budget_stopped' : 'run_failed'
         else if (outcome.report.valid && outcome.report.status !== 'done') classification = 'needs_input'
         else {
           const collected = await collectAndCommit({
-            worktree, baseCommit: input.baseCommit, writeSet: input.subtask.writeSet, rootId, attemptId, subtaskId: input.subtask.id,
+            worktree, baseCommit, writeSet: input.subtask.writeSet, rootId: ctx.rootId, attemptId, subtaskId: input.subtask.id,
             ...(options.signal ? { signal: options.signal } : {}),
           })
           classification = collected.outcome
@@ -296,159 +387,496 @@ export async function orchestrate(options: OrchestrateOptions): Promise<Orchestr
           attemptId, outcome: classification,
           run: { sessionId: outcome.sessionId, status: runStatus, ...(stopReason ? { stopReason } : {}) },
           code, ...(artifact ? { resultRef: artifact.ref } : {}), ...(summary ? { summary } : {}), ...(detail ? { detail } : {}),
+          ...(classification === 'interrupted' ? { unknownSideEffects: true } : {}),
         })
         recorded = true
         progress(`attempt ${attemptId} ${classification}`)
-      } catch (error) {
-        detail = formatError(error)
-        classification = 'failed'
-        if (!recorded) {
-          try { await store.append('attempt/finished', { attemptId, outcome: 'failed', run: { status: 'error' }, code: { changedFiles: [], scopeViolations: [] }, detail }) } catch { /* the root report carries the failure */ }
-        }
-      } finally {
-        broker.cancelAttempt(attemptId)
       }
-      return {
-        attemptId, subtaskId: input.subtask.id, wave: input.wave, epoch: input.epoch, outcome: classification,
-        ...(code.commit ? { commit: code.commit } : {}), ...(code.tree ? { tree: code.tree } : {}),
-        changedFiles: code.changedFiles, scopeViolations: code.scopeViolations,
-        ...(summary ? { summary } : {}), ...(detail ? { detail } : {}), ...(outcome?.sessionId ? { sessionId: outcome.sessionId } : {}), runStatus,
+      if (!recorded) {
+        await store.append('attempt/finished', { attemptId, outcome: classification, run: { status: runStatus }, code: { changedFiles: [], scopeViolations: [] }, ...(detail ? { detail } : {}) })
+        recorded = true
       }
-    }
-    const skippedAttempt = async (subtask: SubtaskSpec, wave: number, reason: string) => {
-      const state = foldOrchestration(await store.read())
-      const epoch = epochFor(state, subtask.id)
-      if (epoch > maxAttemptsPerSubtask) return
-      const attemptId = `at_${randomUUID()}`
-      await store.append('attempt/planned', { attemptId, subtaskId: subtask.id, epoch, wave, baseCommit: currentHead, budget: { maxModelRequests: 1, maxToolCalls: 1, maxTotalTokens: 1 } })
-      await store.append('attempt/finished', { attemptId, outcome: 'skipped', run: { status: 'skipped' }, code: { changedFiles: [], scopeViolations: [] }, detail: bounded(reason, 1024) })
-      progress(`attempt ${attemptId} ${subtask.id} skipped: ${reason}`)
-    }
-    outer: for (const [waveIndex, waveIds] of decision.waves.entries()) {
-      const state = foldOrchestration(await store.read())
-      const runnable: SubtaskSpec[] = []
-      for (const subtaskId of waveIds) {
-        if (integrated.has(subtaskId) || hasTerminalAttempt(state, subtaskId)) continue
-        const subtask = selectedPlan.subtasks.find(item => item.id === subtaskId)!
-        if (dependenciesIntegrated(subtask, integrated)) runnable.push(subtask)
-        else await skippedAttempt(subtask, waveIndex, `dependencies are not integrated: ${(subtask.dependsOn ?? []).filter(id => !integrated.has(id)).join(', ')}`)
+      await ctx.faults.checkpoint('after-attempt-finished')
+    } catch (error) {
+      if (error instanceof SimulatedCrash) {
+        group.markCrashed()
+        stop.abort(error)
+        throw error
       }
-      if (!runnable.length) continue
-      const waveBase = currentHead
-      const allocation = waveBudget(budget, state, runnable.length, options.workerBudget)
-      progress(`wave ${waveIndex + 1}/${decision.waves.length}: ${runnable.map(item => item.id).join(', ')} (${decision.mode})`)
-      const results = await pool(runnable, decision.mode === 'parallel' ? maxWorkers : 1, subtask => executeAttempt({
-        subtask, wave: waveIndex, epoch: epochFor(state, subtask.id), baseCommit: waveBase, budget: allocation, state,
-      }))
-      const order = new Map(waveIds.map((id, index) => [id, index]))
-      const successes = results.filter(result => result.outcome === 'succeeded' && result.commit).sort((a, b) => order.get(a.subtaskId)! - order.get(b.subtaskId)!)
-      if (!successes.length) continue
-      const opened = await openIntegration({ store, manager, wave: waveIndex, baseCommit: currentHead, ...(options.signal ? { signal: options.signal } : {}) })
-      integrationPath = opened.path
-      for (const original of successes) {
-        let candidate = original
-        for (;;) {
-          const applied = await applyAttempt({
-            store, integrationId: opened.integrationId, path: opened.path,
-            attempt: { attemptId: candidate.attemptId, subtaskId: candidate.subtaskId, commit: candidate.commit! },
-            ...(options.signal ? { signal: options.signal } : {}),
+      detail = formatError(error)
+      const interrupted = crashAbort()
+      classification = interrupted ? 'interrupted' : stop.running ? 'cancelled' : 'failed'
+      if (!recorded) {
+        try {
+          await store.append('attempt/finished', {
+            attemptId, outcome: classification, run: { status: 'error' }, code: { changedFiles: [], scopeViolations: [] }, detail,
+            ...(interrupted ? { unknownSideEffects: true } : {}),
           })
-          if (applied.status === 'applied') { integrated.add(candidate.subtaskId); break }
-          const conflictState = foldOrchestration(await store.read())
-          const request: HumanRequestData = {
-            requestId: `hr_${randomUUID()}`, kind: 'conflict', attemptId: candidate.attemptId,
-            prompt: `${candidate.subtaskId} 与已整合内容冲突：${applied.conflict.files.join(', ')}。`,
-            options: conflictOptions(epochFor(conflictState, candidate.subtaskId) - 1, maxAttemptsPerSubtask),
-          }
-          await store.append('human/requested', request)
-          progress(`integration conflict on ${candidate.subtaskId}: ${applied.conflict.files.join(', ')}`)
-          const choice = await options.decide?.(request)
-          if (!choice || !request.options.includes(choice)) {
-            finalStatus = 'needs_human'
-            break outer
-          }
-          await store.append('human/resolved', { requestId: request.requestId, choice, actor: 'local-user' })
-          if (choice === 'abort') {
-            await store.append('control/stop', { scope: 'running', reason: 'conflict aborted by user' })
-            finalStatus = 'cancelled'
-            break outer
-          }
-          if (choice === 'skip-subtask') {
-            progress(`skipped ${candidate.subtaskId}; it stays unintegrated`)
-            break
-          }
-          const rerunState = foldOrchestration(await store.read())
-          const epoch = epochFor(rerunState, candidate.subtaskId)
-          if (epoch > maxAttemptsPerSubtask) {
-            progress(`no attempt budget left for ${candidate.subtaskId}; it stays unintegrated`)
-            break
-          }
-          const subtask = selectedPlan.subtasks.find(item => item.id === candidate.subtaskId)!
-          const rerunBase = await headCommit(opened.path)
-          const rerun = await executeAttempt({
-            subtask, wave: waveIndex, epoch, baseCommit: rerunBase, budget: waveBudget(budget, rerunState, 1, options.workerBudget), state: rerunState,
-          })
-          if (rerun.outcome !== 'succeeded' || !rerun.commit) {
-            progress(`rerun ${rerun.attemptId} ${rerun.outcome}; ${candidate.subtaskId} stays unintegrated`)
-            break
-          }
-          candidate = rerun
-        }
+        } catch { /* the root report carries the failure */ }
       }
-      const finished = await finishIntegration({ store, integrationId: opened.integrationId, path: opened.path })
-      currentHead = finished.head
-      integrationBranch = integrationBranchName(rootId)
-      progress(`integration wave ${waveIndex + 1} ${finished.head}`)
+    } finally {
+      broker.cancelAttempt(attemptId)
     }
-    // 人工中止或等待决定时，整合保持开启、不要用验收结果覆盖根任务状态。
-    if (finalStatus !== 'needs_human' && finalStatus !== 'cancelled') {
-      const state = foldOrchestration(await store.read())
-      if (state.integration?.status === 'finished' && integrationPath && state.integration.head && state.integration.tree) {
-        const commands = new Set<string>()
-        for (const subtaskId of integrated) {
-          const subtask = selectedPlan.subtasks.find(item => item.id === subtaskId)
-          for (const command of subtask?.acceptance.commands ?? []) commands.add(command)
+    return {
+      attemptId, subtaskId: input.subtask.id, wave: input.wave, epoch, outcome: classification,
+      ...(code.commit ? { commit: code.commit } : {}), ...(code.tree ? { tree: code.tree } : {}),
+      changedFiles: code.changedFiles, scopeViolations: code.scopeViolations,
+      ...(summary ? { summary } : {}), ...(detail ? { detail } : {}), ...(outcome?.sessionId ? { sessionId: outcome.sessionId } : {}), runStatus,
+    }
+  }
+
+  outer: for (const [waveIndex, waveIds] of ctx.decision.waves.entries()) {
+    if (stop.running) break
+    state = await load()
+    const runnable: { subtask: SubtaskSpec; planned?: AttemptState }[] = []
+    for (const subtaskId of waveIds) {
+      if (integrated.has(subtaskId) || ctx.skip.has(subtaskId)) continue
+      const subtask = plan.subtasks.find(item => item.id === subtaskId)!
+      if (!dependenciesIntegrated(subtask, integrated)) {
+        await skippedAttempt(subtask, waveIndex, `dependencies are not integrated: ${(subtask.dependsOn ?? []).filter(id => !integrated.has(id)).join(', ')}`)
+        continue
+      }
+      const attempts = state.attemptOrder.map(id => state.attempts[id]!).filter(item => item.subtaskId === subtaskId)
+      const planned = attempts.find(item => item.status === 'planned')
+      const terminal = attempts.some(item => TERMINAL_ATTEMPTS.has(item.status))
+      if (terminal && !ctx.retry.has(subtaskId)) continue
+      if (stop.dispatch) { await skippedAttempt(subtask, waveIndex, 'dispatch stopped'); continue }
+      if (!planned && epochFor(state, subtaskId) > ctx.maxAttemptsPerSubtask) {
+        progress(`${subtaskId} has no attempt left; it stays unintegrated`)
+        continue
+      }
+      runnable.push({ subtask, ...(planned ? { planned } : {}) })
+    }
+    if (runnable.length) {
+      const allocation = waveBudget(ctx.budget, state, runnable.length, options.workerBudget)
+      progress(`wave ${waveIndex + 1}/${ctx.decision.waves.length}: ${runnable.map(item => item.subtask.id).join(', ')} (${ctx.decision.mode})`)
+      await pool(runnable, ctx.decision.mode === 'parallel' ? ctx.maxWorkers : 1, async item => {
+        if (stop.dispatch || ctx.signal.aborted) {
+          await skippedAttempt(item.subtask, waveIndex, 'dispatch stopped')
+          return undefined
         }
-        for (const command of options.verifyCommands ?? []) commands.add(command)
-        const verification = await verifyIntegration({
-          store, worktree: integrationPath, head: state.integration.head, tree: state.integration.tree,
-          commands: [...commands], ...(options.signal ? { signal: options.signal } : {}),
+        return executeAttempt({ subtask: item.subtask, wave: waveIndex, ...(item.planned ? { planned: item.planned } : {}), baseCommit: currentHead, budget: allocation, state })
+      })
+      if (stop.running) break
+    }
+    // 以日志为准收集本波次已成功但尚未整合的 attempt；即使本波次没有新 attempt，
+    // 恢复后已采用的结果也必须在这里进入整合。
+    state = await load()
+    const appliedIds = new Set(state.integrations.flatMap(integration => integration.applied.map(item => item.attemptId)))
+    const order = new Map(waveIds.map((id, index) => [id, index]))
+    const successes = state.attemptOrder.map(id => state.attempts[id]!)
+      .filter(item => order.has(item.subtaskId) && item.outcome === 'succeeded' && item.commit !== undefined && !appliedIds.has(item.attemptId) && !integrated.has(item.subtaskId))
+      .sort((left, right) => order.get(left.subtaskId)! - order.get(right.subtaskId)!)
+    if (!successes.length) {
+      if (stop.dispatch) break
+      continue
+    }
+    const opened = await openIntegration({ store, manager, wave: waveIndex, baseCommit: currentHead, ...(options.signal ? { signal: options.signal } : {}) })
+    integrationPath = opened.path
+    await ctx.faults.checkpoint('after-integration-started')
+    for (const original of successes) {
+      let candidate = { attemptId: original.attemptId, subtaskId: original.subtaskId, commit: original.commit! }
+      for (;;) {
+        if (stop.running) break outer
+        const applied = await applyAttempt({
+          store, integrationId: opened.integrationId, path: opened.path, attempt: candidate, faults: ctx.faults,
+          ...(options.signal ? { signal: options.signal } : {}),
         })
-        progress(`verification ${verification.passed ? 'passed' : 'failed'}`)
-        const complete = decision.waves.flat().every(id => integrated.has(id))
-        if (!verification.passed) { finalStatus = 'failed'; failureDetail = 'integrated verification failed' }
-        else if (complete) finalStatus = 'completed'
-        else if (integrated.size > 0) finalStatus = 'partial'
-        else { finalStatus = 'failed'; failureDetail = 'no subtask was integrated' }
-      } else {
-        finalStatus = 'failed'
-        failureDetail ??= 'no attempt produced an integrable change'
+        if (applied.status === 'applied') { integrated.add(candidate.subtaskId); break }
+        const conflictState = await load()
+        const request: HumanRequestData = {
+          requestId: `hr_${randomUUID()}`, kind: 'conflict', attemptId: candidate.attemptId,
+          prompt: `${candidate.subtaskId} 与已整合内容冲突：${applied.conflict.files.join(', ')}。`,
+          options: conflictOptions(epochFor(conflictState, candidate.subtaskId) - 1, ctx.maxAttemptsPerSubtask),
+        }
+        await store.append('human/requested', request)
+        progress(`integration conflict on ${candidate.subtaskId}: ${applied.conflict.files.join(', ')}`)
+        const choice = await options.decide?.(request)
+        if (!choice || !request.options.includes(choice)) {
+          needsHuman = true
+          break outer
+        }
+        await store.append('human/resolved', { requestId: request.requestId, choice, actor: 'local-user' })
+        if (choice === 'abort') {
+          await stop.stopRunning('conflict aborted by user')
+          break outer
+        }
+        if (choice === 'skip-subtask') {
+          progress(`skipped ${candidate.subtaskId}; it stays unintegrated`)
+          break
+        }
+        const rerunState = await load()
+        const epoch = epochFor(rerunState, candidate.subtaskId)
+        if (epoch > ctx.maxAttemptsPerSubtask) {
+          progress(`no attempt budget left for ${candidate.subtaskId}; it stays unintegrated`)
+          break
+        }
+        const subtask = plan.subtasks.find(item => item.id === candidate.subtaskId)!
+        const rerunBase = await headCommit(opened.path)
+        const rerun = await executeAttempt({
+          subtask, wave: waveIndex, baseCommit: rerunBase, budget: waveBudget(ctx.budget, rerunState, 1, options.workerBudget), state: rerunState,
+        })
+        if (rerun.outcome !== 'succeeded' || !rerun.commit) {
+          progress(`rerun ${rerun.attemptId} ${rerun.outcome}; ${candidate.subtaskId} stays unintegrated`)
+          break
+        }
+        candidate = { attemptId: rerun.attemptId, subtaskId: rerun.subtaskId, commit: rerun.commit }
       }
+    }
+    if (stop.running || needsHuman) break
+    const finished = await finishIntegration({ store, integrationId: opened.integrationId, path: opened.path })
+    currentHead = finished.head
+    integrationBranch = integrationBranchName(ctx.rootId)
+    progress(`integration wave ${waveIndex + 1} ${finished.head}`)
+    if (stop.dispatch) break
+  }
+
+  if (stop.running) return { status: 'cancelled', ...(stop.reason ? { failureDetail: `stopped: ${stop.reason}` } : {}), ...(integrationBranch ? { integrationBranch } : {}) }
+  if (needsHuman) return { status: 'needs_human', ...(integrationBranch ? { integrationBranch } : {}) }
+  state = await load()
+  if (state.integration?.status === 'finished' && integrationPath && state.integration.head && state.integration.tree) {
+    const head = state.integration.head, tree = state.integration.tree
+    const commands = new Set<string>()
+    for (const subtaskId of integrated) {
+      const subtask = plan.subtasks.find(item => item.id === subtaskId)
+      for (const command of subtask?.acceptance.commands ?? []) commands.add(command)
+    }
+    for (const command of ctx.verifyCommands) commands.add(command)
+    const recorded = new Set(state.verifications.filter(item => item.head === head && item.tree === tree).map(item => item.command))
+    const missing = [...commands].filter(command => !recorded.has(command))
+    if (missing.length) {
+      await ctx.faults.checkpoint('before-verification')
+      const verification = await verifyIntegration({
+        store, worktree: integrationPath, head, tree, commands: missing, faults: ctx.faults,
+        ...(options.signal ? { signal: options.signal } : {}),
+      })
+      progress(`verification ${verification.passed ? 'passed' : 'failed'}`)
+    }
+    state = await load()
+    const evidence = state.verifications.filter(item => item.head === head && item.tree === tree)
+    const passed = evidence.length > 0 && evidence.every(item => item.exitCode === 0)
+    const complete = ctx.decision.waves.flat().every(id => integrated.has(id))
+    if (!passed) { finalStatus = 'failed'; failureDetail = 'integrated verification failed' }
+    else if (complete) finalStatus = 'completed'
+    else if (integrated.size > 0) finalStatus = 'partial'
+    else { finalStatus = 'failed'; failureDetail = 'no subtask was integrated' }
+  } else {
+    finalStatus = 'failed'
+    failureDetail ??= 'no attempt produced an integrable change'
+  }
+  return { status: finalStatus, ...(failureDetail ? { failureDetail } : {}), ...(integrationBranch ? { integrationBranch } : {}) }
+}
+
+interface FinalizeInput {
+  store: OrchestrationStore
+  rootId: string
+  status: RootStatus
+  goal: string
+  baseCommit: string
+  repository: string
+  failureDetail?: string
+  crashed?: boolean
+  directory: string
+  worktrees: string
+  dirty: number
+}
+// 报告与 root/finish 只在正常收尾时写；模拟崩溃保留日志现场，供 resume 重建。
+async function finalizeRoot(input: FinalizeInput): Promise<{ reportRef?: string; failure?: string }> {
+  if (input.crashed) return {}
+  try {
+    const state = foldOrchestration(await input.store.read())
+    const report = {
+      rootId: input.rootId, status: input.status, goal: input.goal, baseCommit: input.baseCommit, repository: input.repository,
+      ...(input.failureDetail ? { failure: input.failureDetail } : {}),
+      plan: state.plan, decision: state.decision, attempts: state.attemptOrder.map(id => state.attempts[id]),
+      integrations: state.integrations, verification: state.verifications, approvals: state.approvals,
+      human: state.human, ledger: orchestrationTotals(state),
+      dirtyBaseline: input.dirty > 0, paths: { directory: input.directory, worktrees: input.worktrees, sessions: path.join(input.directory, 'sessions') },
+    }
+    const reportRef = (await writeArtifact(path.join(input.store.directory, 'artifacts'), report)).ref
+    if (input.status !== 'needs_human' && !state.finished) await input.store.append('root/finish', { status: input.status as RootTerminalStatus, reportRef })
+    return { reportRef }
+  } catch (error) {
+    return { failure: formatError(error) }
+  }
+}
+
+export async function orchestrate(options: OrchestrateOptions): Promise<OrchestrateResult> {
+  const progress = options.onProgress ?? (() => {})
+  const maxWorkers = options.maxWorkers ?? 2, maxSubtasks = options.maxSubtasks ?? 4, maxAttemptsPerSubtask = options.maxAttemptsPerSubtask ?? 2
+  if (!Number.isSafeInteger(maxWorkers) || maxWorkers < 1 || maxWorkers > 4) throw new Error('maxWorkers must be 1..4')
+  if (!Number.isSafeInteger(maxSubtasks) || maxSubtasks < 1 || maxSubtasks > 6) throw new Error('maxSubtasks must be 1..6')
+  if (!Number.isSafeInteger(maxAttemptsPerSubtask) || maxAttemptsPerSubtask < 1 || maxAttemptsPerSubtask > 8) throw new Error('maxAttemptsPerSubtask must be 1..8')
+  const budget = resolveRootBudget(options.rootBudget, maxWorkers)
+  if (options.plan) {
+    const structural = planInputError(options.plan)
+    if (structural) throw new Error(structural)
+  }
+  const repository = await repositoryRoot(options.repository)
+  const rootId = newRootId(), directory = orchestrationDirectory(options.baseDirectory, rootId)
+  const manager = new WorktreeManager(repository, rootId, directory, { ...(options.prepareCommand ? { prepareCommand: options.prepareCommand } : {}), ...(options.signal ? { signal: options.signal } : {}) })
+  const clean = await manager.assertClean({ allowDirty: options.allowDirty })
+  const baseCommit = clean.baseCommit
+  const store = await OrchestrationStore.open(directory, rootId)
+  const writeSets = new Map<string, string[]>()
+  const perRequestTimeoutMs = options.approval?.perRequestTimeoutMs ?? CLI_BUDGET.approvalTimeoutMs ?? 300_000
+  const { broker } = applyBroker(options, store, writeSets, perRequestTimeoutMs)
+  const model = options.model ?? `${options.adapter.provider}/${options.adapter.model}`
+  const protectedPaths = DEFAULT_PROTECTED_PATHS
+  const faults = options.faults ?? noFaults
+  let finalStatus: RootStatus = 'failed', reportRef: string | undefined, integrationBranch: string | undefined
+  let failureDetail: string | undefined, crashed = false
+  let stopTimer: ReturnType<typeof setInterval> | undefined
+  let stop: StopController | undefined
+  try {
+    await store.append('root/start', {
+      goal: bounded(options.goal, 4096), repository, baseCommit,
+      config: { mode: options.mode ?? 'auto', maxWorkers, maxSubtasks, maxAttemptsPerSubtask }, budget,
+      ...(options.verifyCommands?.length ? { verifyCommands: options.verifyCommands } : {}),
+      ...(options.prepareCommand ? { prepareCommand: options.prepareCommand } : {}),
+    })
+    await faults.checkpoint('after-root-start')
+    progress(`root ${rootId} @ ${baseCommit}`)
+    const group = await TaskGroupBudgetCoordinator.openJournal(new OrchestrationGroupJournal(store), {
+      maxModelRequests: budget.maxModelRequests, maxToolCalls: budget.maxToolCalls, maxTotalTokens: budget.maxTotalTokens,
+      rootTokenFloor: 0, rootRequestFloor: 0, maxWallDurationMs: budget.maxWallMs, maxInFlightRequests: budget.maxInFlightRequests,
+    }, options.clock ?? Date.now)
+    const clock = options.clock ?? Date.now
+    stop = new StopController(store, clock, group.start.deadline, {
+      ...(options.dispatchSignal ? { dispatchSignal: options.dispatchSignal } : {}),
+      ...(options.signal ? { runningSignal: options.signal } : {}),
+    })
+    stopTimer = setInterval(() => stop?.tick(), 50)
+    stopTimer.unref?.()
+    const signal = AbortSignal.any([group.signal, stop.signal, ...(options.signal ? [options.signal] : [])])
+    let plan = options.plan
+    let planSource: 'file' | 'model' = 'file'
+    let plannerSessionId: string | undefined
+    if (!plan) {
+      await faults.checkpoint('before-planning')
+      const baseWorktree = await manager.createBaseSnapshot(baseCommit)
+      progress(`planner reading ${baseWorktree}`)
+      const planned = await runPlanner({
+        goal: bounded(options.goal, 4096), rootId, worktree: baseWorktree, layout: manager.layout, adapter: options.adapter,
+        model, rootGroup: group, budget: plannerBudget(budget), signal, maxSubtasks, protectedPaths,
+        onSession: sessionId => { plannerSessionId = sessionId; progress(`planner session ${sessionId}`) },
+      })
+      plan = planned.plan
+      planSource = 'model'
+      plannerSessionId = planned.sessionId
+    }
+    const selectedPlan: PlanInput = plan
+    const validation = validatePlan(selectedPlan, { maxSubtasks, mode: options.mode ?? 'auto', protectedPaths, workspace: repository })
+    await store.append('plan/recorded', {
+      planId: `pl_${randomUUID()}`, planVersion: 1, source: planSource, ...(plannerSessionId ? { plannerSessionId } : {}),
+      plan: selectedPlan, validation: validation.ok ? { ok: true, waves: validation.decision.waves } : { ok: false, errors: validation.errors },
+    })
+    if (!validation.ok) throw new Error(bounded(`invalid plan: ${validation.errors.join('; ')}`, 1024))
+    const decision: PlanDecision = { planVersion: 1, mode: validation.decision.mode, reason: validation.decision.reason, waves: validation.decision.waves }
+    await store.append('plan/decision', decision)
+    progress(`plan ${decision.mode}: ${decision.reason}`)
+    await faults.checkpoint('after-plan-decision')
+    if (stop.dispatch || stop.running) {
+      finalStatus = 'cancelled'
+    } else {
+      const outcome = await executeRoot({
+        options, store, manager, broker, group, stop, budget, plan: selectedPlan, decision, writeSets,
+        verifyCommands: options.verifyCommands ?? [], maxWorkers, maxAttemptsPerSubtask, repository, rootId, directory,
+        goal: options.goal, baseCommit, clean, model, progress, faults, signal, retry: new Set(), skip: new Set(),
+      })
+      finalStatus = outcome.status
+      failureDetail = outcome.failureDetail
+      integrationBranch = outcome.integrationBranch
     }
   } catch (error) {
-    failureDetail = formatError(error)
-    finalStatus = 'failed'
+    if (error instanceof SimulatedCrash) {
+      crashed = true
+      failureDetail = error.message
+      progress(error.message)
+    } else {
+      failureDetail = formatError(error)
+      finalStatus = 'failed'
+    }
   } finally {
+    stop?.close()
+    if (stopTimer) clearInterval(stopTimer)
+    await stop?.flush()
     // 先关闭审批通道：关闭时被拒绝的请求仍会写审计事件，必须发生在 root/finish 之前。
     await broker.close().catch(() => {})
-    try {
-      const events = await store.read()
-      const state = foldOrchestration(events)
-      const report = {
-        rootId, status: finalStatus, goal: options.goal, baseCommit, repository,
-        ...(failureDetail ? { failure: failureDetail } : {}),
-        plan: state.plan, decision: state.decision, attempts: state.attemptOrder.map(id => state.attempts[id]),
-        integrations: state.integrations, verification: state.verifications, approvals: state.approvals,
-        human: state.human, ledger: orchestrationTotals(state),
-        dirtyBaseline: clean.dirty > 0, paths: { directory, worktrees: manager.layout.worktrees, sessions: path.join(directory, 'sessions') },
+    const finalized = await finalizeRoot({
+      store, rootId, status: finalStatus, goal: options.goal, baseCommit, repository,
+      ...(failureDetail ? { failureDetail } : {}), crashed, directory,
+      worktrees: manager.layout.worktrees, dirty: clean.dirty,
+    })
+    reportRef = finalized.reportRef
+    failureDetail ??= finalized.failure
+    await store.close().catch(() => {})
+  }
+  return { rootId, status: finalStatus, directory, baseCommit, ...(integrationBranch ? { integrationBranch } : {}), ...(reportRef ? { reportRef } : {}), ...(failureDetail ? { error: failureDetail } : {}) }
+}
+
+// 恢复：同一根任务、同一编排日志、同一账本。恢复不重跑已确认的 attempt；
+// 崩溃窗口按 recovery.ts 对账，旧验收证据只有在同一 tree 上才复用。
+export async function resumeOrchestrate(options: ResumeOptions): Promise<OrchestrateResult> {
+  assertRootId(options.rootId)
+  const progress = options.onProgress ?? (() => {})
+  const rootId = options.rootId, directory = orchestrationDirectory(options.baseDirectory, rootId)
+  const store = await OrchestrationStore.open(directory, rootId)
+  const writeSets = new Map<string, string[]>()
+  const perRequestTimeoutMs = options.approval?.perRequestTimeoutMs ?? CLI_BUDGET.approvalTimeoutMs ?? 300_000
+  const { broker } = applyBroker(options, store, writeSets, perRequestTimeoutMs)
+  const faults = options.faults ?? noFaults
+  const clock = options.clock ?? Date.now
+  const model = options.model ?? `${options.adapter.provider}/${options.adapter.model}`
+  let finalStatus: RootStatus = 'failed', reportRef: string | undefined, integrationBranch: string | undefined
+  let failureDetail: string | undefined, crashed = false, alreadyFinished = false
+  let stop: StopController | undefined, stopTimer: ReturnType<typeof setInterval> | undefined
+  let state: OrchestrationState | undefined, manager: WorktreeManager | undefined
+  let goal = '', baseCommit = '', repository = ''
+  try {
+    state = foldOrchestration(await store.read())
+    goal = state.goal; baseCommit = state.baseCommit; repository = state.repository
+    manager = new WorktreeManager(repository, rootId, directory, {
+      ...(state.prepareCommand ?? options.prepareCommand ? { prepareCommand: state.prepareCommand ?? options.prepareCommand! } : {}),
+      ...(options.signal ? { signal: options.signal } : {}),
+    })
+    if (state.finished) {
+      alreadyFinished = true
+      finalStatus = state.finished.status
+      reportRef = state.finished.reportRef
+    } else {
+      const group = await TaskGroupBudgetCoordinator.openJournal(new OrchestrationGroupJournal(store), {
+        maxModelRequests: state.budget.maxModelRequests, maxToolCalls: state.budget.maxToolCalls, maxTotalTokens: state.budget.maxTotalTokens,
+        rootTokenFloor: 0, rootRequestFloor: 0, maxWallDurationMs: state.budget.maxWallMs, maxInFlightRequests: state.budget.maxInFlightRequests,
+      }, clock)
+      state = foldOrchestration(await store.read())
+      // 崩溃留下的 dispatched 预留已在 openJournal 中转为 unknown(cause=crash)；继续派发前需要人工确认。
+      if (blockingUnknownUsage(state)) {
+        if (!options.acceptUnknownUsage) {
+          if (!pendingHumanRequests(state).some(request => request.kind === 'budget_extension')) {
+            await store.append('human/requested', {
+              requestId: `hr_${randomUUID()}`, kind: 'budget_extension',
+              prompt: '存在崩溃导致的未知 token 用量；确认后才会继续派发。',
+              options: ['accept-unknown-usage', 'abort'],
+            })
+          }
+          finalStatus = 'needs_human'
+        } else {
+          group.acceptUnknownUsage()
+        }
       }
-      reportRef = (await writeArtifact(path.join(store.directory, 'artifacts'), report)).ref
-      if (finalStatus !== 'needs_human' && !state.finished) await store.append('root/finish', { status: finalStatus, reportRef })
-    } catch (error) {
-      failureDetail ??= formatError(error)
-    } finally {
-      await store.close().catch(() => {})
+      if (finalStatus !== 'needs_human') {
+        stop = new StopController(store, clock, group.start.deadline, {
+          ...(options.dispatchSignal ? { dispatchSignal: options.dispatchSignal } : {}),
+          ...(options.signal ? { runningSignal: options.signal } : {}),
+          initial: { dispatch: state.stop.dispatch, running: state.stop.running, ...(state.stop.reason ? { reason: state.stop.reason } : {}) },
+        })
+        stopTimer = setInterval(() => stop?.tick(), 50)
+        stopTimer.unref?.()
+        const signal = AbortSignal.any([group.signal, stop.signal, ...(options.signal ? [options.signal] : [])])
+        let plan = state.plan?.plan, decision = state.decision
+        if (plan && !state.plan!.validation.ok) throw new Error('recorded plan is invalid; resume cannot repair it')
+        if (!plan) {
+          plan = options.plan
+          if (plan) { const structural = planInputError(plan); if (structural) throw new Error(structural) }
+          let plannerSessionId: string | undefined
+          if (!plan) {
+            if (!(await fs.stat(manager.layout.base).catch(() => undefined))) await manager.createBaseSnapshot(baseCommit)
+            const planned = await runPlanner({
+              goal: bounded(goal, 4096), rootId, worktree: manager.layout.base, layout: manager.layout, adapter: options.adapter,
+              model, rootGroup: group, budget: plannerBudget(state.budget), signal, maxSubtasks: state.config.maxSubtasks,
+              protectedPaths: DEFAULT_PROTECTED_PATHS,
+              onSession: sessionId => { plannerSessionId = sessionId; progress(`planner session ${sessionId}`) },
+            })
+            plan = planned.plan
+            plannerSessionId = planned.sessionId
+          }
+          const validation = validatePlan(plan, {
+            maxSubtasks: state.config.maxSubtasks, mode: state.config.mode, protectedPaths: DEFAULT_PROTECTED_PATHS, workspace: repository,
+          })
+          await store.append('plan/recorded', {
+            planId: `pl_${randomUUID()}`, planVersion: 1, source: options.plan ? 'file' : 'model',
+            ...(plannerSessionId ? { plannerSessionId } : {}), plan,
+            validation: validation.ok ? { ok: true, waves: validation.decision.waves } : { ok: false, errors: validation.errors },
+          })
+          if (!validation.ok) throw new Error(bounded(`invalid plan: ${validation.errors.join('; ')}`, 1024))
+          decision = { planVersion: 1, mode: validation.decision.mode, reason: validation.decision.reason, waves: validation.decision.waves }
+          await store.append('plan/decision', decision)
+        } else if (!decision) {
+          const validation = validatePlan(plan, {
+            maxSubtasks: state.config.maxSubtasks, mode: state.config.mode, protectedPaths: DEFAULT_PROTECTED_PATHS, workspace: repository,
+          })
+          if (!validation.ok) throw new Error(bounded(`invalid plan: ${validation.errors.join('; ')}`, 1024))
+          decision = { planVersion: state.plan!.planVersion, mode: validation.decision.mode, reason: validation.decision.reason, waves: validation.decision.waves }
+          await store.append('plan/decision', decision)
+        }
+        const selectedPlan = plan
+        state = foldOrchestration(await store.read())
+        if (state.stop.running) {
+          finalStatus = 'cancelled'
+        } else {
+          const retryInput = new Set(options.retry ?? []), skipInput = new Set(options.skip ?? [])
+          for (const id of [...retryInput, ...skipInput])
+            if (!selectedPlan.subtasks.some(subtask => subtask.id === id)) throw new Error(`resume flags reference unknown subtask: ${id}`)
+          const resolved = await resolvePendingHumans({
+            store, state, acceptUnknownUsage: Boolean(options.acceptUnknownUsage), retry: retryInput, skip: skipInput,
+          })
+          if (resolved.remaining.length) {
+            finalStatus = 'needs_human'
+          } else {
+            state = foldOrchestration(await store.read())
+            await recoverOpenIntegration({ store, manager, state, ...(options.signal ? { signal: options.signal } : {}) })
+            state = foldOrchestration(await store.read())
+            const reconciled = await reconcileAttempts({
+              store, manager, repository, rootId, plan: selectedPlan, state, retry: resolved.retry,
+              ...(options.signal ? { signal: options.signal } : {}),
+            })
+            state = foldOrchestration(await store.read())
+            if (reconciled.pending.length || pendingHumanRequests(state).length) finalStatus = 'needs_human'
+            else if (stop.running) finalStatus = 'cancelled'
+            else {
+              const verifyCommands = state.verifyCommands.length ? state.verifyCommands : options.verifyCommands ?? []
+              const outcome = await executeRoot({
+                options, store, manager, broker, group, stop, budget: state.budget, plan: selectedPlan,
+                decision: decision!, writeSets, verifyCommands, maxWorkers: state.config.maxWorkers,
+                maxAttemptsPerSubtask: state.config.maxAttemptsPerSubtask, repository, rootId, directory, goal,
+                baseCommit, clean: { baseCommit, dirty: 0 }, model, progress, faults, signal,
+                retry: reconciled.retry, skip: skipInput,
+              })
+              finalStatus = outcome.status
+              failureDetail = outcome.failureDetail
+              integrationBranch = outcome.integrationBranch
+            }
+          }
+        }
+      }
     }
+    state = foldOrchestration(await store.read())
+    if (!integrationBranch && state.integrations.length) integrationBranch = integrationBranchName(rootId)
+  } catch (error) {
+    if (error instanceof SimulatedCrash) {
+      crashed = true
+      failureDetail = error.message
+      progress(error.message)
+    } else {
+      failureDetail = formatError(error)
+      finalStatus = 'failed'
+    }
+  } finally {
+    stop?.close()
+    if (stopTimer) clearInterval(stopTimer)
+    await stop?.flush()
+    await broker.close().catch(() => {})
+    if (!alreadyFinished) {
+      const finalized = await finalizeRoot({
+        store, rootId, status: finalStatus, goal, baseCommit, repository,
+        ...(failureDetail ? { failureDetail } : {}), crashed, directory,
+        worktrees: manager?.layout.worktrees ?? path.join(directory, 'worktrees'), dirty: 0,
+      })
+      reportRef = finalized.reportRef ?? reportRef
+      failureDetail ??= finalized.failure
+    }
+    await store.close().catch(() => {})
   }
   return { rootId, status: finalStatus, directory, baseCommit, ...(integrationBranch ? { integrationBranch } : {}), ...(reportRef ? { reportRef } : {}), ...(failureDetail ? { error: failureDetail } : {}) }
 }

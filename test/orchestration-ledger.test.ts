@@ -6,6 +6,7 @@ import path from 'node:path'
 import { TaskGroupBudgetCoordinator } from '../src/core/task-group-budget.js'
 import type { TaskGroupPolicy } from '../src/core/task-group-budget.js'
 import { ModelNotDispatchedError } from '../src/core/model-dispatch.js'
+import { ProviderError } from '../src/core/model-error.js'
 import { OrchestrationStore, newRootId } from '../src/orchestration/store.js'
 import { OrchestrationGroupJournal } from '../src/orchestration/group-journal.js'
 import { foldOrchestration, orchestrationTotals } from '../src/orchestration/state.js'
@@ -76,6 +77,47 @@ test('the in-flight limit bounds reserved and dispatched requests', async t => {
   await group.settle('req-a', usage(700))
   await group.reserve(scope('req-d'))
   assert.equal(group.snapshot().requests, 2)
+})
+
+test('cancel-induced unknown usage does not block, while crash unknown needs explicit acceptance', async t => {
+  const { store } = await temporary(t)
+  const group = await TaskGroupBudgetCoordinator.openJournal(new OrchestrationGroupJournal(store), POLICY, () => 1000)
+  await group.reserve(scope('req-cancel')); await group.dispatched('req-cancel')
+  await group.settle('req-cancel', undefined, 'cancel')
+  assert.equal(group.snapshot().usageUnknown, true)
+  assert.equal(group.snapshot().blockingUnknown, false)
+  await group.reserve(scope('req-after-cancel'))
+  await group.reserve(scope('req-crash')); await group.dispatched('req-crash')
+  await group.settle('req-crash', undefined, 'crash')
+  assert.equal(group.snapshot().blockingUnknown, true)
+  await assert.rejects(group.reserve(scope('req-blocked')), /unknown provider usage/)
+  group.acceptUnknownUsage()
+  await group.reserve(scope('req-accepted')); await group.dispatched('req-accepted'); await group.settle('req-accepted', usage(100))
+  const state = foldOrchestration(await store.read())
+  assert.equal(state.ledger.reservations['req-cancel']?.cause, 'cancel')
+  assert.equal(state.ledger.reservations['req-crash']?.cause, 'crash')
+  assert.equal(state.ledger.reservations['req-crash']?.status, 'unknown')
+})
+
+test('a 429 releases its reservation and a shared cooldown delays the next dispatch', async t => {
+  const { store } = await temporary(t)
+  const waits: number[] = []
+  let now = 1000
+  const group = await TaskGroupBudgetCoordinator.openJournal(new OrchestrationGroupJournal(store), { ...POLICY, maxModelRequests: 8 }, () => now, async ms => { waits.push(ms); now += ms })
+  const request = (requestId: string) => ({
+    system: 'test', maxOutputTokens: 32,
+    dispatchScope: { sessionId: SESSION, taskId: 'task', runId: 'run', requestId },
+  })
+  await assert.rejects(
+    group.dispatch(request('req-429'), { agentId: 'worker', root: false }, async () => { throw new ProviderError('rate_limit', 429, true, undefined, 500) }),
+    /rate limit/,
+  )
+  assert.equal(group.snapshot().cooldownUntil, 3000)
+  assert.equal(group.snapshot().requests, 0, 'the rejected reservation is released, not charged')
+  const response = await group.dispatch(request('req-retry'), { agentId: 'worker', root: false }, async () => ({ usage: usage(100), content: 'ok' }))
+  assert.equal(response.content, 'ok')
+  assert.deepEqual(waits, [2000])
+  assert.equal(group.snapshot().settledTokens, 100)
 })
 
 test('the root wall deadline is enforced through an injected clock', async t => {

@@ -6,7 +6,7 @@ import type { Writable } from 'node:stream'
 import type { ApprovalRequest } from '../core/contracts.js'
 import type { HumanRequestData, PlanInput, RootBudget } from '../orchestration/contracts.js'
 import { assertPlanInput } from '../orchestration/validation.js'
-import { orchestrate } from '../orchestration/orchestrator.js'
+import { orchestrate, resumeOrchestrate } from '../orchestration/orchestrator.js'
 import { formatOrchestration, loadOrchestration } from '../orchestration/inspect.js'
 import { assertRootId, orchestrationDirectory } from '../orchestration/store.js'
 import { WorktreeManager } from '../orchestration/worktrees.js'
@@ -17,6 +17,8 @@ const USAGE = `usage:
     [--mode auto|single|parallel] [--max-workers 1..4] [--root-budget <json>]
     [--verify <cmd>]... [--prepare <cmd>] [--approve-writes auto|ask] [--approve-bash ask|auto] [--allow-dirty]
     (omit --plan to let the read-only planner propose the plan)
+  mini-dsh orchestrate resume <rootId> [--accept-unknown-usage] [--retry <subtaskId>]... [--skip <subtaskId>]...
+    [--plan <plan.json>] [--approve-writes auto|ask] [--approve-bash ask|auto]
   mini-dsh orchestrate inspect <rootId|log-path> [--json]
   mini-dsh orchestrate list
   mini-dsh orchestrate cleanup <rootId>`
@@ -34,8 +36,19 @@ export interface OrchestrateRunArgs {
   approveBash: 'ask' | 'auto'
   allowDirty: boolean
 }
+export interface OrchestrateResumeArgs {
+  kind: 'resume'
+  rootId: string
+  acceptUnknownUsage: boolean
+  retry: string[]
+  skip: string[]
+  planPath: string
+  approveWrites: 'auto' | 'ask'
+  approveBash: 'ask' | 'auto'
+}
 export type OrchestrateCommand =
   | OrchestrateRunArgs
+  | OrchestrateResumeArgs
   | { kind: 'inspect'; target: string; json: boolean }
   | { kind: 'list' }
   | { kind: 'cleanup'; rootId: string }
@@ -70,6 +83,25 @@ export function parseOrchestrateArgs(args: string[]): OrchestrateCommand {
       else throw new Error(`unknown orchestrate run option: ${flag}\n${USAGE}`)
     }
     if (Boolean(result.task) === Boolean(result.taskFile)) throw new Error('exactly one of --task and --task-file is required')
+    return result
+  }
+  if (command === 'resume') {
+    const rootId = rest[0]
+    if (!rootId || rootId.startsWith('--')) throw new Error(USAGE)
+    const result: OrchestrateResumeArgs = {
+      kind: 'resume', rootId, acceptUnknownUsage: false, retry: [], skip: [], planPath: '',
+      approveWrites: 'auto', approveBash: 'ask',
+    }
+    for (let index = 1; index < rest.length; index++) {
+      const flag = rest[index]!
+      if (flag === '--accept-unknown-usage') result.acceptUnknownUsage = true
+      else if (flag === '--retry') { result.retry.push(value(rest, index, flag)); index++ }
+      else if (flag === '--skip') { result.skip.push(value(rest, index, flag)); index++ }
+      else if (flag === '--plan') { if (result.planPath) throw new Error('--plan may only be given once'); result.planPath = value(rest, index, flag); index++ }
+      else if (flag === '--approve-writes') { const mode = value(rest, index, flag); if (mode !== 'auto' && mode !== 'ask') throw new Error('--approve-writes must be auto or ask'); result.approveWrites = mode; index++ }
+      else if (flag === '--approve-bash') { const mode = value(rest, index, flag); if (mode !== 'ask' && mode !== 'auto') throw new Error('--approve-bash must be ask or auto'); result.approveBash = mode; index++ }
+      else throw new Error(`unknown orchestrate resume option: ${flag}\n${USAGE}`)
+    }
     return result
   }
   if (command === 'inspect') {
@@ -155,6 +187,20 @@ async function executeRun(args: OrchestrateRunArgs, output: Writable) {
   const base = createDeepSeekAdapter({ defaultModel: model })
   const interactive = Boolean((output as NodeJS.WriteStream).isTTY)
   const approver = args.approveWrites === 'ask' || args.approveBash === 'ask' || interactive ? terminalApprover(output) : undefined
+  // 两级 Ctrl-C：第一次只停止派发，第二次中止运行中的 worker。
+  const dispatch = new AbortController(), running = new AbortController()
+  let interrupts = 0
+  const onSigint = () => {
+    interrupts++
+    if (interrupts === 1) {
+      output.write('\n[orchestrate] stopping dispatch; running attempts finish first (Ctrl-C again to abort them)\n')
+      dispatch.abort()
+    } else if (interrupts === 2) {
+      output.write('\n[orchestrate] aborting running attempts\n')
+      running.abort()
+    }
+  }
+  process.on('SIGINT', onSigint)
   try {
     const result = await orchestrate({
       repository: process.env.MINI_DSH_WORKSPACE ?? process.cwd(), goal, ...(plan ? { plan } : {}), baseDirectory: orchestrationBaseDirectory(),
@@ -164,6 +210,7 @@ async function executeRun(args: OrchestrateRunArgs, output: Writable) {
       verifyCommands: args.verifyCommands, allowDirty: args.allowDirty,
       approval: { writes: args.approveWrites, bash: args.approveBash, ...(approver ? { approve: approver.ask } : {}) },
       ...(approver && interactive ? { decide: approver.decide } : {}),
+      dispatchSignal: dispatch.signal, signal: running.signal,
       onProgress: line => output.write(`${line}\n`),
     })
     output.write(`\norchestration ${result.status}\nroot: ${result.rootId}\nbase: ${result.baseCommit}\nlog: ${result.directory}\n`)
@@ -172,18 +219,75 @@ async function executeRun(args: OrchestrateRunArgs, output: Writable) {
     if (result.status === 'needs_human') {
       const report = await loadOrchestration(result.directory)
       output.write(`${formatOrchestration({ ...report, events: report.events.length })}\n`)
-      output.write('Resolve the pending human request in an interactive terminal; `orchestrate resume` lands in M3.\n')
+      output.write(`Resolve it with: orchestrate resume ${result.rootId} --retry <subtaskId> or --skip <subtaskId>; add --accept-unknown-usage when the crash left unknown token usage.\n`)
     }
     if (result.error) output.write(`error: ${result.error}\n`)
     return result.status === 'completed' ? 0 : 1
   } finally {
+    process.off('SIGINT', onSigint)
     approver?.close()
   }
 }
+async function executeResume(args: OrchestrateResumeArgs, output: Writable) {
+  const { default: dotenv } = await import('dotenv')
+  dotenv.config({ quiet: true })
+  const plan = args.planPath ? await readPlan(args.planPath) : undefined
+  const { createDeepSeekAdapter } = await import('../models/deepseek.js')
+  const model = process.env.MINI_DSH_MODEL ?? 'deepseek-v4-pro'
+  const base = createDeepSeekAdapter({ defaultModel: model })
+  const interactive = Boolean((output as NodeJS.WriteStream).isTTY)
+  const approver = args.approveWrites === 'ask' || args.approveBash === 'ask' || interactive ? terminalApprover(output) : undefined
+  const dispatch = new AbortController(), running = new AbortController()
+  let interrupts = 0
+  const onSigint = () => {
+    interrupts++
+    if (interrupts === 1) {
+      output.write('\n[orchestrate] stopping dispatch; running attempts finish first (Ctrl-C again to abort them)\n')
+      dispatch.abort()
+    } else if (interrupts === 2) {
+      output.write('\n[orchestrate] aborting running attempts\n')
+      running.abort()
+    }
+  }
+  process.on('SIGINT', onSigint)
+  try {
+    const result = await resumeOrchestrate({
+      rootId: args.rootId, baseDirectory: orchestrationBaseDirectory(),
+      adapter: { provider: 'deepseek', model, chat: base.chat, ...(base.capabilities ? { capabilities: base.capabilities } : {}) },
+      model: `deepseek/${model}`, acceptUnknownUsage: args.acceptUnknownUsage, retry: args.retry, skip: args.skip,
+      ...(plan ? { plan } : {}),
+      approval: { writes: args.approveWrites, bash: args.approveBash, ...(approver ? { approve: approver.ask } : {}) },
+      ...(approver && interactive ? { decide: approver.decide } : {}),
+      dispatchSignal: dispatch.signal, signal: running.signal,
+      onProgress: line => output.write(`${line}\n`),
+    })
+    output.write(`\norchestration ${result.status}\nroot: ${result.rootId}\nbase: ${result.baseCommit}\nlog: ${result.directory}\n`)
+    if (result.integrationBranch) output.write(`integration branch: ${result.integrationBranch} (not merged into your working tree)\n`)
+    if (result.reportRef) output.write(`report: ${path.join(result.directory, 'artifacts', `sha256-${result.reportRef.slice('sha256:'.length)}.json`)}\n`)
+    if (result.status === 'needs_human') {
+      const report = await loadOrchestration(result.directory)
+      output.write(`${formatOrchestration({ ...report, events: report.events.length })}\n`)
+      const pending = Object.values(report.state.human).filter(item => !item.response)
+      for (const item of pending) {
+        const subtask = item.request.attemptId ? report.state.attempts[item.request.attemptId]?.subtaskId : undefined
+        output.write(`pending ${item.request.kind}: ${item.request.prompt}\n  options: ${item.request.options.join(' / ')}${subtask ? `\n  resolve with: orchestrate resume ${result.rootId} --retry ${subtask} or --skip ${subtask}` : ''}\n`)
+      }
+      if (Object.values(report.state.ledger.reservations).some(item => item.status === 'unknown' && item.cause !== 'cancel'))
+        output.write(`unknown token usage from the crash: rerun with --accept-unknown-usage after verifying the provider side.\n`)
+    }
+    if (result.error) output.write(`error: ${result.error}\n`)
+    return result.status === 'completed' ? 0 : 1
+  } finally {
+    process.off('SIGINT', onSigint)
+    approver?.close()
+  }
+}
+
 export async function runOrchestrateCli(args: string[], output: Writable = process.stdout): Promise<number> {
   try {
     const command = parseOrchestrateArgs(args)
     if (command.kind === 'run') return await executeRun(command, output)
+    if (command.kind === 'resume') return await executeResume(command, output)
     if (command.kind === 'inspect') {
       const target = command.target.endsWith('.jsonl') ? command.target : (() => { assertRootId(command.target); return path.join(orchestrationBaseDirectory(), command.target) })()
       const report = await loadOrchestration(target)

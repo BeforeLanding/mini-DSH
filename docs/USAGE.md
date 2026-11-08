@@ -135,15 +135,17 @@ v2.1 的 Full/Baseline 是冻结开发协议里的两条实验臂，不是生产
 
 项目记忆及其专属配置/命令仅保留在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2，不在 main 启用。关闭委派（默认）时，工具清单与 v0.2.0 相同。含委派事件的会话日志请用同一版本恢复。
 
-## 多 Agent 编排（M2，分支 `feat/orchestration-m2`，尚未合入 main）
+## 多 Agent 编排（M3，分支 `feat/orchestration-m3`，尚未合入 main）
 
-本节的 `orchestrate` 子命令只在分支上存在；M2 支持计划文件或只读 planner、同波次并行、FIFO 审批与冲突处置。崩溃恢复 `resume` 仍在 M3，当前命令不存在。
+本节的 `orchestrate` 子命令只在分支上存在；M3 支持计划文件或只读 planner、同波次并行、FIFO 审批、冲突处置、两级停止与崩溃恢复。
 
 ```text
 mini-dsh orchestrate run (--task "<text>" | --task-file <path>) [--plan <plan.json>]
                          [--mode auto|single|parallel] [--max-workers 1..4] [--root-budget <json>]
                          [--verify <cmd>]... [--prepare <cmd>]
                          [--approve-writes auto|ask] [--approve-bash ask|auto] [--allow-dirty]
+mini-dsh orchestrate resume <rootId> [--accept-unknown-usage] [--retry <subtaskId>]... [--skip <subtaskId>]...
+                         [--plan <plan.json>] [--approve-writes auto|ask] [--approve-bash ask|auto]
 mini-dsh orchestrate inspect <rootId|log-path> [--json]
 mini-dsh orchestrate list
 mini-dsh orchestrate cleanup <rootId>
@@ -156,6 +158,14 @@ mini-dsh orchestrate cleanup <rootId>
 - 全部波次完成后，在整合 worktree 运行已整合子任务的验收命令与 `--verify`；证据绑定最终 tree SHA。全部子任务整合且通过为 `completed`，部分整合且通过为 `partial`。
 - 编排日志与 worktree 位于 `~/.mini-dsh/orchestrations/<rootId>/`；`MINI_DSH_ORCHESTRATION_DIR` 指定根目录，`MINI_DSH_ROOT_BUDGET` JSON 覆盖根预算（键与默认值见 [DEVELOPMENT.md](superagent/DEVELOPMENT.md) §7.1）。`inspect` 只读显示计划来源、波次、attempt、审批统计、整合冲突与验收证据。
 - `--prepare` 在每个 worker worktree 内运行一次（如依赖安装）。需要干净工作树；`--allow-dirty` 继续执行，但未提交改动不在基线内。宿主不在用户工作树提交，交付物是 `mini-dsh/<root8>/integration` 分支。`MINI_DSH_MODEL` 与 `MINI_DSH_WORKSPACE` 沿用既有含义。
+
+### 停止与恢复（M3）
+
+- 运行中第一次 Ctrl-C 停止派发：已在跑的 attempt 继续到自然结束，未启动的记 `skipped`，随后照常整合已完成部分并验收，根任务为 `completed`/`partial`。第二次 Ctrl-C 中止运行中的 run，attempt 记 `cancelled`，不整合，根任务 `cancelled`。wall 截止走同一条“停止运行中”路径。
+- 进程崩溃后用 `orchestrate resume <rootId>` 继续同一日志：已完成的 worker run 直接采用（不重跑、不增加模型请求），未完成的记 `interrupted`；Bash 已开始或工具结果未知时生成 `unknown_side_effects` 人工请求。用 `--retry <subtaskId>` 重跑该子任务（新 epoch、新 worktree），或用 `--skip <subtaskId>` 放弃并保持未整合。
+- 崩溃时在途的 provider 调用按 `unknown(cause=crash)` 计入预留额；`resume` 会要求先用 `--accept-unknown-usage` 明确确认，否则停在 `needs_human`。取消产生的未知用量不阻断。429 在根组内共享 `max(retryAfterMs, 2s)` 冷却，被拒绝的预留释放而不计费。
+- 整合中途崩溃会先回到 `integration/started` 的基线并重放已记录的 applied，再继续；验收证据按 `(head, tree, command)` 复用，只补跑缺失命令。日志尾部半行仍须先显式隔离（`OrchestrationStore.quarantineTail`），`resume` 不会自动改写日志。
+- `resume` 使用日志中持久化的预算、并发、验收与 prepare 命令；新的 `MINI_DSH_ROOT_BUDGET` 不会重新解释旧根任务。
 
 ## 本地打包与安装
 

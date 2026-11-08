@@ -53,7 +53,8 @@ export function validatePayload(type: string, data: Record<string, unknown>) {
       break
     }
     case 'group/budget-reserved': valid = safeId(data.groupId) && safeId(data.requestId) && safeId(data.agentId) && safeId(data.sessionId) && safeId(data.taskId) && safeId(data.runId) && typeof data.root === 'boolean' && ['main', 'summary'].includes(String(data.purpose)) && integer(data.reserve) && Number(data.reserve) > 0; break
-    case 'group/model-dispatched': case 'group/reservation-released': case 'group/usage-unknown': valid = safeId(data.groupId) && safeId(data.requestId); break
+    case 'group/model-dispatched': case 'group/reservation-released': valid = safeId(data.groupId) && safeId(data.requestId); break
+    case 'group/usage-unknown': valid = safeId(data.groupId) && safeId(data.requestId) && (data.cause === undefined || ['crash', 'cancel', 'no_usage'].includes(String(data.cause))); break
     case 'group/budget-settled': valid = safeId(data.groupId) && safeId(data.requestId) && validUsage(data.usage) && record(data.usage) && data.usage.source === 'provider' && data.usage.uncertain === false && typeof data.overrun === 'boolean'; break
     case 'group/tool-admitted': valid = safeId(data.groupId) && sha256(data.key) && safeId(data.agentId) && safeId(data.sessionId) && safeId(data.runId) && safeId(data.toolCallId); break
     case 'verification/start': valid = string(data.verificationId) && string(data.command) && !!data.command.trim() && string(data.cwd) && optionalString(data.toolCallId) && validVerificationFiles(data.files, false); break

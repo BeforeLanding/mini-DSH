@@ -19,6 +19,142 @@
 pnpm lint                                                # 276 files, no fixes applied
 ```
 
+## M3-⑤ 崩溃演示（2026-11-07）
+
+**改动**
+
+- 新增 `scripts/demo-orchestrate-crash.ts` 与 `pnpm demo:orchestrate-crash`：临时 git 仓库 + 脚本模型，不配置 provider、不发起付费请求。
+- 演示序列：两个并行子任务中 st-1 完成、st-2 先执行 Bash 后停在未返回的 provider 调用；`after-worker-run` 注入崩溃。随后不带确认的 `resume` 因崩溃未知用量停在 `needs_human`；带 `--accept-unknown-usage` 后采用 st-1、为 st-2 生成 `unknown_side_effects`；带 `--retry st-2` 完成第二 epoch、整合与验收。
+- 断言：崩溃前无 `root/finish`；st-1 采用时 provider 调用数不增加；最终 `completed`；用户工作树 HEAD/状态不变。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm check                     # syntax ok: 256 files
+pnpm lint                      # 287 files, no warnings
+pnpm demo:orchestrate-crash    # PASS；scripted provider requests=6；user worktree unchanged
+pnpm test                      # tests 654 / pass 624 / fail 0 / 30 platform-skipped
+```
+
+**未包含**
+
+- 演示只覆盖一个指定的崩溃点；§8.4 其余窗口由 `test/orchestration-recovery.test.ts` 覆盖。演示使用脚本模型与合成 usage，不代表模型能力或真实账单。
+
+## M3-③ attempt 与整合恢复（2026-11-07）
+
+**改动**
+
+- 新增 `src/orchestration/faults.ts`：命名检查点抛出 `SimulatedCrash`，只在测试/演示注入；`integrator.applyAttempt` 与 `verifier` 接受故障钩子，可分别制造“cherry-pick 成功但未记 applied”与“验收已跑但未记证据”的窗口。
+- 新增 `src/orchestration/recovery.ts`：
+  - 只读解析 worker 会话的已确认前缀，判断 run 是否 completed、是否有 `status=unknown` 的工具结果或已开始未收尾的 Bash。
+  - `recoverOpenIntegration`：中止残留 cherry-pick，回到 `integration/started` 记录的基线，按 `applied` 重放，再写 `integration/finished`。
+  - `reconcileAttempts`：completed run 优先用带 trailer 的提交采用；否则从 worktree 收集提交；不可采用时记 `interrupted`；未知副作用生成 `unknown_side_effects` 人工请求，无未知副作用且未达上限时自动重试。已有人工决定（retry/abandon）优先，不重复询问。
+  - `resolvePendingHumans` 把 `resume --retry/--skip` 映射为 `human/resolved`；`blockingUnknownUsage` 区分崩溃/无 usage 与取消。
+- `resumeOrchestrate`：打开既有编排日志与账本；补做未记录的计划；未知用量未确认时停在 `needs_human`；恢复整合与 attempt 后从当前波次继续；只在同一 head/tree 上缺少证据时运行验收命令；已有 `root/finish` 时直接返回。
+- CLI 增加 `orchestrate resume <rootId> [--accept-unknown-usage] [--retry]... [--skip]... [--plan] [审批选项]`；两级 Ctrl-C 同样适用；输出 pending 请求与建议命令。`root/start` 持久化 `verifyCommands`/`prepareCommand` 供恢复使用。
+- 编排器在崩溃注入时 `markCrashed()` 再 abort 兄弟 worker；被中止的 sibling 记 `interrupted + unknownSideEffects`，日志关闭前等待全部 worker 收尾。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-recovery.test.js dist/test/orchestration-e2e.test.js
+# recovery 7 / pass 7；e2e 13 / pass 13（含 resume 参数解析）
+```
+
+**测试覆盖**
+
+- `after-worker-run` 崩溃：resume 采用 completed run 的 worktree 改动，provider 调用数不变，只有一个 attempt/worktree，整合与验收完成。
+- `after-cherry-pick` / `after-integration-started`：从记录基线重置并关闭旧整合，已成功 attempt 在新周期重新应用。
+- `after-attempt-planned`：resume 原地启动既有 planned attempt，不新建 attempt/worktree。
+- `after-verify-command`：无证据时重跑验收命令，只记录一条 exit 0 证据。
+- 两个 worker 中一个崩溃、一个在途：在途调用记 `unknown(cause=crash)`；未确认时 `needs_human`；确认后中断 sibling 产生人工请求；`--retry st-2` 完成根任务，采用 st-1 不增加 provider 调用。
+- 编排日志尾部半行：`resume` 明确拒绝且不改写日志，需按既有规则显式隔离。
+
+**未包含**
+
+- 真实进程崩溃（测试用故障注入模拟）；已开始的 Bash 在仓库外的影响仍需人工核实。
+- 价格表与费用上限；`maxUsd` 仍只做配置校验。
+
+## M3-④ 账本恢复与 429 冷却（2026-11-07）
+
+**改动**
+
+- `group/usage-unknown` 的 `cause` 进入根组状态：`cancel` 不中止组、不阻断后续派发；`crash`/`no_usage` 保持 M0 的保守规则。`acceptUnknownUsage()` 在人工确认后允许继续，未知量仍按预留额计入总量。
+- `openJournal` 恢复时把 `reserved` 释放、`dispatched` 记为 `unknown(cause=crash)`；恢复流程可据此要求确认。
+- 429：根组记录共享冷却 `max(retryAfterMs, 2s)`，下一次派发在准入后等待；被 429 明确拒绝的预留释放而不计费，Loop 的退避重试得以继续。编排器的进程内崩溃注入在 abort 兄弟 worker 前调用 `markCrashed()`，使被中止的在途调用按 crash 记账。
+- `snapshot()` 增加 `blockingUnknown`、`acceptedUnknown`、`cooldownUntil`；`stopReason`/`#check` 只对未被确认的 blocking unknown 报错。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-ledger.test.js dist/test/task-group-budget.test.js
+# tests 16 / pass 16 / fail 0
+```
+
+**测试覆盖**
+
+- `cancel` 未知后仍可预留；`crash` 未知拒绝继续，`acceptUnknownUsage()` 后恢复；折叠日志保留各自 cause。
+- 429 释放预留（`requests=0`），冷却为 `max(retryAfterMs, 2s)`，下一次派发等待 2000 ms 后成功结算。
+
+**未包含**
+
+- 持久化冷却截止时间（进程内共享即可）；429 之外的 provider 错误仍按 M0 的未知规则处理。
+
+## M3-② 两级停止语义（2026-11-07）
+
+**改动**
+
+- 新增 `StopController`：第一次 `dispatchSignal` 只写 `control/stop(dispatch)`，不再启动新 attempt；第二次 `signal` 或 wall 截止写 `control/stop(running)`、中止运行中 run，并在整合前退出。
+- 编排器按日志而不是本地结果收集本波次的成功 attempt，使停止派发后仍能整合已完成部分并运行验收；停止运行中不打开整合、不复用旧验收证据。
+- CLI `orchestrate run` 注册 SIGINT：第一次提示并停止派发，第二次中止运行中；退出时移除监听。
+- `root/start` 增加可选的 `verifyCommands` 与 `prepareCommand`，为 M3-③ 的 `resume` 重建命令上下文。
+- 并发池改为等待全部 worker 收尾后再抛出失败，崩溃时兄弟 worker 先收到中止，避免编排日志关闭后继续写入。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-stop.test.js dist/test/orchestration-e2e.test.js
+# stop tests 3 / pass 3；既有 e2e 13 项保持通过
+```
+
+**测试覆盖**
+
+- 两子任务同波次、`maxWorkers=1`：第一次 Ctrl-C 在 st-1 运行时触发，st-1 完成并整合、st-2 记 `skipped`，验收 exit 0，根任务 `partial`，用户工作树不变。
+- 第二次 Ctrl-C：st-1 记 `cancelled`，无整合、无验收，`control/stop(running)` 落盘，根任务 `cancelled` 并写 `root/finish`。
+- 可控时钟越过 wall 截止：看门狗写 `control/stop(running)`、中止运行中 attempt，根任务 `cancelled`。
+
+**未包含**
+
+- 崩溃后的恢复与 `resume`（M3-③）；恢复窗口的失败注入。
+
+## M3-① 状态折叠的迟到/过期/重复规则（2026-11-07）
+
+**改动**
+
+- `attempt/finished` 新增可选 `unknownSideEffects`：仅在 `interrupted` 结局上允许为真，表示会话中出现过 `status=unknown` 的工具结果或已开始但未收尾的 Bash。状态折叠把它保留到 `AttemptState`。
+- `group/usage-unknown` 新增可选 `cause`（`crash`/`cancel`/`no_usage`），折叠后写入 `LedgerReservation.cause`；旧日志缺省按 `no_usage`。会话日志与编排日志的校验同时接受该可选字段。
+- `attempt/late` 新增可选 `epoch`：只接受已终结 attempt，且 epoch 必须与对应 attempt 一致；迟到结果仍只记录、不改变状态或账本（I10）。
+
+**验证**
+
+```text
+pnpm typecheck                 # 通过
+pnpm build                     # 通过
+node --test dist/test/orchestration-state.test.js dist/test/orchestration-ledger.test.js dist/test/task-group-budget.test.js
+# tests 21 / pass 21 / fail 0
+```
+
+**测试覆盖**
+
+- 中断 attempt 的 `unknownSideEffects` 与未知预留的 `cause=crash` 在折叠后仍可读；同 epoch 的迟到结果被接受且不改变状态，错误 epoch 被拒绝。
+
 ## M2-⑤ 多 attempt 整合与冲突处置（2026-11-07）
 
 **改动**

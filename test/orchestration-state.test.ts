@@ -97,6 +97,35 @@ test('completed root requires every subtask integrated and passing verification'
   assert.throws(() => foldOrchestration(noIntegration.map((event, index) => ({ ...event, seq: index + 1 })) as OrchestrationEventUnion[]), /requires a finished integration/)
 })
 
+test('interrupted attempts keep unknown-side-effect evidence and unknown reservations keep their cause', () => {
+  const event = eventBuilder()
+  const interrupted = {
+    attemptId: ATTEMPT, outcome: 'interrupted' as const, run: { status: 'error' }, unknownSideEffects: true,
+    code: { changedFiles: [], scopeViolations: [] }, detail: 'bash was running when the process stopped',
+  }
+  const events = [
+    event('root/start', rootStart()),
+    event('plan/recorded', planRecorded()),
+    event('plan/decision', planDecision()),
+    event('attempt/planned', attemptPlanned()),
+    event('attempt/started', attemptStarted()),
+    event('attempt/session', { attemptId: ATTEMPT, sessionId: SESSION }),
+    event('attempt/finished', interrupted),
+    event('group/start', groupStart()),
+    event('group/budget-reserved', reserved('req-1')),
+    event('group/model-dispatched', { groupId: GROUP, requestId: 'req-1' }),
+    event('group/usage-unknown', { groupId: GROUP, requestId: 'req-1', cause: 'crash' }),
+  ] satisfies OrchestrationEventUnion[]
+  const state = foldOrchestration(events)
+  assert.equal(state.attempts[ATTEMPT]?.status, 'interrupted')
+  assert.equal(state.attempts[ATTEMPT]?.unknownSideEffects, true)
+  assert.equal(state.ledger.reservations['req-1']?.cause, 'crash')
+  const late = { ...eventBuilder()('attempt/late', { attemptId: ATTEMPT, summary: 'old epoch result', epoch: 1 }), seq: events.length + 1, id: 'ev-late' }
+  assert.equal(foldOrchestration([...events, late]).attempts[ATTEMPT]?.status, 'interrupted')
+  const wrong = { ...eventBuilder()('attempt/late', { attemptId: ATTEMPT, summary: 'wrong epoch', epoch: 2 }), seq: events.length + 1, id: 'ev-wrong' }
+  assert.throws(() => foldOrchestration([...events, wrong]), /epoch does not match/)
+})
+
 test('unknown event types and mixed roots are rejected', () => {
   const mixedEvent = eventBuilder()
   const mixed = [mixedEvent('root/start', rootStart()), { ...mixedEvent('plan/recorded', planRecorded()), rootId: 'rt_00000000-0000-4000-8000-000000000099' }] as OrchestrationEventUnion[]

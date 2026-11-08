@@ -42,7 +42,25 @@
   - 验收：人为构造的文件/目录冲突产生 `human.request(conflict)`；跳过冲突子任务得到 `partial`；中止得到 `cancelled` 且整合现场保留；`rerun-serially` 在整合 head 上新建 attempt；无决定时停在 `needs_human`。
   - 证据：`src/orchestration/{orchestrator,state,integrator}.ts`、`src/app/orchestrate-cli.ts`、`test/orchestration-e2e.test.ts`、`test/orchestration-worker.test.ts`。
 
-## M3–M4：待开始
+## M3：失败、取消与恢复（已完成）
 
-- [ ] M3 失败、取消与恢复（故障注入、停止语义、账本恢复与 429 冷却）
+- [x] ① 状态折叠的迟到/过期/重复规则
+  - 验收：`attempt/late` 只接受已终结 attempt，旧 epoch 只记录不改变状态；`attempt/finished` 保留 `unknownSideEffects`，`group/usage-unknown` 保留 `cause`。
+  - 证据：`test/orchestration-state.test.ts`、`test/task-group-budget.test.ts`。
+- [x] ② 停止语义（两级 Ctrl-C 与 wall 截止）
+  - 验收：第一次 Ctrl-C 只停止派发，未启动 attempt 记 `skipped`，运行中的继续并整合/验收；第二次 Ctrl-C 与 wall 截止中止运行中 run，attempt 记 `cancelled`，不整合，根任务 `cancelled`。
+  - 证据：`src/orchestration/orchestrator.ts`、`src/app/orchestrate-cli.ts`、`test/orchestration-stop.test.ts`。
+- [x] ③ attempt 与整合恢复（故障注入与 `resume`）
+  - 验收：已完成 run 被采用且 provider 调用数不增加；中断且有未知副作用的 attempt 产生人工请求；`resume --retry/--skip` 可处理；integ 中途崩溃按记录的基线重放；验收只在缺失证据时重跑；尾部半行拒绝恢复。
+  - 证据：`src/orchestration/{faults,recovery,orchestrator}.ts`、`src/app/orchestrate-cli.ts`、`test/orchestration-recovery.test.ts`。
+- [x] ④ 账本恢复与 429 冷却
+  - 验收：崩溃留下的 `dispatched` 预留转为 `unknown(cause=crash)`；取消产生的未知不阻断后续派发；人工确认后可继续；429 释放预留并让同组下一次派发等待共享冷却。
+  - 证据：`src/core/task-group-budget.ts`、`test/orchestration-ledger.test.ts`、`test/task-group-budget.test.ts`。
+- [x] ⑤ 崩溃演示脚本
+  - 验收：`pnpm demo:orchestrate-crash` 离线通过；演示崩溃前已完成 run 被采用、未知用量需确认、未知副作用需人工决定，最终恢复为 `completed`。
+  - 证据：`scripts/demo-orchestrate-crash.ts`、`package.json`。
+  - 命令：`pnpm demo:orchestrate-crash`。
+
+## M4：待开始
+
 - [ ] M4 评测、演示与文档（组合 fixture、演示脚本、四臂对照离线装配；付费批次需单独授权）
