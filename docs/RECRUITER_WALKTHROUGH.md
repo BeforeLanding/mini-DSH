@@ -1,6 +1,6 @@
 # mini-DSH：五分钟项目讲解
 
-本页是讲解提纲，只讲工程线索与取舍；模型评测只有 [SWE-bench 三臂对照](SWE-BENCH-RESULTS.md) 一项，见该页；项目介绍见 [README](../README.md)，完整安装、配置和命令说明见 [使用指南](USAGE.md)。主分支以单 Agent 操作单个本地工作区，目标是让编辑、验证、预算停止与恢复留下可检查的事件证据。多 Agent 编排（M1–M4）在 `feat/orchestration-m*` 分支，尚未合入 main；其契约与离线证据见 [docs/superagent](superagent/DEVELOPMENT.md)，真实模型四臂批次未执行。
+本页是讲解提纲，只讲工程线索与取舍；模型评测只有 [SWE-bench 三臂对照](SWE-BENCH-RESULTS.md) 一项，见该页；项目介绍见 [README](../README.md)，完整安装、配置和命令说明见 [使用指南](USAGE.md)。主分支以单 Agent 操作单个本地工作区，目标是让编辑、验证、预算停止与恢复留下可检查的事件证据。多 Agent 编排（M1–M4）已合入 main（尚未发版）；其契约与离线证据见 [docs/superagent](superagent/DEVELOPMENT.md)，真实模型四臂批次未执行。
 
 ## 五分钟演示顺序
 
@@ -8,7 +8,7 @@
 2. **约 1 分钟：查看有效配置。** 在已按 README 安装依赖并构建的仓库运行 `node dist/src/index.js --show-config`。指出配置值及来源、工作区、预算；无需 API key，不发模型请求。已有 `MINI_DSH_SESSION_ID` 时应先移除该环境变量，或在交互会话用 `/budget` 查看恢复会话。
 3. **约 2 分钟：脚本化机制演示。** 运行 `pnpm demo:compact`，依次看压缩前后请求投影、事件仍保留、`read_history` 回读。脚本使用预设模型响应；它证明 Harness 路径可演示，不代表真实模型完成编程任务。演示最后会打印生成的 `events.jsonl` 路径。
 4. **约 1 分钟：检查日志。** 将上一步打印的路径填入 `$log`，运行 `node dist/src/index.js inspect $log --trace`。指出完整性、最近一次 run 状态、usage 和有限事件轨迹；`inspect` 不执行日志里的工具，也不恢复会话。若时间允许，再运行 `pnpm demo:fix` 看脚本化编辑与公开检查。
-5. **可选：编排分支演示。** 在 `feat/orchestration-m4` 分支运行 `pnpm demo:orchestrate-parallel`：只读 planner 生成两波次计划，两个 worker 的区间重叠，第三个任务在第二波次读取整合后的依赖；演示最后用工作区之外的隐藏验收器复验。再运行 `pnpm demo:orchestrate-crash` 看 `resume` 不重跑已完成结果、未知副作用需要人工决定。两者都是脚本模型，不发真实请求。
+5. **可选：编排演示。** 在 main 上运行 `pnpm demo:orchestrate-parallel`：只读 planner 生成两波次计划，两个 worker 的区间重叠，第三个任务在第二波次读取整合后的依赖；演示最后用工作区之外的隐藏验收器复验。再运行 `pnpm demo:orchestrate-crash` 看 `resume` 不重跑已完成结果、未知副作用需要人工决定。两者都是脚本模型，不发真实请求。
 
 以上演示命令无需模型密钥；依赖首次安装可能访问包注册表。`pnpm start` 或已安装的 `mini-dsh` 进入交互模式时需要 `DEEPSEEK_API_KEY`，实际对话可能产生费用。本地 tarball 安装已在 Windows 验证，Linux 由 CI 的 `package-install` job 验证，npm 尚未发布；macOS 安装未验证。
 
@@ -18,7 +18,7 @@
 2. **预算与上下文投影。** [agent-loop-runtime.ts](../src/core/agent-loop-runtime.ts)、[compaction-runtime.ts](../src/core/compaction-runtime.ts) 管理请求前预留、主动摘要和停止；[history-read.ts](../src/core/history-read.ts) 从原始事件回读。`demo:compact` 可直接展示投影变小而历史未删除。
 3. **有界工具和版本化验证。** [files.ts](../src/tools/files.ts)、[bash.ts](../src/tools/bash.ts) 实现文件/命令闸门；[task-verification.ts](../src/core/task-verification.ts) 将公开检查证据绑定到候选文件版本。`demo:fix` 展示顺利路径；更多失败边界见[设计取舍](context-budget/DECISIONS.md)。
 
-## 多 Agent 编排（开发分支，待合并）
+## 多 Agent 编排
 
 同一根任务内、宿主驱动的多写入者闭环：计划校验 → 每个 worker 一个独立 Harness + git worktree → 宿主提交与写集检查 → 按序 cherry-pick 整合 → 整合后复验。三项有代码与测试证据的贡献（均不等于模型能力结论）：
 
@@ -36,7 +36,7 @@
 
 ## 已知限制
 
-- 主分支仍是单 Agent、单本地工作区；应用层路径和命令闸门不等于操作系统隔离。多 Agent 编排在开发分支，尚未合并，其真实模型四臂对照未授权、未执行。
+- 主分支仍是单 Agent、单本地工作区；应用层路径和命令闸门不等于操作系统隔离。多 Agent 编排已在 main 但尚未发版，其真实模型四臂对照未授权、未执行。
 - 本地 tarball 安装在 Windows 验证，Ubuntu 由 CI 的仓库外安装 job 验证；macOS 未验证；以 GitHub Release 提供 v0.2.0 tarball，npm 未发布。真实交互需要模型密钥，零付费演示使用脚本化响应。
 - 模型评测只有 SWE-bench 三臂对照一项，结论须连同约 2.6 倍成本与未做逐项消融一起陈述，见 [SWE-BENCH-RESULTS](SWE-BENCH-RESULTS.md)。更早的开发集探索不构成可靠完成率或泛化提升，也不能把组合策略结果单独归因于稳定前缀或主动压缩；公开仓库只有脱敏摘要，原始事件仅本地保存。协议边界见 [EVALUATION-SWEBENCH](EVALUATION-SWEBENCH.md)。
 

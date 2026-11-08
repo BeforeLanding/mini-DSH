@@ -1,5 +1,29 @@
 # 多 Agent 编排改动与证据
 
+## 合入 main 与文档同步（2026-11-08）
+
+**改动**
+
+- 分支链按里程碑合入 main：#25（开发文档）、#26（M0）、#27（M1）、#28（M2）、#29（M3）、#30（M4，含本条），均为 merge commit。
+- README、PROGRESS、USAGE、RECRUITER_WALKTHROUGH 与 REQUIREMENTS 从“开发分支、待合并”改为“已在 main、尚未发版（v0.2.0 不含）”。
+- `test/progress-sync.test.ts` 新增文档漂移护栏：`src/app/orchestrate-cli.ts` 存在时，五份用户文档中提到编排的行不得再写未合入 main。
+
+**验证（本步实际输出）**
+
+```text
+# 先证红：只加护栏、未改文档时
+node --test dist/test/progress-sync.test.js   # 1 fail：11 行命中（README 4、PROGRESS 2、USAGE 1、RECRUITER_WALKTHROUGH 3、REQUIREMENTS 1）
+# 改文档后
+node --test dist/test/progress-sync.test.js dist/test/docs-links.test.js   # tests 5 / pass 5 / fail 0
+pnpm check                     # syntax ok: 261 files
+pnpm test                      # tests 664 / pass 634 / fail 0 / 30 platform-skipped
+pnpm lint                      # 292 files, no fixes applied
+```
+
+**未包含**
+
+- 新版本 Release；真实模型四臂付费批次（仍需对该次批次单独授权）。
+
 ## M4-④ 里程碑收尾与文档（2026-11-08）
 
 **改动**

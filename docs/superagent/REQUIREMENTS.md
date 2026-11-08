@@ -1,7 +1,7 @@
 # 多 Agent 编排需求（Super Agent 方向）
 
-- **状态：** M0—M4 的离线部分已完成；M1—M4 在 `feat/orchestration-m1`—`m4` 分支链上，待评审合并，main 尚未包含编排入口。M4 的真实模型小批次需单独授权、尚未执行。本文件只记录目标、范围与验收，领域契约以 [DEVELOPMENT.md](DEVELOPMENT.md) 为唯一来源。
-- **基线：** `main@91de468`（v0.2.0）；开发分支 `feat/orchestration-m1`（M1）、`m2`（M2）、`m3`（M3）与 `m4`（M4）。
+- **状态：** M0—M4 的离线部分已完成；M0—M4 已经由 PR #26—#30 依次合入 main（2026-11-08），尚未发版。M4 的真实模型小批次需单独授权、尚未执行。本文件只记录目标、范围与验收，领域契约以 [DEVELOPMENT.md](DEVELOPMENT.md) 为唯一来源。
+- **基线：** `main@91de468`（v0.2.0）；开发时依次在 `feat/orchestration-m0`—`m4` 分支上，现已合入 main。
 - **日期：** 2026-11-08。
 
 ## 目标

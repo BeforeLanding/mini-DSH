@@ -2,10 +2,18 @@
 
 **非规范性说明：** 方向性决策与数值以 [DEVELOPMENT.md](DEVELOPMENT.md) §2.8 为准；本文件记录开发过程中落实这些决策的具体选择、代码锚点与测试锚点，避免把实现事实只留在提交信息里。
 
+## 合入 main 后的文档口径（2026-11-08）
+
+- **决定：** M0—M4 的分支链按里程碑分别以 PR #26—#30 合入 main，用 merge commit 保留各步骤的原始提交，不 squash/rebase（[AGENTS.md](../../AGENTS.md) 的提交边界规则）。
+- **决定：** 合入后 README、PROGRESS、USAGE、讲解提纲与 REQUIREMENTS 改写为“已在 main、尚未发版”；v0.2.0 Release 不含编排，是否发 v0.3.0 由后续任务决定。修订 M4-④ 中“开发分支，待评审合并”的口径。
+- **决定：** 用回归测试挡住这类漂移：`src/app/orchestrate-cli.ts` 存在时，上述五份用户文档里提到编排的行不得再写“尚未合入/待评审合并/main 尚未包含入口”等。测试以源码事实为条件，入口被移除时自动失效，而不是永久黑名单。
+- **代码锚点：** 无运行时代码改动。
+- **测试锚点：** `test/progress-sync.test.ts` 的“orchestrate 子命令已在源码中时，用户文档不再写编排未合入 main”。
+
 ## M4-④ 里程碑收尾与文档口径
 
 - **决定：** M4 以**离线部分完成**收口；付费小批次保持未执行，文档只写「需单独授权、尚无结果」，不预留结果数字或占位结论。
-- **决定：** README 把编排能力放在“开发分支，待评审合并”下，并明确 main 尚未包含入口；不把分支能力描述成 main 已交付。
+- **决定：** README 把编排能力放在“开发分支，待评审合并”下，并明确 main 尚未包含入口；不把分支能力描述成 main 已交付。（合入 main 后由上一节修订。）
 - **决定：** 证据只引用本步实际命令输出（`pnpm check`、`pnpm test`、`pnpm lint`、三个演示与 `eval:orchestrate --validate-only`），不复用 M1–M3 的历史数字；`test` 的 platform-skipped 仍按平台条件计入而非声称本机通过。
 - **代码锚点：** 无运行时代码改动；文档与证据在 `docs/superagent/`、`README.md`、`PROGRESS.md`。
 - **测试锚点：** M4-④ 的验证命令与结果见 [CHANGES.md](CHANGES.md)。

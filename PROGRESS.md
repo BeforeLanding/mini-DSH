@@ -5,8 +5,8 @@
 ## 当前状态
 
 - **交付范围：单 Agent、本地工作区。** TypeScript / Cordis CLI 保留文件与 Bash 工具、项目规则、版本化检查证据、上下文投影/压缩/回读、预算、JSONL 持久化与恢复、只读日志检查、显式配置 MCP。
-- **多 Agent 编排 M1–M4 已在 `feat/orchestration-m4` 完成（2026-11-08），main 尚未合并。** 组合夹具、单/并行离线演示、四臂离线装配与 `--validate-only` 零付费校验已完成；真实模型小批次未获授权、未执行。验证命令与边界见 [CHANGES.md](docs/superagent/CHANGES.md)。
-- **只读委派已回到 main（默认关闭，2026-11-06，M0）；项目记忆仍只在独立分支。** `MINI_DSH_DELEGATION=read-only` 时主 Agent 可调用 `delegate_tasks`，只读子 Agent 并发 2、共用任务组预算、崩溃后不重跑；关闭时工具 schema 哈希与 v0.2.0 相同（测试钉住）。记忆随 [feat/memory-team-eval-v2@2f2dca9](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2) 暂不合入。后续多 Agent 编排按 [docs/superagent/DEVELOPMENT.md](docs/superagent/DEVELOPMENT.md) 的 M1—M4 推进。
+- **多 Agent 编排 M1–M4 已合入 main（2026-11-08，PR #27–#30），尚未发版。** 组合夹具、单/并行离线演示、四臂离线装配与 `--validate-only` 零付费校验已完成；真实模型小批次未获授权、未执行。验证命令与边界见 [CHANGES.md](docs/superagent/CHANGES.md)。
+- **只读委派已回到 main（默认关闭，2026-11-06，M0）；项目记忆仍只在独立分支。** `MINI_DSH_DELEGATION=read-only` 时主 Agent 可调用 `delegate_tasks`，只读子 Agent 并发 2、共用任务组预算、崩溃后不重跑；关闭时工具 schema 哈希与 v0.2.0 相同（测试钉住）。记忆随 [feat/memory-team-eval-v2@2f2dca9](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2) 暂不合入。多 Agent 编排 M1—M4 已按 [docs/superagent/DEVELOPMENT.md](docs/superagent/DEVELOPMENT.md) 完成离线部分并合入 main。
 - **SWE 实验：结果入 main，运行器留分支。** main 保留旧版预注册与零模型评分通道及移植后的组件；三臂运行器、manifest 与完整过程在 [improve/swe-harness-advantage-20261031@b4b7c43](https://github.com/BeforeLanding/mini-DSH/tree/b4b7c43)，结果摘要见 [SWE-BENCH-RESULTS](docs/SWE-BENCH-RESULTS.md)。更早的正式四臂实现在 [feat/swebench-formal-results@dc7e659](https://github.com/BeforeLanding/mini-DSH/tree/dc7e659883b9729f6f10510d5067f31a42361fee)，不重新合入 main。
 - **SWE 长单任务组件已并入 main，默认关闭（2026-11-01）。** 观测遮蔽、预算提示、收尾检查与复核、紧凑命令结果、宿主提示从 SWE 分支移植；`CLI_BUDGET` 与默认能力清单不变，CLI 用户可经 `MINI_DSH_BUDGET` 打开前三项。SWE 运行器与原始证据仍在分支。
 - **组件开发评测已收口。** 三组件离线对照与实际开发消融均有记录；真实归因均为 `inconclusive`，摘要后裁剪继续默认关闭。历史样本不支撑泛化或效率收益主张，见 [开发批结果](docs/context-budget/COMPONENT-LOO-PAID-RESULT.md)。
@@ -26,7 +26,7 @@
 1. 以 [v0.2.0 Release](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.2.0) 交付；源码验收见 [DELIVERY-20261030](docs/DELIVERY-20261030.md)，其后的演示标题与文档改动由上述 CI 覆盖。后续再有代码变化时重新验收并另发版本，不继续复用旧绿灯。
 2. 核对本地简历锚点与五题问答；个人实际贡献和 AI 辅助范围由本人确认，不根据 Git 作者名代作身份判断。
 3. 完整讲解视频待用户安排录制；记忆/协作后续开发、付费实验和 npm 发布由后续明确任务决定。
-4. 多 Agent 编排 M1–M3 分别在 `feat/orchestration-m1`/`m2`/`m3` 完成；M4（组合夹具、单/并行演示、四臂离线装配与 `--validate-only`）已在 `feat/orchestration-m4` 完成（2026-11-08），整条分支链待评审合并，main 尚未包含编排入口。验收证据见 [docs/superagent/CHANGES.md](docs/superagent/CHANGES.md)。真实模型四臂小批次必须先取得对该次批次的单独授权，且结果另成证据提交。
+4. 多 Agent 编排 M0–M4 的离线部分已经由 PR #26–#30 依次合入 main（2026-11-08）：组合夹具、单/并行/崩溃演示、四臂离线装配与 `--validate-only`。当前 Release 仍是 v0.2.0，不含编排；是否另发版本由后续任务决定。验收证据见 [docs/superagent/CHANGES.md](docs/superagent/CHANGES.md)。真实模型四臂小批次必须先取得对该次批次的单独授权，且结果另成证据提交。
 
 ## 历史记录
 
