@@ -1,5 +1,27 @@
 # 多 Agent 编排改动与证据
 
+## M4-⑤-3 `--execute` 闸门、协议探测与停批规则（2026-11-08）
+
+**改动**
+
+- `pnpm eval:orchestrate --execute --manifest FILE --evidence-root DIR --max-usd N`：唯一会付费的模式。模型只取自冻结 manifest（传 `--model` 或 `MINI_DSH_EVAL_MODEL` 即拒绝）；`--max-usd` 只接受十进制正数。
+- 闸门全部在创建证据目录、发出任何请求之前完成：manifest 协议、价格、矩阵 digest、执行顺序与金额上限按当前代码重算后逐项一致；工作树干净且 HEAD 等于冻结 commit；`--max-usd` 不低于“探测 + 一个 run”的预留、不高于冻结的批次上限；`DEEPSEEK_API_KEY` 与 `MINI_DSH_V2_RUNTIME` 存在且隔离 preflight 通过；证据目录尚不存在。
+- 协议探测与 eval-v2-run 同形：直连 `max_tokens 16` 校验服务端回显等于 manifest 的 `echoedModel`，流式一次校验 provider usage；失败写 `probe-error.json` 与 `stopReason=protocol_probe_failed` 的报告，不跑任何 run。探测预留整额计入已花费，批次守卫只拿剩余额度。
+- 适配器与 eval-v2-run 同形（显式模型列表与 1M 窗口）；thinking 取适配器缺省，与生产 CLI 相同。真实依赖只在 CLI 中装配，测试全部注入脚本依赖。
+
+**验证（本步实际输出）**
+
+```text
+node --test dist/test/eval-orchestrate*.test.js   # tests 21 / pass 21 / fail 0
+#   每个闸门拒绝时证据目录不存在、探测与模型调用均为 0；探测回显不符即停批且无 run；
+#   探测通过后第一个 run 出现未知用量即停批，报告 executedRuns=1、observedModel 已记录
+pnpm check                     # syntax ok: 267 files
+pnpm test                      # tests 682 / pass 652 / fail 0 / 30 platform-skipped
+pnpm lint                      # 298 files, no fixes applied
+```
+
+本步没有发出任何真实请求；付费执行仍需用户对该次批次授权。
+
 ## M4-⑤-2 四臂执行器、并发安全金额守卫、按工作区的隔离与 `--rehearse`（2026-11-08）
 
 代码在 `570bcd5`；该提交漏带本条证据，由后续文档提交补上（不 amend 已推送提交）。

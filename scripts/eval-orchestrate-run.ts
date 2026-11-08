@@ -5,13 +5,16 @@ import type { HarnessAdapter } from '../src/app/create-harness.js'
 import {
   rehearsalAdapter, rehearsalTasks, runBatch, type BatchOutcome, type CommandRunner, type RunResult,
 } from './eval-orchestrate-arms.js'
-import { batchExecutionOrder, type BatchManifest } from './eval-orchestrate-batch.js'
-import type { ArmId, RunSpec } from './eval-orchestrate.js'
+import {
+  assertBatchPrice, batchExecutionOrder, batchProtocol, batchReserveUsd, gitState, matrixDigest, type BatchManifest,
+} from './eval-orchestrate-batch.js'
+// 与 CLI 入口互相导入：这里只在函数体内使用 assembleRunMatrix，模块求值顺序不影响。
+import { assembleRunMatrix, type ArmId, type RunSpec } from './eval-orchestrate.js'
 import { createIsolatedCommandRunner, createIsolationBackend } from './eval-v2-isolation.js'
 import { orchestrationFixtureIds } from './orchestration-fixtures.js'
 
-// 批次执行入口（TASKS M4-⑤-2/⑤-3）：隔离 preflight、演练与报告。真实模型执行在 ⑤-3 接入；本文件的
-// 演练只注入脚本模型，provider 请求恒为 0。
+// 批次执行入口（TASKS M4-⑤-2/⑤-3）：隔离 preflight、演练、付费执行与报告。演练只注入脚本模型（provider
+// 请求恒为 0）；付费执行的适配器与探测由 CLI 注入，本模块不读 .env、不直接发请求。
 
 // 与 eval-v2-run 的 preflight 同一检查（Linux Node v22.22.1 可用、宿主哨兵文件不可读）。不直接改动
 // eval-v2-run：它在 eval-v2 的冻结文件清单里，改动会使旧 manifest 失效。
@@ -116,4 +119,84 @@ export async function rehearseBatch({ manifest, specs, evidenceRoot, runtimeRoot
   await writeBatchReport(root, report)
   const passed = outcome.stopReason === 'completed' && outcome.runs.length === specs.length && outcome.runs.every(run => run.hidden.passed)
   return { evidenceRoot: root, providerRequests: 0 as const, scriptedRequests: adapter.requests(), passed, report }
+}
+
+// ---------- 付费执行（TASKS M4-⑤-3）----------
+// 只在用户对**该次批次**授权后运行；复跑是新批次。全部闸门在创建证据目录与发出任何请求之前完成。
+export interface ExecuteDeps {
+  env: NodeJS.ProcessEnv
+  repository: string
+  createAdapter: (apiKey: string, modelId: string) => HarnessAdapter
+  directProbe: (apiKey: string, modelId: string) => Promise<{ model?: string; usage?: unknown; finishReason?: string }>
+  preflight: (runtimeRoot: string) => Promise<string>
+  runnerFactory: (runtimeRoot: string) => (workspace: string) => CommandRunner
+  onProgress?: (line: string) => void
+}
+export interface ExecuteOptions { manifestPath: string; evidenceRoot: string; maxUsd: number }
+
+const close = (a: number, b: number) => Math.abs(a - b) < 1e-9
+// manifest 必须与当前代码重新装配出的矩阵逐项一致：digest、执行顺序、金额上限；HEAD 干净且等于冻结 commit。
+export async function verifyManifestForExecute(manifestPath: string, repository: string) {
+  const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as BatchManifest
+  if (manifest.protocol !== batchProtocol) throw new Error(`manifest protocol must be ${batchProtocol}`)
+  assertBatchPrice(manifest.price)
+  const specs = assembleRunMatrix({ model: manifest.model })
+  if (matrixDigest(specs) !== manifest.matrixDigest) throw new Error('manifest matrix digest does not match the current run matrix')
+  const ordered = batchExecutionOrder(specs)
+  if (JSON.stringify(ordered.map(spec => spec.runId)) !== JSON.stringify(manifest.runOrder)) throw new Error('manifest run order does not match')
+  const reserve = batchReserveUsd(specs, manifest.price, manifest.maxOutputTokens)
+  if (!close(reserve.batchUsd, manifest.reserve.batchUsd) || !close(reserve.perRunUsd, manifest.reserve.perRunUsd)) throw new Error('manifest cost ceiling does not match the frozen price and budget')
+  const git = gitState(repository)
+  if (git.dirty) throw new Error('refusing a paid batch from a dirty working tree')
+  if (git.head !== manifest.gitCommit) throw new Error(`HEAD ${git.head} is not the frozen commit ${manifest.gitCommit}`)
+  return { manifest, ordered }
+}
+
+export async function executeBatch(options: ExecuteOptions, deps: ExecuteDeps) {
+  const { manifest, ordered } = await verifyManifestForExecute(options.manifestPath, deps.repository)
+  const { probeUsd, perRunUsd, batchUsd } = manifest.reserve
+  if (!Number.isFinite(options.maxUsd) || options.maxUsd < probeUsd + perRunUsd) throw new Error(`--max-usd must cover the probe and one run: at least $${(probeUsd + perRunUsd).toFixed(2)}`)
+  if (options.maxUsd > batchUsd + 1e-9) throw new Error(`--max-usd exceeds the frozen batch ceiling $${batchUsd.toFixed(2)}`)
+  const apiKey = deps.env.DEEPSEEK_API_KEY
+  if (!apiKey) throw new Error('DEEPSEEK_API_KEY is required for a paid batch')
+  const runtimeRoot = deps.env.MINI_DSH_V2_RUNTIME
+  if (!runtimeRoot) throw new Error('MINI_DSH_V2_RUNTIME is required: paid runs execute Bash only inside the Linux isolation')
+  const isolation = await deps.preflight(runtimeRoot)
+  const root = await createEvidenceRoot(options.evidenceRoot)
+  await fs.writeFile(path.join(root, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' })
+  await fs.copyFile(path.join(deps.repository, 'package.json'), path.join(root, 'package.json')).catch(() => {})
+
+  const modelId = manifest.model.replace(/^deepseek\//, '')
+  const adapter = deps.createAdapter(apiKey, modelId)
+  const startedAt = new Date().toISOString()
+  const baseReport = {
+    mode: 'execute' as const, protocol: manifest.protocol, model: manifest.model, isolation, startedAt, plannedRuns: ordered.length,
+    notes: [`maxUsd=${options.maxUsd}`, 'USD is estimated at peak prices and is an upper bound', ...manifest.notes],
+  }
+  let observedModel: string | undefined
+  try {
+    const direct = await deps.directProbe(apiKey, modelId)
+    if (direct.model !== manifest.echoedModel || !direct.usage) throw new Error(`model probe mismatch: expected ${manifest.echoedModel}, observed ${String(direct.model)}`)
+    const streamed = await adapter.chat({ model: modelId, maxOutputTokens: 1024, messages: [{ role: 'user', content: 'reply with the single word: ok' }] })
+    if (streamed.usage?.source !== 'provider' || streamed.complete === false) throw new Error('streaming model probe returned no complete provider usage')
+    observedModel = streamed.observedModel
+    await fs.writeFile(path.join(root, 'probe.json'), `${JSON.stringify({ requestedModel: modelId, echoedModel: direct.model, directUsage: direct.usage, directFinishReason: direct.finishReason, streamedUsage: streamed.usage, streamedObservedModel: streamed.observedModel, reservedUsd: probeUsd }, null, 2)}\n`, { flag: 'wx' })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await fs.writeFile(path.join(root, 'probe-error.json'), `${JSON.stringify({ error: message, reservedUsd: probeUsd })}\n`, { flag: 'wx' })
+    await fs.writeFile(path.join(root, 'report.json'), `${JSON.stringify({ ...baseReport, finishedAt: new Date().toISOString(), stopReason: 'protocol_probe_failed', executedRuns: 0, spentPeakUsd: probeUsd, error: message }, null, 2)}\n`, { flag: 'wx' })
+    return { evidenceRoot: root, stopReason: 'protocol_probe_failed' as const, passed: false }
+  }
+  // 探测预留整额计入已花费；批次守卫只拿剩余额度。
+  const outcome = await runBatch({
+    specs: ordered, evidenceRoot: root, adapter, price: manifest.price, maxUsd: options.maxUsd - probeUsd,
+    commandRunnerFactory: deps.runnerFactory(runtimeRoot), ...(deps.onProgress ? { onProgress: deps.onProgress } : {}),
+  })
+  const report: BatchReport = {
+    ...baseReport, ...(observedModel ? { observedModel } : {}), finishedAt: new Date().toISOString(),
+    stopReason: outcome.stopReason, executedRuns: outcome.runs.length, calls: outcome.calls,
+    spentPeakUsd: probeUsd + outcome.spentUsd, summary: summarizeRuns(outcome.runs), runs: outcome.runs,
+  }
+  await writeBatchReport(root, report)
+  return { evidenceRoot: root, stopReason: outcome.stopReason, passed: outcome.stopReason === 'completed', report }
 }
