@@ -1,5 +1,34 @@
 # 多 Agent 编排改动与证据
 
+## M4-⑤-2 四臂执行器、并发安全金额守卫、按工作区的隔离与 `--rehearse`（2026-11-08）
+
+代码在 `570bcd5`；该提交漏带本条证据，由后续文档提交补上（不 amend 已推送提交）。
+
+**改动**
+
+- `scripts/eval-orchestrate-arms.ts`：
+  - 金额守卫与 `createSmokeAmountGuard` 同一预留口径（满 1M 上下文输入 + 满输出），另计**在途预留**——R 的两个 worker 并发请求时不会合计越过上限；缺 provider usage 后全部拒发。
+  - 逐 run 计量在适配器层统一数请求、provider token、工具调用与 Bash 次数、峰值价 USD，四臂同一口径。
+  - 按命令 cwd 向上找到所属 git 工作区（`.git` 目录或 worktree 的 `.git` 文件），各建一个隔离 runner——编排只接受一个共享 runner，而 bwrap runner 绑定单一工作区。
+  - S/D 走 `createHarness` + 单 Agent（D 加只读委派与同额任务组预算）；R/R-serial 走 `orchestrate()` 固定计划、`maxWorkers` 2/1、`plannerShare = 0`、`fixReserveTokens = 0`，写入与 Bash 自动批准，不提供 `decide`（冲突即停为需人工，计入该臂）。结论一律由隐藏验收器给出。
+  - 批次按 manifest 顺序串行；金额无法预留、未知用量、基础设施错误立即停批。
+- `scripts/eval-orchestrate-run.ts`：隔离 preflight（与 eval-v2-run 同检查；不改 eval-v2-run，它在 eval-v2 的冻结清单里）、批次报告（逐 (任务, 重复) 配对 + 按臂汇总，不做显著性判断）、证据目录一次一用、`--rehearse`。
+- `pnpm eval:orchestrate --rehearse [--evidence-root DIR]`：脚本模型写参考解并经隔离 runner 跑冒烟检查；给出 `MINI_DSH_V2_RUNTIME` 时用 WSL bwrap，否则在报告中标明 Bash 未隔离。
+
+**验证（本步实际输出）**
+
+```text
+MINI_DSH_V2_RUNTIME='D:\Agent\tmp\nx42-runtime\unpack' node dist/scripts/eval-orchestrate.js --rehearse --evidence-root D:/Agent/tmp/orch-rehearse-01
+# passed=true; providerRequests=0; scriptedRequests=72; isolation=wsl-bwrap; stopReason=completed; executedRuns=16
+# 隐藏验收 S 4/4、D 4/4、R 4/4、R-serial 4/4；会话中 24 次 Bash 全部 isError=false，抽查为沙箱内 exit 0
+node --test dist/test/eval-orchestrate*.test.js   # pass 17 / fail 0
+pnpm check                     # syntax ok: 266 files
+pnpm test                      # tests 678 / pass 648 / fail 0 / 30 platform-skipped
+pnpm lint                      # 297 files, no fixes applied
+```
+
+演练证明的是管线（工作区、git/worktree、隔离、守卫、证据与报告），不是模型能力；脚本模型的 usage 是合成值，只用于驱动守卫。
+
 ## 修复：root/start 拒绝 `fixReserveTokens = 0`（2026-11-08）
 
 **现象：** `resolveRootBudget` 有意允许 `fixReserveTokens` 为 0（`src/orchestration/orchestrator.ts`），但 `root/start` 事件校验（`src/orchestration/validation.ts`）要求它 ≥ 1。于是 `--root-budget '{"fixReserveTokens":0}'` 通过入口校验，根却在写第一条事件时失败（`budget.fixReserveTokens must be an integer >= 1`）。在为付费批次装配 R 臂时发现。

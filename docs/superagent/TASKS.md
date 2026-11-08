@@ -80,8 +80,9 @@
   - [x] ⑤-1 批次 manifest、成本上限与 `--plan-only`
     - 验收：manifest 冻结 git commit、价格快照、模型与矩阵 digest，`wx` 不覆盖；上限按每 run `1M × 最高单价 × 1.2 + 满额末请求` × 16 + 探测预留计算；provider 请求 0。
     - 证据：`scripts/eval-orchestrate-batch.ts`、`scripts/eval-orchestrate.ts`、`test/eval-orchestrate-batch.test.ts`；命令见 CHANGES 的 M4-⑤-1。
-  - [ ] ⑤-2 四臂执行器、并发安全金额守卫、按 worktree 的隔离包装与 `--rehearse`
+  - [x] ⑤-2 四臂执行器、并发安全金额守卫、按 worktree 的隔离包装与 `--rehearse`
     - 验收：守卫计入在途预留，两个并发请求不能合计越过上限；缺 provider usage 后全部拒发；`--rehearse` 以脚本模型跑完 16 runs、隐藏验收全过、provider 请求 0。
+    - 证据：`scripts/eval-orchestrate-arms.ts`、`scripts/eval-orchestrate-run.ts`、`test/eval-orchestrate-arms.test.ts`（提交 `570bcd5`）；命令见 CHANGES 的 M4-⑤-2。
   - [ ] ⑤-3 `--execute` 闸门、协议探测、停批规则与报告
     - 验收：缺参、已存在的证据目录、脏树或 HEAD 与 manifest 不符均拒绝；未知用量、基础设施错误、金额无法预留时立即停批；全部用脚本模型测试。
   - [ ] ⑤-4 文档与授权申请（命令原文、模型、价格快照、`--max-usd`）
