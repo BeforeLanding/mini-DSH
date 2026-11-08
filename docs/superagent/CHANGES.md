@@ -1,5 +1,35 @@
 # 多 Agent 编排改动与证据
 
+## v0.3.0 发布（2026-11-08）
+
+**改动**
+
+- `package.json` 0.2.0 → 0.3.0；README、PROGRESS、USAGE、RECRUITER_WALKTHROUGH 与 REQUIREMENTS 的 Release 链接与编排状态改为 v0.3.0。
+- CI 仓库外安装 job：安装后的 `--help` 须含 `mini-dsh orchestrate run`，`orchestrate list` 无状态时须输出 `no orchestrations`。
+- `test/progress-sync.test.ts`：新增“尚未发版”护栏，并把编排行的识别扩到 `orchestrate` 与里程碑区间。
+
+**验证（本步实际输出）**
+
+```text
+# 先证红（版本已改为 0.3.0、文档未改）
+node --test dist/test/progress-sync.test.js   # 2 fail：Release 链接 4 处仍为 v0.2.0；“尚未发版”护栏命中 8 行
+# 改文档后
+node --test dist/test/progress-sync.test.js dist/test/docs-links.test.js   # tests 6 / pass 6 / fail 0
+pnpm check                     # syntax ok: 261 files
+pnpm test                      # tests 665 / pass 635 / fail 0 / 30 platform-skipped
+pnpm lint                      # 292 files, no fixes applied
+# 按 CI 步骤：pnpm pack → 仓库外含空格目录 pnpm add --ignore-scripts
+mini-dsh --version             # 0.3.0
+mini-dsh orchestrate list      # no orchestrations
+mini-dsh demo fix              # demo result: PASS
+tarball                        # 184 files；dist/src/orchestration/ 34 个；无 test/docs/.env/samples
+pnpm audit --prod（安装后）    # No known vulnerabilities found
+```
+
+**未包含**
+
+- npm 发布；真实模型四臂付费批次（仍需对该次批次单独授权）。
+
 ## 合入 main 与文档同步（2026-11-08）
 
 **改动**

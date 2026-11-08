@@ -2,10 +2,18 @@
 
 **非规范性说明：** 方向性决策与数值以 [DEVELOPMENT.md](DEVELOPMENT.md) §2.8 为准；本文件记录开发过程中落实这些决策的具体选择、代码锚点与测试锚点，避免把实现事实只留在提交信息里。
 
+## v0.3.0 发布（2026-11-08）
+
+- **决定：** 编排合入 main 后按次版本号发布 v0.3.0：新增 `orchestrate` 子命令与可选只读委派，默认行为（单 Agent、委派关闭）与 v0.2.0 相同。修订上一节“是否发 v0.3.0 由后续任务决定”。
+- **决定：** CI 的仓库外安装 job 增加两项检查：tarball 安装后的 `--help` 含 `orchestrate run`、`orchestrate list` 无状态时输出 `no orchestrations`。证明编排随包发布，而不是只在源码里可用。
+- **决定：** 文档护栏扩到“尚未发版”：`package.json` 版本 ≥ 0.3.0 且源码含 `orchestrate` 时，用户文档中提到编排的行不得再写“尚未发版 / Release 不含 / 需从源码运行”。主语识别包括“编排”、`orchestrate` 与里程碑区间（M1–M4），因为初版只认“编排”而漏掉了两行。
+- **代码锚点：** 无运行时代码改动；`package.json`、`.github/workflows/ci.yml`。
+- **测试锚点：** `test/progress-sync.test.ts` 的“package.json 版本已含编排时，用户文档不再写编排尚未发版”。
+
 ## 合入 main 后的文档口径（2026-11-08）
 
 - **决定：** M0—M4 的分支链按里程碑分别以 PR #26—#30 合入 main，用 merge commit 保留各步骤的原始提交，不 squash/rebase（[AGENTS.md](../../AGENTS.md) 的提交边界规则）。
-- **决定：** 合入后 README、PROGRESS、USAGE、讲解提纲与 REQUIREMENTS 改写为“已在 main、尚未发版”；v0.2.0 Release 不含编排，是否发 v0.3.0 由后续任务决定。修订 M4-④ 中“开发分支，待评审合并”的口径。
+- **决定：** 合入后 README、PROGRESS、USAGE、讲解提纲与 REQUIREMENTS 改写为“已在 main、尚未发版”；v0.2.0 Release 不含编排，是否发 v0.3.0 由后续任务决定（已由上一节的 v0.3.0 发布修订）。修订 M4-④ 中“开发分支，待评审合并”的口径。
 - **决定：** 用回归测试挡住这类漂移：`src/app/orchestrate-cli.ts` 存在时，上述五份用户文档里提到编排的行不得再写“尚未合入/待评审合并/main 尚未包含入口”等。测试以源码事实为条件，入口被移除时自动失效，而不是永久黑名单。
 - **代码锚点：** 无运行时代码改动。
 - **测试锚点：** `test/progress-sync.test.ts` 的“orchestrate 子命令已在源码中时，用户文档不再写编排未合入 main”。

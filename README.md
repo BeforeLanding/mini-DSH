@@ -36,7 +36,7 @@ mini-DSH 使用 TypeScript / Cordis 构建，内置 DeepSeek 适配器，适合�
 
 ## 快速开始
 
-需要 **Node.js ≥ 22、pnpm 11.22.0 和 Bash**。Windows 使用 Git for Windows 自带的 Bash；Linux/macOS 使用 PATH 中的 `bash`。可从源码使用，也可安装 [v0.2.0 Release](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.2.0) 附带的 tarball（安装步骤见[使用指南](docs/USAGE.md#本地打包与安装)）；尚未发布到 npm。标为 `shell` 的命令在 PowerShell 与 bash 中相同；只适用于一种 shell 的写法分别给出。
+需要 **Node.js ≥ 22、pnpm 11.22.0 和 Bash**。Windows 使用 Git for Windows 自带的 Bash；Linux/macOS 使用 PATH 中的 `bash`。可从源码使用，也可安装 [v0.3.0 Release](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.3.0) 附带的 tarball（安装步骤见[使用指南](docs/USAGE.md#本地打包与安装)）；尚未发布到 npm。标为 `shell` 的命令在 PowerShell 与 bash 中相同；只适用于一种 shell 的写法分别给出。
 
 ### 1. 获取并构建
 
@@ -107,11 +107,11 @@ pnpm start
 - `pnpm demo:orchestrate-parallel`：两个 worker 并行，第三个子任务在第二波次读取整合后的依赖产物。
 - `pnpm demo:orchestrate-crash`：worker 运行中模拟崩溃，`resume` 采用已完成结果、确认未知用量并为未知副作用要求人工决定。
 
-后三个演示属于多 Agent 编排（已在 main，尚未包含在任何 Release 中）；见下方的[多 Agent 编排](#多-agent-编排)。
+后三个演示属于多 Agent 编排（自 v0.3.0 起包含）；见下方的[多 Agent 编排](#多-agent-编排)。
 
 ## 多 Agent 编排
 
-M1–M4 已经由 PR #27–#30 合入 main（v0.2.0 Release 不含，需从源码运行）；领域契约见 [DEVELOPMENT.md](docs/superagent/DEVELOPMENT.md)，逐项命令与证据见 [CHANGES.md](docs/superagent/CHANGES.md)。
+M1–M4 已经由 PR #27–#30 合入 main，自 v0.3.0 起随 Release tarball 提供 `mini-dsh orchestrate`；领域契约见 [DEVELOPMENT.md](docs/superagent/DEVELOPMENT.md)，逐项命令与证据见 [CHANGES.md](docs/superagent/CHANGES.md)。
 
 在同一根任务内，宿主校验计划 → 每个 worker 一个独立 Harness + git worktree → 宿主提交、写集检查、按序 cherry-pick 整合 → 整合后复验（证据绑定 tree SHA）。单 Agent 与只读委派的既有行为不变。
 
@@ -129,7 +129,7 @@ mini-dsh orchestrate resume <rootId> [--accept-unknown-usage] [--retry <subtaskI
 
 ## 当前状态
 
-已发布 [v0.2.0](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.2.0)。已实现源码 CLI、本地 tarball 安装、DeepSeek 适配器、文件/Bash 工具、上下文与预算管理、持久化恢复和只读日志检查。CI 覆盖 Ubuntu / Windows × Node.js 22 / 24，并包含 Linux bubblewrap 隔离测试和仓库外安装检查。
+已发布 [v0.3.0](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.3.0)。已实现源码 CLI、本地 tarball 安装、DeepSeek 适配器、文件/Bash 工具、上下文与预算管理、持久化恢复和只读日志检查。CI 覆盖 Ubuntu / Windows × Node.js 22 / 24，并包含 Linux bubblewrap 隔离测试和仓库外安装检查。
 
 ### 已知边界
 
@@ -139,7 +139,7 @@ mini-dsh orchestrate resume <rootId> [--accept-unknown-usage] [--retry <subtaskI
 - **预算：** token 为估算值，执行预算不等于费用硬上限；`/compact` 可能请求模型。
 - **验收：** 任务能否完成取决于模型与项目；`/report` 记录检查证据，验收仍由使用者判断。
 - **发布：** 以 GitHub Release 提供 tarball，尚未发布 npm；macOS 安装未验证。ECS 部署仅保留[手动入口](docs/ECS_DEPLOYMENT.md)。
-- **范围：** 演示与离线回归验证的是机制；模型评测只有下面的 SWE-bench 对照一项，其运行器与完整过程在[实验分支](https://github.com/BeforeLanding/mini-DSH/tree/improve/swe-harness-advantage-20261031)。只读委派（默认关闭）已在 main；项目记忆仍只在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2)，不属于 main 交付范围。多 Agent 编排的 M1–M4 已在 main，但尚未发版；其真实模型四臂对照未执行，目前只有离线装配与机制演示。
+- **范围：** 演示与离线回归验证的是机制；模型评测只有下面的 SWE-bench 对照一项，其运行器与完整过程在[实验分支](https://github.com/BeforeLanding/mini-DSH/tree/improve/swe-harness-advantage-20261031)。只读委派（默认关闭）已在 main；项目记忆仍只在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2)，不属于 main 交付范围。多 Agent 编排的 M1–M4 自 v0.3.0 起发布；其真实模型四臂对照未执行，目前只有离线装配与机制演示。
 
 ## 评测
 

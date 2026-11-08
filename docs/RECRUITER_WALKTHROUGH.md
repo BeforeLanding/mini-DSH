@@ -1,6 +1,6 @@
 # mini-DSH：五分钟项目讲解
 
-本页是讲解提纲，只讲工程线索与取舍；模型评测只有 [SWE-bench 三臂对照](SWE-BENCH-RESULTS.md) 一项，见该页；项目介绍见 [README](../README.md)，完整安装、配置和命令说明见 [使用指南](USAGE.md)。主分支以单 Agent 操作单个本地工作区，目标是让编辑、验证、预算停止与恢复留下可检查的事件证据。多 Agent 编排（M1–M4）已合入 main（尚未发版）；其契约与离线证据见 [docs/superagent](superagent/DEVELOPMENT.md)，真实模型四臂批次未执行。
+本页是讲解提纲，只讲工程线索与取舍；模型评测只有 [SWE-bench 三臂对照](SWE-BENCH-RESULTS.md) 一项，见该页；项目介绍见 [README](../README.md)，完整安装、配置和命令说明见 [使用指南](USAGE.md)。主分支以单 Agent 操作单个本地工作区，目标是让编辑、验证、预算停止与恢复留下可检查的事件证据。多 Agent 编排（M1–M4）已合入 main，随 v0.3.0 发布；其契约与离线证据见 [docs/superagent](superagent/DEVELOPMENT.md)，真实模型四臂批次未执行。
 
 ## 五分钟演示顺序
 
@@ -36,8 +36,8 @@
 
 ## 已知限制
 
-- 主分支仍是单 Agent、单本地工作区；应用层路径和命令闸门不等于操作系统隔离。多 Agent 编排已在 main 但尚未发版，其真实模型四臂对照未授权、未执行。
-- 本地 tarball 安装在 Windows 验证，Ubuntu 由 CI 的仓库外安装 job 验证；macOS 未验证；以 GitHub Release 提供 v0.2.0 tarball，npm 未发布。真实交互需要模型密钥，零付费演示使用脚本化响应。
+- 默认仍是单 Agent、单本地工作区；应用层路径和命令闸门不等于操作系统隔离。多 Agent 编排需显式运行 `orchestrate`，其真实模型四臂对照未授权、未执行。
+- 本地 tarball 安装在 Windows 验证，Ubuntu 由 CI 的仓库外安装 job 验证；macOS 未验证；以 GitHub Release 提供 v0.3.0 tarball，npm 未发布。真实交互需要模型密钥，零付费演示使用脚本化响应。
 - 模型评测只有 SWE-bench 三臂对照一项，结论须连同约 2.6 倍成本与未做逐项消融一起陈述，见 [SWE-BENCH-RESULTS](SWE-BENCH-RESULTS.md)。更早的开发集探索不构成可靠完成率或泛化提升，也不能把组合策略结果单独归因于稳定前缀或主动压缩；公开仓库只有脱敏摘要，原始事件仅本地保存。协议边界见 [EVALUATION-SWEBENCH](EVALUATION-SWEBENCH.md)。
 
 ## 简历描述草案
