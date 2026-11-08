@@ -20,6 +20,24 @@ export type GroupBudgetEvent =
   | { type: 'group/tool-admitted'; data: { groupId: string; key: string; agentId: string; sessionId: string; runId: string; toolCallId: string } }
 type Reservation = GroupReservation & { status: 'reserved' | 'dispatched' | 'released' | 'settled' | 'unknown'; usage?: Usage }
 type Sessions = Pick<SessionRuntime, 'get' | 'latestRun' | 'append' | 'flush'>
+// 任务组事件的持久化位置：会话日志（单 Agent 委派）或独立的编排日志（多 Agent 编排）。
+// append 返回时必须已落盘；read 只返回本组已可见的 group/* 事件。
+export interface GroupJournal {
+  read(): readonly GroupBudgetEvent[]
+  append(event: GroupBudgetEvent): Promise<void>
+}
+export class SessionGroupJournal implements GroupJournal {
+  constructor(readonly sessions: Sessions, readonly rootSessionId: string, readonly rootTaskId: string) {}
+  read() { return this.sessions.get(this.rootSessionId).events.filter(event => event.taskId === this.rootTaskId && event.type.startsWith('group/')) as unknown as GroupBudgetEvent[] }
+  #scope() {
+    const state = this.sessions.latestRun(this.rootSessionId)
+    if (state?.taskId === this.rootTaskId) return state
+    const original = [...this.sessions.get(this.rootSessionId).events].reverse().find(event => event.type === 'run/start' && event.taskId === this.rootTaskId)
+    if (original?.type !== 'run/start') throw new Error('root task scope is unavailable')
+    return original.data.state
+  }
+  async append(event: GroupBudgetEvent) { this.sessions.append(this.rootSessionId, event.type, event.data, this.#scope()); await this.sessions.flush(this.rootSessionId) }
+}
 export function groupPolicy(overrides: Partial<TaskGroupPolicy> = {}): Readonly<TaskGroupPolicy> {
   const policy = { ...TASK_GROUP_POLICY, ...overrides }
   for (const [key, value] of Object.entries(policy)) if (!(key in TASK_GROUP_POLICY) || !Number.isSafeInteger(value) || value < (key === 'maxWallDurationMs' ? 1 : 0)) throw new Error(`invalid task group policy: ${key}`)
@@ -35,14 +53,17 @@ export class TaskGroupBudgetCoordinator {
   #abort = new AbortController()
   #signal?: AbortSignal
   readonly start: GroupStart
-  private constructor(readonly sessions: Sessions, readonly rootSessionId: string, readonly rootTaskId: string, start: GroupStart, private now: () => number) { this.start = Object.freeze({ ...start, policy: groupPolicy(start.policy) }) }
-  static async open(sessions: Sessions, rootSessionId: string, rootTaskId: string, overrides: Partial<TaskGroupPolicy> = {}, now = Date.now) {
-    const events = sessions.get(rootSessionId).events.filter(event => event.taskId === rootTaskId)
+  private constructor(readonly journal: GroupJournal, start: GroupStart, private now: () => number) { this.start = Object.freeze({ ...start, policy: groupPolicy(start.policy) }) }
+  static open(sessions: Sessions, rootSessionId: string, rootTaskId: string, overrides: Partial<TaskGroupPolicy> = {}, now = Date.now) {
+    return TaskGroupBudgetCoordinator.openJournal(new SessionGroupJournal(sessions, rootSessionId, rootTaskId), overrides, now)
+  }
+  static async openJournal(journal: GroupJournal, overrides: Partial<TaskGroupPolicy> = {}, now = Date.now) {
+    const events = journal.read()
     const saved = events.find(event => event.type === 'group/start')
     const start: GroupStart = saved?.type === 'group/start' ? saved.data : { groupId: randomUUID(), policy: { ...groupPolicy(overrides) }, deadline: now() + groupPolicy(overrides).maxWallDurationMs }
-    const group = new TaskGroupBudgetCoordinator(sessions, rootSessionId, rootTaskId, start, now)
+    const group = new TaskGroupBudgetCoordinator(journal, start, now)
     if (!saved) await group.#persist({ type: 'group/start', data: start })
-    else for (const event of events) if (event.type.startsWith('group/')) group.#fold(event as GroupBudgetEvent)
+    else for (const event of events) group.#fold(event)
     // Crash before a durable dispatch intent: release. After intent: retain the reservation as unknown.
     for (const [requestId, reservation] of group.#reservations) {
       if (reservation.status === 'reserved') await group.#persist({ type: 'group/reservation-released', data: { groupId: start.groupId, requestId } })
@@ -54,15 +75,8 @@ export class TaskGroupBudgetCoordinator {
     const operation = this.#queue.then(async () => { if (this.#failure) throw new Error('group persistence failed', { cause: this.#failure }); return work() })
     this.#queue = operation.then(() => {}, () => {}); return operation
   }
-  #scope() {
-    const state = this.sessions.latestRun(this.rootSessionId)
-    if (state?.taskId === this.rootTaskId) return state
-    const original = [...this.sessions.get(this.rootSessionId).events].reverse().find(event => event.type === 'run/start' && event.taskId === this.rootTaskId)
-    if (original?.type !== 'run/start') throw new Error('root task scope is unavailable')
-    return original.data.state
-  }
   async #persist(event: GroupBudgetEvent) {
-    try { this.sessions.append(this.rootSessionId, event.type, event.data, this.#scope()); await this.sessions.flush(this.rootSessionId) }
+    try { await this.journal.append(event) }
     catch (error) { this.#failure = error; this.#abort.abort(); throw error }
     this.#fold(event)
   }

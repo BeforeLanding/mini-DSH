@@ -26,10 +26,13 @@ try {
     const { runDemo } = await import('./app/demo.js')
     const result = await runDemo()
     if (!result.passed) process.exitCode = 1
+  } else if (args[0] === 'orchestrate') {
+    const { runOrchestrateCli } = await import('./app/orchestrate-cli.js')
+    process.exitCode = await runOrchestrateCli(args.slice(1))
   } else if (args.length > 1 || (args.length === 1 && !['--help', '--version', '--show-config', 'demo'].includes(args[0]!))) {
-    throw new Error('usage: mini-dsh [--help|--version|--show-config|demo [fix]] | inspect <session-jsonl-path> [--json] [--trace] [--tree]')
+    throw new Error('usage: mini-dsh [--help|--version|--show-config|demo [fix]] | inspect <session-jsonl-path> [--json] [--trace] [--tree] | orchestrate <run|inspect|list|cleanup> ...')
   } else if (args[0] === '--help') {
-    console.log('Usage: mini-dsh [--help|--version|--show-config|demo [fix]] [--mcp-config <path>]\n       mini-dsh inspect <session-jsonl-path> [--json] [--trace] [--tree]\nRun in the target workspace directory. --show-config, inspect, and demo need no API key; interactive use requires DEEPSEEK_API_KEY in the environment or current directory .env.\nMCP defaults to no servers; user config: ~/.mini-dsh/mcp.json (override with MINI_DSH_MCP_CONFIG or --mcp-config). Workspace mcp.json is not auto-loaded. Set MINI_DSH_MCP=0 to disable.\nSession logs: ~/.mini-dsh/sessions (override with MINI_DSH_SESSION_DIR).')
+    console.log('Usage: mini-dsh [--help|--version|--show-config|demo [fix]] [--mcp-config <path>]\n       mini-dsh inspect <session-jsonl-path> [--json] [--trace] [--tree]\n       mini-dsh orchestrate run --task <text> --plan <plan.json> [--verify <cmd>]...\n       mini-dsh orchestrate inspect <rootId|log-path> [--json]\n       mini-dsh orchestrate list | cleanup <rootId>\nRun in the target workspace directory. --show-config, inspect, demo, orchestrate inspect/list/cleanup need no API key; interactive and orchestrate run require DEEPSEEK_API_KEY in the environment or current directory .env.\nMCP defaults to no servers; user config: ~/.mini-dsh/mcp.json (override with MINI_DSH_MCP_CONFIG or --mcp-config). Workspace mcp.json is not auto-loaded. Set MINI_DSH_MCP=0 to disable.\nSession logs: ~/.mini-dsh/sessions (override with MINI_DSH_SESSION_DIR). Orchestration logs: ~/.mini-dsh/orchestrations (override with MINI_DSH_ORCHESTRATION_DIR).')
   } else if (args[0] === '--version') {
     const metadata: unknown = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
     if (!metadata || typeof metadata !== 'object' || !('version' in metadata) || typeof metadata.version !== 'string') throw new Error('package version is unavailable')

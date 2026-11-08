@@ -135,6 +135,23 @@ v2.1 的 Full/Baseline 是冻结开发协议里的两条实验臂，不是生产
 
 项目记忆及其专属配置/命令仅保留在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2，不在 main 启用。关闭委派（默认）时，工具清单与 v0.2.0 相同。含委派事件的会话日志请用同一版本恢复。
 
+## 多 Agent 编排（M1，分支 `feat/orchestration-m1`，尚未合入 main）
+
+本节的 `orchestrate` 子命令只在分支上存在；M1 接受计划文件、一次执行一个子任务。模型 planner、并行波次、审批队列与 `resume` 属 M2/M3，当前命令会明确拒绝或不存在，不伪装成已支持。
+
+```text
+mini-dsh orchestrate run --task "<text>" --plan <plan.json> [--verify <cmd>]...
+mini-dsh orchestrate inspect <rootId|log-path> [--json]
+mini-dsh orchestrate list
+mini-dsh orchestrate cleanup <rootId>
+```
+
+- 编排日志与 worktree 位于 `~/.mini-dsh/orchestrations/<rootId>/`；`MINI_DSH_ORCHESTRATION_DIR` 指定根目录（默认 `~/.mini-dsh/orchestrations`）。
+- `MINI_DSH_ROOT_BUDGET` 是 JSON，键与默认值见 [DEVELOPMENT.md](superagent/DEVELOPMENT.md) §7.1；命令行 `--root-budget` 覆盖同名键。M1 执行请求数、token、wall 与工具数上限；planner/fix 份额尚未有对应组件。
+- 需要干净工作树；`--allow-dirty` 继续执行，但未提交改动不在基线内。宿主不在用户工作树提交，交付物是 `mini-dsh/<root8>/integration` 分支。
+- 审批按 D8：worktree 内文件写入默认自动批准，Bash 默认询问；`--approve-writes ask` 可逐条询问写入，`--approve-bash auto` 仅建议在评测的隔离 runner 中使用。
+- `--prepare` 在每个 worker worktree 内运行一次（如依赖安装）；`--verify` 在整合 worktree 中追加根级验收命令。`MINI_DSH_MODEL` 与 `MINI_DSH_WORKSPACE` 沿用既有含义。
+
 ## 本地打包与安装
 
 项目**尚未发布到 npm**，`private: true` 保留以防误发。已发布版本可从 [Releases](https://github.com/BeforeLanding/mini-DSH/releases) 下载 tarball 与 `SHA256SUMS`，核对后跳过下面的 `pnpm pack`，把下载的文件作为 tarball 安装。下面从当前仓库生成 tarball，在仓库外的临时目录安装；已在 Windows 的含空格路径验证 `mini-dsh.cmd`。依赖首次安装可能需要访问包注册表；`--help`、`--version`、`--show-config`、`demo` 与 `inspect` 不需要 API key，也不会请求模型。PowerShell：

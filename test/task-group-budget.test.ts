@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { TaskGroupBudgetCoordinator, groupPolicy } from '../src/core/task-group-budget.js'
-import type { GroupReservation } from '../src/core/task-group-budget.js'
+import type { GroupBudgetEvent, GroupJournal, GroupReservation } from '../src/core/task-group-budget.js'
 import { SessionRuntime } from '../src/core/session-runtime.js'
 import { JsonlStore, parseLog } from '../src/core/event-store.js'
 import { createHarness } from '../src/app/create-harness.js'
@@ -159,4 +159,20 @@ test('shared Harness guards root main, summary, retry and tools without adding s
   assert.equal(calls, 3)
   const failed = h.root.sessions.latestRun(session.id)!
   assert.equal((await h.taskGroups!.get(session.id, failed.taskId)).snapshot().usageUnknown, true)
+})
+
+test('coordinator runs on any GroupJournal and recovers from it exactly as from a session log', async () => {
+  const events: GroupBudgetEvent[] = []
+  const journal: GroupJournal = { read: () => events, append: async event => { events.push(structuredClone(event)) } }
+  const group = await TaskGroupBudgetCoordinator.openJournal(journal, { maxModelRequests: 4, rootRequestFloor: 0, rootTokenFloor: 0, maxTotalTokens: 10_000 })
+  const reservation = (requestId: string): GroupReservation => ({ sessionId: 's', taskId: 't', runId: 'r', requestId, agentId: 'a', root: true, purpose: 'main', reserve: 1000 })
+  await group.reserve(reservation('one')); await group.dispatched('one')
+  await group.settle('one', { inputTokens: 10, outputTokens: 5, totalTokens: 15, source: 'provider', uncertain: false })
+  await group.reserve(reservation('two')); await group.dispatched('two')
+  assert.deepEqual(events.map(event => event.type), ['group/start', 'group/budget-reserved', 'group/model-dispatched', 'group/budget-settled', 'group/budget-reserved', 'group/model-dispatched'])
+  const reopened = await TaskGroupBudgetCoordinator.openJournal(journal)
+  assert.equal(reopened.start.groupId, group.start.groupId)
+  assert.equal(reopened.snapshot().settledTokens, 15); assert.equal(reopened.snapshot().usageUnknown, true)
+  assert.equal(events.at(-1)?.type, 'group/usage-unknown')
+  await assert.rejects(reopened.reserve(reservation('three')), /unknown provider usage/)
 })
