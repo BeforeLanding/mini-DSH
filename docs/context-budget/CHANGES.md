@@ -1,5 +1,13 @@
 # 改动与验收证据
 
+### ET 收尾：零付费端到端报告 `pnpm eval:report-orchestration`（2026-11-11）
+
+新增薄入口 `scripts/eval-orchestration-report.ts`：`pnpm eval:report-orchestration -- --evidence-root <批次目录> [--public-sample <json>] [--out <新文件>]`。从历史证据目录出发——计划取自冻结 manifest 的 `runOrder`（不是今天的 `assembleRunMatrix`），记录取自 `runs/*/run.json`——重算各臂的交付率、可评分成功率（各带 Wilson 区间）与覆盖（未执行、infrastructure、grader_error、missing_evidence），并核对：manifest 的计划等于 tasks × arms × repeats；run 记录可读且无重复/计划外；每条计划内 trial 都有 pass/fail 判决；与原 `report.json` 的计数和各臂通过数一致；给定公开样例时 manifest 与 report 的 sha256 和各臂通过数一致；历史重评分（独立记录）符合预期、无 unknown，且至少有一个重评分样本属于本批次。任一检查失败，命令输出原因并以非零退出；`--out` 只写新文件（已存在则报错），不写入证据目录。输出同时带三条标注：批次存在规格不对称（S/D 与 R 的通过率不得比作能力）、R/R-serial 用固定计划（结论限定为给定计划下的编排执行）、重评分只证明 grader 判决如旧而不证明新版 Agent 不再犯错。
+
+真实证据运行（本机 `D:\Agent\outputs\orchestration-four-arm-20261108\batch-01`，仓库外、不可由他人复现）：`--public-sample docs/samples/orchestration-four-arm-20261108.json` 退出 0——计划 16、记录 16；S 2/4、D 2/4、R 4/4、R-serial 4/4，gradable 与 delivery 相同，无未执行与 unknown；manifest sha256 `60134573…`、report sha256 `ef8257d8…` 与公开样例一致；重评分 `batch01-parallel-composite-S-1` 仍判 `fail`/`st-3` 且符合预期。在证据目录副本上复制一条 run 目录（重复记录）或删除一条（缺记录）均退出 1，并指出 `duplicate record: parallel-composite:S:1` 与 `R: not executed 1`。这一轮也第一次用真实 `run.json` 读数（含 exitCode 与 output）检验了 #37 的有效判决规则：真实的断言失败读数被识别为 `fail`，没有被误判成 `grader_error`。
+
+验收：`test/eval-orchestration-report.test.ts` 7 项——正常证据可复现且带标注；计划来自历史 manifest；重复记录、计划外记录、验收器启动后崩溃、缺记录、infrastructure_error、manifest 计划不一致、原报告与原始记录不一致，七种异常均使报告失败；公开样例不匹配、重评分样本缺文件或无对应样本均阻断；manifest 缺失/损坏为硬错误；命令层面正常退出 0、异常退出 1 并输出原因、`--out` 不覆盖。`pnpm check`（274 files）、`pnpm lint`（306 files、无诊断）、全量测试 719 项：689 pass、0 fail、30 平台条件 skipped。真实模型请求 0。已知限制：CI 只能跑合成的最小证据目录，不能跑 batch-01 本体，因为原始证据不在仓库内。
+
 ### ET-1 补丁：编排适配器同样只接受有效的验收器判决（2026-11-11）
 
 PR #36 收紧了重评分，但 `orchestrationRecords` 仍只把 `exitCode === null` 记为 `grader_error`：原始 `RunResult` 里验收器启动后抛异常、语法错误或依赖错误（非零退出）会被记成任务失败，拉低 `gradable` 分母里的通过率。现在把有效判决的规则提到 `eval-trials.ts` 的 `hasValidVerdict` 并让重评分与编排适配器共用：读数有效 = 通过（退出 0 且有验收标记，即 `passed`），或非零退出且输出含 `AssertionError`；否则整条记录为 `unknown/grader_error`（多任务时任一读数无效即如此）。公开样例只留各任务的布尔结果、没有读数，仍按 `hiddenPassed` 归一化，S 2/4、D 2/4、R 4/4、R-serial 4/4 不变。注意：携带读数的旧 `RunResult` 若缺少 `output`，非零退出现在会记为 `grader_error` 而不是 `fail`——这是有意的，没有输出就无法证明那是断言失败。
