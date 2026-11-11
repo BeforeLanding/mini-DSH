@@ -4,3 +4,6 @@ docs/samples/** -text
 docs/RESULTS.md -text
 # The frozen component protocol hashes this script's checked-out bytes.
 scripts/benchmark-components.mjs text eol=lf
+
+# Regrade samples hold historical bytes; their sha256 in case.json must survive checkout.
+test/fixtures/regrade/** -text

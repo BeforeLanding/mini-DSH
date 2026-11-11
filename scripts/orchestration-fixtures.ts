@@ -22,7 +22,7 @@ export const fixtureProcessTimeoutMs = 30_000
 export type OrchestrationFixtureId = 'parallel-composite' | 'single-repair'
 
 interface HiddenVerify { script: string; target: string; marker: string }
-interface FixtureTask {
+export interface FixtureTask {
   id: string
   title: string
   objective: string
@@ -157,9 +157,9 @@ export async function materializeOrchestrationFixture(id: OrchestrationFixtureId
 
 export interface VerifyResult { taskId: string; command: string; exitCode: number | null; output: string; passed: boolean }
 // 逐任务运行隐藏验收器。初始态至少一个失败、参考态全部通过，是这组夹具的正反例。
-export async function evaluateOrchestrationFixture(id: OrchestrationFixtureId, workspace: string, { timeoutMs = fixtureProcessTimeoutMs } = {}) {
+export async function evaluateOrchestrationFixture(id: OrchestrationFixtureId, workspace: string, { timeoutMs = fixtureProcessTimeoutMs, tasks = orchestrationFixtures[id].tasks }: { timeoutMs?: number; tasks?: readonly FixtureTask[] } = {}) {
   const results: VerifyResult[] = []
-  for (const task of orchestrationFixtures[id].tasks) {
+  for (const task of tasks) {
     const [script, target] = [task.verify.script, task.verify.target]
     const result = spawnSync(process.execPath, [script, target], {
       cwd: workspace, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 32 * 1024, windowsHide: true,
