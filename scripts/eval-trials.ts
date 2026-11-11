@@ -66,7 +66,15 @@ export function summarizeTrials(planned: readonly PlannedTrial[], records: reado
 // --- SWE：计划取自 manifest.schedule，记录取自 runs.jsonl 与 scores.json ---
 export function sweTrials(manifest: SwebenchRunManifest, split: 'development' | 'formal', runs: readonly SwebenchEpisodeResult[], scores: SwebenchScores) {
   const planned: PlannedTrial[] = manifest[split].schedule.map(entry => ({ taskId: entry.instanceId, arm: entry.armId, repeat: 1 }))
-  const scoreByKey = new Map(scores.results.map(result => [`${result.armId}/${result.instanceId}`, result] as const))
+  // 评分与执行记录同口径：重复评分、计划外评分直接抛错，不能让后一条静默覆盖前一条。
+  const plannedKeys = new Set(planned.map(trial => `${trial.arm}/${trial.taskId}`))
+  const scoreByKey = new Map<string, SwebenchScores['results'][number]>()
+  for (const result of scores.results) {
+    const key = `${result.armId}/${result.instanceId}`
+    if (!plannedKeys.has(key)) throw new Error(`score outside the planned trials: ${key}`)
+    if (scoreByKey.has(key)) throw new Error(`duplicate score: ${key}`)
+    scoreByKey.set(key, result)
+  }
   const records: TrialRecord[] = runs.map(run => {
     const base = { taskId: run.instanceId, arm: run.armId, repeat: 1 }
     const score = scoreByKey.get(`${run.armId}/${run.instanceId}`)
