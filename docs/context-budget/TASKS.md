@@ -1,6 +1,6 @@
 # 任务清单
 
-### ET 评测可信度三步：分母、评测器自检、历史重评分（2026-11-11，规划中）
+### ET 评测可信度三步：分母、评测器自检、历史重评分（2026-11-11，进行中）
 
 目标只有一条：让每个绿灯说清它证明了什么。不新增模块，不接 Langfuse，不做模型重放（cassette 后置）；全部零付费。三个里程碑各一个 PR，PR 内按 AGENTS.md 的"可单独 revert + revert 前后有可观察差异"判据拆提交。
 
@@ -13,18 +13,18 @@
 
 **ET-1（PR1）统一分母与区间。** 完成条件：选定的历史格式可归一化；计划、执行、可评分三种分母明确；缺失和重复记录不会静默改变统计；原报告的字段与语义保留。
 
-- ET-1a：新增 `scripts/eval-trials.ts`。`PlannedTrial {taskId, arm, repeat}` 与 `TrialRecord`（`verdict`，以及 `unknown` 时的 `reason`：`infrastructure | grader_error | missing_evidence`）；`summarizeTrials(planned, records)` 按臂输出：
+- ET-1a（完成，与 ET-1b 同次提交）：新增 `scripts/eval-trials.ts`。`PlannedTrial {taskId, arm, repeat}` 与 `TrialRecord`（`verdict`，以及 `unknown` 时的 `reason`：`infrastructure | grader_error | missing_evidence`）；`summarizeTrials(planned, records)` 按臂输出：
   - `delivery`：分子 pass，分母为计划数，带 Wilson 区间；
   - `gradable`：分子 pass，分母 pass+fail，带各自的 Wilson 区间；
   - `coverage`：未执行和三类 unknown 各多少。
 
   遇到重复 key 或计划外记录直接抛错并报出 key，与 `swebench/run.ts` resume 的既有拒绝口径一致；缺失记录计入"未执行"。复用 `swebench/protocol.ts` 的 `wilsonInterval`。验收用例：计划 3、执行 2、通过 1，报告 `delivery 1/3` 和 `gradable 1/2`，两个区间各自绑定口径；外加重复、计划外、全未执行三条反例。
-- ET-1b：两个格式适配器。
+- ET-1b（完成，与 ET-1a 同次提交）：两个格式适配器。
   - **SWE**：计划取自 manifest 的 `schedule`，记录取自 `runs.jsonl` 和 `scores.json`。`status=infrastructure` 且未 resolved 的记 `unknown/infrastructure`；`classification=error` 的记 `unknown/grader_error`（修正原来把评分错误计为未解决的问题）；已执行但没有评分的记 `unknown/missing_evidence`。
   - **编排四臂**：计划取自 `assembleRunMatrix`，记录兼容原始 `RunResult` 和公开样例 `docs/samples/orchestration-four-arm-20261108.json`。`status=infrastructure_error` 的记 `infrastructure`；验收器退出码为 `null`（超时或无法启动）的记 `grader_error`。
 
   验收：公开样例归一化后得到 S 2/4、D 2/4、R 4/4、R-serial 4/4，与[结果页](../superagent/RESULTS-20261108.md)一致。
-- ET-1c：SWE 报告接入。`buildReport` 的 `perArm` 保留全部原字段及其取值，新增 `trials` 块；修正两处错误说明：`summarizeEpisodes` 的分母说明从"all planned episodes"改为"传入的记录（`buildReport` 传入的是已执行记录）"，`perArm.note` 写明 `resolvedRate`/`wilson95` 用的是已执行分母，`resolvedRateOverPlanned` 用的是计划分母。同步改掉 `test/swebench-protocol.test.ts` 中钉住错误说明的断言。
+- ET-1c（待办）：SWE 报告接入。`buildReport` 的 `perArm` 保留全部原字段及其取值，新增 `trials` 块；修正两处错误说明：`summarizeEpisodes` 的分母说明从"all planned episodes"改为"传入的记录（`buildReport` 传入的是已执行记录）"，`perArm.note` 写明 `resolvedRate`/`wilson95` 用的是已执行分母，`resolvedRateOverPlanned` 用的是计划分母。同步改掉 `test/swebench-protocol.test.ts` 中钉住错误说明的断言。
 - 提交边界：ET-1a 与 ET-1b 合为一次提交（适配器是统计模块的首次使用）；ET-1c 单独提交（会改变 SWE 报告的输出）。
 
 **ET-2（PR2）评测器自检。** 完成条件：st-3 的必要规格对每个臂可见；删除该条款会被检查发现；编排夹具的错误实现会被验收拒绝。
