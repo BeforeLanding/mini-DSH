@@ -468,6 +468,6 @@ export function summarizeEpisodes(records: readonly EpisodeRecord[]) {
     averageKnownCostUsd: total ? Number((knownCost / total).toFixed(9)) : 0,
     medianKnownCostUsd: median(known.map(record => record.costUsd!)),
     tokens: { input: sum('inputTokens'), output: sum('outputTokens'), cacheRead: sum('cacheReadTokens') },
-    denominator: 'all planned episodes; infrastructure failures are not silently dropped',
+    denominator: 'the records passed in (buildReport passes executed episodes; the planned denominator is resolvedRateOverPlanned); infrastructure failures are not silently dropped',
   }
 }

@@ -1,5 +1,57 @@
 # 任务清单
 
+### ET 评测可信度三步：分母、评测器自检、历史重评分（2026-11-11，进行中）
+
+目标只有一条：让每个绿灯说清它证明了什么。不新增模块，不接 Langfuse，不做模型重放（cassette 后置）；全部零付费。三个里程碑各一个 PR，PR 内按 AGENTS.md 的"可单独 revert + revert 前后有可观察差异"判据拆提交。
+
+**边界（开工前钉住）**
+
+- 历史重评分只验证"grader 对旧产物的判决是否符合预期"，**不证明新版 Agent 不再犯同样的错**；涉及模型决策的变化另行授权真实模型复验。
+- 修补 st-3 的规格修的是**未来批次的输入公平性**；batch-01 的 S/D 旧产物重评分**仍应判失败**，同时标注该批对照存在规格不对称。不得为让回归变绿而放宽 grader。
+- 统一任务要求不等于各臂拿相同的解题计划：R/R-serial 仍用固定计划，结论限定为"给定计划下的编排执行"。
+- 判决只有 `pass / fail / unknown`；`unknown` 必须带原因。grader 执行错误不得算任务失败，也不得静默跳过；被选为必跑门禁的 case 判不出结果即检查失败。
+
+**ET-1（PR1）统一分母与区间。** 完成条件：选定的历史格式可归一化；计划、执行、可评分三种分母明确；缺失和重复记录不会静默改变统计；原报告的字段与语义保留。
+
+- ET-1a（完成，与 ET-1b 同次提交）：新增 `scripts/eval-trials.ts`。`PlannedTrial {taskId, arm, repeat}` 与 `TrialRecord`（`verdict`，以及 `unknown` 时的 `reason`：`infrastructure | grader_error | missing_evidence`）；`summarizeTrials(planned, records)` 按臂输出：
+  - `delivery`：分子 pass，分母为计划数，带 Wilson 区间；
+  - `gradable`：分子 pass，分母 pass+fail，带各自的 Wilson 区间；
+  - `coverage`：未执行和三类 unknown 各多少。
+
+  遇到重复 key 或计划外记录直接抛错并报出 key，与 `swebench/run.ts` resume 的既有拒绝口径一致；缺失记录计入"未执行"。复用 `swebench/protocol.ts` 的 `wilsonInterval`。验收用例：计划 3、执行 2、通过 1，报告 `delivery 1/3` 和 `gradable 1/2`，两个区间各自绑定口径；外加重复、计划外、全未执行三条反例。
+- ET-1b（完成，与 ET-1a 同次提交）：两个格式适配器。
+  - **SWE**：计划取自 manifest 的 `schedule`，记录取自 `runs.jsonl` 和 `scores.json`。`status=infrastructure` 且未 resolved 的记 `unknown/infrastructure`；`classification=error` 的记 `unknown/grader_error`（修正原来把评分错误计为未解决的问题）；已执行但没有评分的记 `unknown/missing_evidence`。
+  - **编排四臂**：计划取自 `assembleRunMatrix`，记录兼容原始 `RunResult` 和公开样例 `docs/samples/orchestration-four-arm-20261108.json`。`status=infrastructure_error` 的记 `infrastructure`；验收器退出码为 `null`（超时或无法启动）的记 `grader_error`。
+
+  验收：公开样例归一化后得到 S 2/4、D 2/4、R 4/4、R-serial 4/4，与[结果页](../superagent/RESULTS-20261108.md)一致。
+- ET-1c（完成，单独提交）：SWE 报告接入。`buildReport` 的 `perArm` 保留全部原字段及其取值，新增 `trials` 块；修正两处错误说明：`summarizeEpisodes` 的分母说明从"all planned episodes"改为"传入的记录（`buildReport` 传入的是已执行记录）"，`perArm.note` 写明 `resolvedRate`/`wilson95` 用的是已执行分母，`resolvedRateOverPlanned` 用的是计划分母。同步改掉 `test/swebench-protocol.test.ts` 中钉住错误说明的断言。
+- 提交边界：ET-1a 与 ET-1b 合为一次提交（适配器是统计模块的首次使用）；ET-1c 单独提交（会改变 SWE 报告的输出）。
+
+**ET-2（PR2）评测器自检。** 完成条件：st-3 的必要规格对每个臂可见；删除该条款会被检查发现；编排夹具的错误实现会被验收拒绝。
+
+- ET-2a：`orchestration-fixtures.ts` 为每个夹具登记 `requiredClauses`。每条包含 `id`、`text`，以及它对应的隐藏验收断言（人工审核）。`parallel-composite` 的第一条：`names` 按输入顺序列出每一位输入人员，重复 id 也保留。把这句写进夹具 `goal`，使 S/D 可见。新增 `checkClauseVisibility(spec)`：对 `assembleRunMatrix` 实际装配出的每个 RunSpec，检查各臂可见材料（S/D 为 `goal`，R/R-serial 为 `goal` 加计划 objective）是否逐字包含所有已登记条款。`--validate-only` 和测试都调用它。反例测试：从 goal 中删去这句后检查必须失败。自动检查只证明"已登记的条款装配到位"，不证明隐藏验收没有未公开的语义要求；后者由人工审核条款与断言的对应关系负责，并在 DECISIONS 中说明这一分工。
+- ET-2b：新增 `test/fixtures/orchestration/parallel-composite/weak/`，放入"先去重再列名"的错误实现（即 batch-01 中 S/D 的写法）；`single-repair` 也补一份看似合理但错误的实现。`validateOrchestrationFixture` 增加 `weakRejected`，`--validate-only` 与测试要求它为真。
+- ET-2c：文档。superagent DEVELOPMENT §14 和 RESULTS 写明三点：本次补齐的规格只影响此后的批次；batch-01 的 manifest 仍冻结在 `23358c9`；R 的结论限定为"给定计划下的编排执行"。这一项文档与 ET-2a 同次提交。
+- 提交边界：ET-2a（条款登记、可见性检查与 goal 修订）一次提交，ET-2b（错误实现反例）一次提交。
+
+**ET-3（PR3）历史重评分。** 完成条件：一个可移植的历史样本能在无模型调用的 CI 中重评分；预期失败能被正确验证；缺证据、不兼容和 grader 错误三种情况分别可见。
+
+- ET-3a：从 batch-01 的 `01-parallel-composite_S_1/repo` 提取最小样本到 `test/fixtures/regrade/batch01-parallel-composite-S-1/`。只取 `packages/*/src`、`index.mjs` 和 `package.json`，不带 `.mini-dsh/` 下的工具输出。`case.json` 记录以下内容：
+  - 来源：批次、runId、`run.json` 与各文件的 sha256；
+  - `validates: "grader"`；
+  - `expected: { verdict: "fail", failedTasks: ["st-3"] }`；
+  - `annotation: "spec-asymmetry; batch comparison not supported"`。
+- ET-3b：新增 `scripts/eval-regrade.ts`。先把样本复制到临时目录，再用当前版本的隐藏验收器评分，输出一条新的 grade 记录：样本摘要、grader 文件哈希、`verdict`、`reason`、逐子任务结果。原始记录不覆盖。各种 `unknown` 的含义：
+  - `missing_evidence`：缺少验收目标文件；
+  - `incompatible`：样本布局或所声明的夹具与当前 grader 契约不匹配；
+  - `grader_error`：验收器无法启动或超时。
+
+  CI 的检查标准是"实际判决等于预期判决"；判出 `unknown` 视为未通过。三种 `unknown` 各有一条测试，通过注入缺失文件、错误夹具 id、不存在的验收脚本来构造。新增 `pnpm eval:regrade` 命令，跟随现有 `pnpm test` 进入 CI，不新增 job。
+- ET-3c：报告支持面。本 PR 只支持编排夹具类样本；V2 已有阶段快照，可以作为后续来源，本次不接，在文档中写明。
+- 提交边界：ET-3a 与 ET-3b 合为一次提交（样本是重评分器的首次使用）；ET-3c 仅是文档，与之同次提交。
+
+**分支与合并**：ET-1 → `feat/eval-trust-denominators`，基于 main；ET-2 → `feat/eval-grader-checks`，基于 main；ET-3 → `feat/eval-regrade`，要等 ET-1 和 ET-2 都合入 main 后再从 main 切出：它复用 ET-1 的判决类型，并且要用 ET-2 修订后的夹具定义验证"仍判失败"。三个 PR 都用 merge commit 合并。
+
 ### v0.2.0 发布（2026-11-01）
 
 - PORT-13（完成，本提交）：`package.json` 版本 0.1.1 → 0.2.0（新增可选组件，次版本号）；README、PROGRESS 与讲解页的 Release 链接改为 v0.2.0。与 PORT-12 同一 PR 合并，合并后在合并提交上打 `v0.2.0` 并发布带 tarball 与 `SHA256SUMS` 的 Release。

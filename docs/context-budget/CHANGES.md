@@ -1,5 +1,19 @@
 # 改动与验收证据
 
+### ET-1c SWE 报告接入 trials 块并更正说明文字（2026-11-11）
+
+`buildReport` 的 `perArm` 保留全部原字段与取值，新增 `trials`（取自 `sweTrials` + `summarizeTrials`：delivery、gradable、coverage）。更正说明：`summarizeEpisodes.denominator` 由"all planned episodes"改为"传入的记录（`buildReport` 传入已执行记录；计划分母见 `resolvedRateOverPlanned`）"；`perArm.note` 写明 `resolvedRate`/`wilson95` 用已执行分母、`resolvedRateOverPlanned` 用计划分母，且旧字段把评分错误与未评分计为未解决、`trials` 块则计为 unknown；`scoring.errorNote` 同步。`test/swebench-protocol.test.ts` 中钉住错误说明的断言改为反向断言。新增 `test/swebench-report.test.ts`：旧字段取值不变（planned 4、executed 3、resolved 1、resolvedRate 1/3、resolvedRateOverPlanned 0.25）、评分错误在 `trials` 中为 grader_error 且不计失败、重复与计划外记录使报告生成抛错。生成报告时遇到重复或计划外记录现在会抛错（此前静默按 Map 覆盖/多计），与 resume 口径一致。
+
+另：上一提交（ET-1a/1b，`4443e6d`）推送时漏跑 CHANGES 新增后的全量回归，导致 `PROGRESS 的更新日期不早于 CHANGES 最新条目` 失败；本提交把 PROGRESS 更新日期改为 2026-11-11 并加入 ET 下一步，已恢复通过。
+
+验收：`pnpm check`（syntax ok: 270 files）、`pnpm lint`（302 files、无诊断）、`node --test dist/test/*.test.js` 全量 692 项：662 pass、0 fail、30 平台条件 skipped。真实模型请求 0。
+
+### ET-1a/1b 统一分母与区间：判决类型、summarizeTrials 与两个适配器（2026-11-11）
+
+新增 `scripts/eval-trials.ts`：`PlannedTrial`/`TrialRecord`（判决 pass/fail/unknown，unknown 必带 `infrastructure | grader_error | missing_evidence`）；`summarizeTrials(planned, records)` 按臂输出 `delivery`（分母=计划数）、`gradable`（分母=pass+fail）各自的 Wilson 区间，以及 `coverage`（未执行与三类 unknown）。重复记录、计划外记录、重复计划项、缺原因的 unknown 直接抛错并报出 key；缺失记录计入未执行。适配器：`sweTrials`（manifest.schedule + runs + scores；infrastructure 且未 resolved→`infrastructure`，`classification=error`→`grader_error`，已执行无评分→`missing_evidence`）与 `orchestrationRecords`/`orchestrationPlanned`（兼容原始 `RunResult` 与公开样例；`infrastructure_error`→`infrastructure`，验收器 `exitCode===null`→`grader_error`）。本提交不改动任何既有报告；`buildReport` 接入在 ET-1c。
+
+验收：`test/eval-trials.test.ts` 7 项通过，覆盖 计划 3/执行 2/通过 1（delivery 1/3、gradable 1/2，区间不同）、重复/计划外/全未执行反例，以及公开样例归一化为 S 2/4、D 2/4、R 4/4、R-serial 4/4（计划取自 `assembleRunMatrix()`）。`pnpm check`（syntax ok: 269 files）、`pnpm lint`（301 files、无诊断）、`node --test dist/test/*.test.js`：690 项，660 pass、0 fail、30 平台条件 skipped。真实模型请求 0。
+
 ### M0 只读委派移植回 main（2026-11-06）
 
 按 [多 Agent 编排开发文档](../superagent/DEVELOPMENT.md) §13 的 M0，把 `feat/memory-team-eval-v2@2f2dca9` 中的方案 A 按文件移植到 main（分支 `feat/orchestration-m0`）：只读角色（MA-01）、任务组预算含 run guard（MA-02/02b、REV-01）、批次委派（MA-03/03b）、不重跑恢复与兄弟任务收尾（MA-04、REV-02）、reviewer 候选版本（MA-05）、CLI 开关与 `demo:team`（EV-01 的团队部分）。不移植记忆与 memory-team 评测执行器；`memoryHash`/`sha256`/`recordObject` 移到 `src/core/content-hash.ts`，有界读取移到 `src/core/bounded-file.ts`，委派中的记忆快照参数与 `memory_*` 只读工具项已删除。
