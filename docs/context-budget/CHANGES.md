@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### ET-1 补丁：编排适配器同样只接受有效的验收器判决（2026-11-11）
+
+PR #36 收紧了重评分，但 `orchestrationRecords` 仍只把 `exitCode === null` 记为 `grader_error`：原始 `RunResult` 里验收器启动后抛异常、语法错误或依赖错误（非零退出）会被记成任务失败，拉低 `gradable` 分母里的通过率。现在把有效判决的规则提到 `eval-trials.ts` 的 `hasValidVerdict` 并让重评分与编排适配器共用：读数有效 = 通过（退出 0 且有验收标记，即 `passed`），或非零退出且输出含 `AssertionError`；否则整条记录为 `unknown/grader_error`（多任务时任一读数无效即如此）。公开样例只留各任务的布尔结果、没有读数，仍按 `hiddenPassed` 归一化，S 2/4、D 2/4、R 4/4、R-serial 4/4 不变。注意：携带读数的旧 `RunResult` 若缺少 `output`，非零退出现在会记为 `grader_error` 而不是 `fail`——这是有意的，没有输出就无法证明那是断言失败。
+
+验收：`test/eval-trials.test.ts` 新增一项——抛异常、语法错误、依赖缺失、非零退出无输出、退出 0 无标记、多任务中一项崩溃，均为 `grader_error` 且不计入失败与 `gradable` 分母；真正的断言失败仍是 `fail`；原有 infrastructure/null 退出码用例改为带读数的形式并保持结果。用旧规则（只看 `exitCode === null`）时新测试失败（pass 8 / fail 1），恢复后通过。`pnpm check`（272 files）、`pnpm lint`（304 files、无诊断）、`node --test dist/test/*.test.js`：712 项，682 pass、0 fail、30 平台条件 skipped。真实模型请求 0。
+
 ### ET-3 补丁：重评分只接受有效判决，验收器崩溃归入 unknown/grader_error（2026-11-11）
 
 复核发现 `regradeCase` 只把 `exitCode === null`（无法启动或超时）识别成 `grader_error`。验收器启动后发生语法错误、未捕获异常或依赖错误，通常以非零退出码结束，会被当成有效的任务失败：把 st-3 验收器换成直接抛异常的脚本，得到 `fail`/`st-3`，`checkRegrade` 通过——而样本恰好预期 st-3 失败，所以损坏的验收器也能让回归检查变绿，违背“grader 执行错误不得算任务失败、判不出结果门禁不能通过”。现在只有两种有效判决：退出码 0 且输出约定的验收标记（pass），或非零退出且输出含 `AssertionError`（fail）。其余——启动失败、超时、脚本缺失、语法错误、未捕获异常、依赖错误、非零退出但没有断言失败、退出 0 却没有标记——一律 `unknown/grader_error`，`detail` 列出任务、退出码和输出首行。`evaluateOrchestrationFixture` 与编排批次的判定语义不变，只收紧重评分。`test/fixtures/regrade/README.md` 同步写明有效判决的定义。
