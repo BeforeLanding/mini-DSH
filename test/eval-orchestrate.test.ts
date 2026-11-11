@@ -38,7 +38,7 @@ test('offline validation runs the verifier positive/negative cases with zero pro
   assert.equal(report.passed, true, report.matrix.errors.join('; '))
   assert.equal(report.providerRequests, 0)
   assert.equal(report.runs, orchestrationFixtureIds.length * evalArms.length * evalRepeats)
-  assert.ok(report.tasks.every(task => task.initialRejected && task.referenceAccepted))
+  assert.ok(report.tasks.every(task => task.initialRejected && task.referenceAccepted && task.weakRejected))
   assert.equal(report.paidBatch.executed, false)
   assert.equal(report.omitted[0]?.id, 'D′')
 })
