@@ -1,5 +1,17 @@
 # 改动与验收证据
 
+### ET-3 补丁：重评分只接受有效判决，验收器崩溃归入 unknown/grader_error（2026-11-11）
+
+复核发现 `regradeCase` 只把 `exitCode === null`（无法启动或超时）识别成 `grader_error`。验收器启动后发生语法错误、未捕获异常或依赖错误，通常以非零退出码结束，会被当成有效的任务失败：把 st-3 验收器换成直接抛异常的脚本，得到 `fail`/`st-3`，`checkRegrade` 通过——而样本恰好预期 st-3 失败，所以损坏的验收器也能让回归检查变绿，违背“grader 执行错误不得算任务失败、判不出结果门禁不能通过”。现在只有两种有效判决：退出码 0 且输出约定的验收标记（pass），或非零退出且输出含 `AssertionError`（fail）。其余——启动失败、超时、脚本缺失、语法错误、未捕获异常、依赖错误、非零退出但没有断言失败、退出 0 却没有标记——一律 `unknown/grader_error`，`detail` 列出任务、退出码和输出首行。`evaluateOrchestrationFixture` 与编排批次的判定语义不变，只收紧重评分。`test/fixtures/regrade/README.md` 同步写明有效判决的定义。
+
+验收：`test/eval-regrade.test.ts` 新增 2 项——五种“启动后没有判决”的验收器（抛异常、语法错误、依赖导入失败、非零退出无断言、退出 0 无标记）都得到 `unknown/grader_error` 且 `checkRegrade` 不通过；断言失败的验收器仍得到有效的 `fail`/`st-3` 且检查通过。撤掉本修复时崩溃用例失败（pass 10 / fail 1），恢复后 11 项全过。`pnpm check`（272 files）、`pnpm lint`（304 files、无诊断）、`node --test dist/test/*.test.js`：711 项，681 pass、0 fail、30 平台条件 skipped；`pnpm eval:regrade` 对 batch-01 样本仍 PASS（fail/st-3）。真实模型请求 0。已知范围：编排适配器（`orchestrationRecords`）仍只把 `exitCode === null` 记为 `grader_error`，本补丁未改它。
+
+### ET-1 补丁：SWE 适配器拒绝重复与计划外评分（2026-11-11）
+
+复核发现 `sweTrials` 先把 `scores.results` 放进 `Map`，同一任务同一臂的两条评分会被后一条静默覆盖：同样的两条冲突评分，顺序为“未解决、已解决”时报告成功率 100%，顺序相反时为 0%，均不报错，与 PR #33 中“重复记录不再静默覆盖”的说法不符（那只覆盖了运行记录）。现在建立评分索引前逐条检查：重复评分抛 `duplicate score: <arm>/<instance>`，不在计划内的评分抛 `score outside the planned trials: <arm>/<instance>`，`buildReport` 因此同样拒绝。`resolvedRate` 等旧字段的取值与说明不变。
+
+验收：`test/eval-trials.test.ts` 与 `test/swebench-report.test.ts` 各新增反例——两种冲突顺序、计划外任务、计划外臂都抛错；撤掉本修复时这两条新测试失败（pass 9 / fail 2），恢复后通过。`pnpm check`（272 files）、`pnpm lint`（304 files、无诊断）、`node --test dist/test/*.test.js`：709 项，679 pass、0 fail、30 平台条件 skipped。真实模型请求 0。
+
 ### ET-3 历史重评分：batch-01 样本与 eval-regrade（2026-11-11）
 
 新增 `test/fixtures/regrade/batch01-parallel-composite-S-1/`：从 batch-01 的 `01-parallel-composite_S_1/repo` 只取 `packages/*/src`、各包 `index.mjs` 与 `package.json`（9 个文件，不带 `.mini-dsh/`）；`case.json` 记录来源（批次、runId、manifest 提交 `23358c9`、`run.json` 与各文件的 sha256）、`validates: "grader"`、`expected: { verdict: "fail", failedTasks: ["st-3"] }` 与标注 `spec-asymmetry; batch comparison not supported`。`.gitattributes` 对 `test/fixtures/regrade/**` 关闭换行转换，保证哈希在 Windows 检出后不变。新增 `scripts/eval-regrade.ts`：先复制样本到临时目录，再用当前隐藏验收器评分，输出新的 grade 记录（样本摘要、验收器文件哈希、`verdict`、`reason`、逐子任务结果），不覆盖原始样本。`unknown` 三种原因：`missing_evidence`（缺样本文件或验收目标）、`incompatible`（夹具 id 未知、schema 不符、样本字节与记录哈希不符）、`grader_error`（验收器脚本不存在、无法启动或超时，不计为任务失败）。CI 判据为“实际判决等于预期判决（fail 还需失败任务一致）”，判出 unknown 视为未通过。`evaluateOrchestrationFixture` 新增可选 `tasks` 参数供注入验收器，默认行为不变。新增 `pnpm eval:regrade`，并由 `test/eval-regrade.test.ts` 随 `pnpm test` 进入 CI，不新增 job。ET-3c：`test/fixtures/regrade/README.md` 与 DEVELOPMENT §14.3 写明——只验证 grader 对旧产物的判决，不证明新版 Agent 不再犯错；本期只支持编排夹具类样本，V2 阶段快照留作后续来源。同次更新 TASKS 里 ET-1/2/3 的状态与提交号、PROGRESS 的 ET 进度。

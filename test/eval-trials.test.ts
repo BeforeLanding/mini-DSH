@@ -88,3 +88,14 @@ test('SWE adapter maps infrastructure, scoring errors and missing scores to unkn
   assert.equal(arm!.failed, 1)
   assert.equal(arm!.gradable.denominator, 2)
 })
+
+test('SWE adapter rejects duplicate and out-of-plan scores in either order instead of letting the last one win', () => {
+  const manifest = { development: { schedule: [] }, formal: { schedule: [{ instanceId: 'i1', armId: 'x' }] } } as unknown as SwebenchRunManifest
+  const run = [{ instanceId: 'i1', armId: 'x', status: 'completed', resolved: false }] as unknown as SwebenchEpisodeResult[]
+  const score = (instanceId: string, classification: string, armId = 'x') => ({ armId, instanceId, resolved: classification === 'resolved', classification, scoreRunId: 's' })
+  const scoresOf = (...results: ReturnType<typeof score>[]) => ({ runIds: {}, results }) as unknown as SwebenchScores
+  assert.throws(() => sweTrials(manifest, 'formal', run, scoresOf(score('i1', 'unresolved'), score('i1', 'resolved'))), /duplicate score: x\/i1/)
+  assert.throws(() => sweTrials(manifest, 'formal', run, scoresOf(score('i1', 'resolved'), score('i1', 'unresolved'))), /duplicate score: x\/i1/)
+  assert.throws(() => sweTrials(manifest, 'formal', run, scoresOf(score('i9', 'resolved'))), /score outside the planned trials: x\/i9/)
+  assert.throws(() => sweTrials(manifest, 'formal', run, scoresOf(score('i1', 'resolved', 'y'))), /outside the planned trials: y\/i1/)
+})

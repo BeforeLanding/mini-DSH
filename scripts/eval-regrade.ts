@@ -42,6 +42,9 @@ export type RegradeGrade = {
 } & ({ verdict: 'pass' | 'fail'; reason?: undefined } | { verdict: 'unknown'; reason: RegradeUnknownReason })
 
 const sha256 = (data: Uint8Array | string) => createHash('sha256').update(data).digest('hex')
+// node:assert 失败会在输出里留下 AssertionError / ERR_ASSERTION；验收器的有效“失败”判决必须是它。
+const assertionFailure = /AssertionError|ERR_ASSERTION/
+const firstLine = (text: string) => text.split(String.fromCharCode(10)).find(line => line.trim())?.trim().slice(0, 160) ?? 'no output'
 const exists = (target: string) => fs.stat(target).then(() => true, () => false)
 
 export interface RegradeOptions { tasks?: readonly FixtureTask[]; timeoutMs?: number }
@@ -99,8 +102,15 @@ export async function regradeCase(caseDirectory: string, options: RegradeOptions
     const results = evaluation.results.map(result => ({ taskId: result.taskId, passed: result.passed, exitCode: result.exitCode }))
     const failedTasks = results.filter(result => !result.passed).map(result => result.taskId)
     const base = { ...blank, ...withGrader, tasks: results, failedTasks }
-    const broken = results.find(result => result.exitCode === null)
-    if (broken) return { ...base, verdict: 'unknown', reason: 'grader_error', detail: `grader for ${broken.taskId} did not exit (failed to start or timed out)` }
+    // 只有“通过”（退出码 0 且输出约定的标记）或“断言失败”（非零退出且输出含 AssertionError）才是有效判决；
+    // 其余——无法启动、超时、语法错误、未捕获异常、依赖错误、退出 0 却没有标记——都不是对产物的判决，
+    // 不能算任务失败，否则损坏的验收器会让“预期失败”的回归检查错误变绿。
+    const invalid = evaluation.results.flatMap((result, index) => {
+      const marker = tasks[index]!.verify.marker
+      const valid = result.passed || (result.exitCode !== null && result.exitCode !== 0 && assertionFailure.test(result.output))
+      return valid ? [] : [`${result.taskId} (exit ${result.exitCode === null ? 'none' : result.exitCode}${result.exitCode === 0 ? `, no "${marker}" marker` : ''}): ${firstLine(result.output)}`]
+    })
+    if (invalid.length) return { ...base, verdict: 'unknown', reason: 'grader_error', detail: `grader produced no valid verdict for ${invalid.join('; ')}` }
     return { ...base, verdict: failedTasks.length ? 'fail' : 'pass' }
   } finally {
     await fs.rm(workspace, { recursive: true, force: true })

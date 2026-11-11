@@ -43,3 +43,14 @@ test('report generation rejects duplicate or out-of-plan episode records', () =>
   assert.throws(() => buildReport(manifest, 'formal', [run('i1'), run('i1')], scores, batch), /duplicate record/)
   assert.throws(() => buildReport(manifest, 'formal', [run('zz')], scores, batch), /outside the planned trials/)
 })
+
+test('report generation rejects conflicting duplicate scores instead of reporting whichever came last', () => {
+  const one = { ...manifest, formal: { arms: ['x'], schedule: [{ instanceId: 'i1', armId: 'x' }] } } as unknown as SwebenchRunManifest
+  const orders = [['unresolved', 'resolved'], ['resolved', 'unresolved']]
+  for (const order of orders) {
+    const scores = { runIds: {}, results: order.map(classification => scoreOf('i1', classification)) } as unknown as SwebenchScores
+    assert.throws(() => buildReport(one, 'formal', [run('i1')], scores, batch), /duplicate score: x\/i1/)
+  }
+  const stray = { runIds: {}, results: [scoreOf('i1', 'resolved'), scoreOf('i9', 'resolved')] } as unknown as SwebenchScores
+  assert.throws(() => buildReport(one, 'formal', [run('i1')], stray, batch), /score outside the planned trials: x\/i9/)
+})
