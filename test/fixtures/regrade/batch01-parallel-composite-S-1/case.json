@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "kind": "regrade-case",
+  "fixture": "parallel-composite",
+  "validates": "grader",
+  "source": {
+    "batch": "orchestration-four-arm-20261108/batch-01",
+    "protocol": "orchestration-four-arm-v1",
+    "manifestCommit": "23358c9d2218609d499f4dcb593b76445eca537d",
+    "runId": "parallel-composite:S:1",
+    "runDir": "runs/01-parallel-composite_S_1",
+    "runJsonSha256": "44c3c7327c7f5bde52012069c0854477c186c9d0973b5a48d16ec87f69130612",
+    "note": "raw evidence is kept outside the repository; only packages/*/src, index.mjs and package.json are copied, never .mini-dsh/"
+  },
+  "files": {
+    "packages/dedupe/index.mjs": "a6631b9e986c7b126455f6dfd5a1a3e00afca6f70d9f437efffbce1671ff9843",
+    "packages/dedupe/package.json": "95ecaa864ce311297b4f957eb93e2527b47bad60170c3a80d2172e323570685e",
+    "packages/dedupe/src/unique.mjs": "0ea210eb658761e26ea1bfa84ca7bed3a6bdfb4c250fc8504ee7f1d4dd8b666e",
+    "packages/normalize/index.mjs": "40d4b4fee889d45452c4807ecc9c1cc9a958030f668bd346d8a9573f3aa8fd1b",
+    "packages/normalize/package.json": "95ecaa864ce311297b4f957eb93e2527b47bad60170c3a80d2172e323570685e",
+    "packages/normalize/src/name.mjs": "3d368288f861dcaa65ab5b4f5b96318db0cdf2a23f5dd95813f230d2fd1717ac",
+    "packages/report/index.mjs": "17ce799068b8554c49fcd9c680a1b4fe96105350f9543671674fc2e7e3c058db",
+    "packages/report/package.json": "95ecaa864ce311297b4f957eb93e2527b47bad60170c3a80d2172e323570685e",
+    "packages/report/src/report.mjs": "f886d495dc6807448cba7525a6f6a1a08e8eedc3d7bf53ef8f8aeb87be5049be"
+  },
+  "expected": {
+    "verdict": "fail",
+    "failedTasks": [
+      "st-3"
+    ]
+  },
+  "annotation": "spec-asymmetry; batch comparison not supported"
+}

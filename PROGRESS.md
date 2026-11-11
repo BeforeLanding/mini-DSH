@@ -27,7 +27,7 @@
 2. 核对本地简历锚点与五题问答；个人实际贡献和 AI 辅助范围由本人确认，不根据 Git 作者名代作身份判断。
 3. 完整讲解视频待用户安排录制；记忆/协作后续开发、付费实验和 npm 发布由后续明确任务决定。
 4. 多 Agent 编排 M0–M4 的离线部分已经由 PR #26–#30 依次合入 main（2026-11-08）：组合夹具、单/并行/崩溃演示、四臂离线装配与 `--validate-only`。随 v0.3.0 发布。验收证据见 [docs/superagent/CHANGES.md](docs/superagent/CHANGES.md)。四臂第一批结果见[结果页](docs/superagent/RESULTS-20261108.md)；下一批要先消除规格与缓存两处不对称，并对该次批次重新授权。
-5. 评测可信度三步（ET，零付费，方案见 [TASKS](docs/context-budget/TASKS.md) 顶部）进行中：ET-1 统一分母与区间（分支 `feat/eval-trust-denominators`）→ ET-2 评测器自检 → ET-3 历史重评分。历史重评分只证明 grader 对旧产物的判决符合预期，不证明新版 Agent 不再犯错。
+5. 评测可信度三步（ET，零付费，方案见 [TASKS](docs/context-budget/TASKS.md) 顶部）：ET-1 统一分母与区间（PR #33）、ET-2 评测器自检（PR #34）已合入 main；ET-3 历史重评分（分支 `feat/eval-regrade`，`pnpm eval:regrade`）进行中。历史重评分只证明 grader 对旧产物的判决符合预期，不证明新版 Agent 不再犯错。
 
 ## 历史记录
 

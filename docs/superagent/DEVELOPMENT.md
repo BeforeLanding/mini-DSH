@@ -1178,6 +1178,7 @@ mini-dsh orchestrate cleanup <rootId>
 - **同一整题总预算**：请求数、token、wall 对四臂相同；R/D/R-serial 的 planner、摘要、重试、整合修复、验证全部计入；S 的续跑也计入。
 - Bash 审批在所有臂中以相同方式处理（隔离 runner + 自动批准，并单独记录发生次数）。
 - 每任务每臂至少 2 次重复；样本小，只报告逐题配对结果与原始数字，不做显著性主张。
+- **历史重评分（ET-3）：** `pnpm eval:regrade` 把旧产物样本复制到临时目录，用当前隐藏验收器重评分并写出新的 grade 记录；CI 检查“实际判决等于预期判决”。它只验证 grader 对旧产物的判决，不证明新版 Agent 不再犯同样的错；涉及模型决策的变化需另行授权真实模型复验。本期只支持编排夹具类样本，V2 阶段快照留作后续来源。见 `test/fixtures/regrade/README.md`。
 - **必要规格四臂可见（ET-2）：** 隐藏验收器要求的语义，须作为 `requiredClauses` 登记并逐字写进夹具 `goal`；`checkClauseVisibility` 在装配时检查。该检查只证明已登记条款到位，不证明没有未登记的验收要求（条款与断言的对应靠人工审核）。补齐只影响此后的批次：第一批的 manifest 仍冻结在 `23358c9`。R/R-serial 仍用固定计划，结论限定为“给定计划下的编排执行”。
 
 任务集（拟新增 `test/fixtures/orchestration/`）：
