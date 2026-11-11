@@ -16,6 +16,10 @@
 
 `parallel-composite` 的隐藏验收器复用 `test/fixtures/coding/<id>/verify.mjs`（目标为 `packages/<id>`）；`report` 的隐藏验收器在本目录的 `verify/report.mjs`，期望值同时检查跨包 import 与依赖产物已整合。
 
+## 必要规格条款
+
+每个夹具在 `orchestrationFixtures[id].requiredClauses` 登记隐藏验收器要求的语义（`id`、逐字 `text`、对应断言说明）。`checkClauseVisibility(spec)` 检查装配出的每个 RunSpec：条款须出现在 `goal`（S/D 只能读到 goal；R/R-serial 另有计划 objective）。它只证明已登记条款到位；条款与隐藏断言是否对应由人工审核。
+
 ## 材料化与校验入口
 
 `scripts/orchestration-fixtures.ts` 提供：

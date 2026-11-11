@@ -1,5 +1,11 @@
 # 多 Agent 编排改动与证据
 
+## ET-2a 必要规格条款登记与四臂可见性检查（2026-11-11）
+
+`scripts/orchestration-fixtures.ts`：每个夹具登记 `requiredClauses`（`id`、逐字 `text`、对应隐藏断言说明）；新增 `checkClauseVisibility(spec)`，检查 `assembleRunMatrix` 装配出的每个 RunSpec——条款须逐字出现在该臂可见材料（S/D 为 `goal`；R/R-serial 为 `goal` 加计划 objective），且出现在 `goal` 中。`validateRunMatrix` 调用它，所以 `--validate-only`、`--plan-only` 与测试都会执行。`parallel-composite` 的 `goal` 新增一句：names 须为每位输入人员保留一个规范化姓名（重复 id 也保留），只有 count 去重（登记条款 `report-names-keep-duplicates`，对应 `verify/report.mjs` 第 3 组用例）；`single-repair` 登记 `cart-follow-project-rules`。文档（ET-2c）：DEVELOPMENT §14.3、RESULTS-20261108、DECISIONS（ET-2）与夹具 README 写明三点——补齐只影响此后批次；batch-01 manifest 仍冻结在 `23358c9`，S/D 旧结果不重写；R 的结论限定为“给定计划下的编排执行”；并写明自动检查只证明已登记条款到位、不证明隐藏验收没有未公开要求（条款与断言的对应靠人工审核）。
+
+验收：`test/orchestration-fixtures.test.ts` 新增 3 项——全部 16 个 RunSpec 通过检查；从 goal 删去该句后四臂检查全部失败且 `validateRunMatrix` 报错；仅计划 objective 含该句时检查报“missing from the goal”。`pnpm check`（syntax ok: 267 files）、`pnpm lint`（299 files、无诊断）、`node --test dist/test/*.test.js`：686 项，656 pass、0 fail、30 平台条件 skipped；`node dist/scripts/eval-orchestrate.js --validate-only`：passed=true、providerRequests=0、16 runs。真实模型请求 0。证据写在本文件而非 context-budget/CHANGES.md，避免与 ET-1 分支在同一位置冲突。
+
 ## M4-⑤-5 第一批付费执行（2026-11-08）
 
 用户授权的命令（逐字）：

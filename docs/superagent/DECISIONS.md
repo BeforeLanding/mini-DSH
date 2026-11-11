@@ -2,6 +2,15 @@
 
 **非规范性说明：** 方向性决策与数值以 [DEVELOPMENT.md](DEVELOPMENT.md) §2.8 为准；本文件记录开发过程中落实这些决策的具体选择、代码锚点与测试锚点，避免把实现事实只留在提交信息里。
 
+## ET-2 必要规格条款登记（2026-11-11）
+
+- **决定：** 每个编排夹具登记 `requiredClauses`（`id`、`text`、对应隐藏验收断言）。`checkClauseVisibility` 对 `assembleRunMatrix` 装配出的每个 RunSpec 检查：条款 `text` 逐字出现在该臂可见材料中（S/D 为 `goal`；R/R-serial 为 `goal` 加计划 objective），且出现在 `goal` 中。它接在 `validateRunMatrix` 里，因此 `--validate-only`、`--plan-only` 与测试都会执行。
+- **决定：** 分工写明：自动检查只证明“已登记的条款装配到位”，**不证明隐藏验收没有未公开的语义要求**；条款与断言是否对应由人工审核（每条条款的 `assertion` 字段指向被审核的断言）。新增隐藏断言而不登记条款，检查不会发现。
+- **决定：** `parallel-composite` 的“names 覆盖全部人员（重复 id 也保留）”原先只在 st-3 的 objective 里，S/D 看不到；现写入夹具 `goal`。这只影响此后的批次；batch-01 的 manifest 仍冻结在 `23358c9`，其 S/D 失败原因不变（见结果页）。
+- **边界：** 统一任务要求不等于各臂拿相同的解题计划：R/R-serial 仍用固定计划，结论限定为“给定计划下的编排执行”。
+- **代码锚点：** `scripts/orchestration-fixtures.ts`（`requiredClauses`、`checkClauseVisibility`）、`scripts/eval-orchestrate.ts`（`validateRunMatrix`）。
+- **测试锚点：** `test/orchestration-fixtures.test.ts`（删除条款后检查必须失败）。
+
 ## M4-⑤ 付费小批次的准备（2026-11-08）
 
 - **决定：** R/R-serial 用夹具的**固定计划**，不跑 planner（用户选定）。R 与 R-serial 因此共享同一计划，对照只区分并行与串行；planner 的质量与开销不在本批次度量，报告写明。

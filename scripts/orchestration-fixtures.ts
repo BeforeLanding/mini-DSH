@@ -32,9 +32,14 @@ interface FixtureTask {
   check: string
   verify: HiddenVerify
 }
+// 必要规格条款（ET-2a）：隐藏验收器要求、且 S/D 只能从 goal 读到的语义。`text` 必须逐字出现在各臂可见材料中；
+// `assertion` 指向对应的隐藏验收断言，由人工审核二者是否对应。自动检查只证明"已登记的条款装配到位"，
+// 不证明隐藏验收没有未登记的语义要求。
+export interface RequiredClause { id: string; text: string; assertion: string }
 export interface OrchestrationFixtureDefinition {
   id: OrchestrationFixtureId
   goal: string
+  requiredClauses: RequiredClause[]
   rationale: string
   tasks: FixtureTask[]
 }
@@ -42,6 +47,7 @@ export interface OrchestrationFixtureDefinition {
 const codingVerify = (id: string, target: string): HiddenVerify => ({
   script: path.join(coding, id, 'verify.mjs'), target, marker: `acceptance passed: ${id}`,
 })
+const reportNamesClause = 'The names list of describePeople must contain one normalized name for every input person in input order, including people whose id repeats; only count removes duplicate ids.'
 const reportVerify: HiddenVerify = {
   script: path.join(orchestration, 'parallel-composite', 'verify', 'report.mjs'),
   target: 'packages/report', marker: 'acceptance passed: report',
@@ -51,7 +57,11 @@ export const orchestrationFixtureIds: readonly OrchestrationFixtureId[] = ['para
 export const orchestrationFixtures: Readonly<Record<OrchestrationFixtureId, OrchestrationFixtureDefinition>> = Object.freeze({
   'parallel-composite': {
     id: 'parallel-composite',
-    goal: 'Fix the normalize and dedupe packages, then add a report package that combines both through their public exports.',
+    goal: `Fix the normalize and dedupe packages, then add a report package that combines both through their public exports. ${reportNamesClause}`,
+    requiredClauses: [{
+      id: 'report-names-keep-duplicates', text: reportNamesClause,
+      assertion: 'verify/report.mjs case 3: ids [1, 1, 2] must give names of length 3 (count 2); a dedupe-before-names implementation yields 2 names and is rejected',
+    }],
     rationale: 'normalize and dedupe are independent files; report consumes both and therefore belongs to the second wave',
     tasks: [
       {
@@ -74,6 +84,10 @@ export const orchestrationFixtures: Readonly<Record<OrchestrationFixtureId, Orch
   'single-repair': {
     id: 'single-repair',
     goal: 'Fix the cart total in this repository. Per-item discounts and whole-order percentage discounts are both wrong; follow the project rules before editing.',
+    requiredClauses: [{
+      id: 'cart-follow-project-rules', text: 'follow the project rules before editing',
+      assertion: 'coding/repair/verify.mjs checks the cart behaviour defined by AGENTS.md and src/AGENTS.md, which the repository keeps in the workspace',
+    }],
     rationale: 'one root cause in one file; splitting it would duplicate context without independent verification',
     tasks: [{
       id: 'st-1', title: 'fix the cart total',
@@ -82,6 +96,21 @@ export const orchestrationFixtures: Readonly<Record<OrchestrationFixtureId, Orch
     }],
   },
 })
+
+export interface ClauseCheck { passed: boolean; errors: string[] }
+// 逐 RunSpec 检查：各臂可见材料（无计划的 S/D 为 goal；带计划的 R/R-serial 为 goal 加各子任务 objective）
+// 是否逐字包含该夹具登记的全部必要条款，且条款文本出现在 goal 中（S/D 只能读到 goal）。
+export function checkClauseVisibility(spec: { runId: string; taskId: string; goal: string; plan?: PlanInput }): ClauseCheck {
+  const fixture = orchestrationFixtures[spec.taskId as OrchestrationFixtureId]
+  if (!fixture) return { passed: false, errors: [`${spec.runId}: unknown fixture ${spec.taskId}`] }
+  const visible = [spec.goal, ...(spec.plan ? spec.plan.subtasks.map(subtask => subtask.objective) : [])].join('\n')
+  const errors: string[] = []
+  for (const clause of fixture.requiredClauses) {
+    if (!visible.includes(clause.text)) errors.push(`${spec.runId}: required clause ${clause.id} is not visible to this arm`)
+    else if (!spec.goal.includes(clause.text)) errors.push(`${spec.runId}: required clause ${clause.id} is missing from the goal`)
+  }
+  return { passed: errors.length === 0, errors }
+}
 
 export function fixturePlan(id: OrchestrationFixtureId): PlanInput {
   const fixture = orchestrationFixtures[id]

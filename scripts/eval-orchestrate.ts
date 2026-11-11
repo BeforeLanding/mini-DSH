@@ -2,7 +2,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { ChatRequest, ChatResponse } from '../src/core/contracts.js'
 import {
-  fixturePlan, orchestrationFixtureIds, orchestrationFixtures, validateOrchestrationFixture,
+  checkClauseVisibility, fixturePlan, orchestrationFixtureIds, orchestrationFixtures, validateOrchestrationFixture,
   type FixtureValidation, type OrchestrationFixtureId,
 } from './orchestration-fixtures.js'
 import os from 'node:os'
@@ -103,6 +103,7 @@ export function validateRunMatrix(specs: readonly RunSpec[]): MatrixValidation {
     if (ids.has(spec.runId)) errors.push(`duplicate run id: ${spec.runId}`)
     ids.add(spec.runId)
     if (spec.acceptance.tasks.length === 0) errors.push(`run ${spec.runId} has no hidden verifier`)
+    errors.push(...checkClauseVisibility(spec).errors)
   }
   const armsSeen = new Set(specs.map(spec => spec.arm))
   for (const arm of evalArms) if (!armsSeen.has(arm.id)) errors.push(`arm ${arm.id} is missing from the matrix`)
