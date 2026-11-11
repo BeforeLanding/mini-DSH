@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { spawnSync } from 'node:child_process'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -6,7 +7,7 @@ import path from 'node:path'
 import {
   evaluateOrchestrationFixture, fixturePlan, materializeOrchestrationFixture, orchestrationFixtureIds,
   orchestrationFixtures, validateOrchestrationFixture,
-  checkClauseVisibility,
+  checkClauseVisibility, materializeWeakFixture,
 } from '../scripts/orchestration-fixtures.js'
 import { assembleRunMatrix, validateRunMatrix } from '../scripts/eval-orchestrate.js'
 
@@ -92,4 +93,37 @@ test('a clause that only the plan objective carries does not count for S/D and i
   const r = assembleRunMatrix().find(spec => spec.taskId === 'parallel-composite' && spec.arm === 'R')!
   const onlyInPlan = { ...r, goal: 'Fix everything.', plan: { ...r.plan!, subtasks: r.plan!.subtasks.map((subtask, index) => index === 0 ? { ...subtask, objective: `${subtask.objective} ${clause.text}` } : subtask) } }
   assert.match(checkClauseVisibility(onlyInPlan).errors[0]!, /missing from the goal/)
+})
+
+test('each weak counter-example is rejected by the hidden verifier, and only for the intended reason', async () => {
+  for (const id of orchestrationFixtureIds) {
+    const report = await validateOrchestrationFixture(id)
+    assert.equal(report.weakRejected, true, `${id} weak counter-example must fail the hidden verifier`)
+  }
+  // 复合夹具的反例只在 st-3 上失败：前两个包用的是参考解。
+  assert.deepEqual((await validateOrchestrationFixture('parallel-composite')).weakFailedTasks, ['st-3'])
+  assert.deepEqual((await validateOrchestrationFixture('single-repair')).weakFailedTasks, ['st-1'])
+})
+
+test('weak counter-examples pass the public smoke checks, so only the hidden verifier can tell them apart', async () => {
+  for (const id of orchestrationFixtureIds) {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), `orch-weak-${id}-`))
+    try {
+      await materializeWeakFixture(id, root)
+      for (const task of orchestrationFixtures[id].tasks) {
+        const [, script] = task.check.split(' ')
+        const run = spawnSync(process.execPath, [script!], { cwd: root, encoding: 'utf8', timeout: 30_000 })
+        assert.equal(run.status, 0, `${id}/${task.id} public check should accept the weak implementation: ${run.stdout}${run.stderr}`)
+      }
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  }
+})
+
+test('offline validation requires weakRejected for every fixture', async () => {
+  const { validateOfflineBatch } = await import('../scripts/eval-orchestrate.js')
+  const batch = await validateOfflineBatch()
+  assert.equal(batch.passed, true)
+  assert.ok(batch.tasks.every(task => task.weakRejected))
 })

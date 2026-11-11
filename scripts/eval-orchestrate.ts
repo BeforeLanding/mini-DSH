@@ -161,6 +161,7 @@ export async function validateOfflineBatch({ model = 'unset' }: { model?: string
   for (const task of tasks) {
     if (!task.initialRejected) matrix.errors.push(`task ${task.id}: initial state was accepted`)
     if (!task.referenceAccepted) matrix.errors.push(`task ${task.id}: reference state was rejected`)
+    if (!task.weakRejected) matrix.errors.push(`task ${task.id}: weak counter-example was accepted`)
   }
   if (matrix.errors.length) matrix.passed = false
   return {

@@ -20,6 +20,13 @@
 
 每个夹具在 `orchestrationFixtures[id].requiredClauses` 登记隐藏验收器要求的语义（`id`、逐字 `text`、对应断言说明）。`checkClauseVisibility(spec)` 检查装配出的每个 RunSpec：条款须出现在 `goal`（S/D 只能读到 goal；R/R-serial 另有计划 objective）。它只证明已登记条款到位；条款与隐藏断言是否对应由人工审核。
 
+## 反例产物（`weak/`）
+
+每个夹具的 `weak/` 是覆盖在参考态上的反例：公开冒烟检查能通过，但违反隐藏验收器的某条断言。`validateOrchestrationFixture` 返回 `weakRejected`（验收器真的跑出失败读数）与 `weakFailedTasks`；`--validate-only` 与测试都要求它为真。
+
+- `parallel-composite/weak`：先 `uniqueById` 再列名的 `report.mjs`，即 batch-01 中 S 臂的写法（import 路径改为本夹具的文件布局）；只在 `st-3` 上失败。
+- `single-repair/weak`：只接受 `0 < discount < 1` 的“防御式”`cart.mjs`，discount 为 1（该项免费）时被当成无折扣。
+
 ## 材料化与校验入口
 
 `scripts/orchestration-fixtures.ts` 提供：

@@ -170,9 +170,21 @@ export async function evaluateOrchestrationFixture(id: OrchestrationFixtureId, w
   return { passed: results.every(result => result.passed), results }
 }
 
+// 反例产物（`weak/`）：覆盖在参考态上，看似合理但违反隐藏验收器的某条断言；验收器必须拒绝它。
+// 覆盖后其余任务仍应通过，使失败只能归因于这份反例本身。
+export async function materializeWeakFixture(id: OrchestrationFixtureId, directory: string) {
+  await materializeOrchestrationFixture(id, directory, { reference: true })
+  const weak = path.join(orchestration, id, 'weak')
+  if (!await fs.stat(weak).then(entry => entry.isDirectory(), () => false)) throw new Error(`fixture ${id} has no weak/ counter-example`)
+  await fs.cp(weak, directory, { recursive: true })
+  return directory
+}
+
 export interface FixtureValidation {
   id: OrchestrationFixtureId
   initialRejected: boolean
+  weakRejected: boolean
+  weakFailedTasks: string[]
   referenceAccepted: boolean
   mode: 'single' | 'parallel'
   waves: string[][]
@@ -189,6 +201,9 @@ export async function validateOrchestrationFixture(id: OrchestrationFixtureId): 
     const reference = path.join(directory, 'reference')
     await materializeOrchestrationFixture(id, reference, { reference: true })
     const referenceResult = await evaluateOrchestrationFixture(id, reference)
+    const weak = path.join(directory, 'weak')
+    await materializeWeakFixture(id, weak)
+    const weakResult = await evaluateOrchestrationFixture(id, weak)
     const plan = fixturePlan(id)
     const validation = validatePlan(plan, { workspace: reference, maxSubtasks: 6, protectedPaths: DEFAULT_PROTECTED_PATHS })
     if (!validation.ok) throw new Error(`fixture ${id} plan is invalid: ${validation.errors.join('; ')}`)
@@ -196,6 +211,9 @@ export async function validateOrchestrationFixture(id: OrchestrationFixtureId): 
       id,
       initialRejected: !initialResult.passed && initialResult.results.some(result => result.exitCode !== 0),
       referenceAccepted: referenceResult.passed,
+      // 被拒必须是验收器真的跑出了失败读数（退出码非 null），而不是超时或无法启动。
+      weakRejected: !weakResult.passed && weakResult.results.some(result => !result.passed && result.exitCode !== null),
+      weakFailedTasks: weakResult.results.filter(result => !result.passed).map(result => result.taskId),
       mode: validation.decision.mode,
       waves: validation.decision.waves,
       commands: plan.subtasks.flatMap(subtask => subtask.acceptance.commands),
