@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { hasValidVerdict } from './eval-trials.js'
 import {
   evaluateOrchestrationFixture, fixtureProcessTimeoutMs, orchestrationFixtureIds, orchestrationFixtures,
   type FixtureTask, type OrchestrationFixtureId,
@@ -42,8 +43,6 @@ export type RegradeGrade = {
 } & ({ verdict: 'pass' | 'fail'; reason?: undefined } | { verdict: 'unknown'; reason: RegradeUnknownReason })
 
 const sha256 = (data: Uint8Array | string) => createHash('sha256').update(data).digest('hex')
-// node:assert 失败会在输出里留下 AssertionError / ERR_ASSERTION；验收器的有效“失败”判决必须是它。
-const assertionFailure = /AssertionError|ERR_ASSERTION/
 const firstLine = (text: string) => text.split(String.fromCharCode(10)).find(line => line.trim())?.trim().slice(0, 160) ?? 'no output'
 const exists = (target: string) => fs.stat(target).then(() => true, () => false)
 
@@ -107,8 +106,7 @@ export async function regradeCase(caseDirectory: string, options: RegradeOptions
     // 不能算任务失败，否则损坏的验收器会让“预期失败”的回归检查错误变绿。
     const invalid = evaluation.results.flatMap((result, index) => {
       const marker = tasks[index]!.verify.marker
-      const valid = result.passed || (result.exitCode !== null && result.exitCode !== 0 && assertionFailure.test(result.output))
-      return valid ? [] : [`${result.taskId} (exit ${result.exitCode === null ? 'none' : result.exitCode}${result.exitCode === 0 ? `, no "${marker}" marker` : ''}): ${firstLine(result.output)}`]
+      return hasValidVerdict(result) ? [] : [`${result.taskId} (exit ${result.exitCode === null ? 'none' : result.exitCode}${result.exitCode === 0 ? `, no "${marker}" marker` : ''}): ${firstLine(result.output)}`]
     })
     if (invalid.length) return { ...base, verdict: 'unknown', reason: 'grader_error', detail: `grader produced no valid verdict for ${invalid.join('; ')}` }
     return { ...base, verdict: failedTasks.length ? 'fail' : 'pass' }

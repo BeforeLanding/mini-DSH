@@ -91,7 +91,7 @@ export interface OrchestrationRunLike {
   runId: string
   status: string
   hiddenPassed?: boolean
-  hidden?: { passed?: boolean; results?: readonly { exitCode: number | null }[] } | Record<string, boolean>
+  hidden?: { passed?: boolean; results?: readonly GraderReading[] } | Record<string, boolean>
 }
 
 export const orchestrationPlanned = (specs: readonly { taskId: string; arm: string; repeat: number }[]): PlannedTrial[] =>
@@ -104,12 +104,21 @@ export function parseRunId(runId: string): PlannedTrial {
   return { taskId: parts[0], arm: parts[1], repeat }
 }
 
+// 验收器读数是否构成对产物的“判决”：通过（退出 0 且有验收标记，即 passed），或非零退出且输出含
+// node:assert 的 AssertionError（断言确实不成立）。无法启动、超时、语法错误、未捕获异常、依赖错误、
+// 非零退出却无断言失败、退出 0 却无标记，都不是判决，不能算任务失败。重评分与编排适配器共用这条规则。
+export interface GraderReading { passed?: boolean; exitCode: number | null; output?: string }
+const assertionFailure = /AssertionError|ERR_ASSERTION/
+export const hasValidVerdict = (reading: GraderReading) =>
+  reading.passed === true || (reading.exitCode !== null && reading.exitCode !== 0 && assertionFailure.test(reading.output ?? ''))
+
 export function orchestrationRecords(runs: readonly OrchestrationRunLike[]): TrialRecord[] {
   return runs.map(run => {
     const base = parseRunId(run.runId)
     if (run.status === 'infrastructure_error') return { ...base, verdict: 'unknown', reason: 'infrastructure' }
-    const results = typeof run.hidden?.results === 'object' && Array.isArray(run.hidden.results) ? run.hidden.results as readonly { exitCode: number | null }[] : []
-    if (results.some(result => result.exitCode === null)) return { ...base, verdict: 'unknown', reason: 'grader_error' }
+    const results = typeof run.hidden?.results === 'object' && Array.isArray(run.hidden.results) ? run.hidden.results as readonly GraderReading[] : []
+    // 公开样例只留了各任务的布尔结果，没有读数；有读数时必须每条都是有效判决。
+    if (results.some(result => !hasValidVerdict(result))) return { ...base, verdict: 'unknown', reason: 'grader_error' }
     const passed = typeof run.hiddenPassed === 'boolean' ? run.hiddenPassed : typeof run.hidden?.passed === 'boolean' ? run.hidden.passed : undefined
     if (passed === undefined) return { ...base, verdict: 'unknown', reason: 'missing_evidence' }
     return { ...base, verdict: passed ? 'pass' : 'fail' }

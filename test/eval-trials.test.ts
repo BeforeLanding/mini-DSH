@@ -68,8 +68,8 @@ test('orchestration adapter: infrastructure_error and a null verifier exit code 
   const records = orchestrationRecords([
     { runId: 'a:S:1', status: 'infrastructure_error', hidden: { passed: false, results: [] } },
     { runId: 'a:S:2', status: 'completed', hidden: { passed: false, results: [{ exitCode: null }] } },
-    { runId: 'a:D:1', status: 'completed', hidden: { passed: true, results: [{ exitCode: 0 }] } },
-    { runId: 'a:D:2', status: 'completed', hidden: { passed: false, results: [{ exitCode: 1 }] } },
+    { runId: 'a:D:1', status: 'completed', hidden: { passed: true, results: [{ passed: true, exitCode: 0, output: 'acceptance passed: x' }] } },
+    { runId: 'a:D:2', status: 'completed', hidden: { passed: false, results: [{ passed: false, exitCode: 1, output: 'AssertionError [ERR_ASSERTION]: expected 3' }] } },
     { runId: 'a:R:1', status: 'completed' },
   ])
   assert.deepEqual(records.map(record => record.verdict === 'unknown' ? record.reason : record.verdict), ['infrastructure', 'grader_error', 'pass', 'fail', 'missing_evidence'])
@@ -98,4 +98,26 @@ test('SWE adapter rejects duplicate and out-of-plan scores in either order inste
   assert.throws(() => sweTrials(manifest, 'formal', run, scoresOf(score('i1', 'resolved'), score('i1', 'unresolved'))), /duplicate score: x\/i1/)
   assert.throws(() => sweTrials(manifest, 'formal', run, scoresOf(score('i9', 'resolved'))), /score outside the planned trials: x\/i9/)
   assert.throws(() => sweTrials(manifest, 'formal', run, scoresOf(score('i1', 'resolved', 'y'))), /outside the planned trials: y\/i1/)
+})
+
+test('orchestration adapter: a verifier that crashed or gave no verdict is unknown/grader_error, not a task failure', () => {
+  const crashed = (output: string, exitCode: number | null = 1) => ({ status: 'completed', hidden: { passed: false, results: [{ passed: false, exitCode, output }] } })
+  const records = orchestrationRecords([
+    { runId: 'a:S:1', ...crashed('Error: verifier is broken') },
+    { runId: 'a:S:2', ...crashed('SyntaxError: Unexpected token') },
+    { runId: 'a:D:1', ...crashed("Error [ERR_MODULE_NOT_FOUND]: Cannot find module './dep.mjs'") },
+    { runId: 'a:D:2', ...crashed('', 3) },
+    { runId: 'a:R:1', ...crashed('no marker printed', 0) },
+    // 同一批里，真正的断言失败仍然是任务失败；多任务时任一读数无效则整条为 unknown。
+    { runId: 'a:R:2', ...crashed('AssertionError [ERR_ASSERTION]: names differ') },
+    { runId: 'a:R-serial:1', status: 'completed', hidden: { passed: false, results: [
+      { passed: true, exitCode: 0, output: 'acceptance passed: a' }, { passed: false, exitCode: 1, output: 'TypeError: x is not a function' },
+    ] } },
+  ])
+  assert.deepEqual(records.map(record => record.verdict === 'unknown' ? record.reason : record.verdict),
+    ['grader_error', 'grader_error', 'grader_error', 'grader_error', 'grader_error', 'fail', 'grader_error'])
+  const [summary] = summarizeTrials(orchestrationPlanned([{ taskId: 'a', arm: 'S', repeat: 1 }, { taskId: 'a', arm: 'S', repeat: 2 }]), records.slice(0, 2))
+  assert.equal(summary!.failed, 0)
+  assert.equal(summary!.gradable.denominator, 0)
+  assert.equal(summary!.coverage.grader_error, 2)
 })
