@@ -3,6 +3,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { pairedFourCell, summarizeEpisodes } from './protocol.js'
 import type { EpisodeRecord, SwebenchRunManifest } from './protocol.js'
+import { summarizeTrials, sweTrials } from '../eval-trials.js'
 
 // 报告只从已落盘的 episode 记录与独立判分结果重算；判分不在这里发生，避免“报告时顺手改判”。
 export interface SwebenchEpisodeResult extends EpisodeRecord {
@@ -42,6 +43,9 @@ export function buildReport(manifest: SwebenchRunManifest, split: 'development' 
     arm.set(result.instanceId, result)
     scoreByArm.set(result.armId, arm)
   }
+  // 新增 trials 块：计划/执行/可评分三种分母分开计数；评分错误是 unknown，不算未解决。遇到重复或计划外记录会抛错。
+  const trialInput = sweTrials(manifest, split, records, scores)
+  const trialsByArm = new Map(summarizeTrials(trialInput.planned, trialInput.records).map(entry => [entry.arm, entry] as const))
   const perArm = armIds.map(armId => {
     const planned = plannedByArm.get(armId) ?? []
     const executed = records.filter(record => record.armId === armId)
@@ -58,7 +62,8 @@ export function buildReport(manifest: SwebenchRunManifest, split: 'development' 
       resolvedOverPlanned: plannedResolved,
       resolvedRateOverPlanned: planned.length ? plannedResolved / planned.length : 0,
       ...summary,
-      note: 'resolved@1 denominator is all planned episodes; executed-only counts are listed separately',
+      note: 'resolvedRate and wilson95 use the executed episodes passed in as their denominator; resolvedRateOverPlanned uses the planned episodes. Both treat scoring errors and unscored episodes as not resolved; the trials block counts them as unknown instead',
+      trials: trialsByArm.get(armId) ?? null,
     }
   })
   const armByName = new Map(perArm.map(arm => [arm.armId, arm]))
@@ -103,7 +108,7 @@ export function buildReport(manifest: SwebenchRunManifest, split: 'development' 
       unresolved: classified('unresolved').length,
       empty: classified('empty').length,
       error: classified('error').length,
-      errorNote: 'scoring errors stay in the planned denominator and are reported separately',
+      errorNote: 'scoring errors are reported separately here; the legacy resolved counts treat them as not resolved, while perArm.trials counts them as unknown (grader_error)',
       runIds: scores.runIds,
     },
     paired,

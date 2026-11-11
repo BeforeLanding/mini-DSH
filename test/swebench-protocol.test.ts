@@ -65,7 +65,8 @@ test('episode summaries keep infrastructure failures in the denominator and unkn
   assert.equal(summary.timeouts, 1)
   assert.equal(summary.knownCostUsd, 0.5)
   assert.equal(summary.unknownCostEpisodes, 2)
-  assert.match(summary.denominator, /all planned episodes/)
+  assert.match(summary.denominator, /records passed in/)
+  assert.doesNotMatch(summary.denominator, /all planned episodes/)
 })
 
 test('raw dataset rows are sanitized and gold fields cannot reach the runner', () => {

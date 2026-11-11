@@ -24,7 +24,7 @@
   - **编排四臂**：计划取自 `assembleRunMatrix`，记录兼容原始 `RunResult` 和公开样例 `docs/samples/orchestration-four-arm-20261108.json`。`status=infrastructure_error` 的记 `infrastructure`；验收器退出码为 `null`（超时或无法启动）的记 `grader_error`。
 
   验收：公开样例归一化后得到 S 2/4、D 2/4、R 4/4、R-serial 4/4，与[结果页](../superagent/RESULTS-20261108.md)一致。
-- ET-1c（待办）：SWE 报告接入。`buildReport` 的 `perArm` 保留全部原字段及其取值，新增 `trials` 块；修正两处错误说明：`summarizeEpisodes` 的分母说明从"all planned episodes"改为"传入的记录（`buildReport` 传入的是已执行记录）"，`perArm.note` 写明 `resolvedRate`/`wilson95` 用的是已执行分母，`resolvedRateOverPlanned` 用的是计划分母。同步改掉 `test/swebench-protocol.test.ts` 中钉住错误说明的断言。
+- ET-1c（完成，单独提交）：SWE 报告接入。`buildReport` 的 `perArm` 保留全部原字段及其取值，新增 `trials` 块；修正两处错误说明：`summarizeEpisodes` 的分母说明从"all planned episodes"改为"传入的记录（`buildReport` 传入的是已执行记录）"，`perArm.note` 写明 `resolvedRate`/`wilson95` 用的是已执行分母，`resolvedRateOverPlanned` 用的是计划分母。同步改掉 `test/swebench-protocol.test.ts` 中钉住错误说明的断言。
 - 提交边界：ET-1a 与 ET-1b 合为一次提交（适配器是统计模块的首次使用）；ET-1c 单独提交（会改变 SWE 报告的输出）。
 
 **ET-2（PR2）评测器自检。** 完成条件：st-3 的必要规格对每个臂可见；删除该条款会被检查发现；编排夹具的错误实现会被验收拒绝。
