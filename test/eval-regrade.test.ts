@@ -121,3 +121,43 @@ test('every committed regrade case matches its expected verdict (what pnpm eval:
   assert.ok(outcomes.length >= 1)
   for (const outcome of outcomes) assert.equal(outcome.passed, true, `${outcome.case}: ${outcome.reason}`)
 })
+
+// 验收器“启动成功但没给出判决”：异常、语法错误、依赖错误、退出 0 却没有标记。它们不是对产物的判决。
+async function withBrokenGrader(body: string, run: (grade: Awaited<ReturnType<typeof regradeCase>>) => void) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'regrade-grader-'))
+  try {
+    const script = path.join(dir, 'verify.mjs')
+    await fs.writeFile(script, body)
+    const tasks = orchestrationFixtures['parallel-composite'].tasks.map(task => task.id === 'st-3' ? { ...task, verify: { ...task.verify, script } } : task)
+    run(await regradeCase(batch01, { tasks }))
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+}
+
+test('a grader that crashes after starting is unknown/grader_error, never an expected st-3 failure', async () => {
+  const bodies: Record<string, string> = {
+    'throws an exception': "throw new Error('verifier is broken')\n",
+    'has a syntax error': 'const = ;\n',
+    'fails to import a dependency': "await import('./no-such-dependency.mjs')\n",
+    'exits non-zero without an assertion': 'process.exit(3)\n',
+    'exits 0 without the acceptance marker': "console.log('nothing to see')\n",
+  }
+  const expected = { verdict: 'fail' as const, failedTasks: ['st-3'] }
+  for (const [name, body] of Object.entries(bodies)) {
+    await withBrokenGrader(body, grade => {
+      assert.equal(grade.verdict, 'unknown', name)
+      assert.equal(grade.reason, 'grader_error', name)
+      assert.match(grade.detail ?? '', /no valid verdict for st-3/, name)
+      assert.equal(checkRegrade(grade, expected).passed, false, `${name}: the gate must not go green`)
+    })
+  }
+})
+
+test('a grader that fails by assertion still gives a valid fail verdict', async () => {
+  await withBrokenGrader("import assert from 'node:assert/strict'\nassert.equal(1, 2)\n", grade => {
+    assert.equal(grade.verdict, 'fail')
+    assert.deepEqual(grade.failedTasks, ['st-3'])
+    assert.equal(checkRegrade(grade, { verdict: 'fail', failedTasks: ['st-3'] }).passed, true)
+  })
+})

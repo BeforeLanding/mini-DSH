@@ -1,5 +1,11 @@
 # 改动与验收证据
 
+### ET-3 补丁：重评分只接受有效判决，验收器崩溃归入 unknown/grader_error（2026-11-11）
+
+复核发现 `regradeCase` 只把 `exitCode === null`（无法启动或超时）识别成 `grader_error`。验收器启动后发生语法错误、未捕获异常或依赖错误，通常以非零退出码结束，会被当成有效的任务失败：把 st-3 验收器换成直接抛异常的脚本，得到 `fail`/`st-3`，`checkRegrade` 通过——而样本恰好预期 st-3 失败，所以损坏的验收器也能让回归检查变绿，违背“grader 执行错误不得算任务失败、判不出结果门禁不能通过”。现在只有两种有效判决：退出码 0 且输出约定的验收标记（pass），或非零退出且输出含 `AssertionError`（fail）。其余——启动失败、超时、脚本缺失、语法错误、未捕获异常、依赖错误、非零退出但没有断言失败、退出 0 却没有标记——一律 `unknown/grader_error`，`detail` 列出任务、退出码和输出首行。`evaluateOrchestrationFixture` 与编排批次的判定语义不变，只收紧重评分。`test/fixtures/regrade/README.md` 同步写明有效判决的定义。
+
+验收：`test/eval-regrade.test.ts` 新增 2 项——五种“启动后没有判决”的验收器（抛异常、语法错误、依赖导入失败、非零退出无断言、退出 0 无标记）都得到 `unknown/grader_error` 且 `checkRegrade` 不通过；断言失败的验收器仍得到有效的 `fail`/`st-3` 且检查通过。撤掉本修复时崩溃用例失败（pass 10 / fail 1），恢复后 11 项全过。`pnpm check`（272 files）、`pnpm lint`（304 files、无诊断）、`node --test dist/test/*.test.js`：711 项，681 pass、0 fail、30 平台条件 skipped；`pnpm eval:regrade` 对 batch-01 样本仍 PASS（fail/st-3）。真实模型请求 0。已知范围：编排适配器（`orchestrationRecords`）仍只把 `exitCode === null` 记为 `grader_error`，本补丁未改它。
+
 ### ET-1 补丁：SWE 适配器拒绝重复与计划外评分（2026-11-11）
 
 复核发现 `sweTrials` 先把 `scores.results` 放进 `Map`，同一任务同一臂的两条评分会被后一条静默覆盖：同样的两条冲突评分，顺序为“未解决、已解决”时报告成功率 100%，顺序相反时为 0%，均不报错，与 PR #33 中“重复记录不再静默覆盖”的说法不符（那只覆盖了运行记录）。现在建立评分索引前逐条检查：重复评分抛 `duplicate score: <arm>/<instance>`，不在计划内的评分抛 `score outside the planned trials: <arm>/<instance>`，`buildReport` 因此同样拒绝。`resolvedRate` 等旧字段的取值与说明不变。
