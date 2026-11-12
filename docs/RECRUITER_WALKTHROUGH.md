@@ -4,7 +4,7 @@
 
 ## 五分钟演示顺序
 
-1. **约 1 分钟：定位。** 打开 [README](../README.md) 的架构图和[实现入口](../README.md#实现入口)，说明生产 CLI 和评测入口共用 [createHarness](../src/app/create-harness.ts)。
+1. **约 1 分钟：定位。** 打开 [README](../README.md) 的架构图和[架构一节](../README.md#架构)，说明生产 CLI 和评测入口共用 [createHarness](../src/app/create-harness.ts)。
 2. **约 1 分钟：查看有效配置。** 在已按 README 安装依赖并构建的仓库运行 `node dist/src/index.js --show-config`。指出配置值及来源、工作区、预算；无需 API key，不发模型请求。已有 `MINI_DSH_SESSION_ID` 时应先移除该环境变量，或在交互会话用 `/budget` 查看恢复会话。
 3. **约 2 分钟：脚本化机制演示。** 运行 `pnpm demo:compact`，依次看压缩前后请求投影、事件仍保留、`read_history` 回读。脚本使用预设模型响应；它证明 Harness 路径可演示，不代表真实模型完成编程任务。演示最后会打印生成的 `events.jsonl` 路径。
 4. **约 1 分钟：检查日志。** 将上一步打印的路径填入 `$log`，运行 `node dist/src/index.js inspect $log --trace`。指出完整性、最近一次 run 状态、usage 和有限事件轨迹；`inspect` 不执行日志里的工具，也不恢复会话。若时间允许，再运行 `pnpm demo:fix` 看脚本化编辑与公开检查。
