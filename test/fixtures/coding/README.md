@@ -8,7 +8,7 @@
 
 `audit` 是第 14 个、也是唯一一个为**对照 B**（有界工具输出）设计的 fixture：单任务，受保护的 `report.mjs` 打印约 0.9 MB 的违规报告（项目估算器口径约 277k token，是输入目标 65,536 的 **4.2 倍**），而公开的 `check.mjs` 只有一条断言、失败输出指不出任何字段——模型要看细节只能去跑报告，于是「工具输出是否有界」成为可观察量。它同时不进筛查批次与阶段序列，单独一份注册表 `boundedIds`。
 
-`repair` 是第 15 个、也是唯一一个带**项目规则**的 fixture：`initial/` 下有根目录 `AGENTS.md` 与 `src/AGENTS.md` 两份规则，作用域不同，模型必须先查 `src` 才拿得到其中一条。它供 [NX-10 的三条演示](../../../README.md#演示)使用，规则随 `project:context` 注入系统提示、也能由 `project_context` 工具查回——这是评测路径（`runFixtureTask` 不装载 `runtime-context`/`project-context`）里不存在的一段。它另有一份 `partial/src/cart.mjs` 中间态（只修好两条规则中的一条），由 [coding-fixtures.test.ts](../../coding-fixtures.test.ts) 钉住「它确实过不了公开检查」。它单独一份注册表 `demoIds`。
+`repair` 是第 15 个、也是唯一一个带**项目规则**的 fixture：`initial/` 下有根目录 `AGENTS.md` 与 `src/AGENTS.md` 两份规则，作用域不同，模型必须先查 `src` 才拿得到其中一条。它供 [NX-10 的三条演示](../../../README.md#离线演示)使用，规则随 `project:context` 注入系统提示、也能由 `project_context` 工具查回——这是评测路径（`runFixtureTask` 不装载 `runtime-context`/`project-context`）里不存在的一段。它另有一份 `partial/src/cart.mjs` 中间态（只修好两条规则中的一条），由 [coding-fixtures.test.ts](../../coding-fixtures.test.ts) 钉住「它确实过不了公开检查」。它单独一份注册表 `demoIds`。
 
 `blind` 是第 16 个，本身**不是一套新任务**，而是 `pipeline` 的**无公开检查变体**（NX-08h）：同一套十四个阶段、同一个 `docs/SPEC.md` 与同一份参考解，只去掉 `initial/check.mjs`、并把阶段说明末句由「运行 `node check.mjs N`」改成按 SPEC 自验。差别必须**只有这一件事**——这正是它可用的前提，因为与 `pipeline` 并排读的两个数字只有在这个前提下才能相互解释。它与 `pipeline` 测的不是同一件事：`pipeline` 测「有完整、即时、廉价 oracle 时能否收敛」，`blind` 测「能否按规格独立产出正确实现」，而 [NX-08g0](../../../docs/context-budget/CHANGES.md#nx-08g0-任务集天花板效应定性边界与补救排序) 判定的天花板正来自前者的 oracle。该前提由 [coding-fixtures.test.ts](../../coding-fixtures.test.ts) 的六条断言钉住，其中最强的一条是「从 `pipeline` 去掉的每一行都必须与公开检查有关」——只断言「不含 `check.mjs`」会放过一整段被改写的任务要求。它不进筛查批次、不进阶段序列，单独一份注册表 `blindIds`。
 
@@ -84,7 +84,7 @@
 - `ledger`：分四个阶段实现「流水 → 台账」导出，判据的一段落只在第 1 阶段的排期说明里；阶段见 [TASKS/](ledger/TASKS)。
 - `repro-sessions` / `repro-money` / `repro-tally` / `repro-order`：读 `docs/SPEC.md`、新建一份复现脚本，指出实现与规格不符的那一处；任务见各自的 [TASK.md](repro-sessions/TASK.md)。四份的形状与缺陷类别见上文。
 - `mutation-bands` / `mutation-quota` / `mutation-slug` / `mutation-versions`：读 `docs/SPEC.md`，为已正确的实现新建一套测试，要求杀掉足够多的变异体且不杀行为保持的等价实现；任务见各自的 [TASK.md](mutation-bands/TASK.md)。四份的形状、变异算子与阈值见上文。
-- `repair`：按两份 `AGENTS.md` 的规则修复购物车金额；任务见 [TASK.md](repair/TASK.md)。两处缺陷各被公开检查的一条断言钉住、互不遮蔽（单项折扣被忽略、整单百分数被当比例且不取整），`partial/src/cart.mjs` 是只修好第一条的已知中间态。供 [NX-10 演示](../../../README.md#演示)使用。
+- `repair`：按两份 `AGENTS.md` 的规则修复购物车金额；任务见 [TASK.md](repair/TASK.md)。两处缺陷各被公开检查的一条断言钉住、互不遮蔽（单项折扣被忽略、整单百分数被当比例且不取整），`partial/src/cart.mjs` 是只修好第一条的已知中间态。供 [NX-10 演示](../../../README.md#离线演示)使用。
 
 每项的 `initial/` 是完整初始工作区，`reference/src/` 仅保存参考修改，`verify.mjs` 是独立行为验收器。公开检查位于初始工作区的 `check.mjs`，命令为 `node check.mjs`。所有项目不需安装依赖、API Key 或网络。
 
