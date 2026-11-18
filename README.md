@@ -76,6 +76,56 @@ CLI、模型适配器、工具和 MCP 都以 Cordis 插件的形式注册服务�
 
 `events.jsonl` 是会话的唯一事实来源。发给模型的请求上下文、用量统计和 `/report` 的内容都从事件派生；压缩只改变请求，不删除原始事件。
 
+```mermaid
+flowchart TB
+    subgraph Entry["入口"]
+        CLI["交互式 CLI<br/>pnpm start"]
+        Demo["离线演示<br/>demo"]
+        Eval["评测脚本"]
+        Orch["orchestrate run"]
+    end
+
+    CLI --> CH
+    Demo --> CH
+    Eval --> CH
+
+    subgraph Harness["Harness（Cordis Context）"]
+        CH["createHarness 装配"]
+        Loop["agent loop<br/>智能体循环"]
+        Budget["预算与重试<br/>请求 / 工具 / 时间 / token"]
+        Ctx["上下文投影与压缩<br/>AGENTS.md · read_history"]
+        Tools["ToolRuntime<br/>集中授权与审批"]
+        CH --> Loop
+        Loop --> Ctx
+        Loop --> Budget
+        Loop --> Tools
+    end
+
+    Budget --> Model["DeepSeek 适配器<br/>流式协议"]
+    Tools --> FileTool["文件读写 / 搜索<br/>路径与软链检查"]
+    Tools --> BashTool["Bash<br/>受控子进程环境"]
+    Tools --> MCP["MCP server<br/>默认关闭"]
+
+    subgraph Store["事件溯源"]
+        Events[("events.jsonl<br/>追加式事件日志")]
+        Derived["派生视图<br/>请求上下文 · 用量 · /report · inspect"]
+        Events --> Derived
+    end
+
+    Loop <-->|"追加事件 / 恢复重建"| Events
+
+    subgraph Multi["多 agent 编排"]
+        Planner["计划"]
+        Workers["worker × N<br/>独立 harness + git worktree"]
+        Integrator["按序 cherry-pick 整合"]
+        Verifier["运行检查"]
+        Planner --> Workers --> Integrator --> Verifier
+    end
+
+    Orch --> Planner
+    Workers -.->|"每个 worker 一套"| CH
+```
+
 | 目录 | 职责 |
 |---|---|
 | `src/app/` | 装配、配置、离线演示与编排命令 |
@@ -113,12 +163,6 @@ CI 覆盖 Ubuntu / Windows 与 Node.js 22 / 24，另有 Linux bubblewrap 隔离�
 
 面向 agent：请遵循 [AGENTS.md](AGENTS.md)。
 
-## 来源
-
-本项目起源于教程[从零手写 mini-dsh](https://github.com/huangjunsen0406/mini-dsh/blob/main/LEARNING.zh-CN.md)，沿用到提交 `c5fc9c4`：当时约 1,250 行 JavaScript，包含最小的 agent loop、DeepSeek 适配器和文件/Bash 工具。从 `43e3829` 起为独立扩展：迁移到 strict TypeScript，加入事件持久化与恢复、上下文与预算、带版本的检查记录、只读检查、多 agent 编排和评测入口。`src/` 目前约 1.08 万行。
-
 ## 许可证
 
 [MIT](LICENSE)
-
-来源说明见 [NOTICE](NOTICE)。
