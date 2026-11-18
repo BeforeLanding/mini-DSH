@@ -10,8 +10,6 @@ https://github.com/user-attachments/assets/da4584b5-6f9c-4754-b221-2a626ac7d63a
 
 文档：[使用指南](docs/USAGE.md) · [架构](docs/ARCHITECTURE.md) · [文档索引](docs/README.md)
 
-![预算停止后在同一任务续跑，没有工具被执行两次](docs/images/demo-resume.gif)
-
 ## 项目状态
 
 mini-DSH 仍在迭代，配置项和命令可能变化。当前版本为 [v0.3.0](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.3.0)，尚未发布到 npm。

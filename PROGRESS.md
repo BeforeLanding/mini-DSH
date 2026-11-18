@@ -1,6 +1,6 @@
 # 开发进度
 
-更新：2026-11-11。本页只维护当前 main 的状态、实际阻塞与下一步；历史实验与分支决定按原日期归档，不再作为当前开发清单。
+更新：2026-11-18。本页只维护当前 main 的状态、实际阻塞与下一步；历史实验与分支决定按原日期归档，不再作为当前开发清单。
 
 ## 当前状态
 
@@ -12,7 +12,7 @@
 - **组件开发评测已收口。** 三组件离线对照与实际开发消融均有记录；真实归因均为 `inconclusive`，摘要后裁剪继续默认关闭。历史样本不支撑泛化或效率收益主张，见 [开发批结果](docs/context-budget/COMPONENT-LOO-PAID-RESULT.md)。
 - **main 功能撤回验收已通过（v0.2.0 时点；M0 之后 `src/` 已新增只读委派，下列比对不再适用）。** `src/` 与 PR #7 第一父提交 `a5d9191` 一致；构建和 202 文件语法检查、232 文件 lint 通过；正常用户环境完整回归 546 项：516 pass、0 fail、30 平台条件 skipped。公开样例复算、编程夹具及组件基准通过。命令与边界见 [PORT-1 证据](docs/context-budget/CHANGES.md#port-1-main-撤回记忆与只读协作2026-10-30)。
 - **当前代码 CI 全绿。** [CI 41211546998](https://github.com/BeforeLanding/mini-DSH/actions/runs/41211546998) 对应 PR #20 的 `7689c81`，其树与合并后的 main `4de3219` 相同；Ubuntu/Windows × Node 22/24、Linux isolation、Ubuntu package-install 六个必需 job 全部 success，SWE PoC 按配置 skipped，不计为已执行。相对验收基线 `46b8fb1`，`src/` 与依赖未变；之后的提交只改演示标题文案（`5fab772`）、文档、图片与文档回归测试。
-- **README 已有脚本化演示动图（2026-10-31）。** 首屏的 [预算续跑动图](docs/images/demo-resume.gif) 由 [`scripts/demo-resume.tape`](scripts/demo-resume.tape) 驱动 `pnpm demo:resume` 录制，使用预设模型响应，不调用付费 API；架构图改为矢量源 [architecture.svg](docs/images/architecture.svg) 导出。完整讲解视频尚未录制。
+- **README 首屏是 34 秒演示短片（2026-11-18）。** 画面由离线演示的真实输出逐帧渲染，使用预设模型响应，不调用付费 API；首帧即项目名封面。视频以 GitHub 附件形式嵌入，文件不进仓库。原先的预算续跑动图已删除，[`scripts/demo-resume.tape`](scripts/demo-resume.tape) 仍可重新生成它。架构图由矢量源 [architecture.svg](docs/images/architecture.svg) 导出。
 - **v0.3.0 已发布（2026-11-08）。** 相对 v0.2.0 新增多 Agent 编排（`mini-dsh orchestrate`，M1–M4 离线部分）与可选只读委派（M0，默认关闭）；标签 `v0.3.0` 指向版本发布 PR 的合并提交，[GitHub Release](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.3.0) 附 tarball 与 `SHA256SUMS`。v0.2.0（PR #24 合并提交，长单任务组件与 SWE-bench 结果页）、v0.1.1、v0.1.0 的 Release 保留。npm 未发布。
 
 ## 阻塞
