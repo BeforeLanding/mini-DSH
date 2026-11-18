@@ -72,6 +72,8 @@ pnpm start
 
 ## 架构
 
+![mini-DSH 架构：入口与装配、Agent Loop、上下文管理、模型与工具、事件日志及其派生的恢复、检查与交付证据](docs/images/architecture.png)
+
 CLI、模型适配器、工具和 MCP 都以 Cordis 插件的形式注册服务。生产入口、离线演示和评测共用 [`createHarness`](src/app/create-harness.ts) 完成装配。
 
 `events.jsonl` 是会话的唯一事实来源。发给模型的请求上下文、用量统计和 `/report` 的内容都从事件派生；压缩只改变请求，不删除原始事件。
