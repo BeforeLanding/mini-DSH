@@ -6,11 +6,9 @@ mini-DSH 是一个在本地代码仓库中运行的cli coding agent。它用 Typ
 
 会话保存为追加式的 JSONL 事件日志。进程崩溃或预算耗尽后，可以从日志重建状态，在原任务上继续；结果未知的工具调用不会被自动重跑。
 
-https://github.com/user-attachments/assets/da4584b5-6f9c-4754-b221-2a626ac7d63a
+https://github.com/user-attachments/assets/e5494d83-0e59-4e75-a67f-4be3f7e8c2be
 
 文档：[使用指南](docs/USAGE.md) · [架构](docs/ARCHITECTURE.md) · [文档索引](docs/README.md)
-
-![预算停止后在同一任务续跑，没有工具被执行两次](docs/images/demo-resume.gif)
 
 ## 项目状态
 
