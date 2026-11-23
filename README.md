@@ -12,7 +12,7 @@ https://github.com/user-attachments/assets/e5494d83-0e59-4e75-a67f-4be3f7e8c2be
 
 ## 项目状态
 
-mini-DSH 仍在迭代，配置项和命令可能变化。当前版本为 [v0.3.1](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.3.1)，尚未发布到 npm。
+mini-DSH 仍在迭代，配置项和命令可能变化。当前版本为 [v0.3.1](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.3.1)，仅通过 GitHub Release 分发，不发布到 npm。
 
 路径与命令闸门是应用层策略，不是操作系统隔离。在重要的仓库上运行之前，请先阅读[已知边界](#已知边界)。
 
