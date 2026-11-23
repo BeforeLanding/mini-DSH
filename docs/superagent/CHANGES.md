@@ -127,6 +127,35 @@ pnpm test                      # tests 671 / pass 641 / fail 0 / 30 platform-ski
 pnpm lint                      # 294 files, no fixes applied
 ```
 
+## v0.3.1 发布（2026-11-23）
+
+**改动**
+
+- `package.json` 0.3.0 → 0.3.1；README、PROGRESS 与 RECRUITER_WALKTHROUGH 的 Release 链接改为 v0.3.1。
+- 安装包相对 v0.3.0 的行为差异只有 `f92fa77`：编排根任务的 `root/start` 校验允许 `budget.fixReserveTokens` 为 0，与 `resolveRootBudget` 一致，其余预算字段仍至少为 1。v0.3.0 之后的评测脚本（ET-1～ET-3、M4-⑤ 付费批次闸门、`pnpm eval:regrade`、`pnpm eval:report-orchestration`）不进入 tarball。
+
+**验证（本步实际输出）**
+
+```text
+# 先证红（版本已改为 0.3.1、文档未改）
+node --test dist/test/progress-sync.test.js   # 1 fail：Release 链接 3 处仍为 v0.3.0（README 1、PROGRESS 2）
+# 改文档后（main 0bff45e 上另跑一遍完整回归）
+pnpm check                     # syntax ok: 274 files
+pnpm lint                      # 306 files, no fixes applied
+pnpm test                      # tests 719 / pass 689 / fail 0 / 30 platform-skipped
+# 按 CI 步骤：pnpm pack → 仓库外含空格目录 pnpm add --ignore-scripts
+mini-dsh --version             # 0.3.1
+mini-dsh --help                # 含 orchestrate run
+mini-dsh orchestrate list      # no orchestrations
+mini-dsh demo fix              # demo result: PASS
+tarball                        # 184 files；dist/src/orchestration/ 34 个；无 test/docs/.env/samples
+pnpm audit --prod（安装后）    # No known vulnerabilities found
+```
+
+**未包含**
+
+- npm 发布；真实模型四臂付费批次（仍需对该次批次单独授权）。
+
 ## v0.3.0 发布（2026-11-08）
 
 **改动**

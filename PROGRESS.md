@@ -1,6 +1,6 @@
 # 开发进度
 
-更新：2026-11-18。本页只维护当前 main 的状态、实际阻塞与下一步；历史实验与分支决定按原日期归档，不再作为当前开发清单。
+更新：2026-11-23。本页只维护当前 main 的状态、实际阻塞与下一步；历史实验与分支决定按原日期归档，不再作为当前开发清单。
 
 ## 当前状态
 
@@ -11,21 +11,21 @@
 - **SWE 长单任务组件已并入 main，默认关闭（2026-11-01）。** 观测遮蔽、预算提示、收尾检查与复核、紧凑命令结果、宿主提示从 SWE 分支移植；`CLI_BUDGET` 与默认能力清单不变，CLI 用户可经 `MINI_DSH_BUDGET` 打开前三项。SWE 运行器与原始证据仍在分支。
 - **组件开发评测已收口。** 三组件离线对照与实际开发消融均有记录；真实归因均为 `inconclusive`，摘要后裁剪继续默认关闭。历史样本不支撑泛化或效率收益主张，见 [开发批结果](docs/context-budget/COMPONENT-LOO-PAID-RESULT.md)。
 - **main 功能撤回验收已通过（v0.2.0 时点；M0 之后 `src/` 已新增只读委派，下列比对不再适用）。** `src/` 与 PR #7 第一父提交 `a5d9191` 一致；构建和 202 文件语法检查、232 文件 lint 通过；正常用户环境完整回归 546 项：516 pass、0 fail、30 平台条件 skipped。公开样例复算、编程夹具及组件基准通过。命令与边界见 [PORT-1 证据](docs/context-budget/CHANGES.md#port-1-main-撤回记忆与只读协作2026-10-30)。
-- **当前代码 CI 全绿。** [CI 41211546998](https://github.com/BeforeLanding/mini-DSH/actions/runs/41211546998) 对应 PR #20 的 `7689c81`，其树与合并后的 main `4de3219` 相同；Ubuntu/Windows × Node 22/24、Linux isolation、Ubuntu package-install 六个必需 job 全部 success，SWE PoC 按配置 skipped，不计为已执行。相对验收基线 `46b8fb1`，`src/` 与依赖未变；之后的提交只改演示标题文案（`5fab772`）、文档、图片与文档回归测试。
+- **当前代码 CI 全绿。** [CI 43438729288](https://github.com/BeforeLanding/mini-DSH/actions/runs/43438729288) 对应 PR #40 合并后的 main `20becba`；Ubuntu/Windows × Node 22/24、Linux isolation、Ubuntu package-install 六个必需 job 全部 success，SWE PoC 按配置 skipped，不计为已执行。此后到 `0bff45e` 的提交（PR #41–#44）只改 README 与图片，CI 按 `paths-ignore` 不触发，代码、测试与依赖未变。v0.3.0 之后进入 `src/` 的只有 `f92fa77`（编排根任务校验允许 `fixReserveTokens` 为 0），其余为评测脚本与测试（ET、M4-⑤），由上述 CI 覆盖。
 - **README 首屏是 34 秒演示短片（2026-11-18）。** 画面由离线演示的真实输出逐帧渲染，使用预设模型响应，不调用付费 API；首帧即项目名封面。视频以 GitHub 附件形式嵌入，文件不进仓库。原先的预算续跑动图已删除，[`scripts/demo-resume.tape`](scripts/demo-resume.tape) 仍可重新生成它。架构图由矢量源 [architecture.svg](docs/images/architecture.svg) 导出。
-- **v0.3.0 已发布（2026-11-08）。** 相对 v0.2.0 新增多 Agent 编排（`mini-dsh orchestrate`，M1–M4 离线部分）与可选只读委派（M0，默认关闭）；标签 `v0.3.0` 指向版本发布 PR 的合并提交，[GitHub Release](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.3.0) 附 tarball 与 `SHA256SUMS`。v0.2.0（PR #24 合并提交，长单任务组件与 SWE-bench 结果页）、v0.1.1、v0.1.0 的 Release 保留。npm 未发布。
+- **v0.3.1 已发布（2026-11-23）。** 补丁版本：编排根任务校验允许 `fixReserveTokens` 为 0，与预算解析一致；另含评测可信度工具（`pnpm eval:regrade`、`pnpm eval:report-orchestration`，不进入安装包）。标签 `v0.3.1` 指向版本发布 PR 的合并提交，[GitHub Release](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.3.1) 附 tarball 与 `SHA256SUMS`。v0.3.0（2026-11-08，多 Agent 编排 M1–M4 离线部分与可选只读委派）、v0.2.0、v0.1.1、v0.1.0 的 Release 保留。npm 未发布。
 
 ## 阻塞
 
-- 暂无已确认的单 Agent 功能或交付检查阻塞；本版代码 CI、Windows 仓库外安装与文档检查已完成，详见 [当前源码验收](docs/DELIVERY-20261030.md)。
+- 暂无已确认的单 Agent 功能或交付检查阻塞；当前代码由上述 CI 覆盖。[DELIVERY-20261030](docs/DELIVERY-20261030.md) 是 v0.1.x 时点的单 Agent 验收，不覆盖编排与只读委派；v0.3.x 的发布验收（打包、仓库外安装、完整回归）记在 [superagent/CHANGES](docs/superagent/CHANGES.md) 各版本发布条目。
 - 30 项本地跳过的 Linux 隔离检查已由当前代码提交的 isolation job 核验，仍不计作本地通过。
 - 完整讲解视频尚未录制，不作为源码作品投递前置条件。npm、ECS 部署及新付费评测不属于本轮交付，不作为源码作品投递前置条件。
 
 ## 下一步
 
-1. 以 [v0.3.0 Release](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.3.0) 交付；源码验收见 [DELIVERY-20261030](docs/DELIVERY-20261030.md)，其后的演示标题与文档改动由上述 CI 覆盖。后续再有代码变化时重新验收并另发版本，不继续复用旧绿灯。
+1. 以 [v0.3.1 Release](https://github.com/BeforeLanding/mini-DSH/releases/tag/v0.3.1) 交付；发布验收见 [superagent/CHANGES](docs/superagent/CHANGES.md#v031-发布2026-11-23)。后续再有代码变化时重新验收并另发版本，不继续复用旧绿灯。
 2. 核对本地简历锚点与五题问答；个人实际贡献和 AI 辅助范围由本人确认，不根据 Git 作者名代作身份判断。
-3. 完整讲解视频待用户安排录制；记忆/协作后续开发、付费实验和 npm 发布由后续明确任务决定。
+3. 完整讲解视频待用户安排录制；记忆/协作后续开发、付费实验和 npm 发布由后续明确任务决定；若发 npm，须先去掉 `private: true`，并处理预发布依赖 `@deepseek-ai/dsh-mcp-client@0.1.1-rc.2`。
 4. 多 Agent 编排 M0–M4 的离线部分已经由 PR #26–#30 依次合入 main（2026-11-08）：组合夹具、单/并行/崩溃演示、四臂离线装配与 `--validate-only`。随 v0.3.0 发布。验收证据见 [docs/superagent/CHANGES.md](docs/superagent/CHANGES.md)。四臂第一批结果见[结果页](docs/superagent/RESULTS-20261108.md)；下一批要先消除规格与缓存两处不对称，并对该次批次重新授权。
 5. 评测可信度三步（ET，零付费，方案见 [TASKS](docs/context-budget/TASKS.md) 顶部）：ET-1 统一分母与区间（PR #33）、ET-2 评测器自检（PR #34）已合入 main；ET-3 历史重评分（`pnpm eval:regrade`）与三处补丁（#36、#37）已合入 main；零付费端到端报告 `pnpm eval:report-orchestration` 用 batch-01 真实证据跑通，ET 本轮关闭。历史重评分只证明 grader 对旧产物的判决符合预期，不证明新版 Agent 不再犯错。
 
