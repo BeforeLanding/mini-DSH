@@ -133,7 +133,7 @@ v2.1 的 Full/Baseline 是冻结开发协议里的两条实验臂，不是生产
 
 主 Agent 默认是单 Agent。设置 `MINI_DSH_DELEGATION=read-only` 后，主 Agent 获得 `delegate_tasks`：至多 4 个只读子任务（`analyst`、`test_designer`、`reviewer`），并发 2，子 Agent 只有读类工具，不执行命令、不写文件、不再委派；结果由父会话落盘并带内容哈希，`reviewer` 的结论只对固定的候选文件版本有效。主 Agent 与全部子 Agent 共用一个任务组预算（`MINI_DSH_TASK_GROUP_BUDGET`，JSON），写前日志在根会话里，崩溃后已落盘的委派结果被复用，未完成的子任务不会重跑。`MINI_DSH_TEAM_DIR` 指定子会话目录，`MINI_DSH_TEAM_LIMITS` 调整并发与上限；用 `inspect <根日志> --tree` 查看子任务结局，`pnpm demo:team` 离线演示。token 估算不构成供应商计费硬上限。
 
-项目记忆及其专属配置/命令仅保留在 [feat/memory-team-eval-v2](https://github.com/BeforeLanding/mini-DSH/tree/feat/memory-team-eval-v2，不在 main 启用。关闭委派（默认）时，工具清单与 v0.2.0 相同。含委派事件的会话日志请用同一版本恢复。
+项目记忆及其专属配置/命令不在 main 提供（原所在分支 `feat/memory-team-eval-v2` 已于 2026-11-23 删除）。关闭委派（默认）时，工具清单与 v0.2.0 相同。含委派事件的会话日志请用同一版本恢复。
 
 ## 多 Agent 编排
 
@@ -169,7 +169,7 @@ mini-dsh orchestrate cleanup <rootId>
 
 ## 本地打包与安装
 
-项目**尚未发布到 npm**，`private: true` 保留以防误发。已发布版本可从 [Releases](https://github.com/BeforeLanding/mini-DSH/releases) 下载 tarball 与 `SHA256SUMS`，核对后跳过下面的 `pnpm pack`，把下载的文件作为 tarball 安装。下面从当前仓库生成 tarball，在仓库外的临时目录安装；已在 Windows 的含空格路径验证 `mini-dsh.cmd`。依赖首次安装可能需要访问包注册表；`--help`、`--version`、`--show-config`、`demo` 与 `inspect` 不需要 API key，也不会请求模型。PowerShell：
+项目**仅通过 GitHub Release 分发，不发布到 npm**，`private: true` 保留以防误发。已发布版本可从 [Releases](https://github.com/BeforeLanding/mini-DSH/releases) 下载 tarball 与 `SHA256SUMS`，核对后跳过下面的 `pnpm pack`，把下载的文件作为 tarball 安装。下面从当前仓库生成 tarball，在仓库外的临时目录安装；已在 Windows 的含空格路径验证 `mini-dsh.cmd`。依赖首次安装可能需要访问包注册表；`--help`、`--version`、`--show-config`、`demo` 与 `inspect` 不需要 API key，也不会请求模型。PowerShell：
 
 ```powershell
 $packRoot = Join-Path $env:TEMP ("mini-dsh-local-" + [guid]::NewGuid().ToString('N'))

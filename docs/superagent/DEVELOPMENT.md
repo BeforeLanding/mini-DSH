@@ -12,7 +12,7 @@
 | 标签 | 含义 |
 | --- | --- |
 | **已存在** | 在基线 `91de468` 的 main 上可由源码与测试验证 |
-| **分支已有** | 只在 `feat/memory-team-eval-v2@2f2dca9` 上存在，main 已撤回（`46b8fb1`） |
+| **分支已有** | 只在 `feat/memory-team-eval-v2@2f2dca9` 上存在，main 已撤回（`46b8fb1`）；该分支已于 2026-11-23 删除 |
 | **拟实现** | 本文计划在 MVP 或核心扩展中实现 |
 | **延后** | 明确不进约 5 周计划（M0–M4），只保留设计位置 |
 
@@ -28,7 +28,7 @@
 | --- | --- | --- |
 | `D:\Agent\mini-DSH-execution` | `main@91de468` = `origin/main`，干净 | **唯一主仓**，本文基线 |
 | `D:\Agent\mini-DSH` | `main@73f3439`（2026-10-15）+ 10 个未提交文件 | 有 `STALE-DO-NOT-EDIT.md`，落后主仓 177+ 提交，不在此设计或写入 |
-| `D:\Agent\mini-DSH-memory-team` | `feat/memory-team-eval-v2@2f2dca9` | 只读参考分支，不合并 |
+| `D:\Agent\mini-DSH-memory-team` | `feat/memory-team-eval-v2@2f2dca9` | 只读参考分支，不合并（远端分支已于 2026-11-23 删除） |
 | `D:\Agent\BeforeLanding-mini-DSH`、`mini-DSH-nx42` 等 | 旧提交或实验分支 | 与本文无关 |
 | `.zread/wiki` | 主仓中不存在 | 本次全部结论直接来自源码 |
 
